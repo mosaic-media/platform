@@ -6,6 +6,7 @@ import (
 
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/mosaic-platform/internal/platform/secrets"
 )
 
 // Manager runs the MEG-015 §08 configuration activation state machine
@@ -42,11 +43,12 @@ func (m *Manager) Draft(ctx context.Context, store contracts.ConfigStore, payloa
 	return store.Save(ctx, version)
 }
 
-// Validate checks a Draft version's payload against the schema and moves
-// it to Validated (every field registered) or Rejected (any field is not).
-// Both outcomes are a successful call, not a Platform error — rejection is
-// a normal, informative result of the validate transition, not a failure
-// to validate.
+// Validate checks a Draft version's payload against the schema — every
+// field registered, and every Secret field holding a well-formed secret://
+// reference rather than a raw value (MEG-015 §08 — Secret References) —
+// and moves it to Validated or Rejected. Both outcomes are a successful
+// call, not a Platform error — rejection is a normal, informative result
+// of the validate transition, not a failure to validate.
 func (m *Manager) Validate(ctx context.Context, store contracts.ConfigStore, id domain.ConfigVersionID) (domain.ConfigVersion, error) {
 	version, err := store.FindByID(ctx, id)
 	if err != nil {
@@ -66,6 +68,13 @@ func (m *Manager) Validate(ctx context.Context, store contracts.ConfigStore, id 
 		if _, ok := m.schema.ReloadClassOf(field); !ok {
 			detail := fmt.Sprintf("field %q is not a registered configuration field", field)
 			return store.UpdateStatus(ctx, version.MarkRejected(now, detail))
+		}
+		if m.schema.IsSecret(field) {
+			value, err := FieldValue(version.Payload, field)
+			if err != nil || !secrets.IsRef(value) {
+				detail := fmt.Sprintf("field %q must hold a secret:// reference, not a raw value", field)
+				return store.UpdateStatus(ctx, version.MarkRejected(now, detail))
+			}
 		}
 	}
 

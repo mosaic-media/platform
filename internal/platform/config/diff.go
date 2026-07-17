@@ -71,3 +71,23 @@ func FieldNames(payload []byte) ([]string, error) {
 	sort.Strings(names)
 	return names, nil
 }
+
+// FieldValue decodes field's raw JSON value from payload as a string. A
+// Secret field's value must decode this way (MEG-015 §08 — Secret
+// References store a secret:// reference string, never a raw value or a
+// nested structure), so Validate uses this to check it.
+func FieldValue(payload []byte, field string) (string, error) {
+	fields, err := decodeFields(payload)
+	if err != nil {
+		return "", err
+	}
+	raw, ok := fields[field]
+	if !ok {
+		return "", fmt.Errorf("config: field %q not present", field)
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", fmt.Errorf("config: field %q is not a string: %w", field, err)
+	}
+	return value, nil
+}
