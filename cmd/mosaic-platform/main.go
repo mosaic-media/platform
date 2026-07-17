@@ -6,7 +6,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/mosaic-media/mosaic-platform/internal/composition/builtin"
@@ -14,13 +17,22 @@ import (
 	"github.com/mosaic-media/mosaic-platform/internal/platform/config"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/diagnostics"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/events"
+	"github.com/mosaic-media/mosaic-platform/internal/platform/runtime"
+	"github.com/mosaic-media/mosaic-platform/internal/transport/health"
 )
 
 // postgresDSNEnv names the environment variable carrying the PostgreSQL
 // connection string. Reading storage configuration from the environment is
-// a bridge until the Configuration and secret broker slice (MEG-015 §08)
-// lands; it is recorded here so that slice can replace it deliberately.
+// a bridge until a config-loading pipeline reads it from an Active
+// ConfigVersion instead; it is recorded here so that work can replace it
+// deliberately.
 const postgresDSNEnv = "MOSAIC_POSTGRES_DSN"
+
+// healthAddrEnv names the environment variable carrying the address the
+// MEG-015 §10 Supervisor handoff HTTP surface listens on.
+const healthAddrEnv = "MOSAIC_HEALTH_ADDR"
+
+const defaultHealthAddr = ":8080"
 
 func main() {
 	if err := run(); err != nil {
@@ -38,63 +50,78 @@ func run() error {
 
 	// Register built-in modules the same way an external Module would be
 	// discovered (MEG-006). Postgres is the first, required storage module.
-	registry := builtin.NewRegistry()
-	registry.Register(postgres.New())
-	for _, m := range registry.Manifests() {
+	moduleRegistry := builtin.NewRegistry()
+	moduleRegistry.Register(postgres.New())
+	for _, m := range moduleRegistry.Manifests() {
 		fmt.Printf("mosaic-platform: registered built-in module %s@%s (fulfills %d contracts)\n",
 			m.ID, m.Version, len(m.Fulfills))
 	}
+	generationMetadata := runtime.BuildGenerationMetadata(moduleRegistry)
 
 	dsn := os.Getenv(postgresDSNEnv)
 	if dsn == "" {
 		// Storage is not configured yet. Keep the scaffold's boot-and-exit
 		// behaviour rather than failing, so the process still starts before
-		// the configuration slice provides a DSN by another means.
+		// a DSN is provided by another means.
 		fmt.Printf("mosaic-platform: %s not set; skipping storage bootstrap\n", postgresDSNEnv)
 		fmt.Println("mosaic-platform: exiting cleanly")
 		return nil
 	}
 
-	// Open the storage module: connect, then run migrations. Migrate fails
-	// fast on a missing, incompatible or partially applied schema, so this
-	// call is the startup gate that refuses to run against a mismatched
-	// database (MEG-015 §05, MEG-007 §10 — "Migration failures MUST prevent
-	// Runtime startup").
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	lifecycle := runtime.NewLifecycle()
+	migrations := runtime.NewMigrationTracker()
 
-	set, err := postgres.New().Open(ctx, dsn)
+	// Bootstrap phase, bounded: connect, then run migrations. Migrate fails
+	// fast on a missing, incompatible or partially applied schema, so this
+	// is the startup gate that refuses to run against a mismatched database
+	// (MEG-015 §05, MEG-007 §10 — "Migration failures MUST prevent Runtime
+	// startup"). Bracketing it with migrations.Begin/Complete is what makes
+	// MEG-015 §10's migration status endpoint reflect real state — Running
+	// while this is in flight, Complete or Failed once it returns — rather
+	// than a value invented for the endpoint alone.
+	bootCtx, bootCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	pool, err := postgres.Connect(bootCtx, dsn)
 	if err != nil {
-		return fmt.Errorf("storage bootstrap failed: %w", err)
+		bootCancel()
+		return fmt.Errorf("storage connect failed: %w", err)
 	}
+
+	migrations.Begin()
+	migrateErr := postgres.Migrate(bootCtx, pool)
+	migrations.Complete(migrateErr)
+	bootCancel()
+	if migrateErr != nil {
+		pool.Close()
+		return fmt.Errorf("storage migration failed: %w", migrateErr)
+	}
+
+	set := postgres.New().Bind(pool)
 	defer set.Pool.Close()
 
-	health, err := set.Health.Check(ctx)
+	healthCtx, healthCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	storageHealth, err := set.Health.Check(healthCtx)
+	healthCancel()
 	if err != nil {
 		return fmt.Errorf("storage health check failed: %w", err)
 	}
 	fmt.Printf("mosaic-platform: storage ready (%s: %s — %s)\n",
-		health.Component, health.State, health.Detail)
+		storageHealth.Component, storageHealth.State, storageHealth.Detail)
 
 	// Wire the in-process Event Bus and the outbox worker that drains
-	// committed outbox rows into it (MEG-015 §06). There is no long-running
-	// serve loop yet — that arrives with Supervisor handoff — so this
-	// process does not Start() the worker's background poll loop; it drains
-	// whatever is currently deliverable once at boot, proving the wiring
-	// works end to end against the real database.
+	// committed outbox rows into it (MEG-015 §06).
 	bus := events.NewBus()
 	worker := events.NewWorker(set.Outbox, bus, "outbox-worker")
-	published, err := worker.RunOnce(ctx)
+
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	published, err := worker.RunOnce(drainCtx)
+	drainCancel()
 	if err != nil {
 		return fmt.Errorf("outbox drain failed: %w", err)
 	}
 	fmt.Printf("mosaic-platform: outbox worker drained %d event(s)\n", published)
 
-	// Aggregate real component health (MEG-015 §09 — Diagnostics Model) and
-	// write it to the local structured log — no long-running Supervisor
-	// loop exists yet to refresh this on an interval, so this is a
-	// boot-time snapshot, the same one-shot proof the outbox drain above
-	// already is.
+	// Aggregate real component health (MEG-015 §09 — Diagnostics Model),
+	// backing both the local structured log and the /readyz endpoint below.
 	diagRegistry := diagnostics.NewRegistry()
 	diagRegistry.Register("postgres", set.HealthReporter)
 	diagRegistry.Register("event-bus", bus)
@@ -106,11 +133,81 @@ func run() error {
 	}
 	defer logger.Close()
 
-	for _, health := range diagRegistry.Snapshot(ctx) {
-		logger.Info(health.Component, "boot-time health check", diagnostics.ComponentHealthFields(health)...)
-		fmt.Printf("mosaic-platform: component %s health=%s lifecycle=%s\n", health.Component, health.Health, health.Lifecycle)
+	logSnapshot := func(ctx context.Context, label string) {
+		for _, h := range diagRegistry.Snapshot(ctx) {
+			logger.Info(h.Component, label, diagnostics.ComponentHealthFields(h)...)
+		}
+	}
+	logSnapshot(context.Background(), "boot-time health check")
+
+	// From here on the process is a genuine long-running Supervisor
+	// candidate (MEG-015 §10 — Activation Sequence: "Start runtime
+	// components" -> "Readiness probe" -> "Activate candidate"), not a
+	// boot-and-exit scaffold: the outbox worker's background poll loop
+	// runs, and the Supervisor handoff HTTP surface serves readiness,
+	// liveness, metadata, migration and config activation status until a
+	// shutdown signal arrives.
+	serveCtx, stopServe := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopServe()
+
+	worker.Start(serveCtx)
+
+	handoff := &health.Handoff{
+		Metadata:    generationMetadata,
+		Registry:    diagRegistry,
+		Lifecycle:   lifecycle,
+		Migrations:  migrations,
+		ConfigStore: set.Config,
+	}
+	healthAddr := os.Getenv(healthAddrEnv)
+	if healthAddr == "" {
+		healthAddr = defaultHealthAddr
+	}
+	httpServer := &http.Server{Addr: healthAddr, Handler: handoff.Mux()}
+	serveErrCh := make(chan error, 1)
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serveErrCh <- err
+			return
+		}
+		serveErrCh <- nil
+	}()
+
+	lifecycle.MarkRunning()
+	fmt.Printf("mosaic-platform: serving Supervisor handoff surface on %s\n", healthAddr)
+	fmt.Println("mosaic-platform: ready")
+
+	var serveErr error
+	select {
+	case <-serveCtx.Done():
+		fmt.Println("mosaic-platform: shutdown signal received")
+	case serveErr = <-serveErrCh:
+		if serveErr != nil {
+			fmt.Fprintf(os.Stderr, "mosaic-platform: health server error: %v\n", serveErr)
+		}
 	}
 
+	// Graceful shutdown: stop accepting new HTTP requests, then drain the
+	// outbox worker (stop its poll loop and perform one final synchronous
+	// RunOnce so any event that became deliverable between the last poll
+	// tick and Stop is checkpointed before the process exits — MEG-015
+	// §10's "outbox checkpointing"). Rollback, if the Supervisor decides to
+	// activate an earlier Generation instead of this one, means activating
+	// that other binary — this process must never and does not attempt to
+	// reverse any database mutation itself (MEG-015 §10 — Rollback
+	// Boundary).
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+	_ = httpServer.Shutdown(shutdownCtx)
+
+	result := runtime.Shutdown(shutdownCtx, lifecycle, worker)
+	if result.FinalDrainErr != nil {
+		fmt.Fprintf(os.Stderr, "mosaic-platform: final outbox drain failed: %v\n", result.FinalDrainErr)
+	} else {
+		fmt.Printf("mosaic-platform: final outbox drain published %d event(s)\n", result.FinalDrainPublished)
+	}
+	logSnapshot(context.Background(), "shutdown health check")
+
 	fmt.Println("mosaic-platform: exiting cleanly")
-	return nil
+	return serveErr
 }
