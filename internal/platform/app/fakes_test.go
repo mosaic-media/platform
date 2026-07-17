@@ -353,6 +353,10 @@ func (o *fakeEventOutbox) MarkPublished(context.Context, domain.EventID) error {
 	return nil
 }
 
+func (o *fakeEventOutbox) RecordFailure(context.Context, domain.EventID, contracts.ErrorCategory, string) error {
+	return nil
+}
+
 // fakeEventPublisher implements contracts.EventPublisher. It is used for
 // audit events with no state change to bind atomicity to (authentication
 // failures, authorization denials) — the real, transactional writes go

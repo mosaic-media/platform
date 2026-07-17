@@ -49,6 +49,8 @@ func RunAll(t *testing.T, newDeps Factory) {
 	t.Run("ConfigStore", func(t *testing.T) { RunConfigStoreContract(t, newDeps) })
 	t.Run("PermissionStore", func(t *testing.T) { RunPermissionStoreContract(t, newDeps) })
 	t.Run("OutboxAtomicity", func(t *testing.T) { RunOutboxAtomicityContract(t, newDeps) })
+	t.Run("OutboxEnvelope", func(t *testing.T) { RunOutboxEnvelopeContract(t, newDeps) })
+	t.Run("OutboxFailure", func(t *testing.T) { RunOutboxFailureContract(t, newDeps) })
 }
 
 func ctx(t *testing.T) context.Context {
@@ -507,5 +509,147 @@ func RunOutboxAtomicityContract(t *testing.T, newDeps Factory) {
 		if conflicts != workers-1 {
 			t.Fatalf("expected %d conflicts, got %d", workers-1, conflicts)
 		}
+	})
+}
+
+// RunOutboxEnvelopeContract verifies the full event envelope (MEG-015 §06)
+// round-trips through storage.
+func RunOutboxEnvelopeContract(t *testing.T, newDeps Factory) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	t.Run("envelope round-trips", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		want := domain.OutboxEvent{Event: domain.Event{
+			ID:             "evt-1",
+			Type:           "user.created.v1",
+			OccurredAt:     now,
+			RecordedAt:     now.Add(time.Millisecond),
+			Actor:          "user-admin",
+			TenantScope:    "local",
+			CorrelationID:  "corr-1",
+			CausationID:    "cause-1",
+			Payload:        []byte(`{"username":"alice"}`),
+			RedactionClass: domain.RedactionSensitive,
+		}}
+		if err := d.Outbox.Append(c, want); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+
+		events, err := d.Outbox.ListUnpublished(c, 10)
+		if err != nil {
+			t.Fatalf("ListUnpublished: %v", err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("expected 1 event, got %d", len(events))
+		}
+		got := events[0]
+		if got.ID != want.ID || got.Type != want.Type || got.Actor != want.Actor ||
+			got.TenantScope != want.TenantScope || got.CorrelationID != want.CorrelationID ||
+			got.CausationID != want.CausationID || got.RedactionClass != want.RedactionClass ||
+			string(got.Payload) != string(want.Payload) {
+			t.Fatalf("envelope did not round-trip: got %+v", got.Event)
+		}
+		if !got.OccurredAt.Equal(want.OccurredAt) || !got.RecordedAt.Equal(want.RecordedAt) {
+			t.Fatalf("timestamps did not round-trip: occurred=%v recorded=%v", got.OccurredAt, got.RecordedAt)
+		}
+		if got.Published() || got.DeadLettered || got.Attempts != 0 {
+			t.Fatalf("a fresh event should be unpublished, not dead-lettered, zero attempts: %+v", got)
+		}
+	})
+
+	t.Run("unclassified payload defaults to redacted", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		// No RedactionClass set: the store must default to a redact-safe class
+		// rather than leaving the payload unclassified.
+		if err := d.Outbox.Append(c, domain.OutboxEvent{Event: domain.Event{
+			ID: "evt-2", Type: "t", OccurredAt: now, RecordedAt: now, Payload: []byte("x"),
+		}}); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+		events, err := d.Outbox.ListUnpublished(c, 10)
+		if err != nil {
+			t.Fatalf("ListUnpublished: %v", err)
+		}
+		if len(events) != 1 || events[0].RedactionClass != domain.RedactionSensitive {
+			t.Fatalf("expected default RedactionSensitive, got %+v", events)
+		}
+	})
+}
+
+// RunOutboxFailureContract verifies delivery failure bookkeeping (MEG-015
+// §06 — Failure Behaviour): attempts accumulate, a retry is scheduled, and an
+// event is dead-lettered (and dropped from the deliverable set) once retries
+// are exhausted.
+func RunOutboxFailureContract(t *testing.T, newDeps Factory) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	appendEvent := func(t *testing.T, d Deps, c context.Context, id domain.EventID) {
+		t.Helper()
+		if err := d.Outbox.Append(c, domain.OutboxEvent{Event: domain.Event{
+			ID: id, Type: "t", OccurredAt: now, RecordedAt: now, Payload: []byte("p"),
+		}}); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+
+	t.Run("first failure records attempt and schedules retry", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		appendEvent(t, d, c, "evt-1")
+		if err := d.Outbox.RecordFailure(c, "evt-1", contracts.Unavailable, "outbox-worker"); err != nil {
+			t.Fatalf("RecordFailure: %v", err)
+		}
+		events, err := d.Outbox.ListUnpublished(c, 10)
+		if err != nil {
+			t.Fatalf("ListUnpublished: %v", err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("event should still be deliverable after one failure, got %d", len(events))
+		}
+		e := events[0]
+		if e.Attempts != 1 {
+			t.Fatalf("attempts = %d, want 1", e.Attempts)
+		}
+		if e.LastErrorCategory != string(contracts.Unavailable) {
+			t.Fatalf("last error category = %q, want %q", e.LastErrorCategory, contracts.Unavailable)
+		}
+		if e.OwningComponent != "outbox-worker" {
+			t.Fatalf("owning component = %q, want outbox-worker", e.OwningComponent)
+		}
+		if e.NextRetryAt == nil {
+			t.Fatal("a retryable failure must schedule a next retry")
+		}
+		if e.DeadLettered {
+			t.Fatal("event must not be dead-lettered after one failure")
+		}
+	})
+
+	t.Run("exhausting retries dead-letters and removes from deliverable set", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		appendEvent(t, d, c, "evt-2")
+		policy := domain.DefaultDeliveryPolicy()
+		for i := 0; i < policy.MaxAttempts; i++ {
+			if err := d.Outbox.RecordFailure(c, "evt-2", contracts.Internal, "outbox-worker"); err != nil {
+				t.Fatalf("RecordFailure #%d: %v", i+1, err)
+			}
+		}
+		// After MaxAttempts failures the event is dead-lettered, so it drops
+		// out of the deliverable (unpublished, non-dead-lettered) set.
+		events, err := d.Outbox.ListUnpublished(c, 10)
+		if err != nil {
+			t.Fatalf("ListUnpublished: %v", err)
+		}
+		if len(events) != 0 {
+			t.Fatalf("dead-lettered event must not be deliverable, got %d", len(events))
+		}
+	})
+
+	t.Run("failure on missing event is not found", func(t *testing.T) {
+		d := newDeps(t)
+		err := d.Outbox.RecordFailure(ctx(t), "nope", contracts.Internal, "outbox-worker")
+		requireCategory(t, err, contracts.NotFound)
 	})
 }
