@@ -35,7 +35,7 @@ func TestOutboxStateAtomicOnMidTransactionFailure(t *testing.T) {
 	err := uow.WithinTx(c, func(c context.Context, tx contracts.Tx) error {
 		// State write.
 		if _, err := tx.Users().Create(c, domain.User{
-			ID: "u-atomic", Username: "atomic", Email: "atomic@example.com", CreatedAt: now, UpdatedAt: now,
+			ID: "u-atomic", Username: "atomic", Email: "atomic@example.com", Status: domain.UserActive, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			return err
 		}

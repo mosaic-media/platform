@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -115,6 +116,10 @@ func adminRole() domain.Role {
 			domain.Permission(app.ActionConfigDraft),
 			domain.Permission(app.ActionConfigValidate),
 			domain.Permission(app.ActionConfigActivate),
+			domain.Permission(app.ActionUserList),
+			domain.Permission(app.ActionUserStatusUpdate),
+			domain.Permission(app.ActionPermissionRead),
+			domain.Permission(app.ActionConfigRead),
 		},
 	}
 }
@@ -211,6 +216,18 @@ func (s *fakeUserStore) Update(_ context.Context, user domain.User) (domain.User
 	defer s.db.mu.Unlock()
 	s.db.users[user.ID] = user
 	return user, nil
+}
+
+func (s *fakeUserStore) List(_ context.Context) ([]domain.User, error) {
+	s.trace.record("users.list")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	users := make([]domain.User, 0, len(s.db.users))
+	for _, user := range s.db.users {
+		users = append(users, user)
+	}
+	sort.Slice(users, func(i, j int) bool { return users[i].CreatedAt.Before(users[j].CreatedAt) })
+	return users, nil
 }
 
 // fakeSessionStore implements contracts.SessionStore.
@@ -539,6 +556,8 @@ func newTestService(db *fakeDB, tr *trace, now time.Time) *app.Service {
 		&fakeSessionStore{db: db, trace: tr},
 		&fakeUserStore{db: db, trace: tr},
 		&fakeCredentialStore{db: db, trace: tr},
+		&fakeConfigStore{db: db, trace: tr},
+		fakePermissionStore{db: db, trace: tr},
 		fakeClock{now: now},
 		&fakeIDGenerator{},
 		policy.NewEngine(fakePermissionStore{db: db, trace: tr}),

@@ -88,6 +88,7 @@ func (s *Service) CreateLocalUser(ctx context.Context, cmd CreateLocalUserComman
 			Username:    cmd.Username,
 			Email:       cmd.Email,
 			DisplayName: cmd.DisplayName,
+			Status:      domain.UserActive,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}

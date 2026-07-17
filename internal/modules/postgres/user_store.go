@@ -23,13 +23,13 @@ func NewUserStore(pool *pgxpool.Pool) contracts.UserStore {
 	return &userStore{q: pool}
 }
 
-const userColumns = `id, username, email, display_name, created_at, updated_at`
+const userColumns = `id, username, email, display_name, status, created_at, updated_at`
 
 func (s *userStore) Create(ctx context.Context, user domain.User) (domain.User, error) {
 	_, err := s.q.Exec(ctx,
-		`INSERT INTO users (id, username, email, display_name, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		string(user.ID), user.Username, user.Email, user.DisplayName, user.CreatedAt, user.UpdatedAt,
+		`INSERT INTO users (id, username, email, display_name, status, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		string(user.ID), user.Username, user.Email, user.DisplayName, string(user.Status), user.CreatedAt, user.UpdatedAt,
 	)
 	if err != nil {
 		return domain.User{}, mapError("create user", err)
@@ -63,8 +63,8 @@ func (s *userStore) FindByUsername(ctx context.Context, username string) (domain
 
 func (s *userStore) Update(ctx context.Context, user domain.User) (domain.User, error) {
 	tag, err := s.q.Exec(ctx,
-		`UPDATE users SET username = $2, email = $3, display_name = $4, updated_at = $5 WHERE id = $1`,
-		string(user.ID), user.Username, user.Email, user.DisplayName, user.UpdatedAt,
+		`UPDATE users SET username = $2, email = $3, display_name = $4, status = $5, updated_at = $6 WHERE id = $1`,
+		string(user.ID), user.Username, user.Email, user.DisplayName, string(user.Status), user.UpdatedAt,
 	)
 	if err != nil {
 		return domain.User{}, mapError("update user", err)
@@ -75,14 +75,37 @@ func (s *userStore) Update(ctx context.Context, user domain.User) (domain.User, 
 	return user, nil
 }
 
+func (s *userStore) List(ctx context.Context) ([]domain.User, error) {
+	rows, err := s.q.Query(ctx, `SELECT `+userColumns+` FROM users ORDER BY created_at, id`)
+	if err != nil {
+		return nil, mapError("list users", err)
+	}
+	defer rows.Close()
+
+	var users []domain.User
+	for rows.Next() {
+		user, err := scanUser(rows)
+		if err != nil {
+			return nil, mapError("scan user row", err)
+		}
+		users = append(users, user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapError("list users", err)
+	}
+	return users, nil
+}
+
 func scanUser(row pgx.Row) (domain.User, error) {
 	var (
-		user domain.User
-		id   string
+		user   domain.User
+		id     string
+		status string
 	)
-	if err := row.Scan(&id, &user.Username, &user.Email, &user.DisplayName, &user.CreatedAt, &user.UpdatedAt); err != nil {
+	if err := row.Scan(&id, &user.Username, &user.Email, &user.DisplayName, &status, &user.CreatedAt, &user.UpdatedAt); err != nil {
 		return domain.User{}, err
 	}
 	user.ID = domain.UserID(id)
+	user.Status = domain.UserStatus(status)
 	return user, nil
 }

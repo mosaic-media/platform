@@ -69,6 +69,8 @@ func TestApplicationServicesRunAgainstPostgres(t *testing.T) {
 		cs.Sessions,
 		cs.Users,
 		cs.Credentials,
+		cs.Config,
+		cs.Permissions,
 		cs.Clock,
 		cs.IDs,
 		policy.NewEngine(cs.Permissions),
@@ -81,7 +83,7 @@ func TestApplicationServicesRunAgainstPostgres(t *testing.T) {
 	// same fixture shape the in-memory app tests used; only the storage
 	// differs.
 	now := cs.Clock.Now()
-	admin, err := cs.Users.Create(c, domain.User{ID: "admin", Username: "admin", Email: "admin@example.com", CreatedAt: now, UpdatedAt: now})
+	admin, err := cs.Users.Create(c, domain.User{ID: "admin", Username: "admin", Email: "admin@example.com", Status: domain.UserActive, CreatedAt: now, UpdatedAt: now})
 	if err != nil {
 		t.Fatalf("seed admin user: %v", err)
 	}

@@ -76,6 +76,7 @@ func newUser(id domain.UserID, username string, at time.Time) domain.User {
 		Username:    username,
 		Email:       username + "@example.com",
 		DisplayName: username,
+		Status:      domain.UserActive,
 		CreatedAt:   at,
 		UpdatedAt:   at,
 	}
@@ -150,6 +151,44 @@ func RunUserStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		_, err := d.Users.Update(ctx(t), newUser("ghost", "ghost", now))
 		requireCategory(t, err, contracts.NotFound)
+	})
+
+	t.Run("update persists status change", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		created, err := d.Users.Create(c, newUser("u-1", "erin", now))
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		created.Status = domain.UserSuspended
+		if _, err := d.Users.Update(c, created); err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		got, err := d.Users.FindByID(c, created.ID)
+		if err != nil {
+			t.Fatalf("FindByID: %v", err)
+		}
+		if got.Status != domain.UserSuspended {
+			t.Fatalf("Status = %q, want %q", got.Status, domain.UserSuspended)
+		}
+	})
+
+	t.Run("list returns every created user", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		if _, err := d.Users.Create(c, newUser("u-1", "frank", now)); err != nil {
+			t.Fatalf("Create u-1: %v", err)
+		}
+		if _, err := d.Users.Create(c, newUser("u-2", "grace", now.Add(time.Minute))); err != nil {
+			t.Fatalf("Create u-2: %v", err)
+		}
+		users, err := d.Users.List(c)
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if len(users) != 2 {
+			t.Fatalf("List() returned %d users, want 2", len(users))
+		}
 	})
 }
 

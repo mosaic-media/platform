@@ -153,7 +153,7 @@ func TestWorkerPublishesFromRealPostgresOutboxToIdempotentSubscriber(t *testing.
 	// Simulate a command committing state and an outbox event atomically.
 	if err := cs.UnitOfWork.WithinTx(c, func(c context.Context, tx contracts.Tx) error {
 		if _, err := tx.Users().Create(c, domain.User{
-			ID: "u-1", Username: "worker-test", Email: "worker-test@example.com", CreatedAt: now, UpdatedAt: now,
+			ID: "u-1", Username: "worker-test", Email: "worker-test@example.com", Status: domain.UserActive, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			return err
 		}

@@ -46,6 +46,10 @@ func (mockUserStore) Update(ctx context.Context, user domain.User) (domain.User,
 	return user, nil
 }
 
+func (mockUserStore) List(ctx context.Context) ([]domain.User, error) {
+	return nil, nil
+}
+
 type mockSessionStore struct{}
 
 func (mockSessionStore) Create(ctx context.Context, session domain.Session) (domain.Session, error) {

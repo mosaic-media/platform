@@ -22,6 +22,8 @@ type Service struct {
 	sessionStore     contracts.SessionStore
 	users            contracts.UserStore
 	credentials      contracts.CredentialStore
+	configStore      contracts.ConfigStore
+	permissions      contracts.PermissionStore
 	clock            contracts.Clock
 	ids              contracts.IDGenerator
 	policy           policy.PolicyDecisionPoint
@@ -32,12 +34,17 @@ type Service struct {
 }
 
 // NewService wires a Service to its Platform contracts, policy decision
-// point and password verifier.
+// point and password verifier. configStore and permissions are direct
+// (non-transactional) read handles, mirroring sessionStore/users/
+// credentials — used by read-only queries (GetActiveConfigVersion,
+// GetRolesForUser, ...) that must not open a UnitOfWork (MEG-015 §04).
 func NewService(
 	uow contracts.UnitOfWork,
 	sessionStore contracts.SessionStore,
 	users contracts.UserStore,
 	credentials contracts.CredentialStore,
+	configStore contracts.ConfigStore,
+	permissions contracts.PermissionStore,
 	clock contracts.Clock,
 	ids contracts.IDGenerator,
 	policyEngine policy.PolicyDecisionPoint,
@@ -49,6 +56,8 @@ func NewService(
 		sessionStore:     sessionStore,
 		users:            users,
 		credentials:      credentials,
+		configStore:      configStore,
+		permissions:      permissions,
 		clock:            clock,
 		ids:              ids,
 		policy:           policyEngine,
