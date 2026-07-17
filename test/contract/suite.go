@@ -594,35 +594,39 @@ func RunOutboxFailureContract(t *testing.T, newDeps Factory) {
 		}
 	}
 
-	t.Run("first failure records attempt and schedules retry", func(t *testing.T) {
+	t.Run("first failure removes event from immediate deliverability", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
 		appendEvent(t, d, c, "evt-1")
+
+		// Before any failure, a freshly appended event is immediately
+		// deliverable.
+		before, err := d.Outbox.ListUnpublished(c, 10)
+		if err != nil {
+			t.Fatalf("ListUnpublished (before failure): %v", err)
+		}
+		if len(before) != 1 {
+			t.Fatalf("expected 1 deliverable event before any failure, got %d", len(before))
+		}
+
 		if err := d.Outbox.RecordFailure(c, "evt-1", contracts.Unavailable, "outbox-worker"); err != nil {
 			t.Fatalf("RecordFailure: %v", err)
 		}
-		events, err := d.Outbox.ListUnpublished(c, 10)
+
+		// Immediately after a failure the event is waiting out its retry
+		// backoff (MEG-015 §06 — Failure Behaviour) and must not be
+		// immediately redelivered — this is what stops the worker from
+		// hot-looping a retry before the backoff elapses. Exact bookkeeping
+		// field values (attempts, category, owning component, next retry
+		// time) are adapter-specific storage detail, not something this
+		// contract exposes a read path for; they are verified against the
+		// PostgreSQL implementation directly.
+		after, err := d.Outbox.ListUnpublished(c, 10)
 		if err != nil {
-			t.Fatalf("ListUnpublished: %v", err)
+			t.Fatalf("ListUnpublished (after failure): %v", err)
 		}
-		if len(events) != 1 {
-			t.Fatalf("event should still be deliverable after one failure, got %d", len(events))
-		}
-		e := events[0]
-		if e.Attempts != 1 {
-			t.Fatalf("attempts = %d, want 1", e.Attempts)
-		}
-		if e.LastErrorCategory != string(contracts.Unavailable) {
-			t.Fatalf("last error category = %q, want %q", e.LastErrorCategory, contracts.Unavailable)
-		}
-		if e.OwningComponent != "outbox-worker" {
-			t.Fatalf("owning component = %q, want outbox-worker", e.OwningComponent)
-		}
-		if e.NextRetryAt == nil {
-			t.Fatal("a retryable failure must schedule a next retry")
-		}
-		if e.DeadLettered {
-			t.Fatal("event must not be dead-lettered after one failure")
+		if len(after) != 0 {
+			t.Fatalf("event must not be immediately deliverable after a failure, got %d", len(after))
 		}
 	})
 

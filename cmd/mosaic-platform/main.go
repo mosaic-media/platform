@@ -12,6 +12,7 @@ import (
 	"github.com/mosaic-media/mosaic-platform/internal/composition/builtin"
 	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/config"
+	"github.com/mosaic-media/mosaic-platform/internal/platform/events"
 )
 
 // postgresDSNEnv names the environment variable carrying the PostgreSQL
@@ -73,6 +74,20 @@ func run() error {
 	}
 	fmt.Printf("mosaic-platform: storage ready (%s: %s — %s)\n",
 		health.Component, health.State, health.Detail)
+
+	// Wire the in-process Event Bus and the outbox worker that drains
+	// committed outbox rows into it (MEG-015 §06). There is no long-running
+	// serve loop yet — that arrives with Supervisor handoff — so this
+	// process does not Start() the worker's background poll loop; it drains
+	// whatever is currently deliverable once at boot, proving the wiring
+	// works end to end against the real database.
+	bus := events.NewBus()
+	worker := events.NewWorker(set.Outbox, bus, "outbox-worker")
+	published, err := worker.RunOnce(ctx)
+	if err != nil {
+		return fmt.Errorf("outbox drain failed: %w", err)
+	}
+	fmt.Printf("mosaic-platform: outbox worker drained %d event(s)\n", published)
 
 	fmt.Println("mosaic-platform: exiting cleanly")
 	return nil

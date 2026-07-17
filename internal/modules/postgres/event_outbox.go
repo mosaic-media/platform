@@ -56,9 +56,12 @@ func (o *eventOutbox) Append(ctx context.Context, event domain.OutboxEvent) erro
 	return nil
 }
 
-// ListUnpublished returns unpublished, non-dead-lettered events oldest
-// first. Dead-lettered events are excluded because they will never be
-// published (MEG-015 §06 — Failure Behaviour).
+// ListUnpublished returns unpublished, non-dead-lettered, currently
+// deliverable events oldest first. Dead-lettered events are excluded because
+// they will never be published; an event still waiting out its retry
+// backoff (next_retry_at in the future) is excluded until it becomes due,
+// using the event_outbox_deliverable_idx partial index (migration 0009)
+// (MEG-015 §06 — Failure Behaviour).
 func (o *eventOutbox) ListUnpublished(ctx context.Context, limit int) ([]domain.OutboxEvent, error) {
 	if limit <= 0 {
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
@@ -67,9 +70,10 @@ func (o *eventOutbox) ListUnpublished(ctx context.Context, limit int) ([]domain.
 		`SELECT `+eventOutboxColumns+`
 		   FROM event_outbox
 		  WHERE published_at IS NULL AND dead_lettered = false
+		    AND (next_retry_at IS NULL OR next_retry_at <= $2)
 		  ORDER BY occurred_at, id
 		  LIMIT $1`,
-		limit,
+		limit, time.Now().UTC(),
 	)
 	if err != nil {
 		return nil, mapError("list unpublished events", err)
