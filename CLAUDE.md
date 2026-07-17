@@ -56,7 +56,7 @@ Slices from MEG-015 §12 — Build Sequence:
 
 - [x] Repository scaffold — includes creating `internal/modules/` as well as `internal/adapters/` per the tier correction above; Postgres does not belong under `internal/adapters/`.
 - [x] Core contracts — first contract set (`UnitOfWork`/`Tx`, `UserStore`, `SessionStore`, `PermissionStore`, `ConfigStore`, `EventOutbox`, `EventPublisher`, `SecretBroker`, `Clock`, `IDGenerator`, `HealthProbe`) landed in `internal/platform/contracts/`, backed by Platform value types in `internal/platform/domain/`. `ErrorCategory` scheme (7 categories) and `ContractID`/`ContractVersion` metadata added. No adapters or application services written. `go build ./...` and `go test ./...` pass.
-- [ ] Application service skeleton
+- [x] Application service skeleton — `internal/platform/app/` implements the full MEG-015 §04 command order (validate → authenticate → authorize → open `UnitOfWork` → load state → apply domain rules → persist state+outbox in one transaction → return a Platform result) via `CreateLocalUser`, and the query gate (authenticate → authorize → read) via `GetUserByID`. Policy is a stubbed `PolicyDecisionPoint` (subject/action/resource/context shape, default-deny zero value) — the real RBAC/ReBAC/ABAC engine is still the next slice. No Postgres adapter; command/query flow is proven against in-memory fakes with a call-order trace and transaction rollback semantics. `go build ./...` and `go test ./...` pass.
 - [ ] Identity, sessions and policy
 - [ ] PostgreSQL adapter and migrations
 - [ ] Transactional outbox
