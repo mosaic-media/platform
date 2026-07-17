@@ -31,7 +31,7 @@ MEG-015 §02 — Repository Layout describes a two-tier model: `internal/platfor
 
 `internal/adapters/` is reserved for things that are **not** module-shaped — helpers that don't implement a full contract surface on their own (filesystem utilities, crypto helpers). Do not put Postgres there.
 
-**Outstanding:** this is a correction made before implementation began, not yet reflected in MEG-015 itself. MEG-015 §02 should be updated to match the next time a documentation sync pass runs against `mosaic-architecture`. Do not silently edit MEG-015 from an implementation session in this repo — flag it and let a docs session handle it.
+**Synced:** MEG-015 §02 now documents this three-tier model directly (`mosaic-architecture` commit `90da84c`, docs session dated 2026-07-17). That same sync also folded in other implementation feedback through the Transactional outbox slice: §03 gained `CredentialStore` in the First Contract Set and `Credentials()` on `Tx`; §06 enumerated `redaction_class` (none/sensitive/secret); §07 added `revoked_at` to the session table. Continue treating `mosaic-architecture` as canonical — if a future slice's implementation diverges from what's written there, flag it here again rather than silently editing MEG-015 from an implementation session.
 
 ## Non-negotiable rules (from MEG-015)
 
