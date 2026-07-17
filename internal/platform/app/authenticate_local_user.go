@@ -76,7 +76,9 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 		return AuthenticateLocalUserResult{}, contracts.WrapError(contracts.Internal, "verify password", err)
 	}
 	if !verified {
-		s.publishAuditEvent(ctx, "authentication.failed", []byte(cmd.Username))
+		// A failed authentication has no authenticated subject, so the actor
+		// is empty; the attempted username travels in the payload.
+		s.publishAuditEvent(ctx, "authentication.failed", []byte(cmd.Username), "")
 		return AuthenticateLocalUserResult{}, contracts.NewError(contracts.Unauthenticated, "invalid credentials")
 	}
 
@@ -100,14 +102,7 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 		}
 
 		// 7. persist state and outbox events in the same transaction.
-		event := domain.OutboxEvent{
-			Event: domain.Event{
-				ID:         domain.EventID(s.ids.NewID()),
-				Type:       "authentication.succeeded",
-				Payload:    []byte(cmd.Username),
-				OccurredAt: s.clock.Now(),
-			},
-		}
+		event := domain.OutboxEvent{Event: s.newEvent("authentication.succeeded", []byte(cmd.Username), string(user.ID))}
 		if err := tx.Outbox().Append(ctx, event); err != nil {
 			return err
 		}

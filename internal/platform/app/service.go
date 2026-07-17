@@ -81,21 +81,35 @@ func (s *Service) authorize(ctx context.Context, subject policy.Subject, action 
 		return contracts.WrapError(contracts.Internal, "evaluate policy", err)
 	}
 	if !decision.Allowed {
-		s.publishAuditEvent(ctx, "authorization.denied", []byte(string(action)))
+		s.publishAuditEvent(ctx, "authorization.denied", []byte(string(action)), string(subject.UserID))
 		return contracts.NewError(contracts.PermissionDenied, decision.Reason)
 	}
 	return nil
+}
+
+// newEvent builds an Event envelope (MEG-015 §06) for eventType with the
+// given payload and actor, stamping a fresh id and both occurrence and record
+// timestamps from the Service clock. In synchronous command handling
+// OccurredAt and RecordedAt coincide. Audit events carry identifying data
+// (usernames, session ids), so they default to RedactionSensitive — redacted
+// from support bundles (MEG-015 §07/§09).
+func (s *Service) newEvent(eventType string, payload []byte, actor string) domain.Event {
+	now := s.clock.Now()
+	return domain.Event{
+		ID:             domain.EventID(s.ids.NewID()),
+		Type:           eventType,
+		OccurredAt:     now,
+		RecordedAt:     now,
+		Actor:          actor,
+		Payload:        payload,
+		RedactionClass: domain.RedactionSensitive,
+	}
 }
 
 // publishAuditEvent publishes an audit event through the runtime event
 // backbone (MEG-015 §07). Publication is best-effort: a delivery failure
 // must never mask the authorization or authentication outcome that
 // triggered it, so the error is intentionally discarded.
-func (s *Service) publishAuditEvent(ctx context.Context, eventType string, payload []byte) {
-	_ = s.events.Publish(ctx, domain.Event{
-		ID:         domain.EventID(s.ids.NewID()),
-		Type:       eventType,
-		Payload:    payload,
-		OccurredAt: s.clock.Now(),
-	})
+func (s *Service) publishAuditEvent(ctx context.Context, eventType string, payload []byte, actor string) {
+	_ = s.events.Publish(ctx, s.newEvent(eventType, payload, actor))
 }

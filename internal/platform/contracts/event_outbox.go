@@ -13,4 +13,13 @@ type EventOutbox interface {
 	Append(ctx context.Context, event domain.OutboxEvent) error
 	ListUnpublished(ctx context.Context, limit int) ([]domain.OutboxEvent, error)
 	MarkPublished(ctx context.Context, id domain.EventID) error
+
+	// RecordFailure records that a delivery attempt for the event failed with
+	// the given Platform error category, attributed to component. The
+	// implementation increments the attempt count and applies the Platform
+	// delivery policy to set the next retry time or dead-letter the event
+	// (MEG-015 §06 — Failure Behaviour). The outbox worker that performs
+	// deliveries and calls this is a later slice; this is the bookkeeping the
+	// worker will drive, not delivery itself.
+	RecordFailure(ctx context.Context, id domain.EventID, category ErrorCategory, component string) error
 }

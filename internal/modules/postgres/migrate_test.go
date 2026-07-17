@@ -58,16 +58,24 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if err := postgres.Migrate(c, pool); err != nil {
 		t.Fatalf("first Migrate: %v", err)
 	}
+	var afterFirst int
+	if err := pool.QueryRow(c, `SELECT count(*) FROM platform_schema_migrations`).Scan(&afterFirst); err != nil {
+		t.Fatalf("count migrations: %v", err)
+	}
+	if afterFirst == 0 {
+		t.Fatal("expected migrations to be applied")
+	}
+
 	if err := postgres.Migrate(c, pool); err != nil {
 		t.Fatalf("second Migrate should be a no-op: %v", err)
 	}
-
-	var count int
-	if err := pool.QueryRow(c, `SELECT count(*) FROM platform_schema_migrations`).Scan(&count); err != nil {
+	var afterSecond int
+	if err := pool.QueryRow(c, `SELECT count(*) FROM platform_schema_migrations`).Scan(&afterSecond); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 8 {
-		t.Fatalf("migration count = %d, want 8", count)
+	// Idempotency: re-running applies nothing new.
+	if afterSecond != afterFirst {
+		t.Fatalf("migration count changed on re-run: %d -> %d", afterFirst, afterSecond)
 	}
 }
 
@@ -135,9 +143,10 @@ func TestMigrateDetectsDatabaseAhead(t *testing.T) {
 	if err := postgres.Migrate(c, pool); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	// Record a future migration version this binary does not embed.
+	// Record a far-future migration version this binary does not embed. A
+	// large number keeps the test valid as real migrations are added.
 	if _, err := pool.Exec(c,
-		`INSERT INTO platform_schema_migrations (version, name, checksum) VALUES (9, 'future', 'future-checksum')`,
+		`INSERT INTO platform_schema_migrations (version, name, checksum) VALUES (9999, 'future', 'future-checksum')`,
 	); err != nil {
 		t.Fatalf("insert future migration: %v", err)
 	}

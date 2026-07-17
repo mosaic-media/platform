@@ -128,6 +128,10 @@ func (mockEventOutbox) MarkPublished(ctx context.Context, id domain.EventID) err
 	return nil
 }
 
+func (mockEventOutbox) RecordFailure(ctx context.Context, id domain.EventID, category contracts.ErrorCategory, component string) error {
+	return nil
+}
+
 type mockEventPublisher struct{}
 
 func (mockEventPublisher) Publish(ctx context.Context, event domain.Event) error {
