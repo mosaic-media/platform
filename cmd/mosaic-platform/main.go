@@ -12,6 +12,7 @@ import (
 	"github.com/mosaic-media/mosaic-platform/internal/composition/builtin"
 	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/config"
+	"github.com/mosaic-media/mosaic-platform/internal/platform/diagnostics"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/events"
 )
 
@@ -88,6 +89,27 @@ func run() error {
 		return fmt.Errorf("outbox drain failed: %w", err)
 	}
 	fmt.Printf("mosaic-platform: outbox worker drained %d event(s)\n", published)
+
+	// Aggregate real component health (MEG-015 §09 — Diagnostics Model) and
+	// write it to the local structured log — no long-running Supervisor
+	// loop exists yet to refresh this on an interval, so this is a
+	// boot-time snapshot, the same one-shot proof the outbox drain above
+	// already is.
+	diagRegistry := diagnostics.NewRegistry()
+	diagRegistry.Register("postgres", set.HealthReporter)
+	diagRegistry.Register("event-bus", bus)
+	diagRegistry.Register("outbox-worker", worker, "postgres", "event-bus")
+
+	logger, err := diagnostics.NewFileLogger("logs/mosaic-platform.log")
+	if err != nil {
+		return fmt.Errorf("open diagnostics log failed: %w", err)
+	}
+	defer logger.Close()
+
+	for _, health := range diagRegistry.Snapshot(ctx) {
+		logger.Info(health.Component, "boot-time health check", diagnostics.ComponentHealthFields(health)...)
+		fmt.Printf("mosaic-platform: component %s health=%s lifecycle=%s\n", health.Component, health.Health, health.Lifecycle)
+	}
 
 	fmt.Println("mosaic-platform: exiting cleanly")
 	return nil

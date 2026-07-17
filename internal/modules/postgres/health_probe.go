@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -65,4 +66,55 @@ func (h *healthProbe) Check(ctx context.Context) (domain.HealthStatus, error) {
 		Detail:    fmt.Sprintf("schema at version %d", status.AppliedVersion),
 		CheckedAt: now,
 	}, nil
+}
+
+// componentHealthReporter adapts healthProbe into the richer
+// contracts.ComponentHealthReporter MEG-015 §09's Diagnostics Model
+// requires. It is stateful — unlike healthProbe.Check, which is a pure
+// point-in-time check — because ReportHealth must answer "when did this
+// component last succeed", which requires remembering the outcome of the
+// previous call.
+type componentHealthReporter struct {
+	probe     *healthProbe
+	component string
+
+	mu                  sync.Mutex
+	lastSuccessfulCheck time.Time
+}
+
+// NewComponentHealthReporter builds a ComponentHealthReporter over pool.
+func NewComponentHealthReporter(pool *pgxpool.Pool) contracts.ComponentHealthReporter {
+	return &componentHealthReporter{probe: &healthProbe{pool: pool, component: "postgres"}, component: "postgres"}
+}
+
+// ReportHealth never fails: Check's own error return is always nil today
+// (every failure mode is already encoded as a HealthUnavailable
+// domain.HealthStatus), so there is nothing for this method to report
+// beyond translating that status into the richer shape.
+func (r *componentHealthReporter) ReportHealth(ctx context.Context) domain.ComponentHealth {
+	status, _ := r.probe.Check(ctx)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if status.State == domain.HealthHealthy {
+		r.lastSuccessfulCheck = status.CheckedAt
+	}
+
+	var lastFailureCategory string
+	if status.State != domain.HealthHealthy {
+		lastFailureCategory = string(contracts.Unavailable)
+	}
+
+	return domain.ComponentHealth{
+		Component:           r.component,
+		Lifecycle:           domain.LifecycleRunning,
+		Health:              status.State,
+		DegradedReason:      status.Detail,
+		LastSuccessfulCheck: r.lastSuccessfulCheck,
+		LastFailureCategory: lastFailureCategory,
+		// Detail can include a schema-version mismatch description or a
+		// migration error message — internal operational detail, not a
+		// secret, but not assumed safe for a support bundle either.
+		RedactionClass: domain.RedactionSensitive,
+	}
 }

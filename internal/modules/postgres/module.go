@@ -46,6 +46,7 @@ func (Module) Manifest() builtin.Manifest {
 			"Clock",
 			"IDGenerator",
 			"HealthProbe",
+			"ComponentHealthReporter",
 		},
 	}
 }
@@ -57,16 +58,17 @@ func (Module) Manifest() builtin.Manifest {
 type ContractSet struct {
 	Pool *pgxpool.Pool
 
-	UnitOfWork  contracts.UnitOfWork
-	Users       contracts.UserStore
-	Sessions    contracts.SessionStore
-	Permissions contracts.PermissionStore
-	Config      contracts.ConfigStore
-	Outbox      contracts.EventOutbox
-	Credentials contracts.CredentialStore
-	Clock       contracts.Clock
-	IDs         contracts.IDGenerator
-	Health      contracts.HealthProbe
+	UnitOfWork     contracts.UnitOfWork
+	Users          contracts.UserStore
+	Sessions       contracts.SessionStore
+	Permissions    contracts.PermissionStore
+	Config         contracts.ConfigStore
+	Outbox         contracts.EventOutbox
+	Credentials    contracts.CredentialStore
+	Clock          contracts.Clock
+	IDs            contracts.IDGenerator
+	Health         contracts.HealthProbe
+	HealthReporter contracts.ComponentHealthReporter
 }
 
 // Open connects to PostgreSQL, runs migrations (failing fast on a missing,
@@ -97,17 +99,18 @@ func (Module) Bind(pool *pgxpool.Pool) *ContractSet {
 
 func newContractSet(pool *pgxpool.Pool) *ContractSet {
 	return &ContractSet{
-		Pool:        pool,
-		UnitOfWork:  NewUnitOfWork(pool),
-		Users:       NewUserStore(pool),
-		Sessions:    NewSessionStore(pool),
-		Permissions: NewPermissionStore(pool),
-		Config:      NewConfigStore(pool),
-		Outbox:      NewEventOutbox(pool),
-		Credentials: NewCredentialStore(pool),
-		Clock:       NewClock(),
-		IDs:         NewIDGenerator(),
-		Health:      NewHealthProbe(pool),
+		Pool:           pool,
+		UnitOfWork:     NewUnitOfWork(pool),
+		Users:          NewUserStore(pool),
+		Sessions:       NewSessionStore(pool),
+		Permissions:    NewPermissionStore(pool),
+		Config:         NewConfigStore(pool),
+		Outbox:         NewEventOutbox(pool),
+		Credentials:    NewCredentialStore(pool),
+		Clock:          NewClock(),
+		IDs:            NewIDGenerator(),
+		Health:         NewHealthProbe(pool),
+		HealthReporter: NewComponentHealthReporter(pool),
 	}
 }
 

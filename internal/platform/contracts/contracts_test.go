@@ -182,19 +182,26 @@ func (mockHealthProbe) Check(ctx context.Context) (domain.HealthStatus, error) {
 	return domain.HealthStatus{}, nil
 }
 
+type mockComponentHealthReporter struct{}
+
+func (mockComponentHealthReporter) ReportHealth(ctx context.Context) domain.ComponentHealth {
+	return domain.ComponentHealth{}
+}
+
 var (
-	_ contracts.UnitOfWork      = mockUnitOfWork{}
-	_ contracts.Tx              = mockTx{}
-	_ contracts.UserStore       = mockUserStore{}
-	_ contracts.SessionStore    = mockSessionStore{}
-	_ contracts.PermissionStore = mockPermissionStore{}
-	_ contracts.ConfigStore     = mockConfigStore{}
-	_ contracts.EventOutbox     = mockEventOutbox{}
-	_ contracts.EventPublisher  = mockEventPublisher{}
-	_ contracts.Subscription    = mockSubscription{}
-	_ contracts.SecretBroker    = mockSecretBroker{}
-	_ contracts.Clock           = mockClock{}
-	_ contracts.IDGenerator     = mockIDGenerator{}
-	_ contracts.HealthProbe     = mockHealthProbe{}
-	_ contracts.CredentialStore = mockCredentialStore{}
+	_ contracts.UnitOfWork              = mockUnitOfWork{}
+	_ contracts.Tx                      = mockTx{}
+	_ contracts.UserStore               = mockUserStore{}
+	_ contracts.SessionStore            = mockSessionStore{}
+	_ contracts.PermissionStore         = mockPermissionStore{}
+	_ contracts.ConfigStore             = mockConfigStore{}
+	_ contracts.EventOutbox             = mockEventOutbox{}
+	_ contracts.EventPublisher          = mockEventPublisher{}
+	_ contracts.Subscription            = mockSubscription{}
+	_ contracts.SecretBroker            = mockSecretBroker{}
+	_ contracts.Clock                   = mockClock{}
+	_ contracts.IDGenerator             = mockIDGenerator{}
+	_ contracts.HealthProbe             = mockHealthProbe{}
+	_ contracts.CredentialStore         = mockCredentialStore{}
+	_ contracts.ComponentHealthReporter = mockComponentHealthReporter{}
 )
