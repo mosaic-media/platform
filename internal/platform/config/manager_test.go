@@ -83,6 +83,7 @@ func testSchema(t *testing.T) *config.Schema {
 		config.FieldSpec{Name: "runtime.environment", ReloadClass: config.Restart},
 		config.FieldSpec{Name: "composition.modules", ReloadClass: config.Generation},
 		config.FieldSpec{Name: "storage.postgres.dsn", ReloadClass: config.Recovery},
+		config.FieldSpec{Name: "storage.postgres.password", ReloadClass: config.Recovery, Secret: true},
 	)
 	if err != nil {
 		t.Fatalf("NewSchema: %v", err)
@@ -197,6 +198,47 @@ func TestManagerCannotValidateNonDraft(t *testing.T) {
 	_, err = manager.Validate(ctx, store, draft.ID)
 	if got := contracts.CategoryOf(err); got != contracts.Conflict {
 		t.Fatalf("CategoryOf(err) = %s, want %s", got, contracts.Conflict)
+	}
+}
+
+func TestManagerValidateAcceptsSecretFieldHoldingAReference(t *testing.T) {
+	store := newFakeConfigStore()
+	manager := config.NewManager(fakeClock{now: testNow}, &sequentialIDGenerator{}, testSchema(t))
+	ctx := context.Background()
+
+	draft, err := manager.Draft(ctx, store, []byte(`{"storage.postgres.password":"secret://platform/postgres/password"}`))
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	validated, err := manager.Validate(ctx, store, draft.ID)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if validated.Status != domain.ConfigValidated {
+		t.Fatalf("status = %q, want %q (detail: %s)", validated.Status, domain.ConfigValidated, validated.ValidationDetail)
+	}
+}
+
+func TestManagerValidateRejectsSecretFieldHoldingARawValue(t *testing.T) {
+	store := newFakeConfigStore()
+	manager := config.NewManager(fakeClock{now: testNow}, &sequentialIDGenerator{}, testSchema(t))
+	ctx := context.Background()
+
+	// MEG-015 §08: "Configuration should store secret references, not
+	// secret values." A raw literal in a Secret field must never validate.
+	draft, err := manager.Draft(ctx, store, []byte(`{"storage.postgres.password":"hunter2"}`))
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	validated, err := manager.Validate(ctx, store, draft.ID)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if validated.Status != domain.ConfigRejected {
+		t.Fatalf("status = %q, want %q for a raw secret value", validated.Status, domain.ConfigRejected)
+	}
+	if validated.ValidationDetail == "" {
+		t.Fatal("expected a validation detail explaining the rejection")
 	}
 }
 

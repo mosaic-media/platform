@@ -6,6 +6,11 @@ import "fmt"
 type FieldSpec struct {
 	Name        string
 	ReloadClass ReloadClass
+	// Secret marks a field whose value must be a secret:// reference
+	// (MEG-015 §08 — Secret References), never a raw value. Validate
+	// rejects a Secret field whose value is not a well-formed reference,
+	// so a secret value can never reach a persisted configuration version.
+	Secret bool
 }
 
 // Schema is the structural registry of every known configuration field and
@@ -43,6 +48,13 @@ func (s *Schema) ReloadClassOf(field string) (ReloadClass, bool) {
 	return f.ReloadClass, ok
 }
 
+// IsSecret reports whether field is declared as a secret-reference field
+// (MEG-015 §08 — Secret References). An unregistered field reports false;
+// Validate's registration check rejects it before this ever matters.
+func (s *Schema) IsSecret(field string) bool {
+	return s.fields[field].Secret
+}
+
 // RequiredReloadClass returns the most restrictive reload class declared
 // among changedFields, and reports whether every one of them is a
 // registered field. An unregistered field is treated as Recovery — the
@@ -78,12 +90,18 @@ func (s *Schema) RequiredReloadClass(changedFields []string) (class ReloadClass,
 //     Generation boundary (MEG-005 §21 — "the PostgreSQL database is never
 //     inside a Generation"), so changing it is a recovery-flow action, not a
 //     hot toggle or a Generation swap.
+//   - storage.postgres.password: a Secret field — its value must be a
+//     secret:// reference, matching MEG-015 §08's own example exactly
+//     ("storage.postgres.password = secret://platform/postgres/password").
+//     Grouped with the DSN under the same Recovery class, since both name
+//     the same storage-connection concern.
 func PlatformSchema() *Schema {
 	schema, err := NewSchema(
 		FieldSpec{Name: "runtime.log_level", ReloadClass: Hot},
 		FieldSpec{Name: "runtime.environment", ReloadClass: Restart},
 		FieldSpec{Name: "composition.modules", ReloadClass: Generation},
 		FieldSpec{Name: "storage.postgres.dsn", ReloadClass: Recovery},
+		FieldSpec{Name: "storage.postgres.password", ReloadClass: Recovery, Secret: true},
 	)
 	if err != nil {
 		// Unreachable: the field list above is a fixed, valid literal.
