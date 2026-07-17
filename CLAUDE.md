@@ -53,7 +53,7 @@ MEG-015 §02 — Repository Layout describes a two-tier model: `internal/platfor
 
 Slices from MEG-015 §12 — Build Sequence, all unchecked:
 
-- [ ] Repository scaffold — includes creating `internal/modules/` as well as `internal/adapters/` per the tier correction above; Postgres does not belong under `internal/adapters/`.
+- [x] Repository scaffold — includes creating `internal/modules/` as well as `internal/adapters/` per the tier correction above; Postgres does not belong under `internal/adapters/`.
 - [ ] Core contracts
 - [ ] Application service skeleton
 - [ ] Identity, sessions and policy
