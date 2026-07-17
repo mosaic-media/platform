@@ -10,12 +10,48 @@ When something here seems ambiguous or undocumented, the answer lives in `mosaic
 
 ## Quick Start
 
-This repository is freshly initialized and does not yet contain a Go module or source tree — the scaffold is the next session's work (see `CLAUDE.md` → Current status). Once the scaffold lands:
-
 ```bash
 go build ./...
 go test ./...
 ```
+
+### Running the Platform against PostgreSQL
+
+PostgreSQL is the mandatory first storage adapter (MEG-015 §05). The process
+reads its connection string from `MOSAIC_POSTGRES_DSN`; when that variable is
+unset the process still boots but skips storage bootstrap (a bridge until the
+Configuration slice lands). When it is set, startup connects, runs schema
+migrations, and **fails fast** if the schema is missing, incompatible, or
+partially applied — it will not run against a mismatched database.
+
+```bash
+docker compose up -d   # starts local PostgreSQL 16 (see docker-compose.yml)
+export MOSAIC_POSTGRES_DSN="postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable"
+go run ./cmd/mosaic-platform
+```
+
+### PostgreSQL for tests
+
+The storage contract tests (`test/contract`, run by the Postgres module's
+integration tests) execute against a **real** PostgreSQL instance. Two ways to
+provide one:
+
+- **Nothing to install (default).** When `MOSAIC_TEST_POSTGRES_DSN` is unset,
+  the tests download and start an embedded PostgreSQL automatically for the
+  duration of the test run. The first run downloads a PostgreSQL binary (cached
+  under `~/.embedded-postgres-go`), so it needs network access once. If it
+  cannot start, the integration tests skip with a clear reason rather than
+  failing the suite.
+- **Use your own database.** Start one with `docker compose up -d` and point
+  the tests at it:
+
+  ```bash
+  export MOSAIC_TEST_POSTGRES_DSN="postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable"
+  go test ./...
+  ```
+
+  The DSN's user must be able to `CREATE`/`DROP DATABASE` — the migration tests
+  create throwaway databases and drop them on cleanup.
 
 ## Repository Structure
 

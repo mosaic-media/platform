@@ -1,0 +1,31 @@
+# Local PostgreSQL for Mosaic Platform development and integration tests.
+#
+# Start it with:   docker compose up -d
+# Then point the Platform and its tests at it:
+#   export MOSAIC_POSTGRES_DSN="postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable"
+#   export MOSAIC_TEST_POSTGRES_DSN="postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable"
+#
+# The integration tests do NOT require this: when MOSAIC_TEST_POSTGRES_DSN is
+# unset they download and run an embedded PostgreSQL automatically. Use this
+# compose file when you prefer a persistent local database or cannot download
+# the embedded binary.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mosaic
+      POSTGRES_PASSWORD: mosaic
+      POSTGRES_DB: mosaic
+    ports:
+      - "5432:5432"
+    volumes:
+      - mosaic-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mosaic -d mosaic"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mosaic-postgres-data:
