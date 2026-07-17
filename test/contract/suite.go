@@ -314,8 +314,8 @@ func RunCredentialStoreContract(t *testing.T, newDeps Factory) {
 	})
 }
 
-// RunConfigStoreContract verifies config version persistence and latest
-// selection.
+// RunConfigStoreContract verifies config version persistence, latest
+// selection and the MEG-015 §08 activation status bookkeeping.
 func RunConfigStoreContract(t *testing.T, newDeps Factory) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
@@ -328,8 +328,8 @@ func RunConfigStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("save find and latest", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		v1 := domain.ConfigVersion{ID: "cv-1", Payload: []byte(`{"v":1}`), CreatedAt: now}
-		v2 := domain.ConfigVersion{ID: "cv-2", Payload: []byte(`{"v":2}`), CreatedAt: now.Add(time.Minute)}
+		v1 := domain.ConfigVersion{ID: "cv-1", Payload: []byte(`{"v":1}`), Status: domain.ConfigDraft, CreatedAt: now}
+		v2 := domain.ConfigVersion{ID: "cv-2", Payload: []byte(`{"v":2}`), Status: domain.ConfigDraft, CreatedAt: now.Add(time.Minute)}
 		if _, err := d.Config.Save(c, v1); err != nil {
 			t.Fatalf("Save v1: %v", err)
 		}
@@ -343,6 +343,9 @@ func RunConfigStoreContract(t *testing.T, newDeps Factory) {
 		if string(byID.Payload) != `{"v":1}` {
 			t.Fatalf("payload = %s", byID.Payload)
 		}
+		if byID.Status != domain.ConfigDraft {
+			t.Fatalf("status = %q, want %q", byID.Status, domain.ConfigDraft)
+		}
 		latest, err := d.Config.Latest(c)
 		if err != nil {
 			t.Fatalf("Latest: %v", err)
@@ -350,6 +353,74 @@ func RunConfigStoreContract(t *testing.T, newDeps Factory) {
 		if latest.ID != "cv-2" {
 			t.Fatalf("latest id = %q, want cv-2", latest.ID)
 		}
+	})
+
+	t.Run("find active on empty is not found", func(t *testing.T) {
+		d := newDeps(t)
+		_, err := d.Config.FindActive(ctx(t))
+		requireCategory(t, err, contracts.NotFound)
+	})
+
+	t.Run("update status transitions to active and back out on supersede", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		v := domain.ConfigVersion{ID: "cv-active", Payload: []byte(`{"v":1}`), Status: domain.ConfigDraft, CreatedAt: now}
+		if _, err := d.Config.Save(c, v); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+
+		validated := v.MarkValidated(now, "ok")
+		if _, err := d.Config.UpdateStatus(c, validated); err != nil {
+			t.Fatalf("UpdateStatus(validated): %v", err)
+		}
+
+		active := validated.MarkActive(now)
+		if _, err := d.Config.UpdateStatus(c, active); err != nil {
+			t.Fatalf("UpdateStatus(active): %v", err)
+		}
+
+		found, err := d.Config.FindActive(c)
+		if err != nil {
+			t.Fatalf("FindActive: %v", err)
+		}
+		if found.ID != "cv-active" || found.Status != domain.ConfigActive {
+			t.Fatalf("FindActive = %+v, want cv-active/active", found)
+		}
+
+		superseded := active.MarkSuperseded(now.Add(time.Minute))
+		if _, err := d.Config.UpdateStatus(c, superseded); err != nil {
+			t.Fatalf("UpdateStatus(superseded): %v", err)
+		}
+		if _, err := d.Config.FindActive(c); contracts.CategoryOf(err) != contracts.NotFound {
+			t.Fatalf("FindActive after supersede: err = %v, want NotFound", err)
+		}
+	})
+
+	t.Run("update status on unknown id is not found", func(t *testing.T) {
+		d := newDeps(t)
+		_, err := d.Config.UpdateStatus(ctx(t), domain.ConfigVersion{ID: "does-not-exist", Status: domain.ConfigActive})
+		requireCategory(t, err, contracts.NotFound)
+	})
+
+	t.Run("only one version may be active at a time", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		v1 := domain.ConfigVersion{ID: "cv-first", Payload: []byte(`{"v":1}`), Status: domain.ConfigDraft, CreatedAt: now}
+		v2 := domain.ConfigVersion{ID: "cv-second", Payload: []byte(`{"v":2}`), Status: domain.ConfigDraft, CreatedAt: now.Add(time.Minute)}
+		if _, err := d.Config.Save(c, v1); err != nil {
+			t.Fatalf("Save v1: %v", err)
+		}
+		if _, err := d.Config.Save(c, v2); err != nil {
+			t.Fatalf("Save v2: %v", err)
+		}
+		if _, err := d.Config.UpdateStatus(c, v1.MarkActive(now)); err != nil {
+			t.Fatalf("activate v1: %v", err)
+		}
+		// Activating v2 without first superseding v1 must be rejected by the
+		// single-active-version invariant rather than silently leaving two
+		// versions Active.
+		_, err := d.Config.UpdateStatus(c, v2.MarkActive(now.Add(time.Minute)))
+		requireCategory(t, err, contracts.Conflict)
 	})
 }
 

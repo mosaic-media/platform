@@ -39,6 +39,7 @@ type fakeDBSnapshot struct {
 	usernames map[string]domain.UserID
 	sessions  map[domain.SessionID]domain.Session
 	passwords map[domain.UserID]domain.PasswordCredential
+	configs   map[domain.ConfigVersionID]domain.ConfigVersion
 	outbox    []domain.OutboxEvent
 }
 
@@ -52,6 +53,7 @@ type fakeDB struct {
 	usernames map[string]domain.UserID
 	sessions  map[domain.SessionID]domain.Session
 	passwords map[domain.UserID]domain.PasswordCredential
+	configs   map[domain.ConfigVersionID]domain.ConfigVersion
 	outbox    []domain.OutboxEvent
 	// roles is never written by any Service command in this slice — it is
 	// a fixture the tests seed directly, standing in for the "admin-
@@ -66,6 +68,7 @@ func newFakeDB() *fakeDB {
 		usernames: make(map[string]domain.UserID),
 		sessions:  make(map[domain.SessionID]domain.Session),
 		passwords: make(map[domain.UserID]domain.PasswordCredential),
+		configs:   make(map[domain.ConfigVersionID]domain.ConfigVersion),
 		roles:     make(map[domain.UserID][]domain.Role),
 	}
 }
@@ -109,6 +112,9 @@ func adminRole() domain.Role {
 			domain.Permission(app.ActionUserRead),
 			domain.Permission(app.ActionSessionCreate),
 			domain.Permission(app.ActionSessionRevoke),
+			domain.Permission(app.ActionConfigDraft),
+			domain.Permission(app.ActionConfigValidate),
+			domain.Permission(app.ActionConfigActivate),
 		},
 	}
 }
@@ -133,6 +139,10 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 	for k, v := range db.passwords {
 		passwords[k] = v
 	}
+	configs := make(map[domain.ConfigVersionID]domain.ConfigVersion, len(db.configs))
+	for k, v := range db.configs {
+		configs[k] = v
+	}
 	outbox := append([]domain.OutboxEvent(nil), db.outbox...)
 
 	return fakeDBSnapshot{
@@ -140,6 +150,7 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 		usernames: usernames,
 		sessions:  sessions,
 		passwords: passwords,
+		configs:   configs,
 		outbox:    outbox,
 	}
 }
@@ -151,6 +162,7 @@ func (db *fakeDB) restore(snap fakeDBSnapshot) {
 	db.usernames = snap.usernames
 	db.sessions = snap.sessions
 	db.passwords = snap.passwords
+	db.configs = snap.configs
 	db.outbox = snap.outbox
 }
 
@@ -310,21 +322,79 @@ func (s fakePermissionStore) AttributesForUser(context.Context, domain.UserID) (
 	return nil, nil
 }
 
-// fakeConfigStore satisfies the remaining contracts.Tx store. No command
-// or query in this slice uses it; it exists only because fakeTx must
-// implement the full contracts.Tx interface.
-type fakeConfigStore struct{}
+// fakeConfigStore implements contracts.ConfigStore against the shared
+// fakeDB, mirroring fakeUserStore, so the config.Manager driving the
+// Draft/Validate/Activate commands has somewhere real to persist to.
+type fakeConfigStore struct {
+	db    *fakeDB
+	trace *trace
+}
 
-func (fakeConfigStore) Save(_ context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
+func (s *fakeConfigStore) Save(_ context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
+	s.trace.record("config.save")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.configs[version.ID] = version
 	return version, nil
 }
 
-func (fakeConfigStore) Latest(context.Context) (domain.ConfigVersion, error) {
-	return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no config version")
+func (s *fakeConfigStore) Latest(_ context.Context) (domain.ConfigVersion, error) {
+	s.trace.record("config.latest")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var latest domain.ConfigVersion
+	found := false
+	for _, v := range s.db.configs {
+		if !found || v.CreatedAt.After(latest.CreatedAt) {
+			latest = v
+			found = true
+		}
+	}
+	if !found {
+		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no config version")
+	}
+	return latest, nil
 }
 
-func (fakeConfigStore) FindByID(context.Context, domain.ConfigVersionID) (domain.ConfigVersion, error) {
-	return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "config version not found")
+func (s *fakeConfigStore) FindByID(_ context.Context, id domain.ConfigVersionID) (domain.ConfigVersion, error) {
+	s.trace.record("config.find_by_id")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	version, ok := s.db.configs[id]
+	if !ok {
+		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "config version not found")
+	}
+	return version, nil
+}
+
+func (s *fakeConfigStore) FindActive(_ context.Context) (domain.ConfigVersion, error) {
+	s.trace.record("config.find_active")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for _, v := range s.db.configs {
+		if v.Status == domain.ConfigActive {
+			return v, nil
+		}
+	}
+	return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no active config version")
+}
+
+func (s *fakeConfigStore) UpdateStatus(_ context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
+	s.trace.record("config.update_status:" + string(version.Status))
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if _, ok := s.db.configs[version.ID]; !ok {
+		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "config version not found")
+	}
+	if version.Status == domain.ConfigActive {
+		for id, existing := range s.db.configs {
+			if id != version.ID && existing.Status == domain.ConfigActive {
+				return domain.ConfigVersion{}, contracts.NewError(contracts.Conflict, "another config version is already active")
+			}
+		}
+	}
+	s.db.configs[version.ID] = version
+	return version, nil
 }
 
 // fakeEventOutbox implements contracts.EventOutbox. Trace entries include
@@ -391,13 +461,15 @@ type fakeTx struct {
 	trace *trace
 }
 
-func (tx *fakeTx) Users() contracts.UserStore             { return &fakeUserStore{db: tx.db, trace: tx.trace} }
-func (tx *fakeTx) Sessions() contracts.SessionStore       { return &fakeSessionStore{db: tx.db, trace: tx.trace} }
+func (tx *fakeTx) Users() contracts.UserStore { return &fakeUserStore{db: tx.db, trace: tx.trace} }
+func (tx *fakeTx) Sessions() contracts.SessionStore {
+	return &fakeSessionStore{db: tx.db, trace: tx.trace}
+}
 func (tx *fakeTx) Permissions() contracts.PermissionStore {
 	return fakePermissionStore{db: tx.db, trace: tx.trace}
 }
-func (tx *fakeTx) Config() contracts.ConfigStore           { return fakeConfigStore{} }
-func (tx *fakeTx) Outbox() contracts.EventOutbox           { return &fakeEventOutbox{db: tx.db, trace: tx.trace} }
+func (tx *fakeTx) Config() contracts.ConfigStore { return &fakeConfigStore{db: tx.db, trace: tx.trace} }
+func (tx *fakeTx) Outbox() contracts.EventOutbox { return &fakeEventOutbox{db: tx.db, trace: tx.trace} }
 func (tx *fakeTx) Credentials() contracts.CredentialStore {
 	return &fakeCredentialStore{db: tx.db, trace: tx.trace}
 }

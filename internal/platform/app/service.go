@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	"github.com/mosaic-media/mosaic-platform/internal/platform/config"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
@@ -27,6 +28,7 @@ type Service struct {
 	events           contracts.EventPublisher
 	passwordVerifier domain.PasswordVerifier
 	sessionManager   *sessions.Manager
+	configManager    *config.Manager
 }
 
 // NewService wires a Service to its Platform contracts, policy decision
@@ -53,6 +55,7 @@ func NewService(
 		events:           events,
 		passwordVerifier: passwordVerifier,
 		sessionManager:   sessions.NewManager(clock, ids),
+		configManager:    config.NewManager(clock, ids, config.PlatformSchema()),
 	}
 }
 

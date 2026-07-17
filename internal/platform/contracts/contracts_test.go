@@ -88,6 +88,14 @@ func (mockConfigStore) FindByID(ctx context.Context, id domain.ConfigVersionID) 
 	return domain.ConfigVersion{}, nil
 }
 
+func (mockConfigStore) FindActive(ctx context.Context) (domain.ConfigVersion, error) {
+	return domain.ConfigVersion{}, nil
+}
+
+func (mockConfigStore) UpdateStatus(ctx context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
+	return version, nil
+}
+
 type mockCredentialStore struct{}
 
 func (mockCredentialStore) SavePassword(ctx context.Context, credential domain.PasswordCredential) error {
@@ -171,18 +179,18 @@ func (mockHealthProbe) Check(ctx context.Context) (domain.HealthStatus, error) {
 }
 
 var (
-	_ contracts.UnitOfWork     = mockUnitOfWork{}
-	_ contracts.Tx             = mockTx{}
-	_ contracts.UserStore      = mockUserStore{}
-	_ contracts.SessionStore   = mockSessionStore{}
+	_ contracts.UnitOfWork      = mockUnitOfWork{}
+	_ contracts.Tx              = mockTx{}
+	_ contracts.UserStore       = mockUserStore{}
+	_ contracts.SessionStore    = mockSessionStore{}
 	_ contracts.PermissionStore = mockPermissionStore{}
-	_ contracts.ConfigStore    = mockConfigStore{}
-	_ contracts.EventOutbox    = mockEventOutbox{}
-	_ contracts.EventPublisher = mockEventPublisher{}
-	_ contracts.Subscription   = mockSubscription{}
-	_ contracts.SecretBroker     = mockSecretBroker{}
-	_ contracts.Clock            = mockClock{}
-	_ contracts.IDGenerator      = mockIDGenerator{}
-	_ contracts.HealthProbe      = mockHealthProbe{}
-	_ contracts.CredentialStore  = mockCredentialStore{}
+	_ contracts.ConfigStore     = mockConfigStore{}
+	_ contracts.EventOutbox     = mockEventOutbox{}
+	_ contracts.EventPublisher  = mockEventPublisher{}
+	_ contracts.Subscription    = mockSubscription{}
+	_ contracts.SecretBroker    = mockSecretBroker{}
+	_ contracts.Clock           = mockClock{}
+	_ contracts.IDGenerator     = mockIDGenerator{}
+	_ contracts.HealthProbe     = mockHealthProbe{}
+	_ contracts.CredentialStore = mockCredentialStore{}
 )
