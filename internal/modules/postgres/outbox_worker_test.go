@@ -150,14 +150,23 @@ func TestWorkerPublishesFromRealPostgresOutboxToIdempotentSubscriber(t *testing.
 	cs := mod.Bind(pool)
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
-	// Simulate a command committing state and an outbox event atomically.
+	// Simulate a command committing state and an outbox event atomically,
+	// resolving both stores through the uniform Store[T] mechanism (MAD-001).
 	if err := cs.UnitOfWork.WithinTx(c, func(c context.Context, tx contracts.Tx) error {
-		if _, err := tx.Users().Create(c, domain.User{
+		users, err := contracts.Store[contracts.UserStore](tx)
+		if err != nil {
+			return err
+		}
+		outbox, err := contracts.Store[contracts.EventOutbox](tx)
+		if err != nil {
+			return err
+		}
+		if _, err := users.Create(c, domain.User{
 			ID: "u-1", Username: "worker-test", Email: "worker-test@example.com", Status: domain.UserActive, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			return err
 		}
-		return tx.Outbox().Append(c, domain.OutboxEvent{Event: domain.Event{
+		return outbox.Append(c, domain.OutboxEvent{Event: domain.Event{
 			ID: "e-1", Type: "user.created", OccurredAt: now, RecordedAt: now, Payload: []byte("worker-test"),
 		}})
 	}); err != nil {

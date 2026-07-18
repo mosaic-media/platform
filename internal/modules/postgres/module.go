@@ -98,9 +98,13 @@ func (Module) Bind(pool *pgxpool.Pool) *ContractSet {
 }
 
 func newContractSet(pool *pgxpool.Pool) *ContractSet {
+	// The UnitOfWork is reached through the StorageAdapter port rather than
+	// constructed directly, so storage is a swappable port (MAD-001,
+	// MEG-015 §03) even though ContractSet's shape and main.go are unchanged.
+	storage := NewStorageAdapter(pool)
 	return &ContractSet{
 		Pool:           pool,
-		UnitOfWork:     NewUnitOfWork(pool),
+		UnitOfWork:     storage.UnitOfWork(),
 		Users:          NewUserStore(pool),
 		Sessions:       NewSessionStore(pool),
 		Permissions:    NewPermissionStore(pool),

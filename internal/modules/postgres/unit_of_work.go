@@ -61,6 +61,15 @@ func (u *UnitOfWork) WithinTx(ctx context.Context, fn func(ctx context.Context, 
 // tx is a transaction-scoped contracts.Tx. Every accessor returns a store
 // bound to the same underlying pgx.Tx, so all reads and writes within one
 // WithinTx call share one transaction.
+//
+// These six accessors are also the entire mechanism behind slice 13's
+// contracts.Store[T]: that resolver delegates to the matching accessor, so
+// Store[UserStore](tx) resolves to exactly &userStore{q: t.q} — the same
+// construction path, not a parallel one. There is nothing extra for this
+// concrete type to implement to satisfy Store[T]; when Tx is later sealed and
+// these accessors removed, contracts.resolveStore is the single place that
+// repoints at the StorageAdapter's binding, and this struct exposes the bound
+// stores there instead (see the migration note in the contracts package).
 type tx struct {
 	q pgx.Tx
 }
