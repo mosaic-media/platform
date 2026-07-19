@@ -1,9 +1,9 @@
-package domain_test
+package v1_test
 
 import (
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 )
 
 // TestNormaliseTypeName covers the collapse ADR 0015 relies on: the open
@@ -38,7 +38,7 @@ func TestNormaliseTypeName(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := domain.NormaliseTypeName(tc.in); got != tc.want {
+			if got := v1.NormaliseTypeName(tc.in); got != tc.want {
 				t.Fatalf("NormaliseTypeName(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
@@ -50,8 +50,8 @@ func TestNormaliseTypeName(t *testing.T) {
 // write cycle would drift.
 func TestNormaliseTypeNameIsIdempotent(t *testing.T) {
 	for _, in := range []string{"Anime Series", "sci-fi/anime", "__x__", "animekit:ova", ""} {
-		once := domain.NormaliseTypeName(in)
-		if twice := domain.NormaliseTypeName(once); twice != once {
+		once := v1.NormaliseTypeName(in)
+		if twice := v1.NormaliseTypeName(once); twice != once {
 			t.Fatalf("normalising %q twice gave %q then %q", in, once, twice)
 		}
 	}
@@ -60,7 +60,7 @@ func TestNormaliseTypeNameIsIdempotent(t *testing.T) {
 // TestNodeCanonicalNormalisesEveryOpenVocabulary checks all three open
 // columns are covered, not just the one the artist gap exposed.
 func TestNodeCanonicalNormalisesEveryOpenVocabulary(t *testing.T) {
-	node := domain.Node{
+	node := v1.Node{
 		MediaType:     "Anime Series",
 		ContainerType: "Box-Set",
 		ItemType:      "Special Feature",

@@ -8,12 +8,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 )
 
 // nodeStore is the PostgreSQL contracts.NodeStore. It owns SQL and row
-// mapping and returns only domain.Node values across the boundary.
+// mapping and returns only v1.Node values across the boundary.
 type nodeStore struct {
 	q queryer
 }
@@ -27,7 +27,7 @@ func NewNodeStore(pool *pgxpool.Pool) contracts.NodeStore {
 const nodeColumns = `id, work_id, parent_id, node_kind, media_type, container_type, item_type,
 	title, natural_order, status, external_ids, attributes, created_at, updated_at`
 
-func (s *nodeStore) Create(ctx context.Context, node domain.Node) (domain.Node, error) {
+func (s *nodeStore) Create(ctx context.Context, node v1.Node) (v1.Node, error) {
 	// Canonicalise on write rather than trusting callers, so the open
 	// vocabularies cannot fragment through a capability that spells a type
 	// differently (ADR 0015).
@@ -44,24 +44,24 @@ func (s *nodeStore) Create(ctx context.Context, node domain.Node) (domain.Node, 
 		node.CreatedAt, node.UpdatedAt,
 	)
 	if err != nil {
-		return domain.Node{}, mapError("create node", err)
+		return v1.Node{}, mapError("create node", err)
 	}
 	return node, nil
 }
 
-func (s *nodeStore) FindByID(ctx context.Context, id domain.NodeID) (domain.Node, error) {
+func (s *nodeStore) FindByID(ctx context.Context, id v1.NodeID) (v1.Node, error) {
 	row := s.q.QueryRow(ctx, `SELECT `+nodeColumns+` FROM nodes WHERE id = $1`, string(id))
 	node, err := scanNode(row)
 	if err != nil {
 		if isNoRows(err) {
-			return domain.Node{}, contracts.NewError(contracts.NotFound, "node not found")
+			return v1.Node{}, contracts.NewError(contracts.NotFound, "node not found")
 		}
-		return domain.Node{}, mapError("find node by id", err)
+		return v1.Node{}, mapError("find node by id", err)
 	}
 	return node, nil
 }
 
-func (s *nodeStore) Update(ctx context.Context, node domain.Node) (domain.Node, error) {
+func (s *nodeStore) Update(ctx context.Context, node v1.Node) (v1.Node, error) {
 	node = node.Canonical()
 	tag, err := s.q.Exec(ctx,
 		`UPDATE nodes SET work_id = $2, parent_id = $3, node_kind = $4, media_type = $5,
@@ -76,17 +76,17 @@ func (s *nodeStore) Update(ctx context.Context, node domain.Node) (domain.Node, 
 		node.UpdatedAt,
 	)
 	if err != nil {
-		return domain.Node{}, mapError("update node", err)
+		return v1.Node{}, mapError("update node", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return domain.Node{}, contracts.NewError(contracts.NotFound, "node not found")
+		return v1.Node{}, contracts.NewError(contracts.NotFound, "node not found")
 	}
 	return node, nil
 }
 
 // ListChildren is the load-bearing read: it rides nodes_parent_order_idx as a
 // plain indexed scan, with no recursion at read time.
-func (s *nodeStore) ListChildren(ctx context.Context, parentID domain.NodeID) ([]domain.Node, error) {
+func (s *nodeStore) ListChildren(ctx context.Context, parentID v1.NodeID) ([]v1.Node, error) {
 	rows, err := s.q.Query(ctx,
 		`SELECT `+nodeColumns+` FROM nodes WHERE parent_id = $1 ORDER BY natural_order, id`,
 		string(parentID),
@@ -97,7 +97,7 @@ func (s *nodeStore) ListChildren(ctx context.Context, parentID domain.NodeID) ([
 	return collectNodes(rows, "list node children")
 }
 
-func (s *nodeStore) ListByWork(ctx context.Context, workID domain.NodeID) ([]domain.Node, error) {
+func (s *nodeStore) ListByWork(ctx context.Context, workID v1.NodeID) ([]v1.Node, error) {
 	rows, err := s.q.Query(ctx,
 		`SELECT `+nodeColumns+` FROM nodes WHERE work_id = $1 ORDER BY natural_order, id`,
 		string(workID),
@@ -110,14 +110,14 @@ func (s *nodeStore) ListByWork(ctx context.Context, workID domain.NodeID) ([]dom
 
 // ListWorks reads the roots. The empty mediaType returns every root rather
 // than none, so callers browsing the whole library need no second method.
-func (s *nodeStore) ListWorks(ctx context.Context, mediaType domain.MediaType) ([]domain.Node, error) {
+func (s *nodeStore) ListWorks(ctx context.Context, mediaType v1.MediaType) ([]v1.Node, error) {
 	rows, err := s.q.Query(ctx,
 		`SELECT `+nodeColumns+` FROM nodes
 		 WHERE parent_id IS NULL AND ($1 = '' OR media_type = $1)
 		 ORDER BY title, id`,
 		// Normalised on the way in as well as on the way out, or a caller
 		// filtering by "Anime Series" would silently match nothing.
-		string(domain.NormaliseMediaType(string(mediaType))),
+		string(v1.NormaliseMediaType(string(mediaType))),
 	)
 	if err != nil {
 		return nil, mapError("list works", err)
@@ -132,7 +132,7 @@ func (s *nodeStore) ListWorks(ctx context.Context, mediaType domain.MediaType) (
 // is adequate at the row counts a personal library reaches; a trigram index
 // is the escalation if it stops being, and it is not needed to make the read
 // correct.
-func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]domain.Node, error) {
+func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1.Node, error) {
 	if query.Limit <= 0 {
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
 	}
@@ -145,7 +145,7 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]do
 		 ORDER BY title, id
 		 LIMIT $5`,
 		query.Title, likeContains(query.Title),
-		string(domain.NormaliseMediaType(string(query.MediaType))),
+		string(v1.NormaliseMediaType(string(query.MediaType))),
 		string(query.Kind),
 		query.Limit,
 	)
@@ -157,7 +157,7 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]do
 
 // FindByExternalID uses jsonb containment, which is what nodes_external_ids_gin
 // indexes — the lookup this whole column exists to serve.
-func (s *nodeStore) FindByExternalID(ctx context.Context, scheme, value string) ([]domain.Node, error) {
+func (s *nodeStore) FindByExternalID(ctx context.Context, scheme, value string) ([]v1.Node, error) {
 	if scheme == "" {
 		return nil, contracts.NewError(contracts.InvalidArgument, "external id scheme is required")
 	}
@@ -193,7 +193,7 @@ func likeContains(s string) string {
 // are ON DELETE RESTRICT, so a node with children, parts or source bindings
 // still behind it produces a foreign-key violation, which maps to Conflict —
 // deletion is a decision a user confirms, never a silent cascade.
-func (s *nodeStore) Delete(ctx context.Context, id domain.NodeID) error {
+func (s *nodeStore) Delete(ctx context.Context, id v1.NodeID) error {
 	tag, err := s.q.Exec(ctx, `DELETE FROM nodes WHERE id = $1`, string(id))
 	if err != nil {
 		return mapError("delete node", err)
@@ -204,9 +204,9 @@ func (s *nodeStore) Delete(ctx context.Context, id domain.NodeID) error {
 	return nil
 }
 
-func scanNode(row pgx.Row) (domain.Node, error) {
+func scanNode(row pgx.Row) (v1.Node, error) {
 	var (
-		node          domain.Node
+		node          v1.Node
 		id            string
 		workID        string
 		parentID      *string
@@ -221,30 +221,30 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 		&node.Title, &node.NaturalOrder, &status,
 		&node.ExternalIDs, &node.Attributes, &node.CreatedAt, &node.UpdatedAt,
 	); err != nil {
-		return domain.Node{}, err
+		return v1.Node{}, err
 	}
-	node.ID = domain.NodeID(id)
-	node.WorkID = domain.NodeID(workID)
+	node.ID = v1.NodeID(id)
+	node.WorkID = v1.NodeID(workID)
 	if parentID != nil {
-		parent := domain.NodeID(*parentID)
+		parent := v1.NodeID(*parentID)
 		node.ParentID = &parent
 	}
-	node.Kind = domain.NodeKind(kind)
-	node.MediaType = domain.MediaType(mediaType)
+	node.Kind = v1.NodeKind(kind)
+	node.MediaType = v1.MediaType(mediaType)
 	if containerType != nil {
-		node.ContainerType = domain.ContainerType(*containerType)
+		node.ContainerType = v1.ContainerType(*containerType)
 	}
 	if itemType != nil {
-		node.ItemType = domain.ItemType(*itemType)
+		node.ItemType = v1.ItemType(*itemType)
 	}
-	node.Status = domain.NodeStatus(status)
+	node.Status = v1.NodeStatus(status)
 	return node, nil
 }
 
-func collectNodes(rows pgx.Rows, message string) ([]domain.Node, error) {
+func collectNodes(rows pgx.Rows, message string) ([]v1.Node, error) {
 	defer rows.Close()
 
-	var nodes []domain.Node
+	var nodes []v1.Node
 	for rows.Next() {
 		node, err := scanNode(rows)
 		if err != nil {
@@ -259,7 +259,7 @@ func collectNodes(rows pgx.Rows, message string) ([]domain.Node, error) {
 }
 
 // nodeIDParam renders an optional parent as a nullable uuid parameter.
-func nodeIDParam(id *domain.NodeID) any {
+func nodeIDParam(id *v1.NodeID) any {
 	if id == nil {
 		return nil
 	}
@@ -268,7 +268,7 @@ func nodeIDParam(id *domain.NodeID) any {
 
 // nullableText maps the domain's "absent means empty string" convention onto
 // the schema's nullable columns, so container_type and item_type are NULL
-// rather than '' on the kinds they do not apply to.
+// rather than ” on the kinds they do not apply to.
 func nullableText(s string) any {
 	if s == "" {
 		return nil

@@ -7,8 +7,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 )
 
 // partStore is the PostgreSQL contracts.PartStore.
@@ -27,7 +27,7 @@ const partColumns = `id, node_id, part_role, edition_label, natural_order,
 	container, video_codec, audio_codec, width, height, hdr_format,
 	duration_ns, bitrate_bps, size_bytes, attributes, created_at, updated_at`
 
-func (s *partStore) Create(ctx context.Context, part domain.Part) (domain.Part, error) {
+func (s *partStore) Create(ctx context.Context, part v1.Part) (v1.Part, error) {
 	_, err := s.q.Exec(ctx,
 		`INSERT INTO parts (id, node_id, part_role, edition_label, natural_order,
 		                    location_scheme, location_provider, location_ref,
@@ -46,27 +46,27 @@ func (s *partStore) Create(ctx context.Context, part domain.Part) (domain.Part, 
 		// foreign-key violation, but attaching bytes to something unplayable is
 		// a malformed request rather than a race, so it is InvalidArgument.
 		if violatesConstraint(err, "parts_node_is_item") {
-			return domain.Part{}, contracts.WrapError(contracts.InvalidArgument,
+			return v1.Part{}, contracts.WrapError(contracts.InvalidArgument,
 				"part must attach to an existing item node", err)
 		}
-		return domain.Part{}, mapError("create part", err)
+		return v1.Part{}, mapError("create part", err)
 	}
 	return part, nil
 }
 
-func (s *partStore) FindByID(ctx context.Context, id domain.PartID) (domain.Part, error) {
+func (s *partStore) FindByID(ctx context.Context, id v1.PartID) (v1.Part, error) {
 	row := s.q.QueryRow(ctx, `SELECT `+partColumns+` FROM parts WHERE id = $1`, string(id))
 	part, err := scanPart(row)
 	if err != nil {
 		if isNoRows(err) {
-			return domain.Part{}, contracts.NewError(contracts.NotFound, "part not found")
+			return v1.Part{}, contracts.NewError(contracts.NotFound, "part not found")
 		}
-		return domain.Part{}, mapError("find part by id", err)
+		return v1.Part{}, mapError("find part by id", err)
 	}
 	return part, nil
 }
 
-func (s *partStore) Update(ctx context.Context, part domain.Part) (domain.Part, error) {
+func (s *partStore) Update(ctx context.Context, part v1.Part) (v1.Part, error) {
 	tag, err := s.q.Exec(ctx,
 		`UPDATE parts SET node_id = $2, part_role = $3, edition_label = $4, natural_order = $5,
 		                  location_scheme = $6, location_provider = $7, location_ref = $8,
@@ -83,20 +83,20 @@ func (s *partStore) Update(ctx context.Context, part domain.Part) (domain.Part, 
 	)
 	if err != nil {
 		if violatesConstraint(err, "parts_node_is_item") {
-			return domain.Part{}, contracts.WrapError(contracts.InvalidArgument,
+			return v1.Part{}, contracts.WrapError(contracts.InvalidArgument,
 				"part must attach to an existing item node", err)
 		}
-		return domain.Part{}, mapError("update part", err)
+		return v1.Part{}, mapError("update part", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return domain.Part{}, contracts.NewError(contracts.NotFound, "part not found")
+		return v1.Part{}, contracts.NewError(contracts.NotFound, "part not found")
 	}
 	return part, nil
 }
 
 // ListByNode returns editions and segments together, in order. They share one
 // list because they share one source-selection path.
-func (s *partStore) ListByNode(ctx context.Context, nodeID domain.NodeID) ([]domain.Part, error) {
+func (s *partStore) ListByNode(ctx context.Context, nodeID v1.NodeID) ([]v1.Part, error) {
 	rows, err := s.q.Query(ctx,
 		`SELECT `+partColumns+` FROM parts WHERE node_id = $1 ORDER BY natural_order, id`,
 		string(nodeID),
@@ -106,7 +106,7 @@ func (s *partStore) ListByNode(ctx context.Context, nodeID domain.NodeID) ([]dom
 	}
 	defer rows.Close()
 
-	var parts []domain.Part
+	var parts []v1.Part
 	for rows.Next() {
 		part, err := scanPart(rows)
 		if err != nil {
@@ -120,7 +120,7 @@ func (s *partStore) ListByNode(ctx context.Context, nodeID domain.NodeID) ([]dom
 	return parts, nil
 }
 
-func (s *partStore) Delete(ctx context.Context, id domain.PartID) error {
+func (s *partStore) Delete(ctx context.Context, id v1.PartID) error {
 	tag, err := s.q.Exec(ctx, `DELETE FROM parts WHERE id = $1`, string(id))
 	if err != nil {
 		return mapError("delete part", err)
@@ -131,9 +131,9 @@ func (s *partStore) Delete(ctx context.Context, id domain.PartID) error {
 	return nil
 }
 
-func scanPart(row pgx.Row) (domain.Part, error) {
+func scanPart(row pgx.Row) (v1.Part, error) {
 	var (
-		part       domain.Part
+		part       v1.Part
 		id         string
 		nodeID     string
 		role       string
@@ -148,12 +148,12 @@ func scanPart(row pgx.Row) (domain.Part, error) {
 		&durationNS, &part.BitrateBPS, &part.SizeBytes,
 		&part.Attributes, &part.CreatedAt, &part.UpdatedAt,
 	); err != nil {
-		return domain.Part{}, err
+		return v1.Part{}, err
 	}
-	part.ID = domain.PartID(id)
-	part.NodeID = domain.NodeID(nodeID)
-	part.Role = domain.PartRole(role)
-	part.Location.Scheme = domain.LocationScheme(scheme)
+	part.ID = v1.PartID(id)
+	part.NodeID = v1.NodeID(nodeID)
+	part.Role = v1.PartRole(role)
+	part.Location.Scheme = v1.LocationScheme(scheme)
 	part.Duration = time.Duration(durationNS)
 	return part, nil
 }

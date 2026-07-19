@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
@@ -20,7 +21,7 @@ const ActionContentCreate policy.Action = "content.create"
 // the same and it has no parent, and none of that is the caller's to set.
 type AddContentWorkCommand struct {
 	CallerSessionID domain.SessionID
-	MediaType       domain.MediaType
+	MediaType       v1.MediaType
 	Title           string
 	// ExternalIDs and Attributes are optional JSON documents. Empty means
 	// an empty object; the schema does not validate their contents
@@ -32,7 +33,7 @@ type AddContentWorkCommand struct {
 // AddContentWorkResult carries the committed work, whose MediaType is the
 // canonical form (ADR 0015) and may differ from what was sent.
 type AddContentWorkResult struct {
-	Work domain.Node
+	Work v1.Node
 }
 
 func validateAddContentWorkCommand(cmd AddContentWorkCommand) error {
@@ -73,18 +74,18 @@ func (s *Service) AddContentWork(ctx context.Context, cmd AddContentWorkCommand)
 	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
 		now := s.clock.Now()
-		id := domain.NodeID(s.contentIDs.NewID())
+		id := v1.NodeID(s.contentIDs.NewID())
 
 		// 5-6. apply the domain shape of a Work: it roots its own tree, so
 		// work id is its own id and there is no parent.
-		work := domain.Node{
+		work := v1.Node{
 			ID:          id,
 			WorkID:      id,
 			ParentID:    nil,
-			Kind:        domain.NodeWork,
+			Kind:        v1.NodeWork,
 			MediaType:   cmd.MediaType,
 			Title:       cmd.Title,
-			Status:      domain.NodeActive,
+			Status:      v1.NodeActive,
 			ExternalIDs: cmd.ExternalIDs,
 			Attributes:  cmd.Attributes,
 			CreatedAt:   now,

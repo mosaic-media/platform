@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
@@ -25,8 +26,8 @@ const (
 type SearchContentQuery struct {
 	CallerSessionID domain.SessionID
 	Title           string
-	MediaType       domain.MediaType
-	Kind            domain.NodeKind
+	MediaType       v1.MediaType
+	Kind            v1.NodeKind
 	// Limit is clamped to maxSearchLimit and defaults to
 	// defaultSearchLimit when zero or negative.
 	Limit int
@@ -34,7 +35,7 @@ type SearchContentQuery struct {
 
 // SearchContentResult is the Platform result type returned by SearchContent.
 type SearchContentResult struct {
-	Nodes []domain.Node
+	Nodes []v1.Node
 }
 
 func validateSearchContentQuery(query SearchContentQuery) error {
@@ -42,9 +43,9 @@ func validateSearchContentQuery(query SearchContentQuery) error {
 		return contracts.NewError(contracts.InvalidArgument, "caller session id is required")
 	}
 	if query.Kind != "" &&
-		query.Kind != domain.NodeWork &&
-		query.Kind != domain.NodeContainer &&
-		query.Kind != domain.NodeItem {
+		query.Kind != v1.NodeWork &&
+		query.Kind != v1.NodeContainer &&
+		query.Kind != v1.NodeItem {
 		return contracts.NewError(contracts.InvalidArgument, "unknown node kind")
 	}
 	return nil
@@ -100,7 +101,7 @@ type FindContentByExternalIDQuery struct {
 // this is a list rather than a single node — an anime and its source manga
 // can share a provider reference and remain two Works (ADR 0013).
 type FindContentByExternalIDResult struct {
-	Nodes []domain.Node
+	Nodes []v1.Node
 }
 
 func validateFindContentByExternalIDQuery(query FindContentByExternalIDQuery) error {

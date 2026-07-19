@@ -3,7 +3,7 @@ package contracts
 import (
 	"context"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 )
 
 // NodeStore persists the containment tree (ADR 0013).
@@ -15,35 +15,35 @@ import (
 // children are containers.
 //
 // Implementations must store the open type vocabularies canonically —
-// domain.Node.Canonical() — so that "Anime Series", "anime-series" and
+// v1.Node.Canonical() — so that "Anime Series", "anime-series" and
 // "anime_series" are one media type rather than three (ADR 0015). Writes
 // return the canonical value, which may therefore differ from what was
 // passed in.
 type NodeStore interface {
-	Create(ctx context.Context, node domain.Node) (domain.Node, error)
-	FindByID(ctx context.Context, id domain.NodeID) (domain.Node, error)
-	Update(ctx context.Context, node domain.Node) (domain.Node, error)
+	Create(ctx context.Context, node v1.Node) (v1.Node, error)
+	FindByID(ctx context.Context, id v1.NodeID) (v1.Node, error)
+	Update(ctx context.Context, node v1.Node) (v1.Node, error)
 
 	// ListChildren returns the direct children of a node ordered by
 	// NaturalOrder. This is the single most common query a media browser
 	// makes and it is served by a plain indexed scan — no recursion at read
 	// time.
-	ListChildren(ctx context.Context, parentID domain.NodeID) ([]domain.Node, error)
+	ListChildren(ctx context.Context, parentID v1.NodeID) ([]v1.Node, error)
 
 	// ListByWork returns every node in one work's tree, the work itself
 	// included, ordered by NaturalOrder. It reads the denormalised work id
 	// rather than walking parents.
-	ListByWork(ctx context.Context, workID domain.NodeID) ([]domain.Node, error)
+	ListByWork(ctx context.Context, workID v1.NodeID) ([]v1.Node, error)
 
 	// ListWorks returns the root of every tree — the nodes with no parent —
 	// optionally narrowed to one media type. An empty mediaType returns all
 	// of them.
-	ListWorks(ctx context.Context, mediaType domain.MediaType) ([]domain.Node, error)
+	ListWorks(ctx context.Context, mediaType v1.MediaType) ([]v1.Node, error)
 
 	// Search finds nodes matching a set of optional criteria. It is the read
 	// behind "do I already have this?" — the question a capability asks
 	// before sourcing anything.
-	Search(ctx context.Context, query NodeQuery) ([]domain.Node, error)
+	Search(ctx context.Context, query NodeQuery) ([]v1.Node, error)
 
 	// FindByExternalID looks nodes up by a provider's own identifier — the
 	// strongest form of "do I already have this", and the one that does not
@@ -54,13 +54,13 @@ type NodeStore interface {
 	// {"anilist": "1234"}. More than one node may share an external id: an
 	// anime and its source manga can carry the same provider reference, and
 	// ADR 0013 keeps those as two Works rather than merging them.
-	FindByExternalID(ctx context.Context, scheme, value string) ([]domain.Node, error)
+	FindByExternalID(ctx context.Context, scheme, value string) ([]v1.Node, error)
 
 	// Delete removes one node. It is Conflict when the node still has
 	// children or parts: ADR 0013 rules that deletion is a decision a user
 	// confirms, never a silent cascade, so the store refuses rather than
 	// taking a subtree with it. Callers delete depth-first.
-	Delete(ctx context.Context, id domain.NodeID) error
+	Delete(ctx context.Context, id v1.NodeID) error
 }
 
 // NodeQuery narrows a content search. Every field is optional except Limit,
@@ -77,11 +77,11 @@ type NodeQuery struct {
 	// expects to find "Fullmetal Alchemist".
 	Title string
 	// MediaType narrows to one media type, already normalised by the store.
-	MediaType domain.MediaType
+	MediaType v1.MediaType
 	// Kind narrows to works, containers or items. Searching for works alone
 	// is the common case — a capability asks whether a *show* exists, not
 	// whether some episode does.
-	Kind domain.NodeKind
+	Kind v1.NodeKind
 	// Limit caps the result set and must be positive. Search is a
 	// user-facing read and an unbounded one is a denial of service against
 	// a large library.

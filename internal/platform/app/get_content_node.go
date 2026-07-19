@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
@@ -12,7 +13,7 @@ import (
 // children.
 type GetContentNodeQuery struct {
 	CallerSessionID domain.SessionID
-	NodeID          domain.NodeID
+	NodeID          v1.NodeID
 	// WithChildren also returns the node's direct children in order. It is
 	// one level, not a subtree: variable depth means a caller walks
 	// deliberately rather than pulling an unbounded tree by accident.
@@ -23,8 +24,8 @@ type GetContentNodeQuery struct {
 // GetContentNode. Children is nil unless the query asked for it, and empty
 // for a node that has none.
 type GetContentNodeResult struct {
-	Node     domain.Node
-	Children []domain.Node
+	Node     v1.Node
+	Children []v1.Node
 }
 
 func validateGetContentNodeQuery(query GetContentNodeQuery) error {
@@ -75,7 +76,7 @@ func (s *Service) GetContentNode(ctx context.Context, query GetContentNodeQuery)
 		}
 		// Never nil when asked for, so a caller can range without a guard.
 		if children == nil {
-			children = []domain.Node{}
+			children = []v1.Node{}
 		}
 		result.Children = children
 	}

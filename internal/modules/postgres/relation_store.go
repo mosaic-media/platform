@@ -6,8 +6,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 )
 
 // relationStore is the PostgreSQL contracts.RelationStore. Reading a computed
@@ -25,7 +25,7 @@ func NewRelationStore(pool *pgxpool.Pool) contracts.RelationStore {
 
 const relationColumns = `id, from_node_id, to_node_id, relation_type, confidence, origin, created_at`
 
-func (s *relationStore) Create(ctx context.Context, relation domain.Relation) (domain.Relation, error) {
+func (s *relationStore) Create(ctx context.Context, relation v1.Relation) (v1.Relation, error) {
 	_, err := s.q.Exec(ctx,
 		`INSERT INTO relations (id, from_node_id, to_node_id, relation_type, confidence, origin, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -33,24 +33,24 @@ func (s *relationStore) Create(ctx context.Context, relation domain.Relation) (d
 		string(relation.Type), relation.Confidence, string(relation.Origin), relation.CreatedAt,
 	)
 	if err != nil {
-		return domain.Relation{}, mapError("create relation", err)
+		return v1.Relation{}, mapError("create relation", err)
 	}
 	return relation, nil
 }
 
-func (s *relationStore) FindByID(ctx context.Context, id domain.RelationID) (domain.Relation, error) {
+func (s *relationStore) FindByID(ctx context.Context, id v1.RelationID) (v1.Relation, error) {
 	row := s.q.QueryRow(ctx, `SELECT `+relationColumns+` FROM relations WHERE id = $1`, string(id))
 	relation, err := scanRelation(row)
 	if err != nil {
 		if isNoRows(err) {
-			return domain.Relation{}, contracts.NewError(contracts.NotFound, "relation not found")
+			return v1.Relation{}, contracts.NewError(contracts.NotFound, "relation not found")
 		}
-		return domain.Relation{}, mapError("find relation by id", err)
+		return v1.Relation{}, mapError("find relation by id", err)
 	}
 	return relation, nil
 }
 
-func (s *relationStore) ListFrom(ctx context.Context, from domain.NodeID, relationType domain.RelationType) ([]domain.Relation, error) {
+func (s *relationStore) ListFrom(ctx context.Context, from v1.NodeID, relationType v1.RelationType) ([]v1.Relation, error) {
 	rows, err := s.q.Query(ctx,
 		`SELECT `+relationColumns+` FROM relations
 		 WHERE from_node_id = $1 AND ($2 = '' OR relation_type = $2)
@@ -63,7 +63,7 @@ func (s *relationStore) ListFrom(ctx context.Context, from domain.NodeID, relati
 	return collectRelations(rows, "list relations from node")
 }
 
-func (s *relationStore) ListTo(ctx context.Context, to domain.NodeID, relationType domain.RelationType) ([]domain.Relation, error) {
+func (s *relationStore) ListTo(ctx context.Context, to v1.NodeID, relationType v1.RelationType) ([]v1.Relation, error) {
 	rows, err := s.q.Query(ctx,
 		`SELECT `+relationColumns+` FROM relations
 		 WHERE to_node_id = $1 AND ($2 = '' OR relation_type = $2)
@@ -76,7 +76,7 @@ func (s *relationStore) ListTo(ctx context.Context, to domain.NodeID, relationTy
 	return collectRelations(rows, "list relations to node")
 }
 
-func (s *relationStore) Delete(ctx context.Context, id domain.RelationID) error {
+func (s *relationStore) Delete(ctx context.Context, id v1.RelationID) error {
 	tag, err := s.q.Exec(ctx, `DELETE FROM relations WHERE id = $1`, string(id))
 	if err != nil {
 		return mapError("delete relation", err)
@@ -87,9 +87,9 @@ func (s *relationStore) Delete(ctx context.Context, id domain.RelationID) error 
 	return nil
 }
 
-func scanRelation(row pgx.Row) (domain.Relation, error) {
+func scanRelation(row pgx.Row) (v1.Relation, error) {
 	var (
-		relation     domain.Relation
+		relation     v1.Relation
 		id           string
 		fromNodeID   string
 		toNodeID     string
@@ -98,20 +98,20 @@ func scanRelation(row pgx.Row) (domain.Relation, error) {
 	)
 	if err := row.Scan(&id, &fromNodeID, &toNodeID, &relationType,
 		&relation.Confidence, &origin, &relation.CreatedAt); err != nil {
-		return domain.Relation{}, err
+		return v1.Relation{}, err
 	}
-	relation.ID = domain.RelationID(id)
-	relation.FromNodeID = domain.NodeID(fromNodeID)
-	relation.ToNodeID = domain.NodeID(toNodeID)
-	relation.Type = domain.RelationType(relationType)
-	relation.Origin = domain.RelationOrigin(origin)
+	relation.ID = v1.RelationID(id)
+	relation.FromNodeID = v1.NodeID(fromNodeID)
+	relation.ToNodeID = v1.NodeID(toNodeID)
+	relation.Type = v1.RelationType(relationType)
+	relation.Origin = v1.RelationOrigin(origin)
 	return relation, nil
 }
 
-func collectRelations(rows pgx.Rows, message string) ([]domain.Relation, error) {
+func collectRelations(rows pgx.Rows, message string) ([]v1.Relation, error) {
 	defer rows.Close()
 
-	var relations []domain.Relation
+	var relations []v1.Relation
 	for rows.Next() {
 		relation, err := scanRelation(rows)
 		if err != nil {

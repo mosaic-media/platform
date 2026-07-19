@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 )
@@ -25,48 +26,48 @@ func contentID(kind string, seed int) string {
 	return fmt.Sprintf("0193c8f0-%s-7000-8000-%012x", kind, seed)
 }
 
-func nodeID(seed int) domain.NodeID    { return domain.NodeID(contentID("0d00", seed)) }
-func partID(seed int) domain.PartID    { return domain.PartID(contentID("9a11", seed)) }
-func relID(seed int) domain.RelationID { return domain.RelationID(contentID("13e1", seed)) }
-func bindID(seed int) domain.SourceBindingID {
-	return domain.SourceBindingID(contentID("b14d", seed))
+func nodeID(seed int) v1.NodeID    { return v1.NodeID(contentID("0d00", seed)) }
+func partID(seed int) v1.PartID    { return v1.PartID(contentID("9a11", seed)) }
+func relID(seed int) v1.RelationID { return v1.RelationID(contentID("13e1", seed)) }
+func bindID(seed int) v1.SourceBindingID {
+	return v1.SourceBindingID(contentID("b14d", seed))
 }
 
 // newWork builds a root Work. A Work is its own tree's work id and has no
 // parent.
-func newWork(id domain.NodeID, mediaType domain.MediaType, title string, at time.Time) domain.Node {
-	return domain.Node{
+func newWork(id v1.NodeID, mediaType v1.MediaType, title string, at time.Time) v1.Node {
+	return v1.Node{
 		ID: id, WorkID: id, ParentID: nil,
-		Kind: domain.NodeWork, MediaType: mediaType, Title: title,
-		Status: domain.NodeActive, CreatedAt: at, UpdatedAt: at,
+		Kind: v1.NodeWork, MediaType: mediaType, Title: title,
+		Status: v1.NodeActive, CreatedAt: at, UpdatedAt: at,
 	}
 }
 
-func newContainer(id, work, parent domain.NodeID, mediaType domain.MediaType,
-	containerType domain.ContainerType, title string, order float64, at time.Time) domain.Node {
-	return domain.Node{
+func newContainer(id, work, parent v1.NodeID, mediaType v1.MediaType,
+	containerType v1.ContainerType, title string, order float64, at time.Time) v1.Node {
+	return v1.Node{
 		ID: id, WorkID: work, ParentID: &parent,
-		Kind: domain.NodeContainer, MediaType: mediaType, ContainerType: containerType,
+		Kind: v1.NodeContainer, MediaType: mediaType, ContainerType: containerType,
 		Title: title, NaturalOrder: order,
-		Status: domain.NodeActive, CreatedAt: at, UpdatedAt: at,
+		Status: v1.NodeActive, CreatedAt: at, UpdatedAt: at,
 	}
 }
 
-func newItem(id, work, parent domain.NodeID, mediaType domain.MediaType,
-	itemType domain.ItemType, title string, order float64, at time.Time) domain.Node {
-	return domain.Node{
+func newItem(id, work, parent v1.NodeID, mediaType v1.MediaType,
+	itemType v1.ItemType, title string, order float64, at time.Time) v1.Node {
+	return v1.Node{
 		ID: id, WorkID: work, ParentID: &parent,
-		Kind: domain.NodeItem, MediaType: mediaType, ItemType: itemType,
+		Kind: v1.NodeItem, MediaType: mediaType, ItemType: itemType,
 		Title: title, NaturalOrder: order,
-		Status: domain.NodeActive, CreatedAt: at, UpdatedAt: at,
+		Status: v1.NodeActive, CreatedAt: at, UpdatedAt: at,
 	}
 }
 
-func newPart(id domain.PartID, node domain.NodeID, role domain.PartRole,
-	label string, order float64, at time.Time) domain.Part {
-	return domain.Part{
+func newPart(id v1.PartID, node v1.NodeID, role v1.PartRole,
+	label string, order float64, at time.Time) v1.Part {
+	return v1.Part{
 		ID: id, NodeID: node, Role: role, EditionLabel: label, NaturalOrder: order,
-		Location:  domain.MediaLocation{Scheme: domain.LocalLocation, Ref: "/media/" + string(id) + ".mkv"},
+		Location:  v1.MediaLocation{Scheme: v1.LocalLocation, Ref: "/media/" + string(id) + ".mkv"},
 		Container: "matroska", VideoCodec: "hevc", AudioCodec: "eac3",
 		Width: 3840, Height: 2160, HDRFormat: "dolby_vision",
 		Duration: 2 * time.Hour, BitrateBPS: 42_000_000, SizeBytes: 38_000_000_000,
@@ -74,7 +75,7 @@ func newPart(id domain.PartID, node domain.NodeID, role domain.PartRole,
 	}
 }
 
-func titles(nodes []domain.Node) []string {
+func titles(nodes []v1.Node) []string {
 	out := make([]string, len(nodes))
 	for i, n := range nodes {
 		out[i] = n.Title
@@ -94,6 +95,27 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
+// The published models carry no state-transition methods (ADR 0016), so the
+// suite constructs transitions directly. These mirror what the resolve and
+// orphan commands do internally.
+func orphaned(n v1.Node, at time.Time) v1.Node {
+	n.Status = v1.NodeOrphaned
+	n.UpdatedAt = at
+	return n
+}
+
+func confirmedBinding(b v1.SourceBinding, at time.Time) v1.SourceBinding {
+	b.Status = v1.BindingConfirmed
+	b.UpdatedAt = at
+	return b
+}
+
+func movedBinding(b v1.SourceBinding, node v1.NodeID, at time.Time) v1.SourceBinding {
+	b.NodeID = node
+	b.UpdatedAt = at
+	return b
+}
+
 // RunNodeStoreContract verifies the containment tree: variable depth,
 // ordered sibling reads, fractional insertion, and refusal to cascade.
 func RunNodeStoreContract(t *testing.T, newDeps Factory) {
@@ -102,7 +124,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("create and find a work", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		created, err := d.Nodes.Create(c, newWork(nodeID(1), domain.MediaMovie, "Arrival", now))
+		created, err := d.Nodes.Create(c, newWork(nodeID(1), v1.MediaMovie, "Arrival", now))
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
@@ -110,7 +132,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		if err != nil {
 			t.Fatalf("FindByID: %v", err)
 		}
-		if found.Title != "Arrival" || found.Kind != domain.NodeWork {
+		if found.Title != "Arrival" || found.Kind != v1.NodeWork {
 			t.Fatalf("FindByID returned %+v", found)
 		}
 		if !found.IsRoot() {
@@ -133,11 +155,11 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("a film is work then item, with no container layer", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		work := newWork(nodeID(1), domain.MediaMovie, "Arrival", now)
+		work := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
 		if _, err := d.Nodes.Create(c, work); err != nil {
 			t.Fatalf("Create work: %v", err)
 		}
-		feature := newItem(nodeID(2), work.ID, work.ID, domain.MediaMovie, domain.ItemFeature, "Arrival", 1, now)
+		feature := newItem(nodeID(2), work.ID, work.ID, v1.MediaMovie, v1.ItemFeature, "Arrival", 1, now)
 		if _, err := d.Nodes.Create(c, feature); err != nil {
 			t.Fatalf("Create item: %v", err)
 		}
@@ -146,7 +168,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		if err != nil {
 			t.Fatalf("ListChildren: %v", err)
 		}
-		if len(children) != 1 || children[0].Kind != domain.NodeItem {
+		if len(children) != 1 || children[0].Kind != v1.NodeItem {
 			t.Fatalf("a film's child should be one item, got %+v", children)
 		}
 	})
@@ -154,15 +176,15 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("a series nests work, container and item", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		work := newWork(nodeID(1), domain.MediaTVSeries, "Severance", now)
-		season := newContainer(nodeID(2), work.ID, work.ID, domain.MediaTVSeries, domain.ContainerSeason, "Season 1", 1, now)
-		for _, n := range []domain.Node{work, season} {
+		work := newWork(nodeID(1), v1.MediaTVSeries, "Severance", now)
+		season := newContainer(nodeID(2), work.ID, work.ID, v1.MediaTVSeries, v1.ContainerSeason, "Season 1", 1, now)
+		for _, n := range []v1.Node{work, season} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create %s: %v", n.Title, err)
 			}
 		}
 		for i, title := range []string{"Good News About Hell", "Half Loop", "In Perpetuity"} {
-			ep := newItem(nodeID(10+i), work.ID, season.ID, domain.MediaTVSeries, domain.ItemEpisode, title, float64(i+1), now)
+			ep := newItem(nodeID(10+i), work.ID, season.ID, v1.MediaTVSeries, v1.ItemEpisode, title, float64(i+1), now)
 			if _, err := d.Nodes.Create(c, ep); err != nil {
 				t.Fatalf("Create episode %s: %v", title, err)
 			}
@@ -194,20 +216,20 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("a fractional order inserts without renumbering siblings", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		work := newWork(nodeID(1), domain.MediaTVSeries, "Show", now)
+		work := newWork(nodeID(1), v1.MediaTVSeries, "Show", now)
 		if _, err := d.Nodes.Create(c, work); err != nil {
 			t.Fatalf("Create work: %v", err)
 		}
-		five := newItem(nodeID(5), work.ID, work.ID, domain.MediaTVSeries, domain.ItemEpisode, "Five", 5, now)
-		six := newItem(nodeID(6), work.ID, work.ID, domain.MediaTVSeries, domain.ItemEpisode, "Six", 6, now)
-		for _, n := range []domain.Node{five, six} {
+		five := newItem(nodeID(5), work.ID, work.ID, v1.MediaTVSeries, v1.ItemEpisode, "Five", 5, now)
+		six := newItem(nodeID(6), work.ID, work.ID, v1.MediaTVSeries, v1.ItemEpisode, "Six", 6, now)
+		for _, n := range []v1.Node{five, six} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create: %v", err)
 			}
 		}
 
 		// A recap episode arrives between them.
-		recap := newItem(nodeID(7), work.ID, work.ID, domain.MediaTVSeries, domain.ItemEpisode, "Five and a half", 5.5, now)
+		recap := newItem(nodeID(7), work.ID, work.ID, v1.MediaTVSeries, v1.ItemEpisode, "Five and a half", 5.5, now)
 		if _, err := d.Nodes.Create(c, recap); err != nil {
 			t.Fatalf("Create recap: %v", err)
 		}
@@ -228,15 +250,15 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("list works returns roots and filters by media type", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		film := newWork(nodeID(1), domain.MediaMovie, "Arrival", now)
-		series := newWork(nodeID(2), domain.MediaTVSeries, "Severance", now)
-		for _, n := range []domain.Node{film, series} {
+		film := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		series := newWork(nodeID(2), v1.MediaTVSeries, "Severance", now)
+		for _, n := range []v1.Node{film, series} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create: %v", err)
 			}
 		}
 		// A child must not surface as a work.
-		child := newItem(nodeID(3), film.ID, film.ID, domain.MediaMovie, domain.ItemFeature, "Arrival Feature", 1, now)
+		child := newItem(nodeID(3), film.ID, film.ID, v1.MediaMovie, v1.ItemFeature, "Arrival Feature", 1, now)
 		if _, err := d.Nodes.Create(c, child); err != nil {
 			t.Fatalf("Create child: %v", err)
 		}
@@ -248,7 +270,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		if len(all) != 2 {
 			t.Fatalf("ListWorks(\"\") returned %d, want 2 roots: %v", len(all), titles(all))
 		}
-		films, err := d.Nodes.ListWorks(c, domain.MediaMovie)
+		films, err := d.Nodes.ListWorks(c, v1.MediaMovie)
 		if err != nil {
 			t.Fatalf("ListWorks(movie): %v", err)
 		}
@@ -266,27 +288,27 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 
 		// Three capabilities, three spellings, one media type.
 		for i, spelling := range []string{"Anime Series", "anime-series", "anime_series"} {
-			work := newWork(nodeID(i+1), domain.MediaType(spelling), fmt.Sprintf("Show %d", i+1), now)
+			work := newWork(nodeID(i+1), v1.MediaType(spelling), fmt.Sprintf("Show %d", i+1), now)
 			created, err := d.Nodes.Create(c, work)
 			if err != nil {
 				t.Fatalf("Create %q: %v", spelling, err)
 			}
 			// The write returns what was actually stored.
-			if created.MediaType != domain.MediaAnimeSeries {
+			if created.MediaType != v1.MediaAnimeSeries {
 				t.Fatalf("Create(%q) returned media type %q, want %q",
-					spelling, created.MediaType, domain.MediaAnimeSeries)
+					spelling, created.MediaType, v1.MediaAnimeSeries)
 			}
 			found, err := d.Nodes.FindByID(c, created.ID)
 			if err != nil {
 				t.Fatalf("FindByID: %v", err)
 			}
-			if found.MediaType != domain.MediaAnimeSeries {
-				t.Fatalf("stored %q as %q, want %q", spelling, found.MediaType, domain.MediaAnimeSeries)
+			if found.MediaType != v1.MediaAnimeSeries {
+				t.Fatalf("stored %q as %q, want %q", spelling, found.MediaType, v1.MediaAnimeSeries)
 			}
 		}
 
 		// All three browse as one library rather than three.
-		works, err := d.Nodes.ListWorks(c, domain.MediaAnimeSeries)
+		works, err := d.Nodes.ListWorks(c, v1.MediaAnimeSeries)
 		if err != nil {
 			t.Fatalf("ListWorks: %v", err)
 		}
@@ -307,19 +329,19 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("container and item types are canonical too", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		work := newWork(nodeID(1), domain.MediaTVSeries, "Show", now)
+		work := newWork(nodeID(1), v1.MediaTVSeries, "Show", now)
 		if _, err := d.Nodes.Create(c, work); err != nil {
 			t.Fatalf("Create work: %v", err)
 		}
-		season := newContainer(nodeID(2), work.ID, work.ID, domain.MediaTVSeries, "Box-Set", "Set", 1, now)
+		season := newContainer(nodeID(2), work.ID, work.ID, v1.MediaTVSeries, "Box-Set", "Set", 1, now)
 		created, err := d.Nodes.Create(c, season)
 		if err != nil {
 			t.Fatalf("Create container: %v", err)
 		}
-		if created.ContainerType != domain.ContainerBoxSet {
-			t.Fatalf("container type = %q, want %q", created.ContainerType, domain.ContainerBoxSet)
+		if created.ContainerType != v1.ContainerBoxSet {
+			t.Fatalf("container type = %q, want %q", created.ContainerType, v1.ContainerBoxSet)
 		}
-		item := newItem(nodeID(3), work.ID, season.ID, domain.MediaTVSeries, "Special Feature", "Extra", 1, now)
+		item := newItem(nodeID(3), work.ID, season.ID, v1.MediaTVSeries, "Special Feature", "Extra", 1, now)
 		createdItem, err := d.Nodes.Create(c, item)
 		if err != nil {
 			t.Fatalf("Create item: %v", err)
@@ -335,15 +357,15 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 
-		anime := newWork(nodeID(1), domain.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
-		manga := newWork(nodeID(2), domain.MediaMangaSeries, "Fullmetal Alchemist", now)
-		other := newWork(nodeID(3), domain.MediaMovie, "Arrival", now)
-		for _, n := range []domain.Node{anime, manga, other} {
+		anime := newWork(nodeID(1), v1.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
+		manga := newWork(nodeID(2), v1.MediaMangaSeries, "Fullmetal Alchemist", now)
+		other := newWork(nodeID(3), v1.MediaMovie, "Arrival", now)
+		for _, n := range []v1.Node{anime, manga, other} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create %s: %v", n.Title, err)
 			}
 		}
-		episode := newItem(nodeID(4), anime.ID, anime.ID, domain.MediaAnimeSeries, domain.ItemEpisode, "Fullmetal Alchemist", 1, now)
+		episode := newItem(nodeID(4), anime.ID, anime.ID, v1.MediaAnimeSeries, v1.ItemEpisode, "Fullmetal Alchemist", 1, now)
 		if _, err := d.Nodes.Create(c, episode); err != nil {
 			t.Fatalf("Create episode: %v", err)
 		}
@@ -359,7 +381,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 
 		// Kind narrows to works — "does this show exist", not "does some
 		// episode exist".
-		works, err := d.Nodes.Search(c, contracts.NodeQuery{Title: "alchemist", Kind: domain.NodeWork, Limit: 10})
+		works, err := d.Nodes.Search(c, contracts.NodeQuery{Title: "alchemist", Kind: v1.NodeWork, Limit: 10})
 		if err != nil {
 			t.Fatalf("Search works: %v", err)
 		}
@@ -369,7 +391,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 
 		// Media type separates the anime from its source manga.
 		animeOnly, err := d.Nodes.Search(c, contracts.NodeQuery{
-			Title: "alchemist", Kind: domain.NodeWork, MediaType: domain.MediaAnimeSeries, Limit: 10,
+			Title: "alchemist", Kind: v1.NodeWork, MediaType: v1.MediaAnimeSeries, Limit: 10,
 		})
 		if err != nil {
 			t.Fatalf("Search anime: %v", err)
@@ -392,7 +414,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 		for i, title := range []string{"Akira", "Akira Reborn", "Akira Legacy"} {
-			if _, err := d.Nodes.Create(c, newWork(nodeID(i+1), domain.MediaMovie, title, now)); err != nil {
+			if _, err := d.Nodes.Create(c, newWork(nodeID(i+1), v1.MediaMovie, title, now)); err != nil {
 				t.Fatalf("Create %s: %v", title, err)
 			}
 		}
@@ -417,10 +439,10 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("search treats wildcards as literal text", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		if _, err := d.Nodes.Create(c, newWork(nodeID(1), domain.MediaMovie, "100% Wolf", now)); err != nil {
+		if _, err := d.Nodes.Create(c, newWork(nodeID(1), v1.MediaMovie, "100% Wolf", now)); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		if _, err := d.Nodes.Create(c, newWork(nodeID(2), domain.MediaMovie, "Arrival", now)); err != nil {
+		if _, err := d.Nodes.Create(c, newWork(nodeID(2), v1.MediaMovie, "Arrival", now)); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
 		found, err := d.Nodes.Search(c, contracts.NodeQuery{Title: "100%", Limit: 10})
@@ -438,13 +460,13 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 
-		anime := newWork(nodeID(1), domain.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
+		anime := newWork(nodeID(1), v1.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
 		anime.ExternalIDs = []byte(`{"anilist":"5114","mal":"5114"}`)
-		manga := newWork(nodeID(2), domain.MediaMangaSeries, "Fullmetal Alchemist", now)
+		manga := newWork(nodeID(2), v1.MediaMangaSeries, "Fullmetal Alchemist", now)
 		manga.ExternalIDs = []byte(`{"anilist":"30002"}`)
-		unrelated := newWork(nodeID(3), domain.MediaMovie, "Arrival", now)
+		unrelated := newWork(nodeID(3), v1.MediaMovie, "Arrival", now)
 		unrelated.ExternalIDs = []byte(`{"tmdb":"329865"}`)
-		for _, n := range []domain.Node{anime, manga, unrelated} {
+		for _, n := range []v1.Node{anime, manga, unrelated} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create %s: %v", n.Title, err)
 			}
@@ -489,7 +511,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("update changes fields", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		work, err := d.Nodes.Create(c, newWork(nodeID(1), domain.MediaMovie, "Untitled", now))
+		work, err := d.Nodes.Create(c, newWork(nodeID(1), v1.MediaMovie, "Untitled", now))
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
@@ -511,11 +533,11 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("orphaning is a status change, not a deletion", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		work, err := d.Nodes.Create(c, newWork(nodeID(1), domain.MediaMovie, "Arrival", now))
+		work, err := d.Nodes.Create(c, newWork(nodeID(1), v1.MediaMovie, "Arrival", now))
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		if _, err := d.Nodes.Update(c, work.MarkOrphaned(now.Add(time.Hour))); err != nil {
+		if _, err := d.Nodes.Update(c, orphaned(work, now.Add(time.Hour))); err != nil {
 			t.Fatalf("Update: %v", err)
 		}
 		found, err := d.Nodes.FindByID(c, work.ID)
@@ -531,9 +553,9 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("deleting a node with children is refused", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		work := newWork(nodeID(1), domain.MediaTVSeries, "Severance", now)
-		season := newContainer(nodeID(2), work.ID, work.ID, domain.MediaTVSeries, domain.ContainerSeason, "Season 1", 1, now)
-		for _, n := range []domain.Node{work, season} {
+		work := newWork(nodeID(1), v1.MediaTVSeries, "Severance", now)
+		season := newContainer(nodeID(2), work.ID, work.ID, v1.MediaTVSeries, v1.ContainerSeason, "Season 1", 1, now)
+		for _, n := range []v1.Node{work, season} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create: %v", err)
 			}
@@ -562,8 +584,8 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	// the schema, not convention, is what holds that.
 	t.Run("a container type on a work is rejected", func(t *testing.T) {
 		d := newDeps(t)
-		work := newWork(nodeID(1), domain.MediaTVSeries, "Severance", now)
-		work.ContainerType = domain.ContainerSeason
+		work := newWork(nodeID(1), v1.MediaTVSeries, "Severance", now)
+		work.ContainerType = v1.ContainerSeason
 		_, err := d.Nodes.Create(ctx(t), work)
 		requireCategory(t, err, contracts.InvalidArgument)
 	})
@@ -571,12 +593,12 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("an item type on a container is rejected", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		work := newWork(nodeID(1), domain.MediaTVSeries, "Severance", now)
+		work := newWork(nodeID(1), v1.MediaTVSeries, "Severance", now)
 		if _, err := d.Nodes.Create(c, work); err != nil {
 			t.Fatalf("Create work: %v", err)
 		}
-		season := newContainer(nodeID(2), work.ID, work.ID, domain.MediaTVSeries, domain.ContainerSeason, "Season 1", 1, now)
-		season.ItemType = domain.ItemEpisode
+		season := newContainer(nodeID(2), work.ID, work.ID, v1.MediaTVSeries, v1.ContainerSeason, "Season 1", 1, now)
+		season.ItemType = v1.ItemEpisode
 		_, err := d.Nodes.Create(c, season)
 		requireCategory(t, err, contracts.InvalidArgument)
 	})
@@ -584,11 +606,11 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("a work with a parent is rejected", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		root := newWork(nodeID(1), domain.MediaTVSeries, "Severance", now)
+		root := newWork(nodeID(1), v1.MediaTVSeries, "Severance", now)
 		if _, err := d.Nodes.Create(c, root); err != nil {
 			t.Fatalf("Create work: %v", err)
 		}
-		nested := newWork(nodeID(2), domain.MediaTVSeries, "Nested", now)
+		nested := newWork(nodeID(2), v1.MediaTVSeries, "Nested", now)
 		nested.ParentID = &root.ID
 		_, err := d.Nodes.Create(c, nested)
 		requireCategory(t, err, contracts.InvalidArgument)
@@ -602,13 +624,13 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
 	// seedItem creates a work and one item beneath it, returning the item.
-	seedItem := func(t *testing.T, d Deps, c context.Context) domain.Node {
+	seedItem := func(t *testing.T, d Deps, c context.Context) v1.Node {
 		t.Helper()
-		work := newWork(nodeID(1), domain.MediaMovie, "Blade Runner 2049", now)
+		work := newWork(nodeID(1), v1.MediaMovie, "Blade Runner 2049", now)
 		if _, err := d.Nodes.Create(c, work); err != nil {
 			t.Fatalf("Create work: %v", err)
 		}
-		item := newItem(nodeID(2), work.ID, work.ID, domain.MediaMovie, domain.ItemFeature, "Blade Runner 2049", 1, now)
+		item := newItem(nodeID(2), work.ID, work.ID, v1.MediaMovie, v1.ItemFeature, "Blade Runner 2049", 1, now)
 		if _, err := d.Nodes.Create(c, item); err != nil {
 			t.Fatalf("Create item: %v", err)
 		}
@@ -619,7 +641,7 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 		item := seedItem(t, d, c)
-		created, err := d.Parts.Create(c, newPart(partID(1), item.ID, domain.PartEdition, "", 1, now))
+		created, err := d.Parts.Create(c, newPart(partID(1), item.ID, v1.PartEdition, "", 1, now))
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
@@ -646,7 +668,7 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 		item := seedItem(t, d, c)
 
 		for i, label := range []string{"Theatrical", "Director's Cut", "Final Cut"} {
-			p := newPart(partID(10+i), item.ID, domain.PartEdition, label, float64(i+1), now)
+			p := newPart(partID(10+i), item.ID, v1.PartEdition, label, float64(i+1), now)
 			if _, err := d.Parts.Create(c, p); err != nil {
 				t.Fatalf("Create edition %s: %v", label, err)
 			}
@@ -674,7 +696,7 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 		c := ctx(t)
 		item := seedItem(t, d, c)
 		for i, disc := range []string{"Disc 1", "Disc 2", "Disc 3"} {
-			p := newPart(partID(20+i), item.ID, domain.PartSegment, disc, float64(i+1), now)
+			p := newPart(partID(20+i), item.ID, v1.PartSegment, disc, float64(i+1), now)
 			if _, err := d.Parts.Create(c, p); err != nil {
 				t.Fatalf("Create %s: %v", disc, err)
 			}
@@ -697,13 +719,13 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 		c := ctx(t)
 		item := seedItem(t, d, c)
 
-		local := newPart(partID(1), item.ID, domain.PartEdition, "Local", 1, now)
-		local.Location = domain.MediaLocation{Scheme: domain.LocalLocation, Ref: "/mnt/media/br2049.mkv"}
-		remote := newPart(partID(2), item.ID, domain.PartEdition, "Remote", 2, now)
-		remote.Location = domain.MediaLocation{
-			Scheme: domain.RemoteLocation, Provider: "debrid", Ref: "magnet:?xt=urn:btih:abcdef",
+		local := newPart(partID(1), item.ID, v1.PartEdition, "Local", 1, now)
+		local.Location = v1.MediaLocation{Scheme: v1.LocalLocation, Ref: "/mnt/media/br2049.mkv"}
+		remote := newPart(partID(2), item.ID, v1.PartEdition, "Remote", 2, now)
+		remote.Location = v1.MediaLocation{
+			Scheme: v1.RemoteLocation, Provider: "debrid", Ref: "magnet:?xt=urn:btih:abcdef",
 		}
-		for _, p := range []domain.Part{local, remote} {
+		for _, p := range []v1.Part{local, remote} {
 			if _, err := d.Parts.Create(c, p); err != nil {
 				t.Fatalf("Create %s: %v", p.EditionLabel, err)
 			}
@@ -728,23 +750,23 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 	t.Run("a part cannot attach to a work or a container", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
-		work := newWork(nodeID(1), domain.MediaTVSeries, "Severance", now)
-		season := newContainer(nodeID(2), work.ID, work.ID, domain.MediaTVSeries, domain.ContainerSeason, "Season 1", 1, now)
-		for _, n := range []domain.Node{work, season} {
+		work := newWork(nodeID(1), v1.MediaTVSeries, "Severance", now)
+		season := newContainer(nodeID(2), work.ID, work.ID, v1.MediaTVSeries, v1.ContainerSeason, "Season 1", 1, now)
+		for _, n := range []v1.Node{work, season} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create: %v", err)
 			}
 		}
-		_, err := d.Parts.Create(c, newPart(partID(1), work.ID, domain.PartEdition, "", 1, now))
+		_, err := d.Parts.Create(c, newPart(partID(1), work.ID, v1.PartEdition, "", 1, now))
 		requireCategory(t, err, contracts.InvalidArgument)
 
-		_, err = d.Parts.Create(c, newPart(partID(2), season.ID, domain.PartEdition, "", 1, now))
+		_, err = d.Parts.Create(c, newPart(partID(2), season.ID, v1.PartEdition, "", 1, now))
 		requireCategory(t, err, contracts.InvalidArgument)
 	})
 
 	t.Run("a part cannot attach to a node that does not exist", func(t *testing.T) {
 		d := newDeps(t)
-		_, err := d.Parts.Create(ctx(t), newPart(partID(1), nodeID(999), domain.PartEdition, "", 1, now))
+		_, err := d.Parts.Create(ctx(t), newPart(partID(1), nodeID(999), v1.PartEdition, "", 1, now))
 		requireCategory(t, err, contracts.InvalidArgument)
 	})
 
@@ -752,7 +774,7 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 		item := seedItem(t, d, c)
-		part, err := d.Parts.Create(c, newPart(partID(1), item.ID, domain.PartEdition, "", 1, now))
+		part, err := d.Parts.Create(c, newPart(partID(1), item.ID, v1.PartEdition, "", 1, now))
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
@@ -779,7 +801,7 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 		item := seedItem(t, d, c)
-		if _, err := d.Parts.Create(c, newPart(partID(1), item.ID, domain.PartEdition, "", 1, now)); err != nil {
+		if _, err := d.Parts.Create(c, newPart(partID(1), item.ID, v1.PartEdition, "", 1, now)); err != nil {
 			t.Fatalf("Create part: %v", err)
 		}
 		requireCategory(t, d.Nodes.Delete(c, item.ID), contracts.Conflict)
@@ -791,11 +813,11 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
-	seedTwoWorks := func(t *testing.T, d Deps, c context.Context) (domain.Node, domain.Node) {
+	seedTwoWorks := func(t *testing.T, d Deps, c context.Context) (v1.Node, v1.Node) {
 		t.Helper()
-		a := newWork(nodeID(1), domain.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
-		b := newWork(nodeID(2), domain.MediaMangaSeries, "Fullmetal Alchemist", now)
-		for _, n := range []domain.Node{a, b} {
+		a := newWork(nodeID(1), v1.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
+		b := newWork(nodeID(2), v1.MediaMangaSeries, "Fullmetal Alchemist", now)
+		for _, n := range []v1.Node{a, b} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create %s: %v", n.Title, err)
 			}
@@ -808,10 +830,10 @@ func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 		c := ctx(t)
 		anime, manga := seedTwoWorks(t, d, c)
 
-		edge := domain.Relation{
+		edge := v1.Relation{
 			ID: relID(1), FromNodeID: anime.ID, ToNodeID: manga.ID,
-			Type: domain.RelationAdaptation, Confidence: 0.98,
-			Origin: domain.OriginProviderSupplied, CreatedAt: now,
+			Type: v1.RelationAdaptation, Confidence: 0.98,
+			Origin: v1.OriginProviderSupplied, CreatedAt: now,
 		}
 		if _, err := d.Relations.Create(c, edge); err != nil {
 			t.Fatalf("Create: %v", err)
@@ -832,7 +854,7 @@ func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 		if len(in) != 1 || in[0].FromNodeID != anime.ID {
 			t.Fatalf("ListTo = %+v", in)
 		}
-		if in[0].Origin != domain.OriginProviderSupplied {
+		if in[0].Origin != v1.OriginProviderSupplied {
 			t.Fatalf("origin = %q", in[0].Origin)
 		}
 	})
@@ -841,10 +863,10 @@ func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 		a, b := seedTwoWorks(t, d, c)
-		for i, rt := range []domain.RelationType{domain.RelationAdaptation, domain.RelationSameFranchise} {
-			edge := domain.Relation{
+		for i, rt := range []v1.RelationType{v1.RelationAdaptation, v1.RelationSameFranchise} {
+			edge := v1.Relation{
 				ID: relID(i + 1), FromNodeID: a.ID, ToNodeID: b.ID, Type: rt,
-				Confidence: 0.5, Origin: domain.OriginSystemInferred, CreatedAt: now,
+				Confidence: 0.5, Origin: v1.OriginSystemInferred, CreatedAt: now,
 			}
 			if _, err := d.Relations.Create(c, edge); err != nil {
 				t.Fatalf("Create %s: %v", rt, err)
@@ -857,11 +879,11 @@ func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 		if len(all) != 2 {
 			t.Fatalf("got %d edges, want 2", len(all))
 		}
-		adaptations, err := d.Relations.ListFrom(c, a.ID, domain.RelationAdaptation)
+		adaptations, err := d.Relations.ListFrom(c, a.ID, v1.RelationAdaptation)
 		if err != nil {
 			t.Fatalf("ListFrom(adaptation): %v", err)
 		}
-		if len(adaptations) != 1 || adaptations[0].Type != domain.RelationAdaptation {
+		if len(adaptations) != 1 || adaptations[0].Type != v1.RelationAdaptation {
 			t.Fatalf("filtered = %+v", adaptations)
 		}
 	})
@@ -870,9 +892,9 @@ func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 		a, b := seedTwoWorks(t, d, c)
-		edge := domain.Relation{
-			ID: relID(1), FromNodeID: a.ID, ToNodeID: b.ID, Type: domain.RelationAdaptation,
-			Confidence: 0.9, Origin: domain.OriginSystemInferred, CreatedAt: now,
+		edge := v1.Relation{
+			ID: relID(1), FromNodeID: a.ID, ToNodeID: b.ID, Type: v1.RelationAdaptation,
+			Confidence: 0.9, Origin: v1.OriginSystemInferred, CreatedAt: now,
 		}
 		if _, err := d.Relations.Create(c, edge); err != nil {
 			t.Fatalf("first Create: %v", err)
@@ -886,9 +908,9 @@ func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 		a, _ := seedTwoWorks(t, d, c)
-		_, err := d.Relations.Create(c, domain.Relation{
-			ID: relID(1), FromNodeID: a.ID, ToNodeID: a.ID, Type: domain.RelationSequel,
-			Confidence: 1, Origin: domain.OriginUserConfirmed, CreatedAt: now,
+		_, err := d.Relations.Create(c, v1.Relation{
+			ID: relID(1), FromNodeID: a.ID, ToNodeID: a.ID, Type: v1.RelationSequel,
+			Confidence: 1, Origin: v1.OriginUserConfirmed, CreatedAt: now,
 		})
 		requireCategory(t, err, contracts.InvalidArgument)
 	})
@@ -897,9 +919,9 @@ func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 		a, b := seedTwoWorks(t, d, c)
-		_, err := d.Relations.Create(c, domain.Relation{
-			ID: relID(1), FromNodeID: a.ID, ToNodeID: b.ID, Type: domain.RelationAdaptation,
-			Confidence: 1.5, Origin: domain.OriginSystemInferred, CreatedAt: now,
+		_, err := d.Relations.Create(c, v1.Relation{
+			ID: relID(1), FromNodeID: a.ID, ToNodeID: b.ID, Type: v1.RelationAdaptation,
+			Confidence: 1.5, Origin: v1.OriginSystemInferred, CreatedAt: now,
 		})
 		requireCategory(t, err, contracts.InvalidArgument)
 	})
@@ -911,9 +933,9 @@ func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 		requireCategory(t, err, contracts.NotFound)
 
 		a, b := seedTwoWorks(t, d, c)
-		edge, err := d.Relations.Create(c, domain.Relation{
-			ID: relID(1), FromNodeID: a.ID, ToNodeID: b.ID, Type: domain.RelationAdaptation,
-			Confidence: 0.9, Origin: domain.OriginSystemInferred, CreatedAt: now,
+		edge, err := d.Relations.Create(c, v1.Relation{
+			ID: relID(1), FromNodeID: a.ID, ToNodeID: b.ID, Type: v1.RelationAdaptation,
+			Confidence: 0.9, Origin: v1.OriginSystemInferred, CreatedAt: now,
 		})
 		if err != nil {
 			t.Fatalf("Create: %v", err)
@@ -931,18 +953,18 @@ func RunRelationStoreContract(t *testing.T, newDeps Factory) {
 func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
-	newBinding := func(id domain.SourceBindingID, node domain.NodeID, ref string,
-		confidence float64, method domain.MatchMethod, status domain.BindingStatus, at time.Time) domain.SourceBinding {
-		return domain.SourceBinding{
+	newBinding := func(id v1.SourceBindingID, node v1.NodeID, ref string,
+		confidence float64, method v1.MatchMethod, status v1.BindingStatus, at time.Time) v1.SourceBinding {
+		return v1.SourceBinding{
 			ID: id, NodeID: node, SourceProvider: "tmdb", SourceRef: ref,
 			MatchConfidence: confidence, MatchMethod: method, Status: status,
 			CreatedAt: at, UpdatedAt: at,
 		}
 	}
 
-	seedWork := func(t *testing.T, d Deps, c context.Context, seed int, title string) domain.Node {
+	seedWork := func(t *testing.T, d Deps, c context.Context, seed int, title string) v1.Node {
 		t.Helper()
-		work := newWork(nodeID(seed), domain.MediaMovie, title, now)
+		work := newWork(nodeID(seed), v1.MediaMovie, title, now)
 		if _, err := d.Nodes.Create(c, work); err != nil {
 			t.Fatalf("Create work: %v", err)
 		}
@@ -954,7 +976,7 @@ func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 		c := ctx(t)
 		work := seedWork(t, d, c, 1, "Arrival")
 		created, err := d.SourceBindings.Create(c,
-			newBinding(bindID(1), work.ID, "329865", 1, domain.MatchExternalIDExact, domain.BindingConfirmed, now))
+			newBinding(bindID(1), work.ID, "329865", 1, v1.MatchExternalIDExact, v1.BindingConfirmed, now))
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
@@ -984,11 +1006,11 @@ func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 		a := seedWork(t, d, c, 1, "Arrival")
 		b := seedWork(t, d, c, 2, "Arrival (1990)")
 		if _, err := d.SourceBindings.Create(c,
-			newBinding(bindID(1), a.ID, "329865", 1, domain.MatchExternalIDExact, domain.BindingConfirmed, now)); err != nil {
+			newBinding(bindID(1), a.ID, "329865", 1, v1.MatchExternalIDExact, v1.BindingConfirmed, now)); err != nil {
 			t.Fatalf("first Create: %v", err)
 		}
 		_, err := d.SourceBindings.Create(c,
-			newBinding(bindID(2), b.ID, "329865", 1, domain.MatchExternalIDExact, domain.BindingConfirmed, now))
+			newBinding(bindID(2), b.ID, "329865", 1, v1.MatchExternalIDExact, v1.BindingConfirmed, now))
 		requireCategory(t, err, contracts.Conflict)
 	})
 
@@ -998,11 +1020,11 @@ func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 		work := seedWork(t, d, c, 1, "The Thing")
-		weak := newBinding(bindID(1), work.ID, "thing-1982", 0.42, domain.MatchFuzzyTitle, domain.BindingPendingReview, now)
+		weak := newBinding(bindID(1), work.ID, "thing-1982", 0.42, v1.MatchFuzzyTitle, v1.BindingPendingReview, now)
 		if _, err := d.SourceBindings.Create(c, weak); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		strong := newBinding(bindID(2), work.ID, "thing-2011", 0.99, domain.MatchExternalIDExact, domain.BindingConfirmed, now)
+		strong := newBinding(bindID(2), work.ID, "thing-2011", 0.99, v1.MatchExternalIDExact, v1.BindingConfirmed, now)
 		if _, err := d.SourceBindings.Create(c, strong); err != nil {
 			t.Fatalf("Create confirmed: %v", err)
 		}
@@ -1019,7 +1041,7 @@ func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 		}
 
 		// Confirming it — a merge — takes it off the queue.
-		if _, err := d.SourceBindings.Update(c, pending[0].Confirm(now.Add(time.Hour))); err != nil {
+		if _, err := d.SourceBindings.Update(c, confirmedBinding(pending[0], now.Add(time.Hour))); err != nil {
 			t.Fatalf("Confirm: %v", err)
 		}
 		pending, err = d.SourceBindings.ListPendingReview(c, 10)
@@ -1045,12 +1067,12 @@ func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 		wrong := seedWork(t, d, c, 1, "The Thing")
 		right := seedWork(t, d, c, 2, "The Thing (2011)")
 		binding, err := d.SourceBindings.Create(c,
-			newBinding(bindID(1), wrong.ID, "thing-2011", 0.61, domain.MatchFingerprint, domain.BindingPendingReview, now))
+			newBinding(bindID(1), wrong.ID, "thing-2011", 0.61, v1.MatchFingerprint, v1.BindingPendingReview, now))
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
 
-		moved := binding.MoveTo(right.ID, now.Add(time.Hour)).Confirm(now.Add(time.Hour))
+		moved := confirmedBinding(movedBinding(binding, right.ID, now.Add(time.Hour)), now.Add(time.Hour))
 		if _, err := d.SourceBindings.Update(c, moved); err != nil {
 			t.Fatalf("Update: %v", err)
 		}
@@ -1063,7 +1085,7 @@ func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 			t.Fatalf("binding node = %q, want %q", found.NodeID, right.ID)
 		}
 		// Identity survived the move untouched.
-		if found.MatchMethod != domain.MatchFingerprint || found.MatchConfidence != 0.61 {
+		if found.MatchMethod != v1.MatchFingerprint || found.MatchConfidence != 0.61 {
 			t.Fatalf("a split must not re-resolve identity, got %+v", found)
 		}
 		// And the old node kept nothing.
@@ -1083,7 +1105,7 @@ func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 		c := ctx(t)
 		work := seedWork(t, d, c, 1, "Arrival")
 		binding, err := d.SourceBindings.Create(c,
-			newBinding(bindID(1), work.ID, "329865", 1, domain.MatchExternalIDExact, domain.BindingConfirmed, now))
+			newBinding(bindID(1), work.ID, "329865", 1, v1.MatchExternalIDExact, v1.BindingConfirmed, now))
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
@@ -1103,7 +1125,7 @@ func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 		}
 
 		// The node survives, and it is the caller that marks it orphaned.
-		if _, err := d.Nodes.Update(c, work.MarkOrphaned(now.Add(time.Hour))); err != nil {
+		if _, err := d.Nodes.Update(c, orphaned(work, now.Add(time.Hour))); err != nil {
 			t.Fatalf("MarkOrphaned: %v", err)
 		}
 		found, err := d.Nodes.FindByID(c, work.ID)
@@ -1136,19 +1158,19 @@ func RunContentNonUniformityContract(t *testing.T, newDeps Factory) {
 		c := ctx(t)
 
 		artist := newWork(nodeID(1), "artist", "Radiohead", now)
-		soloAlbum := newWork(nodeID(2), domain.MediaAlbum, "In Rainbows", now)
+		soloAlbum := newWork(nodeID(2), v1.MediaAlbum, "In Rainbows", now)
 		// A collaboration: two artists, one album. This is the case that makes
 		// containment impossible.
 		other := newWork(nodeID(3), "artist", "Burial", now)
-		collab := newWork(nodeID(4), domain.MediaAlbum, "Ego / Mirror", now)
-		for _, n := range []domain.Node{artist, soloAlbum, other, collab} {
+		collab := newWork(nodeID(4), v1.MediaAlbum, "Ego / Mirror", now)
+		for _, n := range []v1.Node{artist, soloAlbum, other, collab} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create %s: %v", n.Title, err)
 			}
 		}
 
 		// Every album is a root in its own right.
-		works, err := d.Nodes.ListWorks(c, domain.MediaAlbum)
+		works, err := d.Nodes.ListWorks(c, v1.MediaAlbum)
 		if err != nil {
 			t.Fatalf("ListWorks: %v", err)
 		}
@@ -1166,15 +1188,15 @@ func RunContentNonUniformityContract(t *testing.T, newDeps Factory) {
 
 		// The association is edges, and the collaboration carries two of them
 		// pointing at one album — which single-parent containment cannot do.
-		edges := []domain.Relation{
+		edges := []v1.Relation{
 			{ID: relID(1), FromNodeID: artist.ID, ToNodeID: soloAlbum.ID},
 			{ID: relID(2), FromNodeID: artist.ID, ToNodeID: collab.ID},
 			{ID: relID(3), FromNodeID: other.ID, ToNodeID: collab.ID},
 		}
 		for _, e := range edges {
-			e.Type = domain.RelationSameFranchise
+			e.Type = v1.RelationSameFranchise
 			e.Confidence = 1
-			e.Origin = domain.OriginProviderSupplied
+			e.Origin = v1.OriginProviderSupplied
 			e.CreatedAt = now
 			if _, err := d.Relations.Create(c, e); err != nil {
 				t.Fatalf("Create edge: %v", err)
@@ -1197,33 +1219,33 @@ func RunContentNonUniformityContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 
-		omnibus := newWork(nodeID(1), domain.MediaComicSeries, "Saga: Compendium One", now)
+		omnibus := newWork(nodeID(1), v1.MediaComicSeries, "Saga: Compendium One", now)
 		if _, err := d.Nodes.Create(c, omnibus); err != nil {
 			t.Fatalf("Create omnibus: %v", err)
 		}
 		// The omnibus has its own item structure — it is a real book, not a
 		// view over the issues.
-		omnibusItem := newItem(nodeID(2), omnibus.ID, omnibus.ID, domain.MediaComicSeries, domain.ItemIssue, "Compendium One", 1, now)
+		omnibusItem := newItem(nodeID(2), omnibus.ID, omnibus.ID, v1.MediaComicSeries, v1.ItemIssue, "Compendium One", 1, now)
 		if _, err := d.Nodes.Create(c, omnibusItem); err != nil {
 			t.Fatalf("Create omnibus item: %v", err)
 		}
 
-		run := newWork(nodeID(3), domain.MediaComicSeries, "Saga", now)
+		run := newWork(nodeID(3), v1.MediaComicSeries, "Saga", now)
 		if _, err := d.Nodes.Create(c, run); err != nil {
 			t.Fatalf("Create run: %v", err)
 		}
 		for i := range 3 {
-			issue := newItem(nodeID(10+i), run.ID, run.ID, domain.MediaComicSeries, domain.ItemIssue,
+			issue := newItem(nodeID(10+i), run.ID, run.ID, v1.MediaComicSeries, v1.ItemIssue,
 				fmt.Sprintf("Saga #%d", i+1), float64(i+1), now)
 			if _, err := d.Nodes.Create(c, issue); err != nil {
 				t.Fatalf("Create issue: %v", err)
 			}
 		}
 
-		if _, err := d.Relations.Create(c, domain.Relation{
+		if _, err := d.Relations.Create(c, v1.Relation{
 			ID: relID(1), FromNodeID: omnibus.ID, ToNodeID: run.ID,
-			Type: domain.RelationCollectionMember, Confidence: 1,
-			Origin: domain.OriginUserConfirmed, CreatedAt: now,
+			Type: v1.RelationCollectionMember, Confidence: 1,
+			Origin: v1.OriginUserConfirmed, CreatedAt: now,
 		}); err != nil {
 			t.Fatalf("Create collection edge: %v", err)
 		}
@@ -1244,7 +1266,7 @@ func RunContentNonUniformityContract(t *testing.T, newDeps Factory) {
 			t.Fatalf("run tree = %v, want the work and three issues", titles(runTree))
 		}
 		// And they are joined only by the edge.
-		edges, err := d.Relations.ListFrom(c, omnibus.ID, domain.RelationCollectionMember)
+		edges, err := d.Relations.ListFrom(c, omnibus.ID, v1.RelationCollectionMember)
 		if err != nil {
 			t.Fatalf("ListFrom: %v", err)
 		}
@@ -1260,39 +1282,39 @@ func RunContentNonUniformityContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 
-		anime := newWork(nodeID(1), domain.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
-		manga := newWork(nodeID(2), domain.MediaMangaSeries, "Fullmetal Alchemist", now)
-		for _, n := range []domain.Node{anime, manga} {
+		anime := newWork(nodeID(1), v1.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
+		manga := newWork(nodeID(2), v1.MediaMangaSeries, "Fullmetal Alchemist", now)
+		for _, n := range []v1.Node{anime, manga} {
 			if _, err := d.Nodes.Create(c, n); err != nil {
 				t.Fatalf("Create %s: %v", n.Title, err)
 			}
 		}
 
 		// The anime nests seasons over episodes.
-		season := newContainer(nodeID(3), anime.ID, anime.ID, domain.MediaAnimeSeries, domain.ContainerSeason, "Season 1", 1, now)
+		season := newContainer(nodeID(3), anime.ID, anime.ID, v1.MediaAnimeSeries, v1.ContainerSeason, "Season 1", 1, now)
 		if _, err := d.Nodes.Create(c, season); err != nil {
 			t.Fatalf("Create season: %v", err)
 		}
-		episode := newItem(nodeID(4), anime.ID, season.ID, domain.MediaAnimeSeries, domain.ItemEpisode, "Fullmetal Alchemist", 1, now)
+		episode := newItem(nodeID(4), anime.ID, season.ID, v1.MediaAnimeSeries, v1.ItemEpisode, "Fullmetal Alchemist", 1, now)
 		if _, err := d.Nodes.Create(c, episode); err != nil {
 			t.Fatalf("Create episode: %v", err)
 		}
 
 		// The manga nests volumes over chapters — a genuinely different shape,
 		// which is the reason the two trees are not merged.
-		volume := newContainer(nodeID(5), manga.ID, manga.ID, domain.MediaMangaSeries, domain.ContainerVolume, "Volume 1", 1, now)
+		volume := newContainer(nodeID(5), manga.ID, manga.ID, v1.MediaMangaSeries, v1.ContainerVolume, "Volume 1", 1, now)
 		if _, err := d.Nodes.Create(c, volume); err != nil {
 			t.Fatalf("Create volume: %v", err)
 		}
-		chapter := newItem(nodeID(6), manga.ID, volume.ID, domain.MediaMangaSeries, domain.ItemChapter, "The Two Alchemists", 1, now)
+		chapter := newItem(nodeID(6), manga.ID, volume.ID, v1.MediaMangaSeries, v1.ItemChapter, "The Two Alchemists", 1, now)
 		if _, err := d.Nodes.Create(c, chapter); err != nil {
 			t.Fatalf("Create chapter: %v", err)
 		}
 
-		if _, err := d.Relations.Create(c, domain.Relation{
+		if _, err := d.Relations.Create(c, v1.Relation{
 			ID: relID(1), FromNodeID: anime.ID, ToNodeID: manga.ID,
-			Type: domain.RelationAdaptation, Confidence: 1,
-			Origin: domain.OriginProviderSupplied, CreatedAt: now,
+			Type: v1.RelationAdaptation, Confidence: 1,
+			Origin: v1.OriginProviderSupplied, CreatedAt: now,
 		}); err != nil {
 			t.Fatalf("Create adaptation: %v", err)
 		}
@@ -1319,7 +1341,7 @@ func RunContentNonUniformityContract(t *testing.T, newDeps Factory) {
 			t.Fatal("the two works should not share a container shape")
 		}
 
-		adaptations, err := d.Relations.ListTo(c, manga.ID, domain.RelationAdaptation)
+		adaptations, err := d.Relations.ListTo(c, manga.ID, v1.RelationAdaptation)
 		if err != nil {
 			t.Fatalf("ListTo: %v", err)
 		}
@@ -1336,19 +1358,19 @@ func RunContentNonUniformityContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 
-		channel := newWork(nodeID(1), domain.MediaIPTVChannel, "BBC One HD", now)
+		channel := newWork(nodeID(1), v1.MediaIPTVChannel, "BBC One HD", now)
 		if _, err := d.Nodes.Create(c, channel); err != nil {
 			t.Fatalf("Create channel: %v", err)
 		}
 		// The stream itself is the playable item — one item, one Part, and no
 		// per-programme structure beneath it.
-		stream := newItem(nodeID(2), channel.ID, channel.ID, domain.MediaIPTVChannel, domain.ItemFeature, "Live", 1, now)
+		stream := newItem(nodeID(2), channel.ID, channel.ID, v1.MediaIPTVChannel, v1.ItemFeature, "Live", 1, now)
 		if _, err := d.Nodes.Create(c, stream); err != nil {
 			t.Fatalf("Create stream item: %v", err)
 		}
-		live := newPart(partID(1), stream.ID, domain.PartEdition, "", 1, now)
-		live.Location = domain.MediaLocation{
-			Scheme: domain.RemoteLocation, Provider: "iptv", Ref: "http://example.invalid/bbc1.m3u8",
+		live := newPart(partID(1), stream.ID, v1.PartEdition, "", 1, now)
+		live.Location = v1.MediaLocation{
+			Scheme: v1.RemoteLocation, Provider: "iptv", Ref: "http://example.invalid/bbc1.m3u8",
 		}
 		live.Duration = 0 // A live stream has no duration.
 		if _, err := d.Parts.Create(c, live); err != nil {
@@ -1391,8 +1413,8 @@ func RunContentAtomicityContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 
-		work := newWork(nodeID(1), domain.MediaMovie, "Arrival", now)
-		item := newItem(nodeID(2), work.ID, work.ID, domain.MediaMovie, domain.ItemFeature, "Arrival", 1, now)
+		work := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		item := newItem(nodeID(2), work.ID, work.ID, v1.MediaMovie, v1.ItemFeature, "Arrival", 1, now)
 
 		err := d.UnitOfWork.WithinTx(c, func(c context.Context, tx contracts.Tx) error {
 			if _, err := tx.Nodes().Create(c, work); err != nil {
@@ -1401,13 +1423,13 @@ func RunContentAtomicityContract(t *testing.T, newDeps Factory) {
 			if _, err := tx.Nodes().Create(c, item); err != nil {
 				return err
 			}
-			if _, err := tx.Parts().Create(c, newPart(partID(1), item.ID, domain.PartEdition, "", 1, now)); err != nil {
+			if _, err := tx.Parts().Create(c, newPart(partID(1), item.ID, v1.PartEdition, "", 1, now)); err != nil {
 				return err
 			}
-			if _, err := tx.SourceBindings().Create(c, domain.SourceBinding{
+			if _, err := tx.SourceBindings().Create(c, v1.SourceBinding{
 				ID: bindID(1), NodeID: work.ID, SourceProvider: "tmdb", SourceRef: "329865",
-				MatchConfidence: 1, MatchMethod: domain.MatchExternalIDExact,
-				Status: domain.BindingConfirmed, CreatedAt: now, UpdatedAt: now,
+				MatchConfidence: 1, MatchMethod: v1.MatchExternalIDExact,
+				Status: v1.BindingConfirmed, CreatedAt: now, UpdatedAt: now,
 			}); err != nil {
 				return err
 			}
@@ -1440,8 +1462,8 @@ func RunContentAtomicityContract(t *testing.T, newDeps Factory) {
 		d := newDeps(t)
 		c := ctx(t)
 
-		work := newWork(nodeID(1), domain.MediaMovie, "Arrival", now)
-		item := newItem(nodeID(2), work.ID, work.ID, domain.MediaMovie, domain.ItemFeature, "Arrival", 1, now)
+		work := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		item := newItem(nodeID(2), work.ID, work.ID, v1.MediaMovie, v1.ItemFeature, "Arrival", 1, now)
 		boom := errors.New("capability failed after writing")
 
 		err := d.UnitOfWork.WithinTx(c, func(c context.Context, tx contracts.Tx) error {
@@ -1451,7 +1473,7 @@ func RunContentAtomicityContract(t *testing.T, newDeps Factory) {
 			if _, err := tx.Nodes().Create(c, item); err != nil {
 				return err
 			}
-			if _, err := tx.Parts().Create(c, newPart(partID(1), item.ID, domain.PartEdition, "", 1, now)); err != nil {
+			if _, err := tx.Parts().Create(c, newPart(partID(1), item.ID, v1.PartEdition, "", 1, now)); err != nil {
 				return err
 			}
 			if err := tx.Outbox().Append(c, domain.OutboxEvent{Event: domain.Event{

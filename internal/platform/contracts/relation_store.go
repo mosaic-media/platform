@@ -3,7 +3,7 @@ package contracts
 import (
 	"context"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 )
 
 // RelationStore persists the association graph (ADR 0013).
@@ -20,17 +20,17 @@ import (
 type RelationStore interface {
 	// Create is Conflict on a duplicate (from, to, type) edge and
 	// InvalidArgument when the two endpoints are the same node.
-	Create(ctx context.Context, relation domain.Relation) (domain.Relation, error)
-	FindByID(ctx context.Context, id domain.RelationID) (domain.Relation, error)
+	Create(ctx context.Context, relation v1.Relation) (v1.Relation, error)
+	FindByID(ctx context.Context, id v1.RelationID) (v1.Relation, error)
 
 	// ListFrom returns outgoing edges, optionally narrowed to one type. An
 	// empty relationType returns all of them.
-	ListFrom(ctx context.Context, from domain.NodeID, relationType domain.RelationType) ([]domain.Relation, error)
+	ListFrom(ctx context.Context, from v1.NodeID, relationType v1.RelationType) ([]v1.Relation, error)
 
 	// ListTo returns incoming edges, optionally narrowed to one type. Both
 	// directions are indexed: "what does this adapt" and "what adapts this"
 	// are equally ordinary questions.
-	ListTo(ctx context.Context, to domain.NodeID, relationType domain.RelationType) ([]domain.Relation, error)
+	ListTo(ctx context.Context, to v1.NodeID, relationType v1.RelationType) ([]v1.Relation, error)
 
-	Delete(ctx context.Context, id domain.RelationID) error
+	Delete(ctx context.Context, id v1.RelationID) error
 }

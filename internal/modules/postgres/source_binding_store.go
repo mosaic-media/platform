@@ -6,8 +6,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 )
 
 // sourceBindingStore is the PostgreSQL contracts.SourceBindingStore.
@@ -24,7 +24,7 @@ func NewSourceBindingStore(pool *pgxpool.Pool) contracts.SourceBindingStore {
 const sourceBindingColumns = `id, node_id, source_provider, source_ref,
 	match_confidence, match_method, status, created_at, updated_at`
 
-func (s *sourceBindingStore) Create(ctx context.Context, binding domain.SourceBinding) (domain.SourceBinding, error) {
+func (s *sourceBindingStore) Create(ctx context.Context, binding v1.SourceBinding) (v1.SourceBinding, error) {
 	_, err := s.q.Exec(ctx,
 		`INSERT INTO source_bindings (id, node_id, source_provider, source_ref,
 		                              match_confidence, match_method, status, created_at, updated_at)
@@ -34,24 +34,24 @@ func (s *sourceBindingStore) Create(ctx context.Context, binding domain.SourceBi
 		binding.CreatedAt, binding.UpdatedAt,
 	)
 	if err != nil {
-		return domain.SourceBinding{}, mapError("create source binding", err)
+		return v1.SourceBinding{}, mapError("create source binding", err)
 	}
 	return binding, nil
 }
 
-func (s *sourceBindingStore) FindByID(ctx context.Context, id domain.SourceBindingID) (domain.SourceBinding, error) {
+func (s *sourceBindingStore) FindByID(ctx context.Context, id v1.SourceBindingID) (v1.SourceBinding, error) {
 	row := s.q.QueryRow(ctx, `SELECT `+sourceBindingColumns+` FROM source_bindings WHERE id = $1`, string(id))
 	binding, err := scanSourceBinding(row)
 	if err != nil {
 		if isNoRows(err) {
-			return domain.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
+			return v1.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
 		}
-		return domain.SourceBinding{}, mapError("find source binding by id", err)
+		return v1.SourceBinding{}, mapError("find source binding by id", err)
 	}
 	return binding, nil
 }
 
-func (s *sourceBindingStore) FindBySource(ctx context.Context, provider, ref string) (domain.SourceBinding, error) {
+func (s *sourceBindingStore) FindBySource(ctx context.Context, provider, ref string) (v1.SourceBinding, error) {
 	row := s.q.QueryRow(ctx,
 		`SELECT `+sourceBindingColumns+` FROM source_bindings
 		 WHERE source_provider = $1 AND source_ref = $2`,
@@ -60,9 +60,9 @@ func (s *sourceBindingStore) FindBySource(ctx context.Context, provider, ref str
 	binding, err := scanSourceBinding(row)
 	if err != nil {
 		if isNoRows(err) {
-			return domain.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
+			return v1.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
 		}
-		return domain.SourceBinding{}, mapError("find source binding by source", err)
+		return v1.SourceBinding{}, mapError("find source binding by source", err)
 	}
 	return binding, nil
 }
@@ -70,7 +70,7 @@ func (s *sourceBindingStore) FindBySource(ctx context.Context, provider, ref str
 // Update carries both a confirmation and a split. A split changes node_id and
 // nothing else: the source keeps its identity, confidence and match method,
 // and is never re-fingerprinted.
-func (s *sourceBindingStore) Update(ctx context.Context, binding domain.SourceBinding) (domain.SourceBinding, error) {
+func (s *sourceBindingStore) Update(ctx context.Context, binding v1.SourceBinding) (v1.SourceBinding, error) {
 	tag, err := s.q.Exec(ctx,
 		`UPDATE source_bindings SET node_id = $2, source_provider = $3, source_ref = $4,
 		                            match_confidence = $5, match_method = $6, status = $7, updated_at = $8
@@ -79,15 +79,15 @@ func (s *sourceBindingStore) Update(ctx context.Context, binding domain.SourceBi
 		binding.MatchConfidence, string(binding.MatchMethod), string(binding.Status), binding.UpdatedAt,
 	)
 	if err != nil {
-		return domain.SourceBinding{}, mapError("update source binding", err)
+		return v1.SourceBinding{}, mapError("update source binding", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return domain.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
+		return v1.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
 	}
 	return binding, nil
 }
 
-func (s *sourceBindingStore) ListByNode(ctx context.Context, nodeID domain.NodeID) ([]domain.SourceBinding, error) {
+func (s *sourceBindingStore) ListByNode(ctx context.Context, nodeID v1.NodeID) ([]v1.SourceBinding, error) {
 	rows, err := s.q.Query(ctx,
 		`SELECT `+sourceBindingColumns+` FROM source_bindings
 		 WHERE node_id = $1 ORDER BY created_at, id`,
@@ -99,7 +99,7 @@ func (s *sourceBindingStore) ListByNode(ctx context.Context, nodeID domain.NodeI
 	return collectSourceBindings(rows, "list source bindings by node")
 }
 
-func (s *sourceBindingStore) ListPendingReview(ctx context.Context, limit int) ([]domain.SourceBinding, error) {
+func (s *sourceBindingStore) ListPendingReview(ctx context.Context, limit int) ([]v1.SourceBinding, error) {
 	if limit <= 0 {
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
 	}
@@ -114,7 +114,7 @@ func (s *sourceBindingStore) ListPendingReview(ctx context.Context, limit int) (
 	return collectSourceBindings(rows, "list pending source bindings")
 }
 
-func (s *sourceBindingStore) Delete(ctx context.Context, id domain.SourceBindingID) error {
+func (s *sourceBindingStore) Delete(ctx context.Context, id v1.SourceBindingID) error {
 	tag, err := s.q.Exec(ctx, `DELETE FROM source_bindings WHERE id = $1`, string(id))
 	if err != nil {
 		return mapError("delete source binding", err)
@@ -125,9 +125,9 @@ func (s *sourceBindingStore) Delete(ctx context.Context, id domain.SourceBinding
 	return nil
 }
 
-func scanSourceBinding(row pgx.Row) (domain.SourceBinding, error) {
+func scanSourceBinding(row pgx.Row) (v1.SourceBinding, error) {
 	var (
-		binding domain.SourceBinding
+		binding v1.SourceBinding
 		id      string
 		nodeID  string
 		method  string
@@ -136,19 +136,19 @@ func scanSourceBinding(row pgx.Row) (domain.SourceBinding, error) {
 	if err := row.Scan(&id, &nodeID, &binding.SourceProvider, &binding.SourceRef,
 		&binding.MatchConfidence, &method, &status,
 		&binding.CreatedAt, &binding.UpdatedAt); err != nil {
-		return domain.SourceBinding{}, err
+		return v1.SourceBinding{}, err
 	}
-	binding.ID = domain.SourceBindingID(id)
-	binding.NodeID = domain.NodeID(nodeID)
-	binding.MatchMethod = domain.MatchMethod(method)
-	binding.Status = domain.BindingStatus(status)
+	binding.ID = v1.SourceBindingID(id)
+	binding.NodeID = v1.NodeID(nodeID)
+	binding.MatchMethod = v1.MatchMethod(method)
+	binding.Status = v1.BindingStatus(status)
 	return binding, nil
 }
 
-func collectSourceBindings(rows pgx.Rows, message string) ([]domain.SourceBinding, error) {
+func collectSourceBindings(rows pgx.Rows, message string) ([]v1.SourceBinding, error) {
 	defer rows.Close()
 
-	var bindings []domain.SourceBinding
+	var bindings []v1.SourceBinding
 	for rows.Next() {
 		binding, err := scanSourceBinding(rows)
 		if err != nil {

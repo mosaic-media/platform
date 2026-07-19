@@ -24,19 +24,7 @@ type EventID ID
 // issued to (MEG-015 §07 — Session Model).
 type DeviceID ID
 
-// The content-model identifiers below are UUIDv7 stored in native uuid
-// columns (ADR 0013). The infrastructure identifiers above remain random
-// UUIDv4 in text columns and are deliberately not migrated: they barely
-// join the content tables, and churning working tables buys nothing.
-
-// NodeID identifies a Node.
-type NodeID ID
-
-// PartID identifies a Part.
-type PartID ID
-
-// RelationID identifies a Relation.
-type RelationID ID
-
-// SourceBindingID identifies a SourceBinding.
-type SourceBindingID ID
+// The content-model identifiers live in the published contract surface
+// (contracts/platform/v1), not here: they cross the module boundary, while
+// these infrastructure identifiers stay internal (ADR 0016). The content ids
+// are UUIDv7 and these remain random UUIDv4 (ADR 0013).

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
@@ -20,15 +21,15 @@ import (
 // declaring a different media type than its series.
 type AddContentChildCommand struct {
 	CallerSessionID domain.SessionID
-	ParentID        domain.NodeID
+	ParentID        v1.NodeID
 	// Kind must be container or item. A work is never a child, so it is not
 	// accepted here.
-	Kind domain.NodeKind
+	Kind v1.NodeKind
 	// ContainerType applies when Kind is container, ItemType when it is item;
 	// the other must be empty. Both are open vocabularies, canonicalised on
 	// write (ADR 0015).
-	ContainerType domain.ContainerType
-	ItemType      domain.ItemType
+	ContainerType v1.ContainerType
+	ItemType      v1.ItemType
 	Title         string
 	// NaturalOrder places the child among its siblings. A float so an
 	// insertion does not renumber the rest (ADR 0013).
@@ -39,7 +40,7 @@ type AddContentChildCommand struct {
 
 // AddContentChildResult carries the committed child.
 type AddContentChildResult struct {
-	Node domain.Node
+	Node v1.Node
 }
 
 func validateAddContentChildCommand(cmd AddContentChildCommand) error {
@@ -53,21 +54,21 @@ func validateAddContentChildCommand(cmd AddContentChildCommand) error {
 		return contracts.NewError(contracts.InvalidArgument, "title is required")
 	}
 	switch cmd.Kind {
-	case domain.NodeContainer:
+	case v1.NodeContainer:
 		if cmd.ContainerType == "" {
 			return contracts.NewError(contracts.InvalidArgument, "container type is required for a container")
 		}
 		if cmd.ItemType != "" {
 			return contracts.NewError(contracts.InvalidArgument, "item type must be empty for a container")
 		}
-	case domain.NodeItem:
+	case v1.NodeItem:
 		if cmd.ItemType == "" {
 			return contracts.NewError(contracts.InvalidArgument, "item type is required for an item")
 		}
 		if cmd.ContainerType != "" {
 			return contracts.NewError(contracts.InvalidArgument, "container type must be empty for an item")
 		}
-	case domain.NodeWork:
+	case v1.NodeWork:
 		return contracts.NewError(contracts.InvalidArgument, "a work cannot be a child")
 	default:
 		return contracts.NewError(contracts.InvalidArgument, "kind must be container or item")
@@ -106,8 +107,8 @@ func (s *Service) AddContentChild(ctx context.Context, cmd AddContentChildComman
 
 		now := s.clock.Now()
 		parentID := cmd.ParentID
-		child := domain.Node{
-			ID:            domain.NodeID(s.contentIDs.NewID()),
+		child := v1.Node{
+			ID:            v1.NodeID(s.contentIDs.NewID()),
 			WorkID:        parent.WorkID,
 			ParentID:      &parentID,
 			Kind:          cmd.Kind,
@@ -116,7 +117,7 @@ func (s *Service) AddContentChild(ctx context.Context, cmd AddContentChildComman
 			ItemType:      cmd.ItemType,
 			Title:         cmd.Title,
 			NaturalOrder:  cmd.NaturalOrder,
-			Status:        domain.NodeActive,
+			Status:        v1.NodeActive,
 			ExternalIDs:   cmd.ExternalIDs,
 			Attributes:    cmd.Attributes,
 			CreatedAt:     now,

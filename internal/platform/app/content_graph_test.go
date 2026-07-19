@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
@@ -13,18 +14,18 @@ import (
 
 // twoWorks seeds a fixture with two works, returning the service, the
 // caller's session and the two work ids.
-func twoWorks(t *testing.T) (*app.Service, *fakeDB, domain.SessionID, domain.NodeID, domain.NodeID) {
+func twoWorks(t *testing.T) (*app.Service, *fakeDB, domain.SessionID, v1.NodeID, v1.NodeID) {
 	t.Helper()
 	svc, db, _, session := commandFixture(t)
 	ctx := context.Background()
 	a, err := svc.AddContentWork(ctx, app.AddContentWorkCommand{
-		CallerSessionID: session, MediaType: domain.MediaAnimeSeries, Title: "Fullmetal Alchemist: Brotherhood",
+		CallerSessionID: session, MediaType: v1.MediaAnimeSeries, Title: "Fullmetal Alchemist: Brotherhood",
 	})
 	if err != nil {
 		t.Fatalf("seed anime: %v", err)
 	}
 	b, err := svc.AddContentWork(ctx, app.AddContentWorkCommand{
-		CallerSessionID: session, MediaType: domain.MediaMangaSeries, Title: "Fullmetal Alchemist",
+		CallerSessionID: session, MediaType: v1.MediaMangaSeries, Title: "Fullmetal Alchemist",
 	})
 	if err != nil {
 		t.Fatalf("seed manga: %v", err)
@@ -39,7 +40,7 @@ func TestRelateContent(t *testing.T) {
 		svc, db, session, anime, manga := twoWorks(t)
 		res, err := svc.RelateContent(ctx, app.RelateContentCommand{
 			CallerSessionID: session, FromNodeID: anime, ToNodeID: manga,
-			Type: domain.RelationAdaptation, Confidence: 0.98, Origin: domain.OriginProviderSupplied,
+			Type: v1.RelationAdaptation, Confidence: 0.98, Origin: v1.OriginProviderSupplied,
 		})
 		if err != nil {
 			t.Fatalf("RelateContent: %v", err)
@@ -56,7 +57,7 @@ func TestRelateContent(t *testing.T) {
 		svc, _, session, anime, _ := twoWorks(t)
 		_, err := svc.RelateContent(ctx, app.RelateContentCommand{
 			CallerSessionID: session, FromNodeID: anime, ToNodeID: anime,
-			Type: domain.RelationSequel, Confidence: 1, Origin: domain.OriginUserConfirmed,
+			Type: v1.RelationSequel, Confidence: 1, Origin: v1.OriginUserConfirmed,
 		})
 		if got := contracts.CategoryOf(err); got != contracts.InvalidArgument {
 			t.Fatalf("category = %s, want invalid_argument", got)
@@ -67,7 +68,7 @@ func TestRelateContent(t *testing.T) {
 		svc, _, session, anime, manga := twoWorks(t)
 		base := app.RelateContentCommand{
 			CallerSessionID: session, FromNodeID: anime, ToNodeID: manga,
-			Type: domain.RelationAdaptation, Confidence: 1, Origin: domain.OriginProviderSupplied,
+			Type: v1.RelationAdaptation, Confidence: 1, Origin: v1.OriginProviderSupplied,
 		}
 		bad := base
 		bad.Type = "invented"
@@ -90,7 +91,7 @@ func TestRelateContent(t *testing.T) {
 		svc, _, session, anime, _ := twoWorks(t)
 		_, err := svc.RelateContent(ctx, app.RelateContentCommand{
 			CallerSessionID: session, FromNodeID: anime, ToNodeID: "n-missing",
-			Type: domain.RelationAdaptation, Confidence: 1, Origin: domain.OriginProviderSupplied,
+			Type: v1.RelationAdaptation, Confidence: 1, Origin: v1.OriginProviderSupplied,
 		})
 		if got := contracts.CategoryOf(err); got != contracts.NotFound {
 			t.Fatalf("category = %s, want not_found", got)
@@ -101,7 +102,7 @@ func TestRelateContent(t *testing.T) {
 		svc, _, session, anime, manga := twoWorks(t)
 		cmd := app.RelateContentCommand{
 			CallerSessionID: session, FromNodeID: anime, ToNodeID: manga,
-			Type: domain.RelationAdaptation, Confidence: 1, Origin: domain.OriginProviderSupplied,
+			Type: v1.RelationAdaptation, Confidence: 1, Origin: v1.OriginProviderSupplied,
 		}
 		if _, err := svc.RelateContent(ctx, cmd); err != nil {
 			t.Fatalf("first RelateContent: %v", err)
@@ -120,7 +121,7 @@ func TestBindContentSource(t *testing.T) {
 		res, err := svc.BindContentSource(ctx, app.BindContentSourceCommand{
 			CallerSessionID: session, NodeID: anime,
 			SourceProvider: "anilist", SourceRef: "5114",
-			MatchConfidence: 1, MatchMethod: domain.MatchExternalIDExact, Status: domain.BindingConfirmed,
+			MatchConfidence: 1, MatchMethod: v1.MatchExternalIDExact, Status: v1.BindingConfirmed,
 		})
 		if err != nil {
 			t.Fatalf("BindContentSource: %v", err)
@@ -138,7 +139,7 @@ func TestBindContentSource(t *testing.T) {
 		res, err := svc.BindContentSource(ctx, app.BindContentSourceCommand{
 			CallerSessionID: session, NodeID: anime,
 			SourceProvider: "fuzzy", SourceRef: "maybe", MatchConfidence: 0.4,
-			MatchMethod: domain.MatchFuzzyTitle, Status: domain.BindingPendingReview,
+			MatchMethod: v1.MatchFuzzyTitle, Status: v1.BindingPendingReview,
 		})
 		if err != nil {
 			t.Fatalf("BindContentSource: %v", err)
@@ -153,7 +154,7 @@ func TestBindContentSource(t *testing.T) {
 		_, err := svc.BindContentSource(ctx, app.BindContentSourceCommand{
 			CallerSessionID: session, NodeID: anime,
 			SourceProvider: "x", SourceRef: "y", MatchConfidence: 0,
-			MatchMethod: domain.MatchFuzzyTitle, Status: domain.BindingRejected,
+			MatchMethod: v1.MatchFuzzyTitle, Status: v1.BindingRejected,
 		})
 		if got := contracts.CategoryOf(err); got != contracts.InvalidArgument {
 			t.Fatalf("category = %s, want invalid_argument", got)
@@ -165,7 +166,7 @@ func TestBindContentSource(t *testing.T) {
 		_, err := svc.BindContentSource(ctx, app.BindContentSourceCommand{
 			CallerSessionID: session, NodeID: "n-missing",
 			SourceProvider: "x", SourceRef: "y", MatchConfidence: 1,
-			MatchMethod: domain.MatchExternalIDExact, Status: domain.BindingConfirmed,
+			MatchMethod: v1.MatchExternalIDExact, Status: v1.BindingConfirmed,
 		})
 		if got := contracts.CategoryOf(err); got != contracts.NotFound {
 			t.Fatalf("category = %s, want not_found", got)
@@ -177,7 +178,7 @@ func TestBindContentSource(t *testing.T) {
 		cmd := app.BindContentSourceCommand{
 			CallerSessionID: session, NodeID: anime,
 			SourceProvider: "anilist", SourceRef: "5114", MatchConfidence: 1,
-			MatchMethod: domain.MatchExternalIDExact, Status: domain.BindingConfirmed,
+			MatchMethod: v1.MatchExternalIDExact, Status: v1.BindingConfirmed,
 		}
 		if _, err := svc.BindContentSource(ctx, cmd); err != nil {
 			t.Fatalf("first bind: %v", err)
@@ -194,13 +195,13 @@ func TestResolveContentBinding(t *testing.T) {
 
 	// seedPending returns a service, session, the binding id and the two work
 	// ids, with one weak binding queued against the first work.
-	seedPending := func(t *testing.T) (*app.Service, domain.SessionID, domain.SourceBindingID, domain.NodeID, domain.NodeID) {
+	seedPending := func(t *testing.T) (*app.Service, domain.SessionID, v1.SourceBindingID, v1.NodeID, v1.NodeID) {
 		t.Helper()
 		svc, _, session, wrong, right := twoWorks(t)
 		res, err := svc.BindContentSource(ctx, app.BindContentSourceCommand{
 			CallerSessionID: session, NodeID: wrong,
 			SourceProvider: "fuzzy", SourceRef: "thing-2011", MatchConfidence: 0.5,
-			MatchMethod: domain.MatchFuzzyTitle, Status: domain.BindingPendingReview,
+			MatchMethod: v1.MatchFuzzyTitle, Status: v1.BindingPendingReview,
 		})
 		if err != nil {
 			t.Fatalf("seed binding: %v", err)
@@ -216,7 +217,7 @@ func TestResolveContentBinding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ResolveContentBinding: %v", err)
 		}
-		if res.Binding.Status != domain.BindingConfirmed {
+		if res.Binding.Status != v1.BindingConfirmed {
 			t.Fatalf("status = %q, want confirmed", res.Binding.Status)
 		}
 	})
@@ -229,7 +230,7 @@ func TestResolveContentBinding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ResolveContentBinding: %v", err)
 		}
-		if res.Binding.Status != domain.BindingRejected {
+		if res.Binding.Status != v1.BindingRejected {
 			t.Fatalf("status = %q, want rejected", res.Binding.Status)
 		}
 	})
@@ -247,11 +248,11 @@ func TestResolveContentBinding(t *testing.T) {
 		if res.Binding.NodeID != right {
 			t.Fatalf("binding node = %q, want %q", res.Binding.NodeID, right)
 		}
-		if res.Binding.Status != domain.BindingConfirmed {
+		if res.Binding.Status != v1.BindingConfirmed {
 			t.Fatalf("status = %q, want confirmed", res.Binding.Status)
 		}
 		// Identity survived the move untouched.
-		if res.Binding.MatchMethod != domain.MatchFuzzyTitle || res.Binding.MatchConfidence != 0.5 {
+		if res.Binding.MatchMethod != v1.MatchFuzzyTitle || res.Binding.MatchConfidence != 0.5 {
 			t.Fatalf("a split re-resolved identity: %+v", res.Binding)
 		}
 		_ = wrong

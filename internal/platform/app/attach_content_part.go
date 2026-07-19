@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
@@ -17,12 +18,12 @@ type AttachContentPartCommand struct {
 	// NodeID must be an item. A work or container has nothing to play, and
 	// the store enforces this, but the command checks first for a clearer
 	// error and to confirm the node exists.
-	NodeID domain.NodeID
-	Role   domain.PartRole
+	NodeID v1.NodeID
+	Role   v1.PartRole
 	// EditionLabel names the cut — empty for an unremarkable single file.
 	EditionLabel string
 	NaturalOrder float64
-	Location     domain.MediaLocation
+	Location     v1.MediaLocation
 	// Technical metadata is optional; the zero value means "not known".
 	Container  string
 	VideoCodec string
@@ -38,7 +39,7 @@ type AttachContentPartCommand struct {
 
 // AttachContentPartResult carries the committed part.
 type AttachContentPartResult struct {
-	Part domain.Part
+	Part v1.Part
 }
 
 func validateAttachContentPartCommand(cmd AttachContentPartCommand) error {
@@ -48,15 +49,15 @@ func validateAttachContentPartCommand(cmd AttachContentPartCommand) error {
 	if cmd.NodeID == "" {
 		return contracts.NewError(contracts.InvalidArgument, "node id is required")
 	}
-	if cmd.Role != domain.PartEdition && cmd.Role != domain.PartSegment {
+	if cmd.Role != v1.PartEdition && cmd.Role != v1.PartSegment {
 		return contracts.NewError(contracts.InvalidArgument, "part role must be edition or segment")
 	}
 	switch cmd.Location.Scheme {
-	case domain.LocalLocation:
+	case v1.LocalLocation:
 		if cmd.Location.Provider != "" {
 			return contracts.NewError(contracts.InvalidArgument, "a local location has no provider")
 		}
-	case domain.RemoteLocation:
+	case v1.RemoteLocation:
 		if cmd.Location.Provider == "" {
 			return contracts.NewError(contracts.InvalidArgument, "a remote location requires a provider")
 		}
@@ -98,13 +99,13 @@ func (s *Service) AttachContentPart(ctx context.Context, cmd AttachContentPartCo
 		if err != nil {
 			return err
 		}
-		if node.Kind != domain.NodeItem {
+		if node.Kind != v1.NodeItem {
 			return contracts.NewError(contracts.InvalidArgument, "a part can only attach to an item")
 		}
 
 		now := s.clock.Now()
-		part := domain.Part{
-			ID:           domain.PartID(s.contentIDs.NewID()),
+		part := v1.Part{
+			ID:           v1.PartID(s.contentIDs.NewID()),
 			NodeID:       cmd.NodeID,
 			Role:         cmd.Role,
 			EditionLabel: cmd.EditionLabel,

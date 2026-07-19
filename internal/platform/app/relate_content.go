@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
@@ -21,18 +22,18 @@ const ActionContentRelate policy.Action = "content.relate"
 // edition to what it collects, an anime to its source manga.
 type RelateContentCommand struct {
 	CallerSessionID domain.SessionID
-	FromNodeID      domain.NodeID
-	ToNodeID        domain.NodeID
-	Type            domain.RelationType
+	FromNodeID      v1.NodeID
+	ToNodeID        v1.NodeID
+	Type            v1.RelationType
 	// Confidence is between 0 and 1. The Origin says where the assertion
 	// came from, which is what makes a low confidence actionable.
 	Confidence float64
-	Origin     domain.RelationOrigin
+	Origin     v1.RelationOrigin
 }
 
 // RelateContentResult carries the committed edge.
 type RelateContentResult struct {
-	Relation domain.Relation
+	Relation v1.Relation
 }
 
 func validateRelateContentCommand(cmd RelateContentCommand) error {
@@ -89,8 +90,8 @@ func (s *Service) RelateContent(ctx context.Context, cmd RelateContentCommand) (
 			return err
 		}
 
-		relation := domain.Relation{
-			ID:         domain.RelationID(s.contentIDs.NewID()),
+		relation := v1.Relation{
+			ID:         v1.RelationID(s.contentIDs.NewID()),
 			FromNodeID: cmd.FromNodeID,
 			ToNodeID:   cmd.ToNodeID,
 			Type:       cmd.Type,
@@ -121,20 +122,20 @@ func (s *Service) RelateContent(ctx context.Context, cmd RelateContentCommand) (
 	return result, nil
 }
 
-func knownRelationType(t domain.RelationType) bool {
+func knownRelationType(t v1.RelationType) bool {
 	switch t {
-	case domain.RelationAdaptation, domain.RelationSequel, domain.RelationPrequel,
-		domain.RelationSpinoff, domain.RelationCollectionMember,
-		domain.RelationAlternateEditionOf, domain.RelationSameFranchise:
+	case v1.RelationAdaptation, v1.RelationSequel, v1.RelationPrequel,
+		v1.RelationSpinoff, v1.RelationCollectionMember,
+		v1.RelationAlternateEditionOf, v1.RelationSameFranchise:
 		return true
 	default:
 		return false
 	}
 }
 
-func knownRelationOrigin(o domain.RelationOrigin) bool {
+func knownRelationOrigin(o v1.RelationOrigin) bool {
 	switch o {
-	case domain.OriginSystemInferred, domain.OriginProviderSupplied, domain.OriginUserConfirmed:
+	case v1.OriginSystemInferred, v1.OriginProviderSupplied, v1.OriginUserConfirmed:
 		return true
 	default:
 		return false

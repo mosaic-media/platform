@@ -1,4 +1,4 @@
-package domain
+package v1
 
 import (
 	"strings"
@@ -187,8 +187,8 @@ type Node struct {
 	// correctness to the writing capability. Both are GIN-indexed, so they
 	// are queryable but not typed.
 	Attributes []byte
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // Canonical returns a copy of the node with its open type vocabularies
@@ -206,17 +206,3 @@ func (n Node) IsRoot() bool { return n.ParentID == nil }
 
 // Orphaned reports whether the node has lost its last source binding.
 func (n Node) Orphaned() bool { return n.Status == NodeOrphaned }
-
-// MarkOrphaned returns a copy of the node with its last binding removed.
-func (n Node) MarkOrphaned(now time.Time) Node {
-	n.Status = NodeOrphaned
-	n.UpdatedAt = now
-	return n
-}
-
-// MarkActive returns a copy of the node with a source behind it again.
-func (n Node) MarkActive(now time.Time) Node {
-	n.Status = NodeActive
-	n.UpdatedAt = now
-	return n
-}

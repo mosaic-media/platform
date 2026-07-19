@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
@@ -44,10 +45,10 @@ type fakeDBSnapshot struct {
 	passwords map[domain.UserID]domain.PasswordCredential
 	configs   map[domain.ConfigVersionID]domain.ConfigVersion
 	outbox    []domain.OutboxEvent
-	nodes     map[domain.NodeID]domain.Node
-	parts     map[domain.PartID]domain.Part
-	relations map[domain.RelationID]domain.Relation
-	bindings  map[domain.SourceBindingID]domain.SourceBinding
+	nodes     map[v1.NodeID]v1.Node
+	parts     map[v1.PartID]v1.Part
+	relations map[v1.RelationID]v1.Relation
+	bindings  map[v1.SourceBindingID]v1.SourceBinding
 }
 
 // fakeDB is the shared backing store behind every fake contract in this
@@ -70,10 +71,10 @@ type fakeDB struct {
 
 	// nodes and parts back the content commands and queries; relations and
 	// bindings back the graph and identity commands.
-	nodes     map[domain.NodeID]domain.Node
-	parts     map[domain.PartID]domain.Part
-	relations map[domain.RelationID]domain.Relation
-	bindings  map[domain.SourceBindingID]domain.SourceBinding
+	nodes     map[v1.NodeID]v1.Node
+	parts     map[v1.PartID]v1.Part
+	relations map[v1.RelationID]v1.Relation
+	bindings  map[v1.SourceBindingID]v1.SourceBinding
 }
 
 func newFakeDB() *fakeDB {
@@ -84,10 +85,10 @@ func newFakeDB() *fakeDB {
 		passwords: make(map[domain.UserID]domain.PasswordCredential),
 		configs:   make(map[domain.ConfigVersionID]domain.ConfigVersion),
 		roles:     make(map[domain.UserID][]domain.Role),
-		nodes:     make(map[domain.NodeID]domain.Node),
-		parts:     make(map[domain.PartID]domain.Part),
-		relations: make(map[domain.RelationID]domain.Relation),
-		bindings:  make(map[domain.SourceBindingID]domain.SourceBinding),
+		nodes:     make(map[v1.NodeID]v1.Node),
+		parts:     make(map[v1.PartID]v1.Part),
+		relations: make(map[v1.RelationID]v1.Relation),
+		bindings:  make(map[v1.SourceBindingID]v1.SourceBinding),
 	}
 }
 
@@ -171,19 +172,19 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 		configs[k] = v
 	}
 	outbox := append([]domain.OutboxEvent(nil), db.outbox...)
-	nodes := make(map[domain.NodeID]domain.Node, len(db.nodes))
+	nodes := make(map[v1.NodeID]v1.Node, len(db.nodes))
 	for k, v := range db.nodes {
 		nodes[k] = v
 	}
-	parts := make(map[domain.PartID]domain.Part, len(db.parts))
+	parts := make(map[v1.PartID]v1.Part, len(db.parts))
 	for k, v := range db.parts {
 		parts[k] = v
 	}
-	relations := make(map[domain.RelationID]domain.Relation, len(db.relations))
+	relations := make(map[v1.RelationID]v1.Relation, len(db.relations))
 	for k, v := range db.relations {
 		relations[k] = v
 	}
-	bindings := make(map[domain.SourceBindingID]domain.SourceBinding, len(db.bindings))
+	bindings := make(map[v1.SourceBindingID]v1.SourceBinding, len(db.bindings))
 	for k, v := range db.bindings {
 		bindings[k] = v
 	}
@@ -633,7 +634,7 @@ type fakeNodeStore struct {
 	trace *trace
 }
 
-func (s *fakeNodeStore) Create(_ context.Context, node domain.Node) (domain.Node, error) {
+func (s *fakeNodeStore) Create(_ context.Context, node v1.Node) (v1.Node, error) {
 	s.trace.record("nodes.create")
 	node = node.Canonical()
 	s.db.mu.Lock()
@@ -642,58 +643,58 @@ func (s *fakeNodeStore) Create(_ context.Context, node domain.Node) (domain.Node
 	return node, nil
 }
 
-func (s *fakeNodeStore) FindByID(_ context.Context, id domain.NodeID) (domain.Node, error) {
+func (s *fakeNodeStore) FindByID(_ context.Context, id v1.NodeID) (v1.Node, error) {
 	s.trace.record("nodes.find_by_id")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 	node, ok := s.db.nodes[id]
 	if !ok {
-		return domain.Node{}, contracts.NewError(contracts.NotFound, "node not found")
+		return v1.Node{}, contracts.NewError(contracts.NotFound, "node not found")
 	}
 	return node, nil
 }
 
-func (s *fakeNodeStore) Update(_ context.Context, node domain.Node) (domain.Node, error) {
+func (s *fakeNodeStore) Update(_ context.Context, node v1.Node) (v1.Node, error) {
 	s.trace.record("nodes.update")
 	node = node.Canonical()
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 	if _, ok := s.db.nodes[node.ID]; !ok {
-		return domain.Node{}, contracts.NewError(contracts.NotFound, "node not found")
+		return v1.Node{}, contracts.NewError(contracts.NotFound, "node not found")
 	}
 	s.db.nodes[node.ID] = node
 	return node, nil
 }
 
-func (s *fakeNodeStore) ListChildren(_ context.Context, parentID domain.NodeID) ([]domain.Node, error) {
+func (s *fakeNodeStore) ListChildren(_ context.Context, parentID v1.NodeID) ([]v1.Node, error) {
 	s.trace.record("nodes.list_children")
-	return s.collect(func(n domain.Node) bool {
+	return s.collect(func(n v1.Node) bool {
 		return n.ParentID != nil && *n.ParentID == parentID
 	}, byNaturalOrder), nil
 }
 
-func (s *fakeNodeStore) ListByWork(_ context.Context, workID domain.NodeID) ([]domain.Node, error) {
+func (s *fakeNodeStore) ListByWork(_ context.Context, workID v1.NodeID) ([]v1.Node, error) {
 	s.trace.record("nodes.list_by_work")
-	return s.collect(func(n domain.Node) bool { return n.WorkID == workID }, byNaturalOrder), nil
+	return s.collect(func(n v1.Node) bool { return n.WorkID == workID }, byNaturalOrder), nil
 }
 
-func (s *fakeNodeStore) ListWorks(_ context.Context, mediaType domain.MediaType) ([]domain.Node, error) {
+func (s *fakeNodeStore) ListWorks(_ context.Context, mediaType v1.MediaType) ([]v1.Node, error) {
 	s.trace.record("nodes.list_works")
-	want := domain.NormaliseMediaType(string(mediaType))
-	return s.collect(func(n domain.Node) bool {
+	want := v1.NormaliseMediaType(string(mediaType))
+	return s.collect(func(n v1.Node) bool {
 		return n.ParentID == nil && (want == "" || n.MediaType == want)
 	}, byTitle), nil
 }
 
-func (s *fakeNodeStore) Search(_ context.Context, query contracts.NodeQuery) ([]domain.Node, error) {
+func (s *fakeNodeStore) Search(_ context.Context, query contracts.NodeQuery) ([]v1.Node, error) {
 	s.trace.record("nodes.search")
 	if query.Limit <= 0 {
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
 	}
 	title := strings.ToLower(query.Title)
-	wantMedia := domain.NormaliseMediaType(string(query.MediaType))
+	wantMedia := v1.NormaliseMediaType(string(query.MediaType))
 
-	found := s.collect(func(n domain.Node) bool {
+	found := s.collect(func(n v1.Node) bool {
 		if title != "" && !strings.Contains(strings.ToLower(n.Title), title) {
 			return false
 		}
@@ -712,7 +713,7 @@ func (s *fakeNodeStore) Search(_ context.Context, query contracts.NodeQuery) ([]
 	return found, nil
 }
 
-func (s *fakeNodeStore) FindByExternalID(_ context.Context, scheme, value string) ([]domain.Node, error) {
+func (s *fakeNodeStore) FindByExternalID(_ context.Context, scheme, value string) ([]v1.Node, error) {
 	s.trace.record("nodes.find_by_external_id")
 	if scheme == "" {
 		return nil, contracts.NewError(contracts.InvalidArgument, "external id scheme is required")
@@ -720,7 +721,7 @@ func (s *fakeNodeStore) FindByExternalID(_ context.Context, scheme, value string
 	if value == "" {
 		return nil, contracts.NewError(contracts.InvalidArgument, "external id value is required")
 	}
-	return s.collect(func(n domain.Node) bool {
+	return s.collect(func(n v1.Node) bool {
 		ids := map[string]string{}
 		if err := json.Unmarshal(n.ExternalIDs, &ids); err != nil {
 			// An unparseable document simply does not match, which is what
@@ -731,7 +732,7 @@ func (s *fakeNodeStore) FindByExternalID(_ context.Context, scheme, value string
 	}, byTitle), nil
 }
 
-func (s *fakeNodeStore) Delete(_ context.Context, id domain.NodeID) error {
+func (s *fakeNodeStore) Delete(_ context.Context, id v1.NodeID) error {
 	s.trace.record("nodes.delete")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
@@ -742,10 +743,10 @@ func (s *fakeNodeStore) Delete(_ context.Context, id domain.NodeID) error {
 	return nil
 }
 
-func (s *fakeNodeStore) collect(match func(domain.Node) bool, less func(a, b domain.Node) bool) []domain.Node {
+func (s *fakeNodeStore) collect(match func(v1.Node) bool, less func(a, b v1.Node) bool) []v1.Node {
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
-	var found []domain.Node
+	var found []v1.Node
 	for _, node := range s.db.nodes {
 		if match(node) {
 			found = append(found, node)
@@ -755,21 +756,21 @@ func (s *fakeNodeStore) collect(match func(domain.Node) bool, less func(a, b dom
 	return found
 }
 
-func byTitle(a, b domain.Node) bool {
+func byTitle(a, b v1.Node) bool {
 	if a.Title != b.Title {
 		return a.Title < b.Title
 	}
 	return a.ID < b.ID
 }
 
-func byNaturalOrder(a, b domain.Node) bool {
+func byNaturalOrder(a, b v1.Node) bool {
 	if a.NaturalOrder != b.NaturalOrder {
 		return a.NaturalOrder < b.NaturalOrder
 	}
 	return a.ID < b.ID
 }
 
-func (db *fakeDB) seedNode(node domain.Node) {
+func (db *fakeDB) seedNode(node v1.Node) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.nodes[node.ID] = node.Canonical()
@@ -783,45 +784,45 @@ type fakePartStore struct {
 	trace *trace
 }
 
-func (s *fakePartStore) Create(_ context.Context, part domain.Part) (domain.Part, error) {
+func (s *fakePartStore) Create(_ context.Context, part v1.Part) (v1.Part, error) {
 	s.trace.record("parts.create")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 	node, ok := s.db.nodes[part.NodeID]
-	if !ok || node.Kind != domain.NodeItem {
-		return domain.Part{}, contracts.NewError(contracts.InvalidArgument, "part must attach to an existing item node")
+	if !ok || node.Kind != v1.NodeItem {
+		return v1.Part{}, contracts.NewError(contracts.InvalidArgument, "part must attach to an existing item node")
 	}
 	s.db.parts[part.ID] = part
 	return part, nil
 }
 
-func (s *fakePartStore) FindByID(_ context.Context, id domain.PartID) (domain.Part, error) {
+func (s *fakePartStore) FindByID(_ context.Context, id v1.PartID) (v1.Part, error) {
 	s.trace.record("parts.find_by_id")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 	part, ok := s.db.parts[id]
 	if !ok {
-		return domain.Part{}, contracts.NewError(contracts.NotFound, "part not found")
+		return v1.Part{}, contracts.NewError(contracts.NotFound, "part not found")
 	}
 	return part, nil
 }
 
-func (s *fakePartStore) Update(_ context.Context, part domain.Part) (domain.Part, error) {
+func (s *fakePartStore) Update(_ context.Context, part v1.Part) (v1.Part, error) {
 	s.trace.record("parts.update")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 	if _, ok := s.db.parts[part.ID]; !ok {
-		return domain.Part{}, contracts.NewError(contracts.NotFound, "part not found")
+		return v1.Part{}, contracts.NewError(contracts.NotFound, "part not found")
 	}
 	s.db.parts[part.ID] = part
 	return part, nil
 }
 
-func (s *fakePartStore) ListByNode(_ context.Context, nodeID domain.NodeID) ([]domain.Part, error) {
+func (s *fakePartStore) ListByNode(_ context.Context, nodeID v1.NodeID) ([]v1.Part, error) {
 	s.trace.record("parts.list_by_node")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
-	var parts []domain.Part
+	var parts []v1.Part
 	for _, p := range s.db.parts {
 		if p.NodeID == nodeID {
 			parts = append(parts, p)
@@ -836,7 +837,7 @@ func (s *fakePartStore) ListByNode(_ context.Context, nodeID domain.NodeID) ([]d
 	return parts, nil
 }
 
-func (s *fakePartStore) Delete(_ context.Context, id domain.PartID) error {
+func (s *fakePartStore) Delete(_ context.Context, id v1.PartID) error {
 	s.trace.record("parts.delete")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
@@ -875,7 +876,7 @@ type fakeRelationStore struct {
 	trace *trace
 }
 
-func (s *fakeRelationStore) Create(_ context.Context, relation domain.Relation) (domain.Relation, error) {
+func (s *fakeRelationStore) Create(_ context.Context, relation v1.Relation) (v1.Relation, error) {
 	s.trace.record("relations.create")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
@@ -883,39 +884,39 @@ func (s *fakeRelationStore) Create(_ context.Context, relation domain.Relation) 
 		if existing.FromNodeID == relation.FromNodeID &&
 			existing.ToNodeID == relation.ToNodeID &&
 			existing.Type == relation.Type {
-			return domain.Relation{}, contracts.NewError(contracts.Conflict, "relation already exists")
+			return v1.Relation{}, contracts.NewError(contracts.Conflict, "relation already exists")
 		}
 	}
 	s.db.relations[relation.ID] = relation
 	return relation, nil
 }
 
-func (s *fakeRelationStore) FindByID(_ context.Context, id domain.RelationID) (domain.Relation, error) {
+func (s *fakeRelationStore) FindByID(_ context.Context, id v1.RelationID) (v1.Relation, error) {
 	s.trace.record("relations.find_by_id")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 	relation, ok := s.db.relations[id]
 	if !ok {
-		return domain.Relation{}, contracts.NewError(contracts.NotFound, "relation not found")
+		return v1.Relation{}, contracts.NewError(contracts.NotFound, "relation not found")
 	}
 	return relation, nil
 }
 
-func (s *fakeRelationStore) ListFrom(_ context.Context, from domain.NodeID, relationType domain.RelationType) ([]domain.Relation, error) {
+func (s *fakeRelationStore) ListFrom(_ context.Context, from v1.NodeID, relationType v1.RelationType) ([]v1.Relation, error) {
 	s.trace.record("relations.list_from")
-	return s.list(func(r domain.Relation) bool {
+	return s.list(func(r v1.Relation) bool {
 		return r.FromNodeID == from && (relationType == "" || r.Type == relationType)
 	}), nil
 }
 
-func (s *fakeRelationStore) ListTo(_ context.Context, to domain.NodeID, relationType domain.RelationType) ([]domain.Relation, error) {
+func (s *fakeRelationStore) ListTo(_ context.Context, to v1.NodeID, relationType v1.RelationType) ([]v1.Relation, error) {
 	s.trace.record("relations.list_to")
-	return s.list(func(r domain.Relation) bool {
+	return s.list(func(r v1.Relation) bool {
 		return r.ToNodeID == to && (relationType == "" || r.Type == relationType)
 	}), nil
 }
 
-func (s *fakeRelationStore) Delete(_ context.Context, id domain.RelationID) error {
+func (s *fakeRelationStore) Delete(_ context.Context, id v1.RelationID) error {
 	s.trace.record("relations.delete")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
@@ -926,10 +927,10 @@ func (s *fakeRelationStore) Delete(_ context.Context, id domain.RelationID) erro
 	return nil
 }
 
-func (s *fakeRelationStore) list(match func(domain.Relation) bool) []domain.Relation {
+func (s *fakeRelationStore) list(match func(v1.Relation) bool) []v1.Relation {
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
-	var found []domain.Relation
+	var found []v1.Relation
 	for _, r := range s.db.relations {
 		if match(r) {
 			found = append(found, r)
@@ -947,31 +948,31 @@ type fakeSourceBindingStore struct {
 	trace *trace
 }
 
-func (s *fakeSourceBindingStore) Create(_ context.Context, binding domain.SourceBinding) (domain.SourceBinding, error) {
+func (s *fakeSourceBindingStore) Create(_ context.Context, binding v1.SourceBinding) (v1.SourceBinding, error) {
 	s.trace.record("bindings.create")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 	for _, existing := range s.db.bindings {
 		if existing.SourceProvider == binding.SourceProvider && existing.SourceRef == binding.SourceRef {
-			return domain.SourceBinding{}, contracts.NewError(contracts.Conflict, "source already bound")
+			return v1.SourceBinding{}, contracts.NewError(contracts.Conflict, "source already bound")
 		}
 	}
 	s.db.bindings[binding.ID] = binding
 	return binding, nil
 }
 
-func (s *fakeSourceBindingStore) FindByID(_ context.Context, id domain.SourceBindingID) (domain.SourceBinding, error) {
+func (s *fakeSourceBindingStore) FindByID(_ context.Context, id v1.SourceBindingID) (v1.SourceBinding, error) {
 	s.trace.record("bindings.find_by_id")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 	binding, ok := s.db.bindings[id]
 	if !ok {
-		return domain.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
+		return v1.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
 	}
 	return binding, nil
 }
 
-func (s *fakeSourceBindingStore) FindBySource(_ context.Context, provider, ref string) (domain.SourceBinding, error) {
+func (s *fakeSourceBindingStore) FindBySource(_ context.Context, provider, ref string) (v1.SourceBinding, error) {
 	s.trace.record("bindings.find_by_source")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
@@ -980,38 +981,38 @@ func (s *fakeSourceBindingStore) FindBySource(_ context.Context, provider, ref s
 			return b, nil
 		}
 	}
-	return domain.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
+	return v1.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
 }
 
-func (s *fakeSourceBindingStore) Update(_ context.Context, binding domain.SourceBinding) (domain.SourceBinding, error) {
+func (s *fakeSourceBindingStore) Update(_ context.Context, binding v1.SourceBinding) (v1.SourceBinding, error) {
 	s.trace.record("bindings.update")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
 	if _, ok := s.db.bindings[binding.ID]; !ok {
-		return domain.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
+		return v1.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
 	}
 	s.db.bindings[binding.ID] = binding
 	return binding, nil
 }
 
-func (s *fakeSourceBindingStore) ListByNode(_ context.Context, nodeID domain.NodeID) ([]domain.SourceBinding, error) {
+func (s *fakeSourceBindingStore) ListByNode(_ context.Context, nodeID v1.NodeID) ([]v1.SourceBinding, error) {
 	s.trace.record("bindings.list_by_node")
-	return s.list(func(b domain.SourceBinding) bool { return b.NodeID == nodeID }), nil
+	return s.list(func(b v1.SourceBinding) bool { return b.NodeID == nodeID }), nil
 }
 
-func (s *fakeSourceBindingStore) ListPendingReview(_ context.Context, limit int) ([]domain.SourceBinding, error) {
+func (s *fakeSourceBindingStore) ListPendingReview(_ context.Context, limit int) ([]v1.SourceBinding, error) {
 	s.trace.record("bindings.list_pending")
 	if limit <= 0 {
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
 	}
-	found := s.list(func(b domain.SourceBinding) bool { return b.Status == domain.BindingPendingReview })
+	found := s.list(func(b v1.SourceBinding) bool { return b.Status == v1.BindingPendingReview })
 	if len(found) > limit {
 		found = found[:limit]
 	}
 	return found, nil
 }
 
-func (s *fakeSourceBindingStore) Delete(_ context.Context, id domain.SourceBindingID) error {
+func (s *fakeSourceBindingStore) Delete(_ context.Context, id v1.SourceBindingID) error {
 	s.trace.record("bindings.delete")
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
@@ -1022,10 +1023,10 @@ func (s *fakeSourceBindingStore) Delete(_ context.Context, id domain.SourceBindi
 	return nil
 }
 
-func (s *fakeSourceBindingStore) list(match func(domain.SourceBinding) bool) []domain.SourceBinding {
+func (s *fakeSourceBindingStore) list(match func(v1.SourceBinding) bool) []v1.SourceBinding {
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
-	var found []domain.SourceBinding
+	var found []v1.SourceBinding
 	for _, b := range s.db.bindings {
 		if match(b) {
 			found = append(found, b)

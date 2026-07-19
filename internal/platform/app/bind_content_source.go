@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
@@ -19,19 +20,19 @@ const ActionContentBind policy.Action = "content.bind"
 // because they share a title.
 type BindContentSourceCommand struct {
 	CallerSessionID domain.SessionID
-	NodeID          domain.NodeID
+	NodeID          v1.NodeID
 	SourceProvider  string
 	SourceRef       string
 	MatchConfidence float64
-	MatchMethod     domain.MatchMethod
+	MatchMethod     v1.MatchMethod
 	// Status is the resolution the caller is asserting — confirmed for a
 	// strong match, pending_review to queue a weak one.
-	Status domain.BindingStatus
+	Status v1.BindingStatus
 }
 
 // BindContentSourceResult carries the committed binding.
 type BindContentSourceResult struct {
-	Binding domain.SourceBinding
+	Binding v1.SourceBinding
 }
 
 func validateBindContentSourceCommand(cmd BindContentSourceCommand) error {
@@ -52,7 +53,7 @@ func validateBindContentSourceCommand(cmd BindContentSourceCommand) error {
 	}
 	// A binding is created either confirmed or queued for review. Rejected is
 	// a resolution of an existing binding, not a state to create one in.
-	if cmd.Status != domain.BindingConfirmed && cmd.Status != domain.BindingPendingReview {
+	if cmd.Status != v1.BindingConfirmed && cmd.Status != v1.BindingPendingReview {
 		return contracts.NewError(contracts.InvalidArgument, "a new binding is confirmed or pending_review")
 	}
 	return nil
@@ -87,8 +88,8 @@ func (s *Service) BindContentSource(ctx context.Context, cmd BindContentSourceCo
 		}
 
 		now := s.clock.Now()
-		binding := domain.SourceBinding{
-			ID:              domain.SourceBindingID(s.contentIDs.NewID()),
+		binding := v1.SourceBinding{
+			ID:              v1.SourceBindingID(s.contentIDs.NewID()),
 			NodeID:          cmd.NodeID,
 			SourceProvider:  cmd.SourceProvider,
 			SourceRef:       cmd.SourceRef,
@@ -123,10 +124,10 @@ func (s *Service) BindContentSource(ctx context.Context, cmd BindContentSourceCo
 	return result, nil
 }
 
-func knownMatchMethod(m domain.MatchMethod) bool {
+func knownMatchMethod(m v1.MatchMethod) bool {
 	switch m {
-	case domain.MatchExternalIDExact, domain.MatchFingerprint,
-		domain.MatchFuzzyTitle, domain.MatchUserSelected:
+	case v1.MatchExternalIDExact, v1.MatchFingerprint,
+		v1.MatchFuzzyTitle, v1.MatchUserSelected:
 		return true
 	default:
 		return false

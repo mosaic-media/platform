@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
@@ -30,17 +31,17 @@ const (
 // never re-fingerprinted.
 type ResolveContentBindingCommand struct {
 	CallerSessionID domain.SessionID
-	BindingID       domain.SourceBindingID
+	BindingID       v1.SourceBindingID
 	Resolution      BindingResolution
 	// MoveToNodeID re-targets the binding before confirming — a split. It is
 	// only valid with Confirm: rejecting a match and moving it at once is
 	// contradictory.
-	MoveToNodeID domain.NodeID
+	MoveToNodeID v1.NodeID
 }
 
 // ResolveContentBindingResult carries the updated binding.
 type ResolveContentBindingResult struct {
-	Binding domain.SourceBinding
+	Binding v1.SourceBinding
 }
 
 func validateResolveContentBindingCommand(cmd ResolveContentBindingCommand) error {
@@ -92,21 +93,24 @@ func (s *Service) ResolveContentBinding(ctx context.Context, cmd ResolveContentB
 
 		now := s.clock.Now()
 
-		// 6. apply the resolution. A split moves first — the target must
-		// exist — then confirms, keeping the source's identity untouched.
+		// 6. apply the resolution. State transitions are Platform operations,
+		// so they are performed here rather than by a method on the published
+		// model (ADR 0016). A split moves first — the target must exist — then
+		// confirms, keeping the source's identity (method, confidence)
+		// untouched.
 		switch cmd.Resolution {
 		case ResolveReject:
-			binding.Status = domain.BindingRejected
-			binding.UpdatedAt = now
+			binding.Status = v1.BindingRejected
 		case ResolveConfirm:
 			if cmd.MoveToNodeID != "" {
 				if _, err := tx.Nodes().FindByID(ctx, cmd.MoveToNodeID); err != nil {
 					return err
 				}
-				binding = binding.MoveTo(cmd.MoveToNodeID, now)
+				binding.NodeID = cmd.MoveToNodeID
 			}
-			binding = binding.Confirm(now)
+			binding.Status = v1.BindingConfirmed
 		}
+		binding.UpdatedAt = now
 
 		// 7. persist state and the outbox event in the same transaction.
 		updated, err := tx.SourceBindings().Update(ctx, binding)

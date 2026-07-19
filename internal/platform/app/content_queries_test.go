@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
@@ -25,17 +26,17 @@ func contentFixture(t *testing.T) (*app.Service, *fakeDB, *trace, domain.Session
 	db.seedSession("s-1", "u-1", now)
 	db.seedRole("u-1", adminRole())
 
-	work := domain.Node{
-		ID: "n-1", WorkID: "n-1", Kind: domain.NodeWork,
-		MediaType: domain.MediaAnimeSeries, Title: "Fullmetal Alchemist: Brotherhood",
-		Status: domain.NodeActive, ExternalIDs: []byte(`{"anilist":"5114"}`),
+	work := v1.Node{
+		ID: "n-1", WorkID: "n-1", Kind: v1.NodeWork,
+		MediaType: v1.MediaAnimeSeries, Title: "Fullmetal Alchemist: Brotherhood",
+		Status: v1.NodeActive, ExternalIDs: []byte(`{"anilist":"5114"}`),
 		CreatedAt: now, UpdatedAt: now,
 	}
 	parent := work.ID
-	episode := domain.Node{
-		ID: "n-2", WorkID: work.ID, ParentID: &parent, Kind: domain.NodeItem,
-		MediaType: domain.MediaAnimeSeries, ItemType: domain.ItemEpisode,
-		Title: "The First Day", NaturalOrder: 1, Status: domain.NodeActive,
+	episode := v1.Node{
+		ID: "n-2", WorkID: work.ID, ParentID: &parent, Kind: v1.NodeItem,
+		MediaType: v1.MediaAnimeSeries, ItemType: v1.ItemEpisode,
+		Title: "The First Day", NaturalOrder: 1, Status: v1.NodeActive,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	db.seedNode(work)
@@ -112,7 +113,7 @@ func TestSearchContentReturnsMatches(t *testing.T) {
 	svc, _, _, session := contentFixture(t)
 
 	result, err := svc.SearchContent(context.Background(), app.SearchContentQuery{
-		CallerSessionID: session, Title: "alchemist", Kind: domain.NodeWork,
+		CallerSessionID: session, Title: "alchemist", Kind: v1.NodeWork,
 	})
 	if err != nil {
 		t.Fatalf("SearchContent: %v", err)

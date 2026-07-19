@@ -1,4 +1,4 @@
-package domain
+package v1
 
 import "time"
 
@@ -43,7 +43,8 @@ const (
 // concepts. A merge is a confirmed high-confidence binding. A split moves a
 // binding to a different Node — the source is never re-fingerprinted and
 // nothing else in the graph needs to know. When a Node's last binding is
-// removed it becomes NodeOrphaned, not deleted.
+// removed it becomes NodeOrphaned, not deleted. Those transitions are Platform
+// operations issued through the resolve command, not methods on this value.
 type SourceBinding struct {
 	ID     SourceBindingID
 	NodeID NodeID
@@ -65,19 +66,3 @@ type SourceBinding struct {
 
 // NeedsReview reports whether the binding is waiting on a person.
 func (b SourceBinding) NeedsReview() bool { return b.Status == BindingPendingReview }
-
-// Confirm returns a copy of the binding settled against its current Node.
-func (b SourceBinding) Confirm(now time.Time) SourceBinding {
-	b.Status = BindingConfirmed
-	b.UpdatedAt = now
-	return b
-}
-
-// MoveTo returns a copy of the binding pointing at a different Node. This
-// is a split: the source keeps its identity, confidence and match method,
-// and only its target changes.
-func (b SourceBinding) MoveTo(node NodeID, now time.Time) SourceBinding {
-	b.NodeID = node
-	b.UpdatedAt = now
-	return b
-}
