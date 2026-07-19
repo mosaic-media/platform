@@ -2,13 +2,19 @@
 
 ## Source of truth
 
-**The code in this repository is authoritative.** It is ~15,300 lines of Go and it decides what Mosaic is. The [`mosaic-architecture`](https://github.com/mosaic-media/mosaic-architecture) repository *describes* it and records the decisions behind it. If the two disagree, the documentation is wrong — fix it there, in the same session, rather than working around it.
+**The code in this repository is authoritative.** It is ~22,300 lines of Go and it decides what Mosaic is. The [`mosaic-architecture`](https://github.com/mosaic-media/mosaic-architecture) repository *describes* it and records the decisions behind it. If the two disagree, the documentation is wrong — fix it there, in the same session, rather than working around it.
+
+**Three repositories, all siblings on disk** (`../mosaic-platform`, `../mosaic-architecture`, `../mosaic-sdk`):
+
+- **`mosaic-platform`** (this repo) — the Platform: domain, contracts, application services, the PostgreSQL module, transports, the composition root.
+- **`mosaic-architecture`** — the docs and ADRs. Push doc updates here whenever code and docs diverge.
+- **`mosaic-sdk`** — the **published contract surface**, extracted into its own module (`github.com/mosaic-media/mosaic-sdk`, at `v0.1.0`). This is what a Module compiles against. See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
 
 Required reading, and it is short:
 
 - **[Architecture](https://github.com/mosaic-media/mosaic-architecture/blob/main/docs/architecture.md)** — the package map, the invariants, the standing test gates. Read before changing structure.
-- **[Roadmap](https://github.com/mosaic-media/mosaic-architecture/blob/main/docs/roadmap.md)** — the build sequence, slice exit criteria and the stop point before SDK work.
-- **[Decision records](https://github.com/mosaic-media/mosaic-architecture/tree/main/docs/adr)** — numbered ADRs. 0007 (static composition), 0012 (capabilities do not own stores), 0013 (the object graph) and 0014 (storage authority) bear most directly on this repository.
+- **[Roadmap](https://github.com/mosaic-media/mosaic-architecture/blob/main/docs/roadmap.md)** — where the build is and what the open threads are. The critical path is complete.
+- **[Decision records](https://github.com/mosaic-media/mosaic-architecture/tree/main/docs/adr)** — numbered ADRs. Most load-bearing here: 0007 (static composition), 0012 (capabilities do not own stores), 0013 (the object graph), 0014 (storage authority), 0015 (open vs closed vocabularies), 0016 (the published contract surface), 0017 (how a capability acts).
 
 Everything else is published at [mosaic-media.github.io/mosaic-architecture](https://mosaic-media.github.io/mosaic-architecture/), with a PDF of each page.
 
@@ -43,9 +49,10 @@ Modules compile into the binary, so there is no runtime boundary between Platfor
 ## Transaction shape (ADR 0012 supersedes ADR 0001)
 
 `Tx` enumerates the Platform's stores by name — `Users()`, `Sessions()`,
-`Permissions()`, `Config()`, `Outbox()`, `Credentials()`. Every store reached
-through one `Tx` writes to the same database transaction, so state and outbox
-events commit atomically. That is the whole purpose of the type.
+`Permissions()`, `Config()`, `Outbox()`, `Credentials()`, and the content
+stores `Nodes()`, `Parts()`, `Relations()`, `SourceBindings()`. Every store
+reached through one `Tx` writes to the same database transaction, so state and
+outbox events commit atomically. That is the whole purpose of the type.
 
 ADR 0001 replaced these accessors with uniform `Store[T](tx)` resolution so a
 capability could join a transaction without Core Platform being edited for it.
@@ -64,9 +71,37 @@ The uniform-resolution machinery has therefore been removed:
   still-live concern, and PostgreSQL remains a module rather than a privileged
   implementation.
 
-When the Platform grows a store — the node, relation and attribute stores of
-the content model — add it to `Tx` deliberately. That is Platform evolution and
-should look like it.
+The four content stores were the first exercise of this rule: growing the
+Platform's store set is deliberate Platform evolution and should look like it.
+
+## The published SDK is a separate module
+
+This is the single most surprising thing for a new session. **The content
+models and the content application-service API do not live under `internal/`.
+They were extracted into their own module** — `github.com/mosaic-media/mosaic-sdk`,
+a sibling working tree at `../mosaic-sdk`, pinned in `go.mod` at `v0.1.0` with
+no `replace` directive (ADR 0016).
+
+- Content types are imported as
+  `v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"`. `v1.Node`,
+  `v1.Part`, `v1.Relation`, `v1.SourceBinding`, their vocabularies (`v1.MediaType`,
+  `v1.NodeKind`, …), the content command/query/result types, the
+  `v1.ContentService` interface, and the opaque `v1.Caller` all live there.
+- **Use the `v1` constants, not `domain`** — `v1.MediaAnimeSeries`,
+  `v1.NodeWork`, etc. `NormaliseTypeName` and `Node.Canonical()` are on the
+  `v1` types now, not on `domain`.
+- What stays internal: the store contracts (`NodeStore`, `Tx`,
+  `StorageAdapter`), and the identity/config/event models in
+  `internal/platform/domain`. A capability calls application services, never
+  stores.
+- **Changing the SDK:** edit `../mosaic-sdk`, then for the Platform to see it
+  either add a `replace github.com/mosaic-media/mosaic-sdk => ../mosaic-sdk`
+  to `go.mod` for local work, or tag and push a new version and bump the
+  require. `../mosaic-sdk` is its own git repo; commit and push it separately.
+  The reference capability (`capabilities/reference/`) and `test/sdkprobe/`
+  import only the SDK, enforced by boundary tests — the stop point made
+  executable: **if a capability needs a private Platform import, the contracts
+  are not ready to publish.**
 
 ## Workflow
 
@@ -81,94 +116,93 @@ should look like it.
 
 ## What is built
 
-Twelve slices, each proven against a real PostgreSQL 16 and passing
-`go build ./...`, `go vet ./...` and `go test ./... -race`. Detail is in the
-git history; this is the map.
+**The critical path is complete: the content model, its published surface, a
+reference capability that uses only that surface, and the surface's extraction
+into the SDK module.** Everything passes `go build ./...`, `go vet ./...` and
+`go test ./... -race` against real PostgreSQL 16. Detail is in the git history;
+this is the map, oldest first.
 
 | Slice | What it proves |
 |---|---|
-| Repository scaffold | Process boots, packages compile |
-| Core contracts | First contract set in `internal/platform/contracts/`, seven error categories, contract identity metadata |
-| Application service skeleton | The command order runs end to end against fakes, with a call-order trace and rollback |
-| Identity, sessions and policy | Real ABAC `policy.Engine` (not a stub) drives every decision; a denied action mutates nothing |
-| PostgreSQL adapter and migrations | Built-in module at `internal/modules/postgres/`, eleven embedded migrations, a fail-fast migrator, SQLSTATE mapped to Platform categories, and app services running unchanged against the real adapter |
-| Transactional outbox | State and event commit atomically — proven by failing mid-transaction and querying raw tables to confirm neither row persists |
-| In-process Event Bus | `Bus` + `Worker`, at-least-once delivery, exponential backoff, dead-letter after eight attempts, retries surviving restart |
-| Configuration versioning | Draft to Validated to Active, reload classes, and at most one Active version enforced by a unique partial index |
-| Secret broker | OS keychain with an AES-256-GCM vault fallback, `secret://` references, and a static check that nothing reads secret files directly |
-| GraphQL surface | Executable schema where every resolver body is one call into `app.Service`, enforced by a test that parses imports |
-| Diagnostics and health | Real component state, redact-by-default logging, and support bundles proven not to leak a planted secret |
-| Supervisor handoff | Five HTTP endpoints, a real serve loop, and graceful shutdown that drains the outbox — proven with a one-hour ticker so only the shutdown drain can deliver |
-| Content model | `nodes`, `parts`, `relations`, `source_bindings` in native `uuid`/UUIDv7 columns; four stores added to `Tx`; the four ADR 0013 non-uniformities pinned by contract tests |
+| Scaffold → Supervisor handoff (twelve slices) | Boot, contracts, the command order, ABAC policy, the PostgreSQL module + migrations, transactional outbox, event bus + worker, config versioning, secret broker, GraphQL schema, diagnostics, and a graceful serve loop |
+| Content model | `nodes`, `parts`, `relations`, `source_bindings` in native `uuid`/UUIDv7 columns; four stores on `Tx`; ADR 0013's four non-uniformities pinned by contract tests |
+| Content commands and queries | Nine application services over the graph (search, node read, external-id lookup; add work/child/part, relate, bind, resolve) — the command order into the content model |
+| Published contract surface (ADR 0016) | `contracts/platform/v1` populated: content models, the nine services, `ContentService`, opaque `Caller`; store contracts stay internal; a separate module compiles against it (`test/sdkprobe` / `test/sdkboundary`) |
+| Reference capability (the thesis test) | `capabilities/reference/` imports only the SDK, sources an anime over HTTP, dedupes, creates the tree + adaptation edge + bindings — proven end to end against PostgreSQL. **The extension model works.** |
+| SDK extraction | `contracts/platform/v1` moved out into `github.com/mosaic-media/mosaic-sdk` at `v0.1.0`; the Platform depends on it as an external module |
+| Runnable process | `main.go` constructs `app.Service`; GraphQL served over HTTP at `:8081/graphql` (health handoff on `:8080`); Argon2id password hasher; end-to-end HTTP test signs in and imports content |
+| Permissions management + bootstrap | `PermissionStore` gained `CreateRole`/`GrantRole` (+ commands + GraphQL mutations); `internal/composition/bootstrap.EnsureAdmin` seeds a first admin idempotently from env vars, so the binary is usable by a human |
 
-**Reverted:** uniform store resolution and its PostgreSQL follow-up, under
-ADR 0012. `Store[T]` solved for capability-owned stores, which ADR 0002 had
-already ruled out. No production code ever called it.
+**Reverted long ago:** uniform store resolution (`Store[T]`) under ADR 0012.
+
+**Running it:** set `MOSAIC_POSTGRES_DSN`, and (optionally)
+`MOSAIC_BOOTSTRAP_ADMIN_USERNAME` + `MOSAIC_BOOTSTRAP_ADMIN_PASSWORD`, then
+`go run ./cmd/mosaic-platform`. It migrates, seeds the admin, serves GraphQL on
+`:8081/graphql` and the Supervisor handoff on `:8080`.
 
 ## What is not built
 
-- **Command handlers over the content model.** The stores exist and are
-  proven against real PostgreSQL, but no application service commands them
-  yet, so there is no validate → authenticate → authorize → transact path
-  into the graph. The `Tx` fakes in `internal/platform/app` and
-  `internal/transport/graphql` return nil for the four content stores for
-  exactly this reason.
-- **IPTV programme listings.** ADR 0013 gives them their own lightweight
-  table keyed to the channel node. An `iptv_channel` is a Node; a programme
-  that airs once is deliberately not, and that table is still unbuilt.
-- **Module permissions.** The policy engine governs *user* authority. Module
-  authority is undecided.
-- **External modules.** Only the built-in shape exists.
-- **Jobs service.** `jobs`, `job_attempts` and `job_logs` are tables with
-  nothing on them. `SELECT ... FOR UPDATE SKIP LOCKED` is the intended pattern.
-- **`LISTEN`/`NOTIFY`.** The outbox worker polls. Notifications would be an
-  accelerator, not a replacement — they are dropped when no listener is
-  connected, so the poll stays as the floor.
-- **HTTP serving for GraphQL.** The schema is executable and tested, not served.
-- **Session refresh and device pairing.** Resolvers for both return
-  `Unavailable` rather than faking success. Same for jobs and health history.
-- **Exports, Shell, SDUI, streaming.**
+- **`ContentService` relation reads.** The service can create edges
+  (`RelateContent`) but not read them back — there is no `ListFrom`/`ListTo`
+  on the published surface. A capability that wants to query relations can't
+  yet. Small, additive; a candidate `v1` addition (a `v0.x` bump).
+- **The `media_types` registry** (ADR 0015). Normalisation collapses spelling
+  variants; it cannot catch a value that was never a real type
+  (`animeseries`). The registry needs the **capability manifest shape**
+  (undecided) and a capability that introduces a genuinely new media type
+  (the anime reference capability uses only known ones). Deferred; ADR 0015
+  is amended to say so.
+- **Module-granular permissions and a system principal.** User permissions
+  management is built; a capability acts as its invoking user (ADR 0017).
+  Authority a *module* holds distinct from that user, and a system principal
+  for background (no-user) work, are scoped to future ADRs.
+- **External-module composition.** Only the built-in module shape exists; how
+  a third-party module is discovered and compiled in is unbuilt.
+- **IPTV programme listings.** ADR 0013 gives them their own lightweight table
+  keyed to the channel node; unbuilt.
+- **Jobs service.** `jobs`, `job_attempts`, `job_logs` are empty tables.
+  `SELECT ... FOR UPDATE SKIP LOCKED` is the intended pattern.
+- **`LISTEN`/`NOTIFY`.** The outbox worker polls; notifications would be an
+  accelerator over the poll, not a replacement.
+- **Session refresh and device pairing.** Resolvers return `Unavailable`.
+  Same for jobs and health-history resolvers.
+- **Exports (NFO/.mos), Shell, SDUI, streaming.**
 
 ## What is next
 
-**The reference capability path.** The content model landed, so a capability
-now has somewhere to put an anime — the blocker that failed that slice twice
-is gone.
+No single forced next step — the critical path is done. The open threads,
+roughly in order of how cheaply they harden what exists:
 
-Under ADR 0012 it must prove a capability can source external metadata, search
-existing content, create nodes and relations, and publish an event, using only
-published contracts and owning no schema. That will likely want content-model
-command handlers first, since the capability should go through application
-services rather than reaching for `Tx` itself.
+1. **Close the relation-read gap** — add `ListFrom`/`ListTo` to
+   `ContentService` (and `v1`), so a capability can read the graph it writes.
+   Smallest; would bump the SDK to `v0.1.1`/`v0.2.0`.
+2. **A second capability** — a different media type (music, comics) built
+   against the SDK, to stress the surface and surface what a real second
+   consumer needs before the SDK stabilises.
+3. **The module system** — the capability manifest shape, external-module
+   composition, and module-granular permissions. This unblocks the
+   `media_types` registry and genuinely third-party modules/distribution.
+   Larger; several ADRs.
+4. **Background work** — the job queue and a system principal, for scheduled
+   metadata refresh (no user in the loop).
 
-Then SDK extraction readiness.
+### Standing facts a new session needs
 
-### Notes carried out of the content-model slice
-
-- **Open and closed vocabularies are now ADR 0015**, which refines ADR 0013.
-  The test is whether Platform code branches on the value. `node_kind`,
-  `part_role`, relation types, match methods and statuses do, so they are
-  `CHECK`-constrained. `media_type`, `container_type` and `item_type` do not,
-  so they are unconstrained text — a `CHECK` would make every new media type a
-  schema migration. Open is not unguarded: stores canonicalise on write via
-  `domain.Node.Canonical()`, so `Anime Series`, `anime-series` and
-  `anime_series` are one media type — a contract obligation, not a Postgres
-  detail, and writes return the canonical value. What normalisation cannot
-  recover (`animeseries`, a misspelling) is owed to the `media_types`
-  registry landing with the reference capability. Use the `domain` constants,
-  not string literals.
-- **UUIDv7 has its own generator.** `NewIDGenerator()` stays UUIDv4 for the
-  infrastructure tables; `NewUUIDv7Generator()` serves the content tables and
-  is exposed as `ContractSet.ContentIDs`. Both satisfy `contracts.IDGenerator`.
-- **SQLSTATE `23001` now maps to `Conflict`.** PostgreSQL reports an explicit
-  `ON DELETE RESTRICT` as `23001`, not `23503`; without it a refused cascading
-  delete surfaced as `Internal`.
-- **Unsettled by ADR 0013 and left unbuilt, not invented:** the fractional
-  ordering scheme at large scale (`natural_order` is stored as given and
-  nothing rebalances), relation confidence decay or reverification (edges are
-  written once, and `RelationStore` has no `Update` so that stays visible),
-  and attribute validation (JSONB is unvalidated by design; correctness
-  belongs to the writing capability).
-
-The stop point still holds: **if the reference capability needs a private
-import, the contracts are not ready to publish.**
+- **Content vocabularies are open text, canonicalised on write** (ADR 0015).
+  The test for open-vs-closed is "does Platform code branch on it?" —
+  `node_kind`, `part_role`, relation types, match methods, statuses are
+  `CHECK`-constrained; `media_type`, `container_type`, `item_type` are not.
+  Stores call `v1.Node.Canonical()`, a contract obligation, so `Anime Series`
+  and `anime-series` are one type. Use `v1` constants, not string literals.
+- **UUIDv7 for content ids.** `NewIDGenerator()` (UUIDv4) serves the
+  infrastructure tables; `NewUUIDv7Generator()` (`ContractSet.ContentIDs`)
+  serves the content tables. Content ids are native `uuid`; infrastructure
+  ids stay `text`/UUIDv4 and are not migrated.
+- **SQLSTATE `23001` → `Conflict`** (explicit `ON DELETE RESTRICT`).
+- **Password hashing is Argon2id** in `internal/adapters/crypto`, PHC-encoded;
+  satisfies `domain.PasswordVerifier` structurally.
+- **Left unbuilt, not invented** (ADR 0013): the fractional ordering scheme at
+  scale, relation confidence decay (edges written once; `RelationStore` has no
+  `Update`), and attribute validation (JSONB is unvalidated by design).
+- **The stop point still governs any SDK change:** if a capability needs a
+  private Platform import, the contracts are not ready to publish.
