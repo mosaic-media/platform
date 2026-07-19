@@ -145,13 +145,15 @@ Then SDK extraction readiness.
 
 ### Notes carried out of the content-model slice
 
-- **`media_type`, `container_type` and `item_type` are unconstrained text on
-  purpose.** A `CHECK` listing the known types would make every new media type
-  a schema migration, which is the outcome ADR 0002 and ADR 0013 exist to
-  prevent. It would also be wrong today: an artist is its own Work and
-  `artist` is not in ADR 0013's illustrative list. The Platform-owned *graph*
-  vocabulary — `node_kind`, `part_role`, relation types, match methods,
-  statuses — is closed and checked.
+- **Open and closed vocabularies are now ADR 0015**, which refines ADR 0013.
+  The test is whether Platform code branches on the value. `node_kind`,
+  `part_role`, relation types, match methods and statuses do, so they are
+  `CHECK`-constrained. `media_type`, `container_type` and `item_type` do not,
+  so they are unconstrained text — a `CHECK` would make every new media type a
+  schema migration. Nothing validates the open columns, so a typo fragments a
+  library silently; a `media_types` registry is the named fix, due when
+  something other than Platform code can introduce a type. Use the `domain`
+  constants, not string literals.
 - **UUIDv7 has its own generator.** `NewIDGenerator()` stays UUIDv4 for the
   infrastructure tables; `NewUUIDv7Generator()` serves the content tables and
   is exposed as `ContractSet.ContentIDs`. Both satisfy `contracts.IDGenerator`.

@@ -23,11 +23,17 @@ const (
 // anime_series, album, book, manga_series, comic_series, podcast,
 // iptv_channel, collection, artist and whatever comes next.
 //
-// It is deliberately open. ADR 0013 exists so that adding a media type is
-// new rows rather than new tables; constraining this to a fixed list would
-// make every new media type a schema migration, which is the outcome the
-// decision rules out. The database therefore stores it as unconstrained
-// text, and the writing capability is responsible for using a sensible one.
+// It is deliberately open (ADR 0015). The Platform never branches on a
+// media type, so it is descriptive rather than structural, and constraining
+// it to a fixed list would make every new media type a schema migration —
+// the outcome ADR 0013 exists to prevent. The database stores it as
+// unconstrained text.
+//
+// Nothing validates it, which means a typo fragments a library silently:
+// anime_series and anime-series browse as two separate things. Use these
+// constants rather than string literals. A media_types registry is the
+// anticipated fix, due when something other than Platform code can
+// introduce a type.
 type MediaType string
 
 // The media types named in ADR 0013, provided as constants for the
