@@ -9,6 +9,8 @@ require (
 	github.com/zalando/go-keyring v0.2.8
 )
 
+require golang.org/x/crypto v0.54.0
+
 require (
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
@@ -18,7 +20,7 @@ require (
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mosaic-media/mosaic-sdk v0.1.0
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
-	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/sys v0.27.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 )
