@@ -46,6 +46,8 @@ type fakeDBSnapshot struct {
 	outbox    []domain.OutboxEvent
 	nodes     map[domain.NodeID]domain.Node
 	parts     map[domain.PartID]domain.Part
+	relations map[domain.RelationID]domain.Relation
+	bindings  map[domain.SourceBindingID]domain.SourceBinding
 }
 
 // fakeDB is the shared backing store behind every fake contract in this
@@ -66,9 +68,12 @@ type fakeDB struct {
 	// this slice does not build a command for.
 	roles map[domain.UserID][]domain.Role
 
-	// nodes and parts back the content commands and queries.
-	nodes map[domain.NodeID]domain.Node
-	parts map[domain.PartID]domain.Part
+	// nodes and parts back the content commands and queries; relations and
+	// bindings back the graph and identity commands.
+	nodes     map[domain.NodeID]domain.Node
+	parts     map[domain.PartID]domain.Part
+	relations map[domain.RelationID]domain.Relation
+	bindings  map[domain.SourceBindingID]domain.SourceBinding
 }
 
 func newFakeDB() *fakeDB {
@@ -81,6 +86,8 @@ func newFakeDB() *fakeDB {
 		roles:     make(map[domain.UserID][]domain.Role),
 		nodes:     make(map[domain.NodeID]domain.Node),
 		parts:     make(map[domain.PartID]domain.Part),
+		relations: make(map[domain.RelationID]domain.Relation),
+		bindings:  make(map[domain.SourceBindingID]domain.SourceBinding),
 	}
 }
 
@@ -132,6 +139,9 @@ func adminRole() domain.Role {
 			domain.Permission(app.ActionConfigRead),
 			domain.Permission(app.ActionContentRead),
 			domain.Permission(app.ActionContentCreate),
+			domain.Permission(app.ActionContentRelate),
+			domain.Permission(app.ActionContentBind),
+			domain.Permission(app.ActionContentResolve),
 		},
 	}
 }
@@ -169,6 +179,14 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 	for k, v := range db.parts {
 		parts[k] = v
 	}
+	relations := make(map[domain.RelationID]domain.Relation, len(db.relations))
+	for k, v := range db.relations {
+		relations[k] = v
+	}
+	bindings := make(map[domain.SourceBindingID]domain.SourceBinding, len(db.bindings))
+	for k, v := range db.bindings {
+		bindings[k] = v
+	}
 
 	return fakeDBSnapshot{
 		users:     users,
@@ -179,6 +197,8 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 		outbox:    outbox,
 		nodes:     nodes,
 		parts:     parts,
+		relations: relations,
+		bindings:  bindings,
 	}
 }
 
@@ -193,6 +213,8 @@ func (db *fakeDB) restore(snap fakeDBSnapshot) {
 	db.outbox = snap.outbox
 	db.nodes = snap.nodes
 	db.parts = snap.parts
+	db.relations = snap.relations
+	db.bindings = snap.bindings
 }
 
 // fakeUserStore implements contracts.UserStore. It deliberately does not
@@ -518,10 +540,12 @@ func (tx *fakeTx) Credentials() contracts.CredentialStore {
 func (tx *fakeTx) Nodes() contracts.NodeStore { return &fakeNodeStore{db: tx.db, trace: tx.trace} }
 func (tx *fakeTx) Parts() contracts.PartStore { return &fakePartStore{db: tx.db, trace: tx.trace} }
 
-// Relations and SourceBindings have no command yet, so their fakes are owed
-// with the graph/identity commands. A handler reaching for one fails loudly.
-func (*fakeTx) Relations() contracts.RelationStore           { return nil }
-func (*fakeTx) SourceBindings() contracts.SourceBindingStore { return nil }
+func (tx *fakeTx) Relations() contracts.RelationStore {
+	return &fakeRelationStore{db: tx.db, trace: tx.trace}
+}
+func (tx *fakeTx) SourceBindings() contracts.SourceBindingStore {
+	return &fakeSourceBindingStore{db: tx.db, trace: tx.trace}
+}
 
 // fakeUnitOfWork implements contracts.UnitOfWork with real rollback
 // semantics: it snapshots the shared fakeDB before calling fn, and
@@ -842,4 +866,171 @@ func (db *fakeDB) outboxHas(eventType string) bool {
 		}
 	}
 	return false
+}
+
+// fakeRelationStore implements contracts.RelationStore over fakeDB, enforcing
+// the unique-edge rule the real adapter's constraint does.
+type fakeRelationStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func (s *fakeRelationStore) Create(_ context.Context, relation domain.Relation) (domain.Relation, error) {
+	s.trace.record("relations.create")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for _, existing := range s.db.relations {
+		if existing.FromNodeID == relation.FromNodeID &&
+			existing.ToNodeID == relation.ToNodeID &&
+			existing.Type == relation.Type {
+			return domain.Relation{}, contracts.NewError(contracts.Conflict, "relation already exists")
+		}
+	}
+	s.db.relations[relation.ID] = relation
+	return relation, nil
+}
+
+func (s *fakeRelationStore) FindByID(_ context.Context, id domain.RelationID) (domain.Relation, error) {
+	s.trace.record("relations.find_by_id")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	relation, ok := s.db.relations[id]
+	if !ok {
+		return domain.Relation{}, contracts.NewError(contracts.NotFound, "relation not found")
+	}
+	return relation, nil
+}
+
+func (s *fakeRelationStore) ListFrom(_ context.Context, from domain.NodeID, relationType domain.RelationType) ([]domain.Relation, error) {
+	s.trace.record("relations.list_from")
+	return s.list(func(r domain.Relation) bool {
+		return r.FromNodeID == from && (relationType == "" || r.Type == relationType)
+	}), nil
+}
+
+func (s *fakeRelationStore) ListTo(_ context.Context, to domain.NodeID, relationType domain.RelationType) ([]domain.Relation, error) {
+	s.trace.record("relations.list_to")
+	return s.list(func(r domain.Relation) bool {
+		return r.ToNodeID == to && (relationType == "" || r.Type == relationType)
+	}), nil
+}
+
+func (s *fakeRelationStore) Delete(_ context.Context, id domain.RelationID) error {
+	s.trace.record("relations.delete")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if _, ok := s.db.relations[id]; !ok {
+		return contracts.NewError(contracts.NotFound, "relation not found")
+	}
+	delete(s.db.relations, id)
+	return nil
+}
+
+func (s *fakeRelationStore) list(match func(domain.Relation) bool) []domain.Relation {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var found []domain.Relation
+	for _, r := range s.db.relations {
+		if match(r) {
+			found = append(found, r)
+		}
+	}
+	sort.Slice(found, func(i, j int) bool { return found[i].ID < found[j].ID })
+	return found
+}
+
+// fakeSourceBindingStore implements contracts.SourceBindingStore over fakeDB,
+// enforcing the one-source-one-node uniqueness the real adapter's constraint
+// does.
+type fakeSourceBindingStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func (s *fakeSourceBindingStore) Create(_ context.Context, binding domain.SourceBinding) (domain.SourceBinding, error) {
+	s.trace.record("bindings.create")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for _, existing := range s.db.bindings {
+		if existing.SourceProvider == binding.SourceProvider && existing.SourceRef == binding.SourceRef {
+			return domain.SourceBinding{}, contracts.NewError(contracts.Conflict, "source already bound")
+		}
+	}
+	s.db.bindings[binding.ID] = binding
+	return binding, nil
+}
+
+func (s *fakeSourceBindingStore) FindByID(_ context.Context, id domain.SourceBindingID) (domain.SourceBinding, error) {
+	s.trace.record("bindings.find_by_id")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	binding, ok := s.db.bindings[id]
+	if !ok {
+		return domain.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
+	}
+	return binding, nil
+}
+
+func (s *fakeSourceBindingStore) FindBySource(_ context.Context, provider, ref string) (domain.SourceBinding, error) {
+	s.trace.record("bindings.find_by_source")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for _, b := range s.db.bindings {
+		if b.SourceProvider == provider && b.SourceRef == ref {
+			return b, nil
+		}
+	}
+	return domain.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
+}
+
+func (s *fakeSourceBindingStore) Update(_ context.Context, binding domain.SourceBinding) (domain.SourceBinding, error) {
+	s.trace.record("bindings.update")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if _, ok := s.db.bindings[binding.ID]; !ok {
+		return domain.SourceBinding{}, contracts.NewError(contracts.NotFound, "source binding not found")
+	}
+	s.db.bindings[binding.ID] = binding
+	return binding, nil
+}
+
+func (s *fakeSourceBindingStore) ListByNode(_ context.Context, nodeID domain.NodeID) ([]domain.SourceBinding, error) {
+	s.trace.record("bindings.list_by_node")
+	return s.list(func(b domain.SourceBinding) bool { return b.NodeID == nodeID }), nil
+}
+
+func (s *fakeSourceBindingStore) ListPendingReview(_ context.Context, limit int) ([]domain.SourceBinding, error) {
+	s.trace.record("bindings.list_pending")
+	if limit <= 0 {
+		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
+	}
+	found := s.list(func(b domain.SourceBinding) bool { return b.Status == domain.BindingPendingReview })
+	if len(found) > limit {
+		found = found[:limit]
+	}
+	return found, nil
+}
+
+func (s *fakeSourceBindingStore) Delete(_ context.Context, id domain.SourceBindingID) error {
+	s.trace.record("bindings.delete")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if _, ok := s.db.bindings[id]; !ok {
+		return contracts.NewError(contracts.NotFound, "source binding not found")
+	}
+	delete(s.db.bindings, id)
+	return nil
+}
+
+func (s *fakeSourceBindingStore) list(match func(domain.SourceBinding) bool) []domain.SourceBinding {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var found []domain.SourceBinding
+	for _, b := range s.db.bindings {
+		if match(b) {
+			found = append(found, b)
+		}
+	}
+	sort.Slice(found, func(i, j int) bool { return found[i].ID < found[j].ID })
+	return found
 }
