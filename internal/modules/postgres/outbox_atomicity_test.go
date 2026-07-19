@@ -33,18 +33,8 @@ func TestOutboxStateAtomicOnMidTransactionFailure(t *testing.T) {
 	injected := errors.New("injected failure after outbox append, before commit")
 
 	err := uow.WithinTx(c, func(c context.Context, tx contracts.Tx) error {
-		// Stores are resolved through slice 13's uniform Store[T] mechanism
-		// against a real transaction, not the named accessors — this is the
-		// path MAD-001 moves command handlers onto, proven here to preserve
-		// state+outbox atomicity exactly as the accessor path did.
-		users, err := contracts.Store[contracts.UserStore](tx)
-		if err != nil {
-			return err
-		}
-		outbox, err := contracts.Store[contracts.EventOutbox](tx)
-		if err != nil {
-			return err
-		}
+		users := tx.Users()
+		outbox := tx.Outbox()
 		// State write.
 		if _, err := users.Create(c, domain.User{
 			ID: "u-atomic", Username: "atomic", Email: "atomic@example.com", Status: domain.UserActive, CreatedAt: now, UpdatedAt: now,

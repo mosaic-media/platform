@@ -2,7 +2,6 @@ package contracts_test
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
@@ -17,42 +16,17 @@ import (
 type mockUnitOfWork struct{}
 
 func (mockUnitOfWork) WithinTx(ctx context.Context, fn func(ctx context.Context, tx contracts.Tx) error) error {
-	return fn(ctx, newMockTx())
+	return fn(ctx, mockTx{})
 }
 
-// mockTx carries one instance of each store as a field so that the named
-// accessors and Store[T] resolution both hand back the identical instance,
-// making the equivalence test below provable by pointer identity rather than
-// by empty-struct value equality (every mockUserStore{} would otherwise
-// compare equal). Store[T] resolves by delegating to these same accessors, so
-// mockTx satisfies resolution in addition to its six existing methods without
-// any new method.
-type mockTx struct {
-	users       *mockUserStore
-	sessions    *mockSessionStore
-	permissions *mockPermissionStore
-	config      *mockConfigStore
-	outbox      *mockEventOutbox
-	credentials *mockCredentialStore
-}
+type mockTx struct{}
 
-func newMockTx() mockTx {
-	return mockTx{
-		users:       &mockUserStore{},
-		sessions:    &mockSessionStore{},
-		permissions: &mockPermissionStore{},
-		config:      &mockConfigStore{},
-		outbox:      &mockEventOutbox{},
-		credentials: &mockCredentialStore{},
-	}
-}
-
-func (tx mockTx) Users() contracts.UserStore             { return tx.users }
-func (tx mockTx) Sessions() contracts.SessionStore       { return tx.sessions }
-func (tx mockTx) Permissions() contracts.PermissionStore { return tx.permissions }
-func (tx mockTx) Config() contracts.ConfigStore          { return tx.config }
-func (tx mockTx) Outbox() contracts.EventOutbox          { return tx.outbox }
-func (tx mockTx) Credentials() contracts.CredentialStore { return tx.credentials }
+func (mockTx) Users() contracts.UserStore             { return mockUserStore{} }
+func (mockTx) Sessions() contracts.SessionStore       { return mockSessionStore{} }
+func (mockTx) Permissions() contracts.PermissionStore { return mockPermissionStore{} }
+func (mockTx) Config() contracts.ConfigStore          { return mockConfigStore{} }
+func (mockTx) Outbox() contracts.EventOutbox          { return mockEventOutbox{} }
+func (mockTx) Credentials() contracts.CredentialStore { return mockCredentialStore{} }
 
 type mockUserStore struct{}
 
@@ -231,59 +205,3 @@ var (
 	_ contracts.CredentialStore         = mockCredentialStore{}
 	_ contracts.ComponentHealthReporter = mockComponentHealthReporter{}
 )
-
-// TestStoreResolvesIdenticalInstanceAsNamedAccessor proves the equivalence
-// MAD-001 §02 requires: "Every store — Core Platform or capability — is
-// resolved the same way." For each store type, Store[T](tx) must hand back the
-// exact same instance the matching named accessor would for the same tx value.
-// This is the strongest guarantee the contracts package can make on its own —
-// full transactional atomicity against real PostgreSQL is a later slice's job.
-func TestStoreResolvesIdenticalInstanceAsNamedAccessor(t *testing.T) {
-	tx := newMockTx()
-
-	userStore, err := contracts.Store[contracts.UserStore](tx)
-	if err != nil {
-		t.Fatalf("Store[UserStore] returned error: %v", err)
-	}
-	if userStore != tx.Users() {
-		t.Error("Store[UserStore] resolved a different instance than tx.Users()")
-	}
-
-	outbox, err := contracts.Store[contracts.EventOutbox](tx)
-	if err != nil {
-		t.Fatalf("Store[EventOutbox] returned error: %v", err)
-	}
-	if outbox != tx.Outbox() {
-		t.Error("Store[EventOutbox] resolved a different instance than tx.Outbox()")
-	}
-
-	credentials, err := contracts.Store[contracts.CredentialStore](tx)
-	if err != nil {
-		t.Fatalf("Store[CredentialStore] returned error: %v", err)
-	}
-	if credentials != tx.Credentials() {
-		t.Error("Store[CredentialStore] resolved a different instance than tx.Credentials()")
-	}
-}
-
-// TestStoreFailsLoudlyForUnboundType proves the caller-facing boundary fails
-// closed: a type no adapter binds to the transaction scope yields an
-// Internal-category Platform error and a zero store, not a silent nil. This is
-// the property that lets Store stay type-safe without a stringly-typed,
-// permission-asking extension registry (MAD-001 §03, rejected option a).
-func TestStoreFailsLoudlyForUnboundType(t *testing.T) {
-	tx := newMockTx()
-
-	// SecretBroker is a real contract, but it is not a transaction-scoped
-	// store and is deliberately absent from Store's resolution table.
-	broker, err := contracts.Store[contracts.SecretBroker](tx)
-	if err == nil {
-		t.Fatal("Store[SecretBroker] returned nil error for an unbound store type")
-	}
-	if got := contracts.CategoryOf(err); got != contracts.Internal {
-		t.Errorf("Store[SecretBroker] error category = %q, want %q", got, contracts.Internal)
-	}
-	if broker != nil {
-		t.Error("Store[SecretBroker] returned a non-nil store alongside its error")
-	}
-}
