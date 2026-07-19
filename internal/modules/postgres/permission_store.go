@@ -81,6 +81,28 @@ func (s *permissionStore) GrantsForUser(ctx context.Context, userID domain.UserI
 	return grants, nil
 }
 
+func (s *permissionStore) CreateRole(ctx context.Context, role domain.Role) (domain.Role, error) {
+	_, err := s.q.Exec(ctx,
+		`INSERT INTO roles (id, name, permissions) VALUES ($1, $2, $3)`,
+		string(role.ID), role.Name, permissionsToStrings(role.Permissions),
+	)
+	if err != nil {
+		return domain.Role{}, mapError("create role", err)
+	}
+	return role, nil
+}
+
+func (s *permissionStore) GrantRole(ctx context.Context, grant domain.Grant) error {
+	_, err := s.q.Exec(ctx,
+		`INSERT INTO grants (user_id, role_id) VALUES ($1, $2)`,
+		string(grant.UserID), string(grant.RoleID),
+	)
+	if err != nil {
+		return mapError("grant role", err)
+	}
+	return nil
+}
+
 func (s *permissionStore) AttributesForUser(ctx context.Context, userID domain.UserID) ([]domain.Attribute, error) {
 	rows, err := s.q.Query(ctx,
 		`SELECT key, value FROM resource_attributes WHERE subject_user_id = $1 ORDER BY key`,

@@ -523,6 +523,72 @@ func RunPermissionStoreContract(t *testing.T, newDeps Factory) {
 			t.Fatalf("expected no roles, got %+v", roles)
 		}
 	})
+
+	// CreateRole and GrantRole are the write path — the first way authority is
+	// assigned through the Platform rather than seeded out of band.
+	t.Run("create a role, grant it, and read it back", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		if _, err := d.Users.Create(c, newUser("u-1", "grace", now)); err != nil {
+			t.Fatalf("seed user: %v", err)
+		}
+
+		role, err := d.Permissions.CreateRole(c, domain.Role{
+			ID: "role-editor", Name: "Editor",
+			Permissions: []domain.Permission{"content.create", "content.read"},
+		})
+		if err != nil {
+			t.Fatalf("CreateRole: %v", err)
+		}
+		if err := d.Permissions.GrantRole(c, domain.Grant{UserID: "u-1", RoleID: role.ID}); err != nil {
+			t.Fatalf("GrantRole: %v", err)
+		}
+
+		roles, err := d.Permissions.RolesForUser(c, "u-1")
+		if err != nil {
+			t.Fatalf("RolesForUser: %v", err)
+		}
+		if len(roles) != 1 || roles[0].Name != "Editor" || len(roles[0].Permissions) != 2 {
+			t.Fatalf("roles = %+v", roles)
+		}
+	})
+
+	t.Run("a duplicate role is a conflict", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		role := domain.Role{ID: "role-dup", Name: "Dup", Permissions: []domain.Permission{"content.read"}}
+		if _, err := d.Permissions.CreateRole(c, role); err != nil {
+			t.Fatalf("first CreateRole: %v", err)
+		}
+		_, err := d.Permissions.CreateRole(c, role)
+		requireCategory(t, err, contracts.Conflict)
+	})
+
+	t.Run("granting a role that does not exist is a conflict", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		if _, err := d.Users.Create(c, newUser("u-1", "heidi", now)); err != nil {
+			t.Fatalf("seed user: %v", err)
+		}
+		err := d.Permissions.GrantRole(c, domain.Grant{UserID: "u-1", RoleID: "role-missing"})
+		requireCategory(t, err, contracts.Conflict)
+	})
+
+	t.Run("a duplicate grant is a conflict", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		if _, err := d.Users.Create(c, newUser("u-1", "ivan", now)); err != nil {
+			t.Fatalf("seed user: %v", err)
+		}
+		if _, err := d.Permissions.CreateRole(c, domain.Role{ID: "role-x", Name: "X"}); err != nil {
+			t.Fatalf("CreateRole: %v", err)
+		}
+		if err := d.Permissions.GrantRole(c, domain.Grant{UserID: "u-1", RoleID: "role-x"}); err != nil {
+			t.Fatalf("first GrantRole: %v", err)
+		}
+		err := d.Permissions.GrantRole(c, domain.Grant{UserID: "u-1", RoleID: "role-x"})
+		requireCategory(t, err, contracts.Conflict)
+	})
 }
 
 // RunOutboxAtomicityContract is the core storage guarantee: a state write and

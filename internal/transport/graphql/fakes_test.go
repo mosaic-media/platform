@@ -27,6 +27,7 @@ type fakeDB struct {
 	passwords map[domain.UserID]domain.PasswordCredential
 	configs   map[domain.ConfigVersionID]domain.ConfigVersion
 	roles     map[domain.UserID][]domain.Role
+	rolesByID map[domain.RoleID]domain.Role
 	outbox    []domain.OutboxEvent
 }
 
@@ -38,6 +39,7 @@ func newFakeDB() *fakeDB {
 		passwords: make(map[domain.UserID]domain.PasswordCredential),
 		configs:   make(map[domain.ConfigVersionID]domain.ConfigVersion),
 		roles:     make(map[domain.UserID][]domain.Role),
+		rolesByID: make(map[domain.RoleID]domain.Role),
 	}
 }
 
@@ -214,6 +216,32 @@ func (s fakePermissionStore) GrantsForUser(_ context.Context, userID domain.User
 
 func (fakePermissionStore) AttributesForUser(context.Context, domain.UserID) ([]domain.Attribute, error) {
 	return nil, nil
+}
+
+func (s fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (domain.Role, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if _, exists := s.db.rolesByID[role.ID]; exists {
+		return domain.Role{}, contracts.NewError(contracts.Conflict, "role already exists")
+	}
+	s.db.rolesByID[role.ID] = role
+	return role, nil
+}
+
+func (s fakePermissionStore) GrantRole(_ context.Context, grant domain.Grant) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	role, ok := s.db.rolesByID[grant.RoleID]
+	if !ok {
+		return contracts.NewError(contracts.Conflict, "role does not exist")
+	}
+	for _, existing := range s.db.roles[grant.UserID] {
+		if existing.ID == grant.RoleID {
+			return contracts.NewError(contracts.Conflict, "grant already exists")
+		}
+	}
+	s.db.roles[grant.UserID] = append(s.db.roles[grant.UserID], role)
+	return nil
 }
 
 type fakeConfigStore struct{ db *fakeDB }

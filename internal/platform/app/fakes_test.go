@@ -68,6 +68,8 @@ type fakeDB struct {
 	// controlled permission assignment" MEG-015 §07 lists as in scope but
 	// this slice does not build a command for.
 	roles map[domain.UserID][]domain.Role
+	// rolesByID is the role catalogue CreateRole writes and GrantRole reads.
+	rolesByID map[domain.RoleID]domain.Role
 
 	// nodes and parts back the content commands and queries; relations and
 	// bindings back the graph and identity commands.
@@ -85,6 +87,7 @@ func newFakeDB() *fakeDB {
 		passwords: make(map[domain.UserID]domain.PasswordCredential),
 		configs:   make(map[domain.ConfigVersionID]domain.ConfigVersion),
 		roles:     make(map[domain.UserID][]domain.Role),
+		rolesByID: make(map[domain.RoleID]domain.Role),
 		nodes:     make(map[v1.NodeID]v1.Node),
 		parts:     make(map[v1.PartID]v1.Part),
 		relations: make(map[v1.RelationID]v1.Relation),
@@ -384,6 +387,34 @@ func (s fakePermissionStore) GrantsForUser(context.Context, domain.UserID) ([]do
 
 func (s fakePermissionStore) AttributesForUser(context.Context, domain.UserID) ([]domain.Attribute, error) {
 	return nil, nil
+}
+
+func (s fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (domain.Role, error) {
+	s.trace.record("permissions.create_role")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if _, exists := s.db.rolesByID[role.ID]; exists {
+		return domain.Role{}, contracts.NewError(contracts.Conflict, "role already exists")
+	}
+	s.db.rolesByID[role.ID] = role
+	return role, nil
+}
+
+func (s fakePermissionStore) GrantRole(_ context.Context, grant domain.Grant) error {
+	s.trace.record("permissions.grant_role")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	role, ok := s.db.rolesByID[grant.RoleID]
+	if !ok {
+		return contracts.NewError(contracts.Conflict, "role does not exist")
+	}
+	for _, existing := range s.db.roles[grant.UserID] {
+		if existing.ID == grant.RoleID {
+			return contracts.NewError(contracts.Conflict, "grant already exists")
+		}
+	}
+	s.db.roles[grant.UserID] = append(s.db.roles[grant.UserID], role)
+	return nil
 }
 
 // fakeConfigStore implements contracts.ConfigStore against the shared

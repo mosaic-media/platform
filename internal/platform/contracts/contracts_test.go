@@ -82,6 +82,12 @@ func (mockPermissionStore) GrantsForUser(ctx context.Context, userID domain.User
 	return nil, nil
 }
 
+func (mockPermissionStore) CreateRole(context.Context, domain.Role) (domain.Role, error) {
+	return domain.Role{}, nil
+}
+
+func (mockPermissionStore) GrantRole(context.Context, domain.Grant) error { return nil }
+
 func (mockPermissionStore) AttributesForUser(ctx context.Context, userID domain.UserID) ([]domain.Attribute, error) {
 	return nil, nil
 }
