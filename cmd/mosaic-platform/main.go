@@ -12,12 +12,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mosaic-media/mosaic-platform/internal/adapters/crypto"
 	"github.com/mosaic-media/mosaic-platform/internal/composition/builtin"
 	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres"
+	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/config"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/diagnostics"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/events"
+	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/runtime"
+	graphqltransport "github.com/mosaic-media/mosaic-platform/internal/transport/graphql"
 	"github.com/mosaic-media/mosaic-platform/internal/transport/health"
 )
 
@@ -33,6 +37,16 @@ const postgresDSNEnv = "MOSAIC_POSTGRES_DSN"
 const healthAddrEnv = "MOSAIC_HEALTH_ADDR"
 
 const defaultHealthAddr = ":8080"
+
+// apiAddrEnv names the environment variable carrying the address the
+// client-facing GraphQL API listens on. It is a separate surface from the
+// Supervisor handoff: the handoff is operational (readiness, liveness), the
+// API is where a client — or a compiled-in capability's caller — reaches the
+// application services. Read from the environment for the same bridging
+// reason as the DSN above.
+const apiAddrEnv = "MOSAIC_API_ADDR"
+
+const defaultAPIAddr = ":8081"
 
 func main() {
 	if err := run(); err != nil {
@@ -140,6 +154,21 @@ func run() error {
 	}
 	logSnapshot(context.Background(), "boot-time health check")
 
+	// Assemble the application services over the wired contracts, and build
+	// the executable GraphQL schema that projects them. This is the first
+	// time the composition root constructs app.Service: every dependency it
+	// needs is already on the ContractSet, plus the ABAC policy engine, the
+	// event bus as the audit publisher, and the Argon2id password hasher.
+	svc := app.NewService(
+		set.UnitOfWork, set.Sessions, set.Users, set.Credentials, set.Config, set.Permissions,
+		set.Nodes, set.Clock, set.IDs, set.ContentIDs,
+		policy.NewEngine(set.Permissions), bus, crypto.NewPasswordHasher(),
+	)
+	schema, err := graphqltransport.NewSchema(svc)
+	if err != nil {
+		return fmt.Errorf("build graphql schema failed: %w", err)
+	}
+
 	// From here on the process is a genuine long-running Supervisor
 	// candidate (MEG-015 §10 — Activation Sequence: "Start runtime
 	// components" -> "Readiness probe" -> "Activate candidate"), not a
@@ -164,17 +193,31 @@ func run() error {
 		healthAddr = defaultHealthAddr
 	}
 	httpServer := &http.Server{Addr: healthAddr, Handler: handoff.Mux()}
-	serveErrCh := make(chan error, 1)
-	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+
+	apiAddr := os.Getenv(apiAddrEnv)
+	if apiAddr == "" {
+		apiAddr = defaultAPIAddr
+	}
+	apiMux := http.NewServeMux()
+	apiMux.Handle("/graphql", graphqltransport.Handler(schema))
+	apiServer := &http.Server{Addr: apiAddr, Handler: apiMux}
+
+	// Both servers feed one error channel; whichever fails first ends the
+	// serve phase and both are shut down together below.
+	serveErrCh := make(chan error, 2)
+	serve := func(s *http.Server) {
+		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serveErrCh <- err
 			return
 		}
 		serveErrCh <- nil
-	}()
+	}
+	go serve(httpServer)
+	go serve(apiServer)
 
 	lifecycle.MarkRunning()
 	fmt.Printf("mosaic-platform: serving Supervisor handoff surface on %s\n", healthAddr)
+	fmt.Printf("mosaic-platform: serving GraphQL API on %s/graphql\n", apiAddr)
 	fmt.Println("mosaic-platform: ready")
 
 	var serveErr error
@@ -198,6 +241,7 @@ func run() error {
 	// Boundary).
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
+	_ = apiServer.Shutdown(shutdownCtx)
 	_ = httpServer.Shutdown(shutdownCtx)
 
 	result := runtime.Shutdown(shutdownCtx, lifecycle, worker)
