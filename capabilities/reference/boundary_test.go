@@ -10,18 +10,19 @@ import (
 	"testing"
 )
 
-// TestCapabilityImportsOnlyPublishedContracts is the stop point made
-// executable: the reference capability must use only the published contract
-// surface (contracts/platform/v1) and the standard library. A private
-// Platform import here would mean the contracts are not ready to publish
-// (the roadmap's stop point, ADR 0016).
+// TestCapabilityImportsOnlyTheSDK is the stop point made executable: the
+// reference capability must use only the published SDK (the mosaic-sdk module)
+// and the standard library. A private Platform import here would mean the
+// contracts are not ready to publish (the roadmap's stop point, ADR 0016).
 //
-// It parses this package's non-test files rather than trusting review, in the
-// same style as the GraphQL and health boundary tests.
-func TestCapabilityImportsOnlyPublishedContracts(t *testing.T) {
+// Since the surface was extracted into its own module, Go itself would also
+// reject a Platform-internal import — but this parse keeps the intent explicit
+// and catches a third-party dependency creeping in too, in the same style as
+// the GraphQL and health boundary tests.
+func TestCapabilityImportsOnlyTheSDK(t *testing.T) {
 	const (
-		modulePrefix = "github.com/mosaic-media/mosaic-platform/"
-		allowed      = "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
+		sdkPrefix      = "github.com/mosaic-media/mosaic-sdk/"
+		platformPrefix = "github.com/mosaic-media/mosaic-platform/"
 	)
 
 	entries, err := os.ReadDir(".")
@@ -47,16 +48,15 @@ func TestCapabilityImportsOnlyPublishedContracts(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unquote import in %s: %v", name, err)
 			}
+			switch {
 			// Standard-library imports have no dot in their first segment.
-			if !strings.Contains(strings.SplitN(path, "/", 2)[0], ".") {
-				continue
-			}
-			if !strings.HasPrefix(path, modulePrefix) {
-				t.Errorf("%s imports third-party package %q; the reference capability may use only v1 and the standard library", name, path)
-				continue
-			}
-			if path != allowed {
-				t.Errorf("%s imports private Platform package %q; the capability may import only %q", name, path, allowed)
+			case !strings.Contains(strings.SplitN(path, "/", 2)[0], "."):
+			case strings.HasPrefix(path, sdkPrefix):
+				// The published SDK — the one dependency a capability may have.
+			case strings.HasPrefix(path, platformPrefix):
+				t.Errorf("%s imports private Platform package %q; a capability may import only the SDK", name, path)
+			default:
+				t.Errorf("%s imports third-party package %q; the reference capability may use only the SDK and the standard library", name, path)
 			}
 		}
 	}

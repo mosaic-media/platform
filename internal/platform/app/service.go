@@ -3,12 +3,12 @@ package app
 import (
 	"context"
 
-	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/config"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/sessions"
+	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
 )
 
 // Service hosts Platform application command and query handlers. It holds

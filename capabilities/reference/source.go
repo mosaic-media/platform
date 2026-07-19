@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
+	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
 )
 
 // MetadataSource is the capability's own port to an external provider. The

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
+	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
 )
 
 // Capability sources content from a provider and adds it to the Platform. It

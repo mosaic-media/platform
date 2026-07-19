@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
 )
 
 // The content query services. These prove the query boundary — validate,

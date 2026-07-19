@@ -3,7 +3,7 @@ package contracts
 import (
 	"context"
 
-	v1 "github.com/mosaic-media/mosaic-platform/contracts/platform/v1"
+	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
 )
 
 // NodeStore persists the containment tree (ADR 0013).
