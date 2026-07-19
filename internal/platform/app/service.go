@@ -24,6 +24,7 @@ type Service struct {
 	credentials      contracts.CredentialStore
 	configStore      contracts.ConfigStore
 	permissions      contracts.PermissionStore
+	nodes            contracts.NodeStore
 	clock            contracts.Clock
 	ids              contracts.IDGenerator
 	policy           policy.PolicyDecisionPoint
@@ -45,6 +46,7 @@ func NewService(
 	credentials contracts.CredentialStore,
 	configStore contracts.ConfigStore,
 	permissions contracts.PermissionStore,
+	nodes contracts.NodeStore,
 	clock contracts.Clock,
 	ids contracts.IDGenerator,
 	policyEngine policy.PolicyDecisionPoint,
@@ -58,6 +60,7 @@ func NewService(
 		credentials:      credentials,
 		configStore:      configStore,
 		permissions:      permissions,
+		nodes:            nodes,
 		clock:            clock,
 		ids:              ids,
 		policy:           policyEngine,

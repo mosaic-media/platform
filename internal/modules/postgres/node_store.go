@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -121,6 +123,70 @@ func (s *nodeStore) ListWorks(ctx context.Context, mediaType domain.MediaType) (
 		return nil, mapError("list works", err)
 	}
 	return collectNodes(rows, "list works")
+}
+
+// Search applies the optional criteria of a NodeQuery.
+//
+// The title match is a substring, so it does not use the (media_type, title)
+// index — it is a scan narrowed by whatever other criteria are present. That
+// is adequate at the row counts a personal library reaches; a trigram index
+// is the escalation if it stops being, and it is not needed to make the read
+// correct.
+func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]domain.Node, error) {
+	if query.Limit <= 0 {
+		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
+	}
+
+	rows, err := s.q.Query(ctx,
+		`SELECT `+nodeColumns+` FROM nodes
+		 WHERE ($1 = '' OR title ILIKE $2 ESCAPE '\')
+		   AND ($3 = '' OR media_type = $3)
+		   AND ($4 = '' OR node_kind = $4)
+		 ORDER BY title, id
+		 LIMIT $5`,
+		query.Title, likeContains(query.Title),
+		string(domain.NormaliseMediaType(string(query.MediaType))),
+		string(query.Kind),
+		query.Limit,
+	)
+	if err != nil {
+		return nil, mapError("search nodes", err)
+	}
+	return collectNodes(rows, "search nodes")
+}
+
+// FindByExternalID uses jsonb containment, which is what nodes_external_ids_gin
+// indexes — the lookup this whole column exists to serve.
+func (s *nodeStore) FindByExternalID(ctx context.Context, scheme, value string) ([]domain.Node, error) {
+	if scheme == "" {
+		return nil, contracts.NewError(contracts.InvalidArgument, "external id scheme is required")
+	}
+	if value == "" {
+		return nil, contracts.NewError(contracts.InvalidArgument, "external id value is required")
+	}
+
+	// Built through the JSON encoder rather than by string concatenation, so
+	// a scheme or value containing a quote is data and not syntax.
+	document, err := json.Marshal(map[string]string{scheme: value})
+	if err != nil {
+		return nil, contracts.WrapError(contracts.InvalidArgument, "encode external id", err)
+	}
+
+	rows, err := s.q.Query(ctx,
+		`SELECT `+nodeColumns+` FROM nodes WHERE external_ids @> $1 ORDER BY title, id`,
+		document,
+	)
+	if err != nil {
+		return nil, mapError("find nodes by external id", err)
+	}
+	return collectNodes(rows, "find nodes by external id")
+}
+
+// likeContains renders a substring match, escaping the wildcards so a title
+// containing % or _ is searched for literally rather than as a pattern.
+func likeContains(s string) string {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+	return "%" + escaped + "%"
 }
 
 // Delete refuses rather than cascading. The parent_id and parts foreign keys

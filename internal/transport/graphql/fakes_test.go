@@ -365,6 +365,9 @@ func newTestService(db *fakeDB, now time.Time) *app.Service {
 		fakeCredentialStore{db: db},
 		fakeConfigStore{db: db},
 		fakePermissionStore{db: db},
+		// No resolver reads content yet, so there is nothing for a fake node
+		// store to serve. A resolver that starts using one fails loudly here.
+		nil,
 		fakeClock{now: now},
 		&fakeIDGenerator{},
 		policy.NewEngine(fakePermissionStore{db: db}),

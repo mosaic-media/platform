@@ -329,6 +329,163 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		}
 	})
 
+	// "Do I already have this?" is the read a capability makes before it
+	// sources anything, and a browse surface makes for a user typing.
+	t.Run("search narrows by title, media type and kind", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+
+		anime := newWork(nodeID(1), domain.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
+		manga := newWork(nodeID(2), domain.MediaMangaSeries, "Fullmetal Alchemist", now)
+		other := newWork(nodeID(3), domain.MediaMovie, "Arrival", now)
+		for _, n := range []domain.Node{anime, manga, other} {
+			if _, err := d.Nodes.Create(c, n); err != nil {
+				t.Fatalf("Create %s: %v", n.Title, err)
+			}
+		}
+		episode := newItem(nodeID(4), anime.ID, anime.ID, domain.MediaAnimeSeries, domain.ItemEpisode, "Fullmetal Alchemist", 1, now)
+		if _, err := d.Nodes.Create(c, episode); err != nil {
+			t.Fatalf("Create episode: %v", err)
+		}
+
+		// Substring, not prefix: "alchemist" must find "Fullmetal Alchemist".
+		byTitle, err := d.Nodes.Search(c, contracts.NodeQuery{Title: "alchemist", Limit: 10})
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if len(byTitle) != 3 {
+			t.Fatalf("title search found %v, want the two works and the episode", titles(byTitle))
+		}
+
+		// Kind narrows to works — "does this show exist", not "does some
+		// episode exist".
+		works, err := d.Nodes.Search(c, contracts.NodeQuery{Title: "alchemist", Kind: domain.NodeWork, Limit: 10})
+		if err != nil {
+			t.Fatalf("Search works: %v", err)
+		}
+		if len(works) != 2 {
+			t.Fatalf("work search found %v, want 2", titles(works))
+		}
+
+		// Media type separates the anime from its source manga.
+		animeOnly, err := d.Nodes.Search(c, contracts.NodeQuery{
+			Title: "alchemist", Kind: domain.NodeWork, MediaType: domain.MediaAnimeSeries, Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("Search anime: %v", err)
+		}
+		if len(animeOnly) != 1 || animeOnly[0].ID != anime.ID {
+			t.Fatalf("anime search = %v", titles(animeOnly))
+		}
+
+		// The empty query is "everything", not "nothing".
+		all, err := d.Nodes.Search(c, contracts.NodeQuery{Limit: 10})
+		if err != nil {
+			t.Fatalf("Search all: %v", err)
+		}
+		if len(all) != 4 {
+			t.Fatalf("empty query found %d nodes, want all 4", len(all))
+		}
+	})
+
+	t.Run("search is case-insensitive and honours its limit", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		for i, title := range []string{"Akira", "Akira Reborn", "Akira Legacy"} {
+			if _, err := d.Nodes.Create(c, newWork(nodeID(i+1), domain.MediaMovie, title, now)); err != nil {
+				t.Fatalf("Create %s: %v", title, err)
+			}
+		}
+		found, err := d.Nodes.Search(c, contracts.NodeQuery{Title: "AKIRA", Limit: 2})
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if len(found) != 2 {
+			t.Fatalf("limit not honoured: got %d, want 2", len(found))
+		}
+	})
+
+	// A user's library is not a place to run an unbounded scan from.
+	t.Run("a non-positive search limit is rejected", func(t *testing.T) {
+		d := newDeps(t)
+		_, err := d.Nodes.Search(ctx(t), contracts.NodeQuery{Limit: 0})
+		requireCategory(t, err, contracts.InvalidArgument)
+	})
+
+	// Wildcards in a title are searched for literally, not as a pattern —
+	// otherwise a title containing % matches everything.
+	t.Run("search treats wildcards as literal text", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		if _, err := d.Nodes.Create(c, newWork(nodeID(1), domain.MediaMovie, "100% Wolf", now)); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if _, err := d.Nodes.Create(c, newWork(nodeID(2), domain.MediaMovie, "Arrival", now)); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		found, err := d.Nodes.Search(c, contracts.NodeQuery{Title: "100%", Limit: 10})
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if len(found) != 1 || found[0].Title != "100% Wolf" {
+			t.Fatalf("wildcard search = %v, want only the literal match", titles(found))
+		}
+	})
+
+	// The strong form of "do I already have this": it does not depend on
+	// titles matching, which is why a metadata capability reaches for it first.
+	t.Run("nodes are findable by a provider identifier", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+
+		anime := newWork(nodeID(1), domain.MediaAnimeSeries, "Fullmetal Alchemist: Brotherhood", now)
+		anime.ExternalIDs = []byte(`{"anilist":"5114","mal":"5114"}`)
+		manga := newWork(nodeID(2), domain.MediaMangaSeries, "Fullmetal Alchemist", now)
+		manga.ExternalIDs = []byte(`{"anilist":"30002"}`)
+		unrelated := newWork(nodeID(3), domain.MediaMovie, "Arrival", now)
+		unrelated.ExternalIDs = []byte(`{"tmdb":"329865"}`)
+		for _, n := range []domain.Node{anime, manga, unrelated} {
+			if _, err := d.Nodes.Create(c, n); err != nil {
+				t.Fatalf("Create %s: %v", n.Title, err)
+			}
+		}
+
+		found, err := d.Nodes.FindByExternalID(c, "anilist", "5114")
+		if err != nil {
+			t.Fatalf("FindByExternalID: %v", err)
+		}
+		if len(found) != 1 || found[0].ID != anime.ID {
+			t.Fatalf("lookup = %v, want the anime alone", titles(found))
+		}
+
+		// The same value under a different scheme is a different identifier.
+		none, err := d.Nodes.FindByExternalID(c, "tmdb", "5114")
+		if err != nil {
+			t.Fatalf("FindByExternalID: %v", err)
+		}
+		if len(none) != 0 {
+			t.Fatalf("scheme is not being matched: got %v", titles(none))
+		}
+
+		// An unknown id is an empty result, not an error — "no" is an answer.
+		missing, err := d.Nodes.FindByExternalID(c, "anilist", "999999")
+		if err != nil {
+			t.Fatalf("FindByExternalID: %v", err)
+		}
+		if len(missing) != 0 {
+			t.Fatalf("expected no matches, got %v", titles(missing))
+		}
+	})
+
+	t.Run("an empty external id lookup is rejected", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		_, err := d.Nodes.FindByExternalID(c, "", "5114")
+		requireCategory(t, err, contracts.InvalidArgument)
+		_, err = d.Nodes.FindByExternalID(c, "anilist", "")
+		requireCategory(t, err, contracts.InvalidArgument)
+	})
+
 	t.Run("update changes fields", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)

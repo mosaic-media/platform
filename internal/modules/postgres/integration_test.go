@@ -77,6 +77,7 @@ func TestApplicationServicesRunAgainstPostgres(t *testing.T) {
 		cs.Credentials,
 		cs.Config,
 		cs.Permissions,
+		cs.Nodes,
 		cs.Clock,
 		cs.IDs,
 		policy.NewEngine(cs.Permissions),

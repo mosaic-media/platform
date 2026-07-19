@@ -2,8 +2,10 @@ package app_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,6 +63,11 @@ type fakeDB struct {
 	// controlled permission assignment" MEG-015 §07 lists as in scope but
 	// this slice does not build a command for.
 	roles map[domain.UserID][]domain.Role
+
+	// nodes backs the content query services. Only the reads those services
+	// make are implemented; the write half of the content model has no
+	// application service yet, so there is nothing here to exercise it.
+	nodes map[domain.NodeID]domain.Node
 }
 
 func newFakeDB() *fakeDB {
@@ -71,6 +78,7 @@ func newFakeDB() *fakeDB {
 		passwords: make(map[domain.UserID]domain.PasswordCredential),
 		configs:   make(map[domain.ConfigVersionID]domain.ConfigVersion),
 		roles:     make(map[domain.UserID][]domain.Role),
+		nodes:     make(map[domain.NodeID]domain.Node),
 	}
 }
 
@@ -120,6 +128,7 @@ func adminRole() domain.Role {
 			domain.Permission(app.ActionUserStatusUpdate),
 			domain.Permission(app.ActionPermissionRead),
 			domain.Permission(app.ActionConfigRead),
+			domain.Permission(app.ActionContentRead),
 		},
 	}
 }
@@ -567,10 +576,162 @@ func newTestService(db *fakeDB, tr *trace, now time.Time) *app.Service {
 		&fakeCredentialStore{db: db, trace: tr},
 		&fakeConfigStore{db: db, trace: tr},
 		fakePermissionStore{db: db, trace: tr},
+		&fakeNodeStore{db: db, trace: tr},
 		fakeClock{now: now},
 		&fakeIDGenerator{},
 		policy.NewEngine(fakePermissionStore{db: db, trace: tr}),
 		&fakeEventPublisher{trace: tr},
 		fakePasswordVerifier{},
 	)
+}
+
+// fakeNodeStore implements contracts.NodeStore over fakeDB. The reads the
+// content query services make are implemented faithfully — including the
+// canonicalisation ADR 0015 requires of any implementation — so an app-level
+// test proves the service, not the adapter.
+type fakeNodeStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func (s *fakeNodeStore) Create(_ context.Context, node domain.Node) (domain.Node, error) {
+	s.trace.record("nodes.create")
+	node = node.Canonical()
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.nodes[node.ID] = node
+	return node, nil
+}
+
+func (s *fakeNodeStore) FindByID(_ context.Context, id domain.NodeID) (domain.Node, error) {
+	s.trace.record("nodes.find_by_id")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	node, ok := s.db.nodes[id]
+	if !ok {
+		return domain.Node{}, contracts.NewError(contracts.NotFound, "node not found")
+	}
+	return node, nil
+}
+
+func (s *fakeNodeStore) Update(_ context.Context, node domain.Node) (domain.Node, error) {
+	s.trace.record("nodes.update")
+	node = node.Canonical()
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if _, ok := s.db.nodes[node.ID]; !ok {
+		return domain.Node{}, contracts.NewError(contracts.NotFound, "node not found")
+	}
+	s.db.nodes[node.ID] = node
+	return node, nil
+}
+
+func (s *fakeNodeStore) ListChildren(_ context.Context, parentID domain.NodeID) ([]domain.Node, error) {
+	s.trace.record("nodes.list_children")
+	return s.collect(func(n domain.Node) bool {
+		return n.ParentID != nil && *n.ParentID == parentID
+	}, byNaturalOrder), nil
+}
+
+func (s *fakeNodeStore) ListByWork(_ context.Context, workID domain.NodeID) ([]domain.Node, error) {
+	s.trace.record("nodes.list_by_work")
+	return s.collect(func(n domain.Node) bool { return n.WorkID == workID }, byNaturalOrder), nil
+}
+
+func (s *fakeNodeStore) ListWorks(_ context.Context, mediaType domain.MediaType) ([]domain.Node, error) {
+	s.trace.record("nodes.list_works")
+	want := domain.NormaliseMediaType(string(mediaType))
+	return s.collect(func(n domain.Node) bool {
+		return n.ParentID == nil && (want == "" || n.MediaType == want)
+	}, byTitle), nil
+}
+
+func (s *fakeNodeStore) Search(_ context.Context, query contracts.NodeQuery) ([]domain.Node, error) {
+	s.trace.record("nodes.search")
+	if query.Limit <= 0 {
+		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
+	}
+	title := strings.ToLower(query.Title)
+	wantMedia := domain.NormaliseMediaType(string(query.MediaType))
+
+	found := s.collect(func(n domain.Node) bool {
+		if title != "" && !strings.Contains(strings.ToLower(n.Title), title) {
+			return false
+		}
+		if wantMedia != "" && n.MediaType != wantMedia {
+			return false
+		}
+		if query.Kind != "" && n.Kind != query.Kind {
+			return false
+		}
+		return true
+	}, byTitle)
+
+	if len(found) > query.Limit {
+		found = found[:query.Limit]
+	}
+	return found, nil
+}
+
+func (s *fakeNodeStore) FindByExternalID(_ context.Context, scheme, value string) ([]domain.Node, error) {
+	s.trace.record("nodes.find_by_external_id")
+	if scheme == "" {
+		return nil, contracts.NewError(contracts.InvalidArgument, "external id scheme is required")
+	}
+	if value == "" {
+		return nil, contracts.NewError(contracts.InvalidArgument, "external id value is required")
+	}
+	return s.collect(func(n domain.Node) bool {
+		ids := map[string]string{}
+		if err := json.Unmarshal(n.ExternalIDs, &ids); err != nil {
+			// An unparseable document simply does not match, which is what
+			// jsonb containment does too.
+			return false
+		}
+		return ids[scheme] == value
+	}, byTitle), nil
+}
+
+func (s *fakeNodeStore) Delete(_ context.Context, id domain.NodeID) error {
+	s.trace.record("nodes.delete")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if _, ok := s.db.nodes[id]; !ok {
+		return contracts.NewError(contracts.NotFound, "node not found")
+	}
+	delete(s.db.nodes, id)
+	return nil
+}
+
+func (s *fakeNodeStore) collect(match func(domain.Node) bool, less func(a, b domain.Node) bool) []domain.Node {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var found []domain.Node
+	for _, node := range s.db.nodes {
+		if match(node) {
+			found = append(found, node)
+		}
+	}
+	sort.Slice(found, func(i, j int) bool { return less(found[i], found[j]) })
+	return found
+}
+
+func byTitle(a, b domain.Node) bool {
+	if a.Title != b.Title {
+		return a.Title < b.Title
+	}
+	return a.ID < b.ID
+}
+
+func byNaturalOrder(a, b domain.Node) bool {
+	if a.NaturalOrder != b.NaturalOrder {
+		return a.NaturalOrder < b.NaturalOrder
+	}
+	return a.ID < b.ID
+}
+
+func (db *fakeDB) seedNode(node domain.Node) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.nodes[node.ID] = node.Canonical()
 }

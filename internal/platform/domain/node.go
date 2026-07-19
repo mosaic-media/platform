@@ -175,13 +175,18 @@ type Node struct {
 	// stores whatever value it is given and does not rebalance.
 	NaturalOrder float64
 	Status       NodeStatus
-	// ExternalIDs and Attributes are raw JSON documents. This is where
-	// per-media-type variation lives instead of in per-type columns, which
-	// means the schema does not validate them: ADR 0013 assigns attribute
+	// ExternalIDs maps a provider scheme to that provider's identifier —
+	// {"tmdb": "329865", "anilist": "1234"} — as a raw JSON document. The
+	// flat scheme-to-string shape is what NodeStore.FindByExternalID reads;
+	// nesting or non-string values will store fine and simply not be found.
+	ExternalIDs []byte
+	// Attributes is where per-media-type variation lives instead of in
+	// per-type columns.
+	//
+	// Neither document is validated by the schema: ADR 0013 assigns their
 	// correctness to the writing capability. Both are GIN-indexed, so they
 	// are queryable but not typed.
-	ExternalIDs []byte
-	Attributes  []byte
+	Attributes []byte
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
