@@ -33,6 +33,7 @@ import (
 	"github.com/mosaic-media/mosaic-platform/internal/transport/artwork"
 	graphqltransport "github.com/mosaic-media/mosaic-platform/internal/transport/graphql"
 	"github.com/mosaic-media/mosaic-platform/internal/transport/health"
+	"github.com/mosaic-media/mosaic-platform/internal/transport/live"
 )
 
 // postgresDSNEnv names the environment variable carrying the PostgreSQL
@@ -302,6 +303,7 @@ func run() error {
 	apiMux := http.NewServeMux()
 	apiMux.Handle("/graphql", graphqltransport.Handler(schema))
 	apiMux.Handle("/artwork", artwork.Handler(artworkSigner, artwork.GuardedClient()))
+	apiMux.Handle("/live", live.Handler(svc, schema, artworkSigner.Rewrite))
 	apiServer := &http.Server{Addr: apiAddr, Handler: apiMux}
 
 	// Both servers feed one error channel; whichever fails first ends the

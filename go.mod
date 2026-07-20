@@ -13,6 +13,8 @@ require golang.org/x/crypto v0.54.0
 
 require github.com/mosaic-media/mosaic-sdui v0.1.0
 
+require github.com/coder/websocket v1.8.15
+
 require (
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
