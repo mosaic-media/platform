@@ -60,6 +60,8 @@ func NewService(a *app.Service, artwork func(string) string) *Service {
 // unknown name is NotFound. The returned Node is the root the client renders.
 func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, params map[string]any) (sdui.Node, error) {
 	switch name {
+	case "shell":
+		return s.shellScreen()
 	case "search":
 		return s.searchScreen(ctx, caller, params)
 	case "collections":
@@ -219,6 +221,34 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 		sdui.Prop("title", "Collection"),
 		sdui.Child(sdui.Grid(sdui.Child(cards...))),
 	), nil
+}
+
+// shellScreen is the server-emitted application frame (ADR 0031): the nav rail
+// and top bar. The Shell renders this and fills its content region with the
+// current screen; it owns no chrome of its own. It is static for now — a live
+// session (ADR 0032) will push shell changes over the socket.
+func (s *Service) shellScreen() (sdui.Node, error) {
+	return sdui.Component("AppShell",
+		sdui.Prop("title", "Mosaic"),
+		sdui.Slot("nav",
+			navItem("Search", "search", "search"),
+			navItem("Collections", "list", "collections"),
+		),
+		sdui.Slot("topbar",
+			sdui.Component(sdui.TypeSearchBar,
+				sdui.Prop("placeholder", "Search for anime, movies, shows…"),
+				sdui.Act(sdui.Navigate("search", map[string]any{"text": "$value"})),
+			),
+		),
+	), nil
+}
+
+// navItem builds one sidebar navigation button that navigates to a screen.
+func navItem(label, icon, screen string) sdui.Node {
+	return sdui.Component("NavItem",
+		sdui.Prop("label", label), sdui.Prop("icon", icon), sdui.Prop("screen", screen),
+		sdui.Act(sdui.Navigate(screen, nil)),
+	)
 }
 
 // searchScreen is the user's discovery surface: a search bar over the results
