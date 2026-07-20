@@ -22,8 +22,11 @@ type fakeQueries struct {
 	results      []v1.SearchResult
 	catalogs     []app.ModuleCatalog
 	items        []v1.CatalogItem
+	node         v1.Node
+	children     []v1.Node
 	gotText      string
 	gotCatalogID string
+	gotNodeID    v1.NodeID
 }
 
 func (f *fakeQueries) SearchAvailableContent(_ context.Context, q app.SearchAvailableContentQuery) (app.SearchAvailableContentResult, error) {
@@ -38,6 +41,11 @@ func (f *fakeQueries) ListModuleCatalogs(_ context.Context, _ app.ListModuleCata
 func (f *fakeQueries) ListCatalogItems(_ context.Context, q app.ListCatalogItemsQuery) (app.ListCatalogItemsResult, error) {
 	f.gotCatalogID = q.CatalogID
 	return app.ListCatalogItemsResult{Items: f.items}, nil
+}
+
+func (f *fakeQueries) GetContentNode(_ context.Context, q v1.GetContentNodeQuery) (v1.GetContentNodeResult, error) {
+	f.gotNodeID = q.NodeID
+	return v1.GetContentNodeResult{Node: f.node, Children: f.children}, nil
 }
 
 func render(t *testing.T, svc *Service, name string, params map[string]any) sdui.Node {
@@ -205,6 +213,39 @@ func TestCatalogScreenRendersItemsWithMaterialiseAction(t *testing.T) {
 
 func TestCatalogScreenRequiresParams(t *testing.T) {
 	_, err := (&Service{content: &fakeQueries{}}).Render(context.Background(), "catalog", v1.CallerFromSession("s-1"), map[string]any{"moduleId": "stremio"})
+	if got := contracts.CategoryOf(err); got != contracts.InvalidArgument {
+		t.Fatalf("category = %s, want InvalidArgument", got)
+	}
+}
+
+func TestDetailScreenRendersHeaderAndChildren(t *testing.T) {
+	fake := &fakeQueries{
+		node: v1.Node{ID: "n-1", WorkID: "n-1", Kind: v1.NodeWork, MediaType: v1.MediaTVSeries, Title: "Breaking Bad"},
+		children: []v1.Node{
+			{ID: "n-2", Kind: v1.NodeContainer, MediaType: v1.MediaTVSeries, Title: "Season 1"},
+		},
+	}
+	node := render(t, &Service{content: fake}, "detail", map[string]any{"nodeId": "n-1"})
+	if fake.gotNodeID != "n-1" {
+		t.Fatalf("backend saw node %q, want n-1", fake.gotNodeID)
+	}
+	header, ok := find(node, sdui.TypeDetailHeader)
+	if !ok || header.Props["title"] != "Breaking Bad" {
+		t.Fatalf("detail header = %+v, want the node title", header.Props)
+	}
+	var cards []sdui.Node
+	findAll(node, sdui.TypePosterCard, &cards)
+	if len(cards) != 1 {
+		t.Fatalf("child cards = %d, want 1 per child", len(cards))
+	}
+	act, _ := cards[0].Props["action"].(sdui.Action)
+	if act.Kind != sdui.KindNavigate || act.Params["nodeId"] != "n-2" {
+		t.Fatalf("child card action = %+v, want Navigate to the child's detail", act)
+	}
+}
+
+func TestDetailScreenRequiresNodeId(t *testing.T) {
+	_, err := (&Service{content: &fakeQueries{}}).Render(context.Background(), "detail", v1.CallerFromSession("s-1"), nil)
 	if got := contracts.CategoryOf(err); got != contracts.InvalidArgument {
 		t.Fatalf("category = %s, want InvalidArgument", got)
 	}

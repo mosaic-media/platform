@@ -34,6 +34,7 @@ type contentQueries interface {
 	SearchAvailableContent(context.Context, app.SearchAvailableContentQuery) (app.SearchAvailableContentResult, error)
 	ListModuleCatalogs(context.Context, app.ListModuleCatalogsQuery) (app.ListModuleCatalogsResult, error)
 	ListCatalogItems(context.Context, app.ListCatalogItemsQuery) (app.ListCatalogItemsResult, error)
+	GetContentNode(context.Context, v1.GetContentNodeQuery) (v1.GetContentNodeResult, error)
 }
 
 // Service renders named screens. It holds the query surface the builders read
@@ -57,9 +58,41 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.collectionsScreen(ctx, caller)
 	case "catalog":
 		return s.catalogScreen(ctx, caller, params)
+	case "detail":
+		return s.detailScreen(ctx, caller, params)
 	default:
 		return sdui.Node{}, contracts.NewError(contracts.NotFound, "no screen named "+name)
 	}
+}
+
+// detailScreen renders a materialised library node: its header, and its direct
+// children as cards that open their own detail (one level per screen, since the
+// tree is of variable depth — ADR 0013). A film's child is its feature item; a
+// series' children are its seasons.
+func (s *Service) detailScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
+	nodeID := stringParam(params, "nodeId")
+	if nodeID == "" {
+		return sdui.Node{}, contracts.NewError(contracts.InvalidArgument, "detail screen needs a nodeId param")
+	}
+	res, err := s.content.GetContentNode(ctx, v1.GetContentNodeQuery{
+		Caller: caller, NodeID: v1.NodeID(nodeID), WithChildren: true,
+	})
+	if err != nil {
+		return sdui.Node{}, err
+	}
+	n := res.Node
+
+	body := []sdui.Node{sdui.DetailHeader(n.Title, sdui.Meta(string(n.MediaType), string(n.Kind)))}
+	if len(res.Children) > 0 {
+		cards := make([]sdui.Node, 0, len(res.Children))
+		for _, c := range res.Children {
+			cards = append(cards, sdui.PosterCard(c.Title, string(c.MediaType),
+				sdui.Act(sdui.Navigate("detail", map[string]any{"nodeId": string(c.ID)})),
+			))
+		}
+		body = append(body, sdui.Section("Contents", sdui.Child(sdui.Grid(sdui.Child(cards...)))))
+	}
+	return sdui.Screen(sdui.Prop("title", n.Title), sdui.Child(body...)), nil
 }
 
 // collectionsScreen is the admin's entry to curation: the collections the
