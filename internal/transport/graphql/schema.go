@@ -25,11 +25,16 @@ import (
 	"github.com/graphql-go/graphql"
 
 	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
+	"github.com/mosaic-media/mosaic-platform/internal/transport/screens"
 )
 
 // NewSchema builds the executable GraphQL schema for svc. Every resolver
 // closes over svc and calls exactly one of its command/query methods.
 func NewSchema(svc *app.Service) (graphql.Schema, error) {
+	// The SDUI emit-side (ADR 0029) projects application queries into screens;
+	// the screen query below serves them.
+	screenSvc := screens.NewService(svc)
+
 	query := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
 		Fields: graphql.Fields{
@@ -53,6 +58,8 @@ func NewSchema(svc *app.Service) (graphql.Schema, error) {
 			"searchAvailableContent": searchAvailableContentField(svc),
 			"moduleCatalogs":         moduleCatalogsField(svc),
 			"catalogItems":           catalogItemsField(svc),
+			// Server-emitted SDUI screens (ADR 0029).
+			"screen": screenField(screenSvc),
 			// Auth.
 			"remoteSignInChallengeStatus": remoteSignInChallengeStatusField(),
 			// Jobs (stub — see jobs.go).
