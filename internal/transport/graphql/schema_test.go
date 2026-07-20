@@ -23,7 +23,7 @@ var testNow = time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 // if the top-level execution reports errors, returning the raw Data map.
 func exec(t *testing.T, svc *app.Service, query string) map[string]interface{} {
 	t.Helper()
-	schema, err := graphql.NewSchema(svc)
+	schema, err := graphql.NewSchema(svc, nil)
 	if err != nil {
 		t.Fatalf("NewSchema: %v", err)
 	}
@@ -42,7 +42,7 @@ func exec(t *testing.T, svc *app.Service, query string) map[string]interface{} {
 // the test if the query unexpectedly succeeded.
 func execExpectError(t *testing.T, svc *app.Service, query string) string {
 	t.Helper()
-	schema, err := graphql.NewSchema(svc)
+	schema, err := graphql.NewSchema(svc, nil)
 	if err != nil {
 		t.Fatalf("NewSchema: %v", err)
 	}

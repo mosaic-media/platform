@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"net/http"
 	"os"
@@ -29,6 +30,7 @@ import (
 	"github.com/mosaic-media/mosaic-platform/internal/platform/events"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
 	"github.com/mosaic-media/mosaic-platform/internal/platform/runtime"
+	"github.com/mosaic-media/mosaic-platform/internal/transport/artwork"
 	graphqltransport "github.com/mosaic-media/mosaic-platform/internal/transport/graphql"
 	"github.com/mosaic-media/mosaic-platform/internal/transport/health"
 )
@@ -231,7 +233,17 @@ func run() error {
 		policy.NewEngine(set.Permissions), bus, crypto.NewPasswordHasher(),
 		capRegistry, set.ModuleSettings,
 	)
-	schema, err := graphqltransport.NewSchema(svc)
+	// The artwork proxy (ADR 0030) re-serves remote poster/backdrop images from
+	// the Platform's origin, so a client gets same-origin (CORS-clean) artwork.
+	// Its signing key is process-scoped: emitted screens are re-fetched, so a
+	// signature need not outlive the process.
+	artworkKey := make([]byte, 32)
+	if _, err := rand.Read(artworkKey); err != nil {
+		return fmt.Errorf("generate artwork key failed: %w", err)
+	}
+	artworkSigner := artwork.NewSigner(artworkKey)
+
+	schema, err := graphqltransport.NewSchema(svc, artworkSigner.Rewrite)
 	if err != nil {
 		return fmt.Errorf("build graphql schema failed: %w", err)
 	}
@@ -289,6 +301,7 @@ func run() error {
 	}
 	apiMux := http.NewServeMux()
 	apiMux.Handle("/graphql", graphqltransport.Handler(schema))
+	apiMux.Handle("/artwork", artwork.Handler(artworkSigner, artwork.GuardedClient()))
 	apiServer := &http.Server{Addr: apiAddr, Handler: apiMux}
 
 	// Both servers feed one error channel; whichever fails first ends the

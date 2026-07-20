@@ -29,11 +29,13 @@ import (
 )
 
 // NewSchema builds the executable GraphQL schema for svc. Every resolver
-// closes over svc and calls exactly one of its command/query methods.
-func NewSchema(svc *app.Service) (graphql.Schema, error) {
+// closes over svc and calls exactly one of its command/query methods. artwork
+// rewrites a remote image URL to a Platform-proxied one for emitted screens
+// (ADR 0030); pass nil to leave URLs unchanged.
+func NewSchema(svc *app.Service, artwork func(string) string) (graphql.Schema, error) {
 	// The SDUI emit-side (ADR 0029) projects application queries into screens;
 	// the screen query below serves them.
-	screenSvc := screens.NewService(svc)
+	screenSvc := screens.NewService(svc, artwork)
 
 	query := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",

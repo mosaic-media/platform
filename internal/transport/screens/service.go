@@ -39,14 +39,21 @@ type contentQueries interface {
 }
 
 // Service renders named screens. It holds the query surface the builders read
-// from; it opens nothing of its own.
+// from, and an artwork rewriter that routes remote poster/backdrop URLs through
+// the Platform's artwork proxy (ADR 0030); it opens nothing of its own.
 type Service struct {
 	content contentQueries
+	artwork func(string) string
 }
 
-// NewService wires the emit-side to the application services.
-func NewService(a *app.Service) *Service {
-	return &Service{content: a}
+// NewService wires the emit-side to the application services. artwork rewrites a
+// remote image URL to a Platform-proxied one; a nil rewriter passes URLs
+// through unchanged (a Service built without the proxy).
+func NewService(a *app.Service, artwork func(string) string) *Service {
+	if artwork == nil {
+		artwork = func(u string) string { return u }
+	}
+	return &Service{content: a, artwork: artwork}
 }
 
 // Render builds the named screen for the caller, with the given params. An
@@ -112,10 +119,10 @@ func (s *Service) virtualDetail(ctx context.Context, caller v1.Caller, ref v1.Co
 		opts = append(opts, sdui.Meta(y, string(ref.MediaType)))
 	}
 	if m.Poster != "" {
-		opts = append(opts, sdui.Poster(m.Poster))
+		opts = append(opts, sdui.Poster(s.artwork(m.Poster)))
 	}
 	if m.Backdrop != "" {
-		opts = append(opts, sdui.Backdrop(m.Backdrop))
+		opts = append(opts, sdui.Backdrop(s.artwork(m.Backdrop)))
 	}
 	return sdui.Screen(sdui.Prop("title", title), sdui.Child(sdui.DetailHeader(title, opts...))), nil
 }
@@ -206,7 +213,7 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 	}
 	cards := make([]sdui.Node, 0, len(res.Items))
 	for _, it := range res.Items {
-		cards = append(cards, contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary, it.NodeID))
+		cards = append(cards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary, it.NodeID))
 	}
 	return sdui.Screen(
 		sdui.Prop("title", "Collection"),
@@ -249,7 +256,7 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 
 	cards := make([]sdui.Node, 0, len(res.Results))
 	for _, r := range res.Results {
-		cards = append(cards, resultCard(r))
+		cards = append(cards, s.resultCard(r))
 	}
 	return sdui.Screen(
 		sdui.Prop("title", "Search"),
@@ -258,8 +265,8 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 }
 
 // resultCard renders one search result as a content card.
-func resultCard(r v1.SearchResult) sdui.Node {
-	return contentCard(r.Ref, r.Title, r.Year, r.Poster, r.InLibrary, r.NodeID)
+func (s *Service) resultCard(r v1.SearchResult) sdui.Node {
+	return s.contentCard(r.Ref, r.Title, r.Year, r.Poster, r.InLibrary, r.NodeID)
 }
 
 // contentCard renders a content item — a search result or a catalog entry,
@@ -267,14 +274,15 @@ func resultCard(r v1.SearchResult) sdui.Node {
 // item to its node's detail, a virtual one to a preview whose sole library
 // affordance is Add to library (ADR 0028 — materialising is the deliberate act,
 // made on the detail rather than the card). An in-library item also carries a
-// badge so the two read apart at a glance.
-func contentCard(ref v1.ContentRef, title string, year int, poster string, inLibrary bool, nodeID v1.NodeID) sdui.Node {
+// badge so the two read apart at a glance. The poster is routed through the
+// artwork proxy (ADR 0030).
+func (s *Service) contentCard(ref v1.ContentRef, title string, year int, poster string, inLibrary bool, nodeID v1.NodeID) sdui.Node {
 	opts := []sdui.Option{}
 	if y := yearLabel(year); y != "" {
 		opts = append(opts, sdui.Subtitle(y))
 	}
 	if poster != "" {
-		opts = append(opts, sdui.Poster(poster))
+		opts = append(opts, sdui.Poster(s.artwork(poster)))
 	}
 	if inLibrary {
 		opts = append(opts,

@@ -69,7 +69,7 @@ func TestGraphQLHTTPImportsAndQueriesContent(t *testing.T) {
 		t.Fatalf("seed role: %v", err)
 	}
 
-	schema, err := graphqltransport.NewSchema(svc)
+	schema, err := graphqltransport.NewSchema(svc, nil)
 	if err != nil {
 		t.Fatalf("build schema: %v", err)
 	}
