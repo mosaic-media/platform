@@ -19,7 +19,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mosaic-media/mosaic-module-stremio v0.0.0
-	github.com/mosaic-media/mosaic-sdk v0.2.0
+	github.com/mosaic-media/mosaic-sdk v0.3.0
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
@@ -28,4 +28,4 @@ require (
 
 replace github.com/mosaic-media/mosaic-sdk => ../mosaic-sdk
 
-replace github.com/mosaic-media/mosaic-module-stremio => ./modules/stremio
+replace github.com/mosaic-media/mosaic-module-stremio => ../mosaic-module-stremio

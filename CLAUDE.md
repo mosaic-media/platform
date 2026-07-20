@@ -4,11 +4,12 @@
 
 **The code in this repository is authoritative.** It is ~22,300 lines of Go and it decides what Mosaic is. The [`mosaic-architecture`](https://github.com/mosaic-media/mosaic-architecture) repository *describes* it and records the decisions behind it. If the two disagree, the documentation is wrong — fix it there, in the same session, rather than working around it.
 
-**Three repositories, all siblings on disk** (`../mosaic-platform`, `../mosaic-architecture`, `../mosaic-sdk`):
+**Four repositories, all siblings on disk** (`../mosaic-platform`, `../mosaic-architecture`, `../mosaic-sdk`, `../mosaic-module-stremio`):
 
 - **`mosaic-platform`** (this repo) — the Platform: domain, contracts, application services, the PostgreSQL module, transports, the composition root.
 - **`mosaic-architecture`** — the docs and ADRs. Push doc updates here whenever code and docs diverge.
-- **`mosaic-sdk`** — the **published contract surface**, extracted into its own module (`github.com/mosaic-media/mosaic-sdk`, at `v0.1.0`). This is what a Module compiles against. See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
+- **`mosaic-sdk`** — the **published contract surface**, extracted into its own module (`github.com/mosaic-media/mosaic-sdk`). This is what a Module compiles against. See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
+- **`mosaic-module-stremio`** — the **first optional module**, in its own repo exactly as a third party's would be: a Go client of the Stremio addon protocol importing only the SDK. The Platform composes it in via a `replace` to `../mosaic-module-stremio` (ADR 0019–0021). Commit and push it separately.
 
 Required reading, and it is short:
 
@@ -137,7 +138,7 @@ this is the map, oldest first.
 | SDK extraction | `contracts/platform/v1` moved out into `github.com/mosaic-media/mosaic-sdk` at `v0.1.0`; the Platform depends on it as an external module |
 | Runnable process | `main.go` constructs `app.Service`; GraphQL served over HTTP at `:8081/graphql` (health handoff on `:8080`); Argon2id password hasher; end-to-end HTTP test signs in and imports content |
 | Permissions management + bootstrap | `PermissionStore` gained `CreateRole`/`GrantRole` (+ commands + GraphQL mutations); `internal/composition/bootstrap.EnsureAdmin` seeds a first admin idempotently from env vars, so the binary is usable by a human |
-| Optional-module composition + invocation (ADR 0019, 0020) | The SDK gained a `Capability` interface (`Manifest()`/`Import()`) at `v0.2.0`; the Platform gained a `CapabilityRegistry`, an `ImportContent` command (action `content.import`) and an `importContent` GraphQL mutation. The **Stremio module** (`modules/stremio/`, its own Go module importing only the SDK) is statically composed in via `main.go` and invoked through the registry — sourcing movies/series from a Stremio addon and landing the tree + source binding + **`RemoteLocation` stream Parts** in PostgreSQL. Proven end to end. **The composition-and-invocation half of the extension story works.** |
+| Optional-module composition + invocation (ADR 0019, 0020) | The SDK gained a `Capability` interface (`Manifest()`/`Import()`) at `v0.2.0`; the Platform gained a `CapabilityRegistry`, an `ImportContent` command (action `content.import`) and an `importContent` GraphQL mutation. The **Stremio module** (its own repo `mosaic-module-stremio`, importing only the SDK) is statically composed in via `main.go` and invoked through the registry — sourcing movies/series from a Stremio addon and landing the tree + source binding + **`RemoteLocation` stream Parts** in PostgreSQL. Proven end to end. **The composition-and-invocation half of the extension story works.** |
 | User-managed module settings (ADR 0021) | The first SDK gap the Stremio module surfaced. A Platform-owned `ModuleSettingsStore` (one jsonb doc per module id, on `Tx`), generic `configureModule`/`moduleSettings` commands + GraphQL (actions `module.configure`/`module.read`), and SDK `v0.3.0` handing a module its settings via `ImportRequest{Caller, Query, Settings}`. A user adds a Stremio addon by manifest URL at runtime; the module reads `{"addons":[...]}`. Retired the `MOSAIC_STREMIO_ADDONS` env bridge. |
 
 **Reverted long ago:** uniform store resolution (`Store[T]`) under ADR 0012.
@@ -224,13 +225,16 @@ roughly in order of how cheaply they harden what exists:
   Stores call `v1.Node.Canonical()`, a contract obligation, so `Anime Series`
   and `anime-series` are one type. Use `v1` constants, not string literals.
 - **How an optional module is composed and invoked** (ADR 0019, 0020). A
-  module is its **own Go module** outside `internal/` (the Stremio module at
-  `modules/stremio/`, module path `github.com/mosaic-media/mosaic-module-stremio`),
-  importing **only** the SDK — enforced by a boundary test and by Go itself.
-  It implements the SDK `Capability` interface. `main.go`'s
-  `registerCapabilities` constructs it and registers it into an
-  `app.CapabilityRegistry`; the platform `go.mod` reaches it by a
-  `replace => ./modules/stremio` (in-repo, so a fresh clone builds). A caller
+  module is its **own Go module and its own repository** — the Stremio module
+  now lives in the sibling repo
+  [`mosaic-module-stremio`](https://github.com/mosaic-media/mosaic-module-stremio)
+  (`../mosaic-module-stremio` on disk, module path
+  `github.com/mosaic-media/mosaic-module-stremio`), importing **only** the SDK —
+  enforced by a boundary test and by Go itself. It implements the SDK
+  `Capability` interface. `main.go`'s `registerCapabilities` constructs it and
+  registers it into an `app.CapabilityRegistry`; the platform `go.mod` reaches
+  it by a `replace => ../mosaic-module-stremio` (a local dev bridge until the
+  module is tagged and pushed). A caller
   invokes it through the `ImportContent` command (GraphQL `importContent`),
   which authorises `content.import`, resolves the capability by id, and hands
   it the `app.Service` as its `ContentService` plus the caller — so the
