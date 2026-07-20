@@ -19,13 +19,25 @@ import (
 // fakeQueries stands in for the application query surface, so the screen
 // builders are tested without a full Service.
 type fakeQueries struct {
-	results []v1.SearchResult
-	gotText string
+	results      []v1.SearchResult
+	catalogs     []app.ModuleCatalog
+	items        []v1.CatalogItem
+	gotText      string
+	gotCatalogID string
 }
 
 func (f *fakeQueries) SearchAvailableContent(_ context.Context, q app.SearchAvailableContentQuery) (app.SearchAvailableContentResult, error) {
 	f.gotText = q.Text
 	return app.SearchAvailableContentResult{Results: f.results}, nil
+}
+
+func (f *fakeQueries) ListModuleCatalogs(_ context.Context, _ app.ListModuleCatalogsQuery) (app.ListModuleCatalogsResult, error) {
+	return app.ListModuleCatalogsResult{Catalogs: f.catalogs}, nil
+}
+
+func (f *fakeQueries) ListCatalogItems(_ context.Context, q app.ListCatalogItemsQuery) (app.ListCatalogItemsResult, error) {
+	f.gotCatalogID = q.CatalogID
+	return app.ListCatalogItemsResult{Items: f.items}, nil
 }
 
 func render(t *testing.T, svc *Service, name string, params map[string]any) sdui.Node {
@@ -142,5 +154,58 @@ func TestUnknownScreenIsNotFound(t *testing.T) {
 	_, err := svc.Render(context.Background(), "nope", v1.CallerFromSession("s-1"), nil)
 	if got := contracts.CategoryOf(err); got != contracts.NotFound {
 		t.Fatalf("category = %s, want NotFound", got)
+	}
+}
+
+func TestCollectionsScreenListsCatalogsAsNavigableRows(t *testing.T) {
+	fake := &fakeQueries{catalogs: []app.ModuleCatalog{
+		{ModuleID: "stremio", Catalog: v1.Catalog{ID: "top", NativeType: "movie", Name: "Popular Movies"}},
+	}}
+	node := render(t, &Service{content: fake}, "collections", nil)
+
+	var buttons []sdui.Node
+	findAll(node, sdui.TypeButton, &buttons)
+	if len(buttons) != 1 {
+		t.Fatalf("buttons = %d, want 1 per catalog", len(buttons))
+	}
+	act, _ := buttons[0].Props["action"].(sdui.Action)
+	if act.Kind != sdui.KindNavigate || act.Screen == nil || *act.Screen != "catalog" {
+		t.Fatalf("catalog row action = %+v, want Navigate catalog", act)
+	}
+	if act.Params["catalogId"] != "top" || act.Params["moduleId"] != "stremio" {
+		t.Fatalf("navigate params = %+v, want the catalog's module and id", act.Params)
+	}
+}
+
+func TestCollectionsScreenEmpty(t *testing.T) {
+	node := render(t, &Service{content: &fakeQueries{}}, "collections", nil)
+	if _, ok := find(node, sdui.TypeEmptyState); !ok {
+		t.Fatal("no catalogs must render an EmptyState")
+	}
+}
+
+func TestCatalogScreenRendersItemsWithMaterialiseAction(t *testing.T) {
+	fake := &fakeQueries{items: []v1.CatalogItem{
+		{Ref: v1.ContentRef{Provider: "stremio", NativeID: "tt1254207", NativeType: "movie", MediaType: v1.MediaMovie, ExternalScheme: "imdb", ExternalID: "tt1254207"}, Title: "Blade Runner 2049", Year: 2017},
+	}}
+	node := render(t, &Service{content: fake}, "catalog", map[string]any{"moduleId": "stremio", "catalogId": "top", "nativeType": "movie"})
+	if fake.gotCatalogID != "top" {
+		t.Fatalf("backend saw catalog %q, want the param forwarded", fake.gotCatalogID)
+	}
+	var cards []sdui.Node
+	findAll(node, sdui.TypePosterCard, &cards)
+	if len(cards) != 1 {
+		t.Fatalf("cards = %d, want 1", len(cards))
+	}
+	act, _ := cards[0].Props["action"].(sdui.Action)
+	if act.Kind != sdui.KindInvoke || act.Mutation == nil || *act.Mutation != "importContent" {
+		t.Fatalf("catalog item action = %+v, want Invoke importContent", act)
+	}
+}
+
+func TestCatalogScreenRequiresParams(t *testing.T) {
+	_, err := (&Service{content: &fakeQueries{}}).Render(context.Background(), "catalog", v1.CallerFromSession("s-1"), map[string]any{"moduleId": "stremio"})
+	if got := contracts.CategoryOf(err); got != contracts.InvalidArgument {
+		t.Fatalf("category = %s, want InvalidArgument", got)
 	}
 }
