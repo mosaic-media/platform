@@ -98,7 +98,7 @@ func TestStremioModuleAgainstPostgres(t *testing.T) {
 
 	// Invoke the module through the Platform's generic import command.
 	result, err := svc.ImportContent(c, app.ImportContentCommand{
-		Caller: caller, CapabilityID: stremio.CapabilityID, Query: "series/tt0903747",
+		Caller: caller, Ref: v1.ContentRef{Provider: stremio.CapabilityID, NativeID: "tt0903747", NativeType: "series", MediaType: v1.MediaTVSeries, ExternalScheme: "imdb", ExternalID: "tt0903747"},
 	})
 	if err != nil {
 		t.Fatalf("ImportContent: %v", err)
@@ -170,7 +170,7 @@ func TestStremioModuleAgainstPostgres(t *testing.T) {
 
 	// Re-invoking is idempotent: the source is already resolved.
 	again, err := svc.ImportContent(c, app.ImportContentCommand{
-		Caller: caller, CapabilityID: stremio.CapabilityID, Query: "series/tt0903747",
+		Caller: caller, Ref: v1.ContentRef{Provider: stremio.CapabilityID, NativeID: "tt0903747", NativeType: "series", MediaType: v1.MediaTVSeries, ExternalScheme: "imdb", ExternalID: "tt0903747"},
 	})
 	if err != nil {
 		t.Fatalf("second ImportContent: %v", err)

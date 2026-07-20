@@ -49,6 +49,10 @@ func NewSchema(svc *app.Service) (graphql.Schema, error) {
 			"searchContent":       searchContentField(svc),
 			"contentNode":         contentNodeField(svc),
 			"contentByExternalId": contentByExternalIDField(svc),
+			// Content discovery through modules (virtual plane — ADR 0028).
+			"searchAvailableContent": searchAvailableContentField(svc),
+			"moduleCatalogs":         moduleCatalogsField(svc),
+			"catalogItems":           catalogItemsField(svc),
 			// Auth.
 			"remoteSignInChallengeStatus": remoteSignInChallengeStatusField(),
 			// Jobs (stub — see jobs.go).

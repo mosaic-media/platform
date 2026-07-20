@@ -16,17 +16,18 @@ import (
 	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
 )
 
-// ImportContent invokes a registered capability. These tests prove the command
-// boundary around the invocation — validate, authenticate, authorise, resolve
-// the capability, forward the caller — using a recording fake capability, so
-// they check the routing rather than any particular module's behaviour.
+// ImportContent materialises a virtual result by invoking the capability its ref
+// names. These tests prove the command boundary around the invocation —
+// validate, authenticate, authorise, resolve the capability from the ref,
+// forward the caller — using a recording fake capability, so they check the
+// routing rather than any particular module's behaviour.
 
 // recordingCapability is a fake v1.Capability that records what it was handed
 // and returns a canned result (or an error).
 type recordingCapability struct {
 	id          string
 	err         error
-	gotQuery    string
+	gotRef      v1.ContentRef
 	gotCaller   v1.Caller
 	gotService  bool
 	gotSettings []byte
@@ -37,14 +38,20 @@ func (c *recordingCapability) Manifest() v1.Manifest {
 }
 
 func (c *recordingCapability) Import(ctx context.Context, svc v1.ContentService, req v1.ImportRequest) (v1.ImportResult, error) {
-	c.gotQuery = req.Query
+	c.gotRef = req.Ref
 	c.gotCaller = req.Caller
 	c.gotService = svc != nil
 	c.gotSettings = req.Settings
 	if c.err != nil {
 		return v1.ImportResult{}, c.err
 	}
-	return v1.ImportResult{WorkID: v1.NodeID("work-" + req.Query), Items: 2, Parts: 1}, nil
+	return v1.ImportResult{WorkID: v1.NodeID("work-" + req.Ref.NativeID), Items: 2, Parts: 1}, nil
+}
+
+// testRef builds the ContentRef the Platform materialises — as a search or
+// catalog browse would have produced it, naming the provider that owns it.
+func testRef(provider, nativeType, nativeID string) v1.ContentRef {
+	return v1.ContentRef{Provider: provider, NativeID: nativeID, NativeType: nativeType, MediaType: v1.MediaMovie}
 }
 
 func importFixture(t *testing.T, caps ...*recordingCapability) (*app.Service, *fakeDB, *trace, domain.SessionID) {
@@ -76,21 +83,21 @@ func traced(tr *trace, step string) bool {
 func TestImportContent(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("invokes the named capability, forwarding the caller and the service", func(t *testing.T) {
+	t.Run("invokes the capability the ref names, forwarding the caller and the service", func(t *testing.T) {
 		cap := &recordingCapability{id: "stremio"}
 		svc, _, tr, session := importFixture(t, cap)
 
 		result, err := svc.ImportContent(ctx, app.ImportContentCommand{
-			Caller: v1.Caller{Session: string(session)}, CapabilityID: "stremio", Query: "movie/tt1254207",
+			Caller: v1.Caller{Session: string(session)}, Ref: testRef("stremio", "movie", "tt1254207"),
 		})
 		if err != nil {
 			t.Fatalf("ImportContent: %v", err)
 		}
-		if result.WorkID != v1.NodeID("work-movie/tt1254207") {
+		if result.WorkID != v1.NodeID("work-tt1254207") {
 			t.Fatalf("WorkID = %q, want the capability's result", result.WorkID)
 		}
-		if cap.gotQuery != "movie/tt1254207" {
-			t.Fatalf("capability saw query %q", cap.gotQuery)
+		if cap.gotRef.NativeID != "tt1254207" {
+			t.Fatalf("capability saw ref native id %q", cap.gotRef.NativeID)
 		}
 		if cap.gotCaller.Session != string(session) {
 			t.Fatalf("capability saw caller %q, want the invoking session forwarded", cap.gotCaller.Session)
@@ -106,29 +113,29 @@ func TestImportContent(t *testing.T) {
 		}
 	})
 
-	t.Run("an unknown capability id is NotFound", func(t *testing.T) {
+	t.Run("a ref naming an unregistered provider is NotFound", func(t *testing.T) {
 		svc, _, _, session := importFixture(t)
 		_, err := svc.ImportContent(ctx, app.ImportContentCommand{
-			Caller: v1.Caller{Session: string(session)}, CapabilityID: "nope", Query: "x",
+			Caller: v1.Caller{Session: string(session)}, Ref: testRef("nope", "movie", "x"),
 		})
 		if got := contracts.CategoryOf(err); got != contracts.NotFound {
 			t.Fatalf("category = %s, want NotFound", got)
 		}
 	})
 
-	t.Run("a missing capability id or query is InvalidArgument", func(t *testing.T) {
+	t.Run("a missing provider or native id is InvalidArgument", func(t *testing.T) {
 		svc, _, _, session := importFixture(t, &recordingCapability{id: "stremio"})
 		_, err := svc.ImportContent(ctx, app.ImportContentCommand{
-			Caller: v1.Caller{Session: string(session)}, Query: "x",
+			Caller: v1.Caller{Session: string(session)}, Ref: v1.ContentRef{NativeID: "x", NativeType: "movie"},
 		})
 		if got := contracts.CategoryOf(err); got != contracts.InvalidArgument {
-			t.Fatalf("missing capability id: category = %s", got)
+			t.Fatalf("missing provider: category = %s", got)
 		}
 		_, err = svc.ImportContent(ctx, app.ImportContentCommand{
-			Caller: v1.Caller{Session: string(session)}, CapabilityID: "stremio",
+			Caller: v1.Caller{Session: string(session)}, Ref: v1.ContentRef{Provider: "stremio"},
 		})
 		if got := contracts.CategoryOf(err); got != contracts.InvalidArgument {
-			t.Fatalf("missing query: category = %s", got)
+			t.Fatalf("missing native id/type: category = %s", got)
 		}
 	})
 
@@ -136,12 +143,12 @@ func TestImportContent(t *testing.T) {
 		cap := &recordingCapability{id: "stremio"}
 		svc, _, _, _ := importFixture(t, cap)
 		_, err := svc.ImportContent(ctx, app.ImportContentCommand{
-			Caller: v1.Caller{Session: "not-a-session"}, CapabilityID: "stremio", Query: "x",
+			Caller: v1.Caller{Session: "not-a-session"}, Ref: testRef("stremio", "movie", "x"),
 		})
 		if got := contracts.CategoryOf(err); got != contracts.Unauthenticated {
 			t.Fatalf("category = %s, want Unauthenticated", got)
 		}
-		if cap.gotQuery != "" {
+		if cap.gotRef.NativeID != "" {
 			t.Fatal("the capability must not be invoked for an unauthenticated caller")
 		}
 	})
@@ -158,12 +165,12 @@ func TestImportContent(t *testing.T) {
 		db.seedSession("s-2", "u-2", now)
 
 		_, err := svc.ImportContent(ctx, app.ImportContentCommand{
-			Caller: v1.Caller{Session: "s-2"}, CapabilityID: "stremio", Query: "x",
+			Caller: v1.Caller{Session: "s-2"}, Ref: testRef("stremio", "movie", "x"),
 		})
 		if got := contracts.CategoryOf(err); got != contracts.PermissionDenied {
 			t.Fatalf("category = %s, want PermissionDenied", got)
 		}
-		if cap.gotQuery != "" {
+		if cap.gotRef.NativeID != "" {
 			t.Fatal("the capability must not be invoked for an unauthorised caller")
 		}
 	})
@@ -172,7 +179,7 @@ func TestImportContent(t *testing.T) {
 		cap := &recordingCapability{id: "stremio", err: errors.New("provider unreachable")}
 		svc, _, _, session := importFixture(t, cap)
 		_, err := svc.ImportContent(ctx, app.ImportContentCommand{
-			Caller: v1.Caller{Session: string(session)}, CapabilityID: "stremio", Query: "x",
+			Caller: v1.Caller{Session: string(session)}, Ref: testRef("stremio", "movie", "x"),
 		})
 		if err == nil {
 			t.Fatal("expected the capability error to propagate")

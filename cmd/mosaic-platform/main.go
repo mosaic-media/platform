@@ -215,8 +215,14 @@ func run() error {
 	// until the Supervisor's Build Pipeline generates the imports.
 	capRegistry := app.NewCapabilityRegistry()
 	registerCapabilities(capRegistry)
+	// Fail boot if a capability declares a provider role it does not implement
+	// (ADR 0027): a role named but unbacked would otherwise surface as a nil
+	// provider at invocation, not at composition.
+	if err := capRegistry.Verify(); err != nil {
+		return fmt.Errorf("capability registry invalid: %w", err)
+	}
 	for _, m := range capRegistry.Manifests() {
-		fmt.Printf("mosaic-platform: registered capability %s@%s (%s)\n", m.ID, m.Version, m.Name)
+		fmt.Printf("mosaic-platform: registered capability %s@%s (%s) — provides %v\n", m.ID, m.Version, m.Name, m.Provides)
 	}
 
 	svc := app.NewService(

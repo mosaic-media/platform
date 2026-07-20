@@ -18,25 +18,26 @@ import (
 // under the content actions (ADR 0017) — this gate is the outer one.
 const ActionContentImport policy.Action = "content.import"
 
-// ImportContentCommand names a registered capability and the query to hand it.
-// It is a Platform command a transport issues (the GraphQL importContent
-// mutation), deliberately not part of the published ContentService: a
-// capability is invoked by this command, it does not call it.
+// ImportContentCommand materialises one virtual content item — a ContentRef a
+// search or catalog browse produced (ADR 0028) — into the graph. It names no
+// capability id of its own: the ref carries its Provider, the module that can
+// materialise it. It is a Platform command a transport issues (the GraphQL
+// importContent mutation), deliberately not part of the published
+// ContentService: a capability is invoked by this command, it does not call it.
 type ImportContentCommand struct {
-	Caller       v1.Caller
-	CapabilityID string
-	Query        string
+	Caller v1.Caller
+	Ref    v1.ContentRef
 }
 
 func validateImportContentCommand(cmd ImportContentCommand) error {
 	if cmd.Caller.Session == "" {
 		return contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
-	if cmd.CapabilityID == "" {
-		return contracts.NewError(contracts.InvalidArgument, "capability id is required")
+	if cmd.Ref.Provider == "" {
+		return contracts.NewError(contracts.InvalidArgument, "ref provider is required")
 	}
-	if cmd.Query == "" {
-		return contracts.NewError(contracts.InvalidArgument, "query is required")
+	if cmd.Ref.NativeID == "" || cmd.Ref.NativeType == "" {
+		return contracts.NewError(contracts.InvalidArgument, "ref native id and type are required")
 	}
 	return nil
 }
@@ -68,16 +69,16 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 		return v1.ImportResult{}, err
 	}
 
-	// 4. resolve the capability by id.
-	capability, ok := s.lookupCapability(cmd.CapabilityID)
+	// 4. resolve the capability the ref names as its materialiser.
+	capability, ok := s.lookupCapability(cmd.Ref.Provider)
 	if !ok {
-		return v1.ImportResult{}, contracts.NewError(contracts.NotFound, "no capability registered under id "+cmd.CapabilityID)
+		return v1.ImportResult{}, contracts.NewError(contracts.NotFound, "no capability registered under id "+cmd.Ref.Provider)
 	}
 
 	// 5. read the module's user-managed settings so it is invoked with the
 	// configuration a user set for it (ADR 0021). Absent settings read back as
 	// an empty document, never an error.
-	settings, err := s.readModuleSettings(ctx, cmd.CapabilityID)
+	settings, err := s.readModuleSettings(ctx, cmd.Ref.Provider)
 	if err != nil {
 		return v1.ImportResult{}, err
 	}
@@ -85,15 +86,15 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 	// 6. invoke it, forwarding the caller so it acts as the invoking user and
 	// passing the Service as the ContentService it drives.
 	result, err := capability.Import(ctx, s, v1.ImportRequest{
-		Caller: cmd.Caller, Query: cmd.Query, Settings: settings,
+		Caller: cmd.Caller, Ref: cmd.Ref, Settings: settings,
 	})
 	if err != nil {
 		return v1.ImportResult{}, err
 	}
 
-	// 6. record that an import ran, for audit. The capability's own writes each
+	// 7. record that an import ran, for audit. The capability's own writes each
 	// emit their content events; this marks the invocation itself.
-	s.publishAuditEvent(ctx, "content.import.invoked", []byte(cmd.CapabilityID), string(callerID))
+	s.publishAuditEvent(ctx, "content.import.invoked", []byte(cmd.Ref.Provider), string(callerID))
 
 	return result, nil
 }

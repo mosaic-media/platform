@@ -59,7 +59,7 @@ func TestConfigureModule(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("ConfigureModule: %v", err)
 		}
-		if _, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, CapabilityID: "stremio", Query: "movie/tt1"}); err != nil {
+		if _, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: testRef("stremio", "movie", "tt1")}); err != nil {
 			t.Fatalf("ImportContent: %v", err)
 		}
 		if string(cap.gotSettings) != `{"addons":["x"]}` {

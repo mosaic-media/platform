@@ -59,6 +59,15 @@ func optionalBytes(s string) []byte {
 	return []byte(s)
 }
 
+// sourceField projects one field of a value type T carried as the resolver
+// source — the compact form the virtual-content types use, where every field is
+// a plain projection of the source struct.
+func sourceField[T any](typ graphql.Output, get func(T) interface{}) *graphql.Field {
+	return &graphql.Field{Type: typ, Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+		return get(p.Source.(T)), nil
+	}}
+}
+
 // nodeType projects v1.Node. Every field resolves explicitly because the SDK
 // uses named string types and raw JSON []byte, which graphql-go's reflection
 // default does not serialize.
@@ -475,23 +484,166 @@ func resolveContentBindingField(svc *app.Service) *graphql.Field {
 	}
 }
 
-// importContentField invokes a registered capability by id, forwarding the
-// caller so the module acts as the invoking user (ADR 0017). Unlike the other
-// content mutations it maps to a Platform command (app.ImportContentCommand),
-// not a published v1 type: a capability is invoked by this, it does not call it.
+// contentRefType projects a v1.ContentRef — the handle a virtual result carries
+// and a client passes back to materialise it.
+var contentRefType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "ContentRef",
+	Fields: graphql.Fields{
+		"provider":       sourceField(graphql.String, func(r v1.ContentRef) interface{} { return r.Provider }),
+		"nativeId":       sourceField(graphql.String, func(r v1.ContentRef) interface{} { return r.NativeID }),
+		"nativeType":     sourceField(graphql.String, func(r v1.ContentRef) interface{} { return r.NativeType }),
+		"mediaType":      sourceField(graphql.String, func(r v1.ContentRef) interface{} { return string(r.MediaType) }),
+		"externalScheme": sourceField(graphql.String, func(r v1.ContentRef) interface{} { return r.ExternalScheme }),
+		"externalId":     sourceField(graphql.String, func(r v1.ContentRef) interface{} { return r.ExternalID }),
+	},
+})
+
+// contentRefInputType is the ContentRef a client submits to materialise a
+// virtual result. It mirrors contentRefType; the two exist because GraphQL
+// keeps input and output object types separate.
+var contentRefInputType = graphql.NewInputObject(graphql.InputObjectConfig{
+	Name: "ContentRefInput",
+	Fields: graphql.InputObjectConfigFieldMap{
+		"provider":       &graphql.InputObjectFieldConfig{Type: graphql.NewNonNull(graphql.String)},
+		"nativeId":       &graphql.InputObjectFieldConfig{Type: graphql.NewNonNull(graphql.String)},
+		"nativeType":     &graphql.InputObjectFieldConfig{Type: graphql.NewNonNull(graphql.String)},
+		"mediaType":      &graphql.InputObjectFieldConfig{Type: graphql.String},
+		"externalScheme": &graphql.InputObjectFieldConfig{Type: graphql.String},
+		"externalId":     &graphql.InputObjectFieldConfig{Type: graphql.String},
+	},
+})
+
+// contentRefArg reads a ContentRefInput argument into a v1.ContentRef.
+func contentRefArg(p graphql.ResolveParams, name string) v1.ContentRef {
+	m, _ := p.Args[name].(map[string]interface{})
+	get := func(k string) string { s, _ := m[k].(string); return s }
+	return v1.ContentRef{
+		Provider: get("provider"), NativeID: get("nativeId"), NativeType: get("nativeType"),
+		MediaType: v1.MediaType(get("mediaType")), ExternalScheme: get("externalScheme"), ExternalID: get("externalId"),
+	}
+}
+
+// searchResultType projects a v1.SearchResult — a virtual candidate, marked
+// whether it is already in the library.
+var searchResultType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "SearchResult",
+	Fields: graphql.Fields{
+		"ref":       sourceField(contentRefType, func(r v1.SearchResult) interface{} { return r.Ref }),
+		"title":     sourceField(graphql.String, func(r v1.SearchResult) interface{} { return r.Title }),
+		"year":      sourceField(graphql.Int, func(r v1.SearchResult) interface{} { return r.Year }),
+		"poster":    sourceField(graphql.String, func(r v1.SearchResult) interface{} { return r.Poster }),
+		"inLibrary": sourceField(graphql.Boolean, func(r v1.SearchResult) interface{} { return r.InLibrary }),
+		"nodeId":    sourceField(graphql.String, func(r v1.SearchResult) interface{} { return string(r.NodeID) }),
+	},
+})
+
+// moduleCatalogType projects an app.ModuleCatalog — a collection a module
+// exposes, tagged with the module that serves it.
+var moduleCatalogType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "ModuleCatalog",
+	Fields: graphql.Fields{
+		"moduleId":   sourceField(graphql.String, func(c app.ModuleCatalog) interface{} { return c.ModuleID }),
+		"id":         sourceField(graphql.String, func(c app.ModuleCatalog) interface{} { return c.Catalog.ID }),
+		"name":       sourceField(graphql.String, func(c app.ModuleCatalog) interface{} { return c.Catalog.Name }),
+		"nativeType": sourceField(graphql.String, func(c app.ModuleCatalog) interface{} { return c.Catalog.NativeType }),
+	},
+})
+
+// catalogItemType projects a v1.CatalogItem — a virtual entry of a collection.
+var catalogItemType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "CatalogItem",
+	Fields: graphql.Fields{
+		"ref":       sourceField(contentRefType, func(i v1.CatalogItem) interface{} { return i.Ref }),
+		"title":     sourceField(graphql.String, func(i v1.CatalogItem) interface{} { return i.Title }),
+		"year":      sourceField(graphql.Int, func(i v1.CatalogItem) interface{} { return i.Year }),
+		"poster":    sourceField(graphql.String, func(i v1.CatalogItem) interface{} { return i.Poster }),
+		"inLibrary": sourceField(graphql.Boolean, func(i v1.CatalogItem) interface{} { return i.InLibrary }),
+		"nodeId":    sourceField(graphql.String, func(i v1.CatalogItem) interface{} { return string(i.NodeID) }),
+	},
+})
+
+// searchAvailableContentField fans a free-text search out to the enabled
+// modules' search providers and returns virtual candidates — discovery with no
+// raw id (ADR 0028). It is a query: nothing is written until a result is
+// materialised.
+func searchAvailableContentField(svc *app.Service) *graphql.Field {
+	return &graphql.Field{
+		Type: graphql.NewList(searchResultType),
+		Args: graphql.FieldConfigArgument{
+			"callerSessionId": nonNullString(),
+			"text":            nonNullString(),
+			"mediaType":       &graphql.ArgumentConfig{Type: graphql.String},
+			"limit":           &graphql.ArgumentConfig{Type: graphql.Int},
+		},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			result, err := svc.SearchAvailableContent(p.Context, app.SearchAvailableContentQuery{
+				Caller: caller(p), Text: argString(p, "text"),
+				MediaType: v1.MediaType(argString(p, "mediaType")), Limit: argInt(p, "limit"),
+			})
+			if err != nil {
+				return nil, err
+			}
+			return result.Results, nil
+		},
+	}
+}
+
+// moduleCatalogsField lists the collections the enabled modules expose, for the
+// admin collection browser.
+func moduleCatalogsField(svc *app.Service) *graphql.Field {
+	return &graphql.Field{
+		Type: graphql.NewList(moduleCatalogType),
+		Args: graphql.FieldConfigArgument{"callerSessionId": nonNullString()},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			result, err := svc.ListModuleCatalogs(p.Context, app.ListModuleCatalogsQuery{Caller: caller(p)})
+			if err != nil {
+				return nil, err
+			}
+			return result.Catalogs, nil
+		},
+	}
+}
+
+// catalogItemsField pages one module catalog's virtual items.
+func catalogItemsField(svc *app.Service) *graphql.Field {
+	return &graphql.Field{
+		Type: graphql.NewList(catalogItemType),
+		Args: graphql.FieldConfigArgument{
+			"callerSessionId": nonNullString(),
+			"moduleId":        nonNullString(),
+			"catalogId":       nonNullString(),
+			"nativeType":      &graphql.ArgumentConfig{Type: graphql.String},
+			"skip":            &graphql.ArgumentConfig{Type: graphql.Int},
+		},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			result, err := svc.ListCatalogItems(p.Context, app.ListCatalogItemsQuery{
+				Caller: caller(p), ModuleID: argString(p, "moduleId"), CatalogID: argString(p, "catalogId"),
+				NativeType: argString(p, "nativeType"), Skip: argInt(p, "skip"),
+			})
+			if err != nil {
+				return nil, err
+			}
+			return result.Items, nil
+		},
+	}
+}
+
+// importContentField materialises a virtual result into the graph, invoking the
+// capability the ref names as its provider and forwarding the caller so the
+// module acts as the invoking user (ADR 0017). Unlike the other content
+// mutations it maps to a Platform command (app.ImportContentCommand), not a
+// published v1 type: a capability is invoked by this, it does not call it.
 func importContentField(svc *app.Service) *graphql.Field {
 	return &graphql.Field{
 		Type: importResultType,
 		Args: graphql.FieldConfigArgument{
 			"callerSessionId": nonNullString(),
-			"capabilityId":    nonNullString(),
-			"query":           nonNullString(),
+			"ref":             &graphql.ArgumentConfig{Type: graphql.NewNonNull(contentRefInputType)},
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 			result, err := svc.ImportContent(p.Context, app.ImportContentCommand{
-				Caller:       caller(p),
-				CapabilityID: argString(p, "capabilityId"),
-				Query:        argString(p, "query"),
+				Caller: caller(p),
+				Ref:    contentRefArg(p, "ref"),
 			})
 			if err != nil {
 				return nil, err
