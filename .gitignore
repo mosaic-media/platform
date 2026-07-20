@@ -2,3 +2,6 @@
 # Editor and IDE state
 .idea/
 .vscode/
+
+# Runtime output — the diagnostics file logger writes here (main.go)
+logs/
