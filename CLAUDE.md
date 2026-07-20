@@ -4,12 +4,13 @@
 
 **The code in this repository is authoritative.** It is ~22,300 lines of Go and it decides what Mosaic is. The [`mosaic-architecture`](https://github.com/mosaic-media/mosaic-architecture) repository *describes* it and records the decisions behind it. If the two disagree, the documentation is wrong — fix it there, in the same session, rather than working around it.
 
-**Four repositories, all siblings on disk** (`../mosaic-platform`, `../mosaic-architecture`, `../mosaic-sdk`, `../mosaic-module-stremio`):
+**Five repositories, all siblings on disk** (`../mosaic-platform`, `../mosaic-architecture`, `../mosaic-sdk`, `../mosaic-module-stremio`, `../mosaic-shell`):
 
 - **`mosaic-platform`** (this repo) — the Platform: domain, contracts, application services, the PostgreSQL module, transports, the composition root.
 - **`mosaic-architecture`** — the docs and ADRs. Push doc updates here whenever code and docs diverge.
 - **`mosaic-sdk`** — the **published contract surface**, extracted into its own module (`github.com/mosaic-media/mosaic-sdk`). This is what a Module compiles against. See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
 - **`mosaic-module-stremio`** — the **first optional module**, in its own repo exactly as a third party's would be: a Go client of the Stremio addon protocol importing only the SDK, MIT-licensed, published at `v0.1.0`. The Platform requires it as a tagged dependency (ADR 0019–0021). Commit and push it separately.
+- **`mosaic-shell`** — the **Server-Driven-UI web client** (React/TypeScript/Vite), a *client of the Platform over GraphQL*, not a Module and not in the binary. Its whole component set is primitives + `ComponentDefinition` data on a token-driven skin, technology-agnostic so a future Flutter client renders the same payloads. AGPL-3.0-only (ADR 0022–0024). The Platform does not yet *emit* SDUI screens, so the Shell runs on mock payloads. Commit and push it separately.
 
 Required reading, and it is short:
 
