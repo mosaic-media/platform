@@ -27,10 +27,12 @@ type fakeQueries struct {
 	previewMeta      v1.ContentMetadata
 	previewInLibrary bool
 	previewNodeID    v1.NodeID
-	gotText          string
-	gotCatalogID     string
-	gotNodeID        v1.NodeID
-	gotPreviewRef    v1.ContentRef
+	settingsUI          []byte
+	gotText             string
+	gotCatalogID        string
+	gotNodeID           v1.NodeID
+	gotPreviewRef       v1.ContentRef
+	gotSettingsModuleID string
 }
 
 func (f *fakeQueries) SearchAvailableContent(_ context.Context, q app.SearchAvailableContentQuery) (app.SearchAvailableContentResult, error) {
@@ -55,6 +57,11 @@ func (f *fakeQueries) GetContentNode(_ context.Context, q v1.GetContentNodeQuery
 func (f *fakeQueries) PreviewContent(_ context.Context, q app.PreviewContentQuery) (app.PreviewContentResult, error) {
 	f.gotPreviewRef = q.Ref
 	return app.PreviewContentResult{Metadata: f.previewMeta, InLibrary: f.previewInLibrary, NodeID: f.previewNodeID}, nil
+}
+
+func (f *fakeQueries) ModuleSettingsUI(_ context.Context, q app.ModuleSettingsUIQuery) (app.ModuleSettingsUIResult, error) {
+	f.gotSettingsModuleID = q.ModuleID
+	return app.ModuleSettingsUIResult{ModuleID: q.ModuleID, UI: f.settingsUI}, nil
 }
 
 func render(t *testing.T, svc *Service, name string, params map[string]any) sdui.Node {
@@ -368,6 +375,24 @@ func TestDetailScreenRendersHeaderAndChildren(t *testing.T) {
 	act, _ := cards[0].Props["action"].(sdui.Action)
 	if act.Kind != sdui.KindNavigate || act.Params["nodeId"] != "n-2" {
 		t.Fatalf("child card action = %+v, want Navigate to the child's detail", act)
+	}
+}
+
+func TestSettingsScreenHostsModuleUI(t *testing.T) {
+	// The Platform hosts the module's contributed settings UINode verbatim (ADR
+	// 0038): the settings screen renders whatever the module returned.
+	moduleUI := `{"type":"Screen","props":{"title":"Stremio addons"},"children":[{"type":"Section","props":{"title":"Add an addon"}}]}`
+	fake := &fakeQueries{settingsUI: []byte(moduleUI)}
+
+	node := render(t, &Service{content: fake}, "settings", nil)
+	if fake.gotSettingsModuleID != "stremio" {
+		t.Fatalf("settings screen resolved module %q, want the stremio default", fake.gotSettingsModuleID)
+	}
+	if node.Type != sdui.TypeScreen || node.Props["title"] != "Stremio addons" {
+		t.Fatalf("settings root = %+v, want the module's Screen", node.Props)
+	}
+	if _, ok := find(node, sdui.TypeSection); !ok {
+		t.Fatal("settings screen did not render the module's section")
 	}
 }
 

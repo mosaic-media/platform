@@ -5,6 +5,8 @@
 package graphql
 
 import (
+	"encoding/json"
+
 	"github.com/graphql-go/graphql"
 
 	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
@@ -699,25 +701,72 @@ var moduleSettingsType = graphql.NewObject(graphql.ObjectConfig{
 })
 
 // configureModuleField sets an optional module's user-managed settings (ADR
-// 0021) — for the Stremio module, the addon manifest URLs a user adds.
+// 0021) — for the Stremio module, the addon manifest URLs a user adds. It is
+// invoke-compatible (ADR 0029/0038): the return type is the JSON scalar and it
+// accepts the runtime's `input: JSON` envelope, so a module's contributed
+// settings UI (ADR 0038) can drive it as an Invoke action. moduleId/settings
+// also work as typed args for a direct caller.
 func configureModuleField(svc *app.Service) *graphql.Field {
 	return &graphql.Field{
-		Type: moduleSettingsType,
+		Type: jsonScalar,
 		Args: graphql.FieldConfigArgument{
-			"callerSessionId": nonNullString(),
-			"moduleId":        nonNullString(),
-			"settings":        nonNullString(),
+			"callerSessionId": &graphql.ArgumentConfig{Type: graphql.String},
+			"moduleId":        &graphql.ArgumentConfig{Type: graphql.String},
+			"settings":        &graphql.ArgumentConfig{Type: graphql.String},
+			"input":           &graphql.ArgumentConfig{Type: jsonScalar},
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			moduleID, settings := configureArgs(p)
 			result, err := svc.ConfigureModule(p.Context, app.ConfigureModuleCommand{
 				Caller:   caller(p),
-				ModuleID: argString(p, "moduleId"),
-				Settings: optionalBytes(argString(p, "settings")),
+				ModuleID: moduleID,
+				Settings: settings,
 			})
 			if err != nil {
 				return nil, err
 			}
 			return map[string]interface{}{"moduleId": result.ModuleID, "settings": string(result.Settings)}, nil
+		},
+	}
+}
+
+// configureArgs reads the module id and settings document from either the
+// runtime's input envelope (an Invoke action — settings arrives as a JSON object)
+// or the typed arguments (a direct caller — settings arrives as a JSON string).
+func configureArgs(p graphql.ResolveParams) (string, []byte) {
+	if input, ok := p.Args["input"].(map[string]interface{}); ok {
+		moduleID, _ := input["moduleId"].(string)
+		var settings []byte
+		if s, ok := input["settings"]; ok && s != nil {
+			settings, _ = json.Marshal(s)
+		}
+		return moduleID, settings
+	}
+	return argString(p, "moduleId"), optionalBytes(argString(p, "settings"))
+}
+
+// moduleSettingsUIField resolves a module's own contributed settings screen as a
+// serialised UINode (ADR 0038), for the Platform's settings host to render.
+func moduleSettingsUIField(svc *app.Service) *graphql.Field {
+	return &graphql.Field{
+		Type: jsonScalar,
+		Args: graphql.FieldConfigArgument{
+			"callerSessionId": &graphql.ArgumentConfig{Type: graphql.String},
+			"moduleId":        nonNullString(),
+		},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			result, err := svc.ModuleSettingsUI(p.Context, app.ModuleSettingsUIQuery{
+				Caller:   caller(p),
+				ModuleID: argString(p, "moduleId"),
+			})
+			if err != nil {
+				return nil, err
+			}
+			var node interface{}
+			if err := json.Unmarshal(result.UI, &node); err != nil {
+				return nil, err
+			}
+			return node, nil
 		},
 	}
 }

@@ -89,6 +89,9 @@ func roleImplemented(c v1.Capability, role v1.Role) bool {
 	case v1.RoleSubtitles:
 		_, ok := c.(v1.SubtitlesProvider)
 		return ok
+	case v1.RoleSettingsUI:
+		_, ok := c.(v1.SettingsUIProvider)
+		return ok
 	default:
 		return true
 	}
@@ -162,6 +165,18 @@ func (r *CapabilityRegistry) SubtitlesProvider(id string) (v1.SubtitlesProvider,
 		return nil, false
 	}
 	p, ok := c.(v1.SubtitlesProvider)
+	return p, ok
+}
+
+// SettingsUIProvider returns the settings-UI provider registered under id, if
+// that capability fills RoleSettingsUI (ADR 0038) — how the module-settings host
+// resolves a module's contributed settings screen.
+func (r *CapabilityRegistry) SettingsUIProvider(id string) (v1.SettingsUIProvider, bool) {
+	c, ok := r.byID[id]
+	if !ok {
+		return nil, false
+	}
+	p, ok := c.(v1.SettingsUIProvider)
 	return p, ok
 }
 

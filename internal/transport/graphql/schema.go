@@ -51,7 +51,8 @@ func NewSchema(svc *app.Service, artwork func(string) string) (graphql.Schema, e
 			"activeConfigVersion": activeConfigVersionField(svc),
 			"configVersion":       configVersionField(svc),
 			// Modules.
-			"moduleSettings": moduleSettingsField(svc),
+			"moduleSettings":   moduleSettingsField(svc),
+			"moduleSettingsUI": moduleSettingsUIField(svc),
 			// Content.
 			"searchContent":       searchContentField(svc),
 			"contentNode":         contentNodeField(svc),

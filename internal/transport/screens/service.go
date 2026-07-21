@@ -16,6 +16,7 @@ package screens
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -37,6 +38,7 @@ type contentQueries interface {
 	ListCatalogItems(context.Context, app.ListCatalogItemsQuery) (app.ListCatalogItemsResult, error)
 	GetContentNode(context.Context, v1.GetContentNodeQuery) (v1.GetContentNodeResult, error)
 	PreviewContent(context.Context, app.PreviewContentQuery) (app.PreviewContentResult, error)
+	ModuleSettingsUI(context.Context, app.ModuleSettingsUIQuery) (app.ModuleSettingsUIResult, error)
 }
 
 // Service renders named screens. It holds the query surface the builders read
@@ -80,9 +82,33 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.catalogScreen(ctx, caller, params)
 	case "detail":
 		return s.detailScreen(ctx, caller, params)
+	case "settings":
+		return s.settingsScreen(ctx, caller, params)
 	default:
 		return sdui.Node{}, contracts.NewError(contracts.NotFound, "no screen named "+name)
 	}
+}
+
+// settingsScreen hosts a module's own contributed settings UI (ADR 0038). The
+// Platform owns the frame; the module fills it — the settings screen renders the
+// UINode tree the module returned through ModuleSettingsUI, validated by the app
+// service. It takes a moduleId param, defaulting to the Stremio module (the only
+// one that provides a settings UI today); a settings index over several modules
+// is a later addition.
+func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
+	moduleID := stringParam(params, "moduleId")
+	if moduleID == "" {
+		moduleID = "stremio"
+	}
+	res, err := s.content.ModuleSettingsUI(ctx, app.ModuleSettingsUIQuery{Caller: caller, ModuleID: moduleID})
+	if err != nil {
+		return sdui.Node{}, err
+	}
+	var node sdui.Node
+	if err := json.Unmarshal(res.UI, &node); err != nil {
+		return sdui.Node{}, contracts.WrapError(contracts.Internal, "decode module settings UI", err)
+	}
+	return node, nil
 }
 
 // detailScreen renders a rich content detail — a backdrop+logo hero, poster,
@@ -357,6 +383,7 @@ func (s *Service) shellScreen() (sdui.Node, error) {
 		sdui.Slot("nav",
 			navItem("Search", "search", "search"),
 			navItem("Collections", "list", "collections"),
+			navItem("Settings", "settings", "settings"),
 		),
 		sdui.Slot("topbar",
 			sdui.Component(sdui.TypeSearchBar,
