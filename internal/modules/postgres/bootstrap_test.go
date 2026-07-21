@@ -62,13 +62,14 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 
 	// The admin signs in with its real password (verified by Argon2id) and
 	// then uses the authority it was granted, all through the services.
-	svc := app.NewService(
-		cs.UnitOfWork, cs.Sessions, cs.Users, cs.Credentials, cs.Config, cs.Permissions,
-		cs.Nodes, cs.Clock, cs.IDs, cs.ContentIDs,
-		policy.NewEngine(cs.Permissions), noopPublisher{}, hasher,
-		nil, // no capabilities registered in this bootstrap test
-		cs.ModuleSettings,
-	)
+	svc := app.NewService(app.Deps{
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Clock: cs.Clock,
+		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
+		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: hasher,
+		Capabilities:   nil, // no capabilities registered in this bootstrap test
+		ModuleSettings: cs.ModuleSettings,
+	})
 
 	auth, err := svc.AuthenticateLocalUser(c, app.AuthenticateLocalUserCommand{
 		Username: username, Password: password, DeviceID: "cli",

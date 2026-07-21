@@ -391,23 +391,23 @@ func (fakePasswordVerifier) Verify(plaintext, hash string) (bool, error) {
 }
 
 func newTestService(db *fakeDB, now time.Time) *app.Service {
-	return app.NewService(
-		fakeUnitOfWork{db: db},
-		fakeSessionStore{db: db},
-		fakeUserStore{db: db},
-		fakeCredentialStore{db: db},
-		fakeConfigStore{db: db},
-		fakePermissionStore{db: db},
+	return app.NewService(app.Deps{
+		UnitOfWork:  fakeUnitOfWork{db: db},
+		Sessions:    fakeSessionStore{db: db},
+		Users:       fakeUserStore{db: db},
+		Credentials: fakeCredentialStore{db: db},
+		Config:      fakeConfigStore{db: db},
+		Permissions: fakePermissionStore{db: db},
 		// No resolver reads content yet, so there is nothing for a fake node
 		// store to serve. A resolver that starts using one fails loudly here.
-		nil,
-		fakeClock{now: now},
-		&fakeIDGenerator{},
-		&fakeIDGenerator{},
-		policy.NewEngine(fakePermissionStore{db: db}),
-		fakeEventPublisher{},
-		fakePasswordVerifier{},
-		nil, // no capabilities registered in resolver tests
-		nil, // no module settings store in resolver tests
-	)
+		Nodes:            nil,
+		Clock:            fakeClock{now: now},
+		IDs:              &fakeIDGenerator{},
+		ContentIDs:       &fakeIDGenerator{},
+		Policy:           policy.NewEngine(fakePermissionStore{db: db}),
+		Events:           fakeEventPublisher{},
+		PasswordVerifier: fakePasswordVerifier{},
+		Capabilities:     nil, // no capabilities registered in resolver tests
+		ModuleSettings:   nil, // no module settings store in resolver tests
+	})
 }

@@ -228,12 +228,23 @@ func run() error {
 		fmt.Printf("mosaic-platform: registered capability %s@%s (%s) — provides %v\n", m.ID, m.Version, m.Name, m.Provides)
 	}
 
-	svc := app.NewService(
-		set.UnitOfWork, set.Sessions, set.Users, set.Credentials, set.Config, set.Permissions,
-		set.Nodes, set.Clock, set.IDs, set.ContentIDs,
-		policy.NewEngine(set.Permissions), bus, crypto.NewPasswordHasher(),
-		capRegistry, set.ModuleSettings,
-	)
+	svc := app.NewService(app.Deps{
+		UnitOfWork:       set.UnitOfWork,
+		Sessions:         set.Sessions,
+		Users:            set.Users,
+		Credentials:      set.Credentials,
+		Config:           set.Config,
+		Permissions:      set.Permissions,
+		Nodes:            set.Nodes,
+		Clock:            set.Clock,
+		IDs:              set.IDs,
+		ContentIDs:       set.ContentIDs,
+		Policy:           policy.NewEngine(set.Permissions),
+		Events:           bus,
+		PasswordVerifier: crypto.NewPasswordHasher(),
+		Capabilities:     capRegistry,
+		ModuleSettings:   set.ModuleSettings,
+	})
 	// The artwork proxy (ADR 0030) re-serves remote poster/backdrop images from
 	// the Platform's origin, so a client gets same-origin (CORS-clean) artwork.
 	// Its signing key is process-scoped: emitted screens are re-fetched, so a

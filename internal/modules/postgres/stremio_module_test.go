@@ -52,13 +52,13 @@ func TestStremioModuleAgainstPostgres(t *testing.T) {
 	registry := app.NewCapabilityRegistry()
 	registry.Register(stremio.New(addon.Client()))
 
-	svc := app.NewService(
-		cs.UnitOfWork, cs.Sessions, cs.Users, cs.Credentials, cs.Config, cs.Permissions,
-		cs.Nodes, cs.Clock, cs.IDs, cs.ContentIDs,
-		policy.NewEngine(cs.Permissions), noopPublisher{}, reversibleVerifier{},
-		registry,
-		cs.ModuleSettings,
-	)
+	svc := app.NewService(app.Deps{
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Clock: cs.Clock,
+		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
+		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},
+		Capabilities: registry, ModuleSettings: cs.ModuleSettings,
+	})
 
 	// An importer with a session and every action the invocation and the
 	// capability's writes require, including content.import.

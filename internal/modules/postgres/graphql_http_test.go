@@ -38,13 +38,14 @@ func TestGraphQLHTTPImportsAndQueriesContent(t *testing.T) {
 	cs := mod.Bind(pool)
 	hasher := crypto.NewPasswordHasher()
 
-	svc := app.NewService(
-		cs.UnitOfWork, cs.Sessions, cs.Users, cs.Credentials, cs.Config, cs.Permissions,
-		cs.Nodes, cs.Clock, cs.IDs, cs.ContentIDs,
-		policy.NewEngine(cs.Permissions), noopPublisher{}, hasher,
-		nil, // no capabilities registered in this GraphQL HTTP test
-		cs.ModuleSettings,
-	)
+	svc := app.NewService(app.Deps{
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Clock: cs.Clock,
+		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
+		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: hasher,
+		Capabilities:   nil, // no capabilities registered in this GraphQL HTTP test
+		ModuleSettings: cs.ModuleSettings,
+	})
 
 	// Seed an admin with a real password credential and the actions the flow
 	// needs. This stands in for the bootstrap a running binary performs.

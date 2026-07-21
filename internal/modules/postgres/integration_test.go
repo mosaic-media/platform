@@ -74,23 +74,23 @@ func TestApplicationServicesRunAgainstPostgres(t *testing.T) {
 	var mod postgres.Module
 	cs := mod.Bind(pool)
 
-	svc := app.NewService(
-		cs.UnitOfWork,
-		cs.Sessions,
-		cs.Users,
-		cs.Credentials,
-		cs.Config,
-		cs.Permissions,
-		cs.Nodes,
-		cs.Clock,
-		cs.IDs,
-		cs.ContentIDs,
-		policy.NewEngine(cs.Permissions),
-		noopPublisher{},
-		reversibleVerifier{},
-		nil, // no capabilities registered in this content integration test
-		cs.ModuleSettings,
-	)
+	svc := app.NewService(app.Deps{
+		UnitOfWork:       cs.UnitOfWork,
+		Sessions:         cs.Sessions,
+		Users:            cs.Users,
+		Credentials:      cs.Credentials,
+		Config:           cs.Config,
+		Permissions:      cs.Permissions,
+		Nodes:            cs.Nodes,
+		Clock:            cs.Clock,
+		IDs:              cs.IDs,
+		ContentIDs:       cs.ContentIDs,
+		Policy:           policy.NewEngine(cs.Permissions),
+		Events:           noopPublisher{},
+		PasswordVerifier: reversibleVerifier{},
+		Capabilities:     nil, // no capabilities registered in this content integration test
+		ModuleSettings:   cs.ModuleSettings,
+	})
 
 	// Bootstrap an authorized admin caller directly (admin user, an active
 	// session, and a role granting the actions the flow needs). This is the

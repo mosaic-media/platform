@@ -42,46 +42,56 @@ type Service struct {
 	configManager    *config.Manager
 }
 
-// NewService wires a Service to its Platform contracts, policy decision
-// point and password verifier. configStore and permissions are direct
-// (non-transactional) read handles, mirroring sessionStore/users/
-// credentials — used by read-only queries (GetActiveConfigVersion,
-// GetRolesForUser, ...) that must not open a UnitOfWork (MEG-015 §04).
-func NewService(
-	uow contracts.UnitOfWork,
-	sessionStore contracts.SessionStore,
-	users contracts.UserStore,
-	credentials contracts.CredentialStore,
-	configStore contracts.ConfigStore,
-	permissions contracts.PermissionStore,
-	nodes contracts.NodeStore,
-	clock contracts.Clock,
-	ids contracts.IDGenerator,
-	contentIDs contracts.IDGenerator,
-	policyEngine policy.PolicyDecisionPoint,
-	events contracts.EventPublisher,
-	passwordVerifier domain.PasswordVerifier,
-	capabilities *CapabilityRegistry,
-	moduleSettings contracts.ModuleSettingsStore,
-) *Service {
+// Deps are the collaborators a Service is built from. They are passed as a named
+// struct rather than positionally because the list is long and several members
+// share a type: IDs and ContentIDs are both contracts.IDGenerator, and swapping
+// them would compile cleanly while silently crossing the platform and content id
+// generators. Named fields make each dependency explicit at the call site and
+// remove that transposition footgun. Field names mirror the composition root's
+// ContractSet so wiring reads Sessions: set.Sessions, etc.
+type Deps struct {
+	UnitOfWork  contracts.UnitOfWork
+	Sessions    contracts.SessionStore
+	Users       contracts.UserStore
+	Credentials contracts.CredentialStore
+	// Config and Permissions are direct (non-transactional) read handles, like
+	// Sessions/Users/Credentials — used by read-only queries
+	// (GetActiveConfigVersion, GetRolesForUser, …) that must not open a
+	// UnitOfWork (MEG-015 §04).
+	Config           contracts.ConfigStore
+	Permissions      contracts.PermissionStore
+	Nodes            contracts.NodeStore
+	Clock            contracts.Clock
+	IDs              contracts.IDGenerator
+	ContentIDs       contracts.IDGenerator
+	Policy           policy.PolicyDecisionPoint
+	Events           contracts.EventPublisher
+	PasswordVerifier domain.PasswordVerifier
+	Capabilities     *CapabilityRegistry
+	ModuleSettings   contracts.ModuleSettingsStore
+}
+
+// NewService wires a Service to its Platform contracts, policy decision point
+// and password verifier from d.
+func NewService(d Deps) *Service {
 	return &Service{
-		uow:              uow,
-		sessionStore:     sessionStore,
-		users:            users,
-		credentials:      credentials,
-		configStore:      configStore,
-		permissions:      permissions,
-		moduleSettings:   moduleSettings,
-		nodes:            nodes,
-		clock:            clock,
-		ids:              ids,
-		contentIDs:       contentIDs,
-		policy:           policyEngine,
-		events:           events,
-		passwordVerifier: passwordVerifier,
-		capabilities:     capabilities,
-		sessionManager:   sessions.NewManager(clock, ids),
-		configManager:    config.NewManager(clock, ids, config.PlatformSchema()),
+		uow:              d.UnitOfWork,
+		sessionStore:     d.Sessions,
+		users:            d.Users,
+		credentials:      d.Credentials,
+		configStore:      d.Config,
+		permissions:      d.Permissions,
+		moduleSettings:   d.ModuleSettings,
+		nodes:            d.Nodes,
+		clock:            d.Clock,
+		ids:              d.IDs,
+		contentIDs:       d.ContentIDs,
+		policy:           d.Policy,
+		events:           d.Events,
+		passwordVerifier: d.PasswordVerifier,
+		capabilities:     d.Capabilities,
+		sessionManager:   sessions.NewManager(d.Clock, d.IDs),
+		configManager:    config.NewManager(d.Clock, d.IDs, config.PlatformSchema()),
 	}
 }
 

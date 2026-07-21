@@ -693,23 +693,23 @@ func newTestService(db *fakeDB, tr *trace, now time.Time) *app.Service {
 // for the ImportContent path. Most tests register nothing and use the wrapper
 // above.
 func newTestServiceWithCapabilities(db *fakeDB, tr *trace, now time.Time, caps *app.CapabilityRegistry) *app.Service {
-	return app.NewService(
-		&fakeUnitOfWork{db: db, trace: tr},
-		&fakeSessionStore{db: db, trace: tr},
-		&fakeUserStore{db: db, trace: tr},
-		&fakeCredentialStore{db: db, trace: tr},
-		&fakeConfigStore{db: db, trace: tr},
-		fakePermissionStore{db: db, trace: tr},
-		&fakeNodeStore{db: db, trace: tr},
-		fakeClock{now: now},
-		&fakeIDGenerator{},
-		&fakeIDGenerator{},
-		policy.NewEngine(fakePermissionStore{db: db, trace: tr}),
-		&fakeEventPublisher{trace: tr},
-		fakePasswordVerifier{},
-		caps,
-		&fakeModuleSettingsStore{db: db, trace: tr},
-	)
+	return app.NewService(app.Deps{
+		UnitOfWork:       &fakeUnitOfWork{db: db, trace: tr},
+		Sessions:         &fakeSessionStore{db: db, trace: tr},
+		Users:            &fakeUserStore{db: db, trace: tr},
+		Credentials:      &fakeCredentialStore{db: db, trace: tr},
+		Config:           &fakeConfigStore{db: db, trace: tr},
+		Permissions:      fakePermissionStore{db: db, trace: tr},
+		Nodes:            &fakeNodeStore{db: db, trace: tr},
+		Clock:            fakeClock{now: now},
+		IDs:              &fakeIDGenerator{},
+		ContentIDs:       &fakeIDGenerator{},
+		Policy:           policy.NewEngine(fakePermissionStore{db: db, trace: tr}),
+		Events:           &fakeEventPublisher{trace: tr},
+		PasswordVerifier: fakePasswordVerifier{},
+		Capabilities:     caps,
+		ModuleSettings:   &fakeModuleSettingsStore{db: db, trace: tr},
+	})
 }
 
 // fakeNodeStore implements contracts.NodeStore over fakeDB. The reads the
