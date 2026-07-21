@@ -2,26 +2,26 @@
 
 ## Source of truth
 
-**The code in this repository is authoritative.** It is ~22,300 lines of Go and it decides what Mosaic is. The [`mosaic-architecture`](https://github.com/mosaic-media/mosaic-architecture) repository *describes* it and records the decisions behind it. If the two disagree, the documentation is wrong — fix it there, in the same session, rather than working around it.
+**The code in this repository is authoritative.** It is ~22,300 lines of Go and it decides what Mosaic is. The [`architecture`](https://github.com/mosaic-media/architecture) repository *describes* it and records the decisions behind it. If the two disagree, the documentation is wrong — fix it there, in the same session, rather than working around it.
 
-**Eight repositories, all siblings on disk** (`../mosaic-platform`, `../mosaic-architecture`, `../mosaic-sdk`, `../mosaic-module-stremio`, `../mosaic-shell`, `../mosaic-sdui`, `../mosaic-sdui-react`, `../mosaic-storybook`):
+**Eight repositories, all siblings on disk** (`../platform`, `../architecture`, `../sdk`, `../module-stremio-addons`, `../mosaic-shell`, `../sdui`, `../mosaic-sdui-react`, `../mosaic-storybook`):
 
-- **`mosaic-platform`** (this repo) — the Platform: domain, contracts, application services, the PostgreSQL module, transports, the composition root.
-- **`mosaic-architecture`** — the docs and ADRs. Push doc updates here whenever code and docs diverge.
-- **`mosaic-sdk`** — the **published contract surface**, extracted into its own module (`github.com/mosaic-media/mosaic-sdk`). This is what a Module compiles against. See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
-- **`mosaic-module-stremio`** — the **first optional module**, in its own repo exactly as a third party's would be: a Go client of the Stremio addon protocol importing only the SDK, MIT-licensed, published at `v0.1.0`. The Platform requires it as a tagged dependency (ADR 0019–0021). Commit and push it separately.
+- **`platform`** (this repo) — the Platform: domain, contracts, application services, the PostgreSQL module, transports, the composition root.
+- **`architecture`** — the docs and ADRs. Push doc updates here whenever code and docs diverge.
+- **`sdk`** — the **published contract surface**, extracted into its own module (`github.com/mosaic-media/sdk`). This is what a Module compiles against. See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
+- **`module-stremio-addons`** — the **first optional module**, in its own repo exactly as a third party's would be: a Go client of the Stremio addon protocol importing only the SDK, MIT-licensed, published at `v0.1.0`. The Platform requires it as a tagged dependency (ADR 0019–0021). Commit and push it separately.
 - **`mosaic-shell`** — the **Server-Driven-UI web client** (React/TypeScript/Vite), a *client of the Platform over GraphQL*, not a Module and not in the binary. A thin app: chrome/routing/mock-screens/gallery that consumes the runtime below. Its component set is primitives + `ComponentDefinition` data on a token-driven skin, technology-agnostic so a future Flutter client renders the same payloads. AGPL-3.0-only (ADR 0022–0024). The Platform does not yet *emit* SDUI screens, so the Shell runs on mock payloads. Commit and push it separately.
 - **`mosaic-sdui-react`** — **`@mosaic-media/sdui-react`**, the **React runtime** for the SDUI (primitives, registry, renderer, definition expander, `ShellProvider`, token skin). Extracted from the Shell into its own repo so the Shell and the storybook consume it as **peers**. AGPL-3.0-only (first-party client code, unlike the Apache contract). Builds to `dist` via tsc; React is a peer dep. Published: npm `@mosaic-media/sdui-react@0.1.0`.
 - **`mosaic-storybook`** — a **live, bespoke storybook** of the SDUI components (each shown as a live render beside its `UINode` JSON), on GitHub Pages at https://mosaic-media.github.io/mosaic-storybook/. React/TS/Vite, AGPL-3.0-only; a peer consumer of `@mosaic-media/sdui-react` + `@mosaic-media/sdui` from npm. Not part of the runtime path — pure showcase/docs.
-- **`mosaic-sdui`** — the **published SDUI contract** the Platform, Modules and Shell share: JSON-Schema schema (`UINode`/`Action`/`ComponentDefinition`) is the single source of truth; the Go/TS bindings are **generated** from it. Ships a **Go producer binding** (`github.com/mosaic-media/mosaic-sdui/sdui`, published at `v0.1.0` — `go get` it, the emit-side builds screens against it), an npm package (`@mosaic-media/sdui`), the standard definition library as data, and DTCG tokens. Apache-2.0, like the SDK (ADR 0025). When you build the Platform's SDUI emit-side, `go get` this and build against it (`replace => ../mosaic-sdui` for local cross-repo work). Commit and push it separately.
+- **`sdui`** — the **published SDUI contract** the Platform, Modules and Shell share: JSON-Schema schema (`UINode`/`Action`/`ComponentDefinition`) is the single source of truth; the Go/TS bindings are **generated** from it. Ships a **Go producer binding** (`github.com/mosaic-media/sdui/sdui`, published at `v0.1.0` — `go get` it, the emit-side builds screens against it), an npm package (`@mosaic-media/sdui`), the standard definition library as data, and DTCG tokens. Apache-2.0, like the SDK (ADR 0025). When you build the Platform's SDUI emit-side, `go get` this and build against it (`replace => ../sdui` for local cross-repo work). Commit and push it separately.
 
 Required reading, and it is short:
 
-- **[Architecture](https://github.com/mosaic-media/mosaic-architecture/blob/main/docs/architecture.md)** — the package map, the invariants, the standing test gates. Read before changing structure.
-- **[Roadmap](https://github.com/mosaic-media/mosaic-architecture/blob/main/docs/roadmap.md)** — where the build is and what the open threads are. The critical path is complete.
-- **[Decision records](https://github.com/mosaic-media/mosaic-architecture/tree/main/docs/adr)** — numbered ADRs. Most load-bearing here: 0007 (static composition), 0012 (capabilities do not own stores), 0013 (the object graph), 0014 (storage authority), 0015 (open vs closed vocabularies), 0016 (the published contract surface), 0017 (how a capability acts).
+- **[Architecture](https://github.com/mosaic-media/architecture/blob/main/docs/architecture.md)** — the package map, the invariants, the standing test gates. Read before changing structure.
+- **[Roadmap](https://github.com/mosaic-media/architecture/blob/main/docs/roadmap.md)** — where the build is and what the open threads are. The critical path is complete.
+- **[Decision records](https://github.com/mosaic-media/architecture/tree/main/docs/adr)** — numbered ADRs. Most load-bearing here: 0007 (static composition), 0012 (capabilities do not own stores), 0013 (the object graph), 0014 (storage authority), 0015 (open vs closed vocabularies), 0016 (the published contract surface), 0017 (how a capability acts).
 
-Everything else is published at [mosaic-media.github.io/mosaic-architecture](https://mosaic-media.github.io/mosaic-architecture/), with a PDF of each page.
+Everything else is published at [mosaic-media.github.io/architecture](https://mosaic-media.github.io/architecture/), with a PDF of each page.
 
 > **The MDL/MDS/MEG/MAC/MIP/MOP/MAD/MDP specification library no longer exists.** It grew to 200+ largely unvalidated documents, accumulated contradictions faster than they could be resolved, and produced concrete wrong work — a roadmap built against an abandoned DuckDB storage model, and an invented module transport layer the architecture explicitly forbids. It was retired on 2026-07-19 and is preserved only at git tag `pre-reset-2026-07-19`. **Do not cite MEG-015 or any other retired identifier, and do not attempt to read those paths.** If something you need is missing from the three documents above, say so rather than reconstructing it.
 
@@ -83,16 +83,16 @@ Platform's store set is deliberate Platform evolution and should look like it.
 
 This is the single most surprising thing for a new session. **The content
 models and the content application-service API do not live under `internal/`.
-They were extracted into their own module** — `github.com/mosaic-media/mosaic-sdk`,
+They were extracted into their own module** — `github.com/mosaic-media/sdk`,
 **published** and required in `go.mod` at `v0.3.0`, resolved from the module
 proxy with **no `replace`** (ADR 0016). The tags: `v0.1.0` the content surface,
 `v0.2.0` the `Capability` interface (ADR 0019), `v0.3.0` the `ImportRequest`
-carrying module settings (ADR 0021). A sibling working tree at `../mosaic-sdk`
-is still handy for local SDK work — add a `replace => ../mosaic-sdk` temporarily
+carrying module settings (ADR 0021). A sibling working tree at `../sdk`
+is still handy for local SDK work — add a `replace => ../sdk` temporarily
 if you're changing the SDK, then tag/push a new version and bump the require.
 
 - Content types are imported as
-  `v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"`. `v1.Node`,
+  `v1 "github.com/mosaic-media/sdk/contracts/platform/v1"`. `v1.Node`,
   `v1.Part`, `v1.Relation`, `v1.SourceBinding`, their vocabularies (`v1.MediaType`,
   `v1.NodeKind`, …), the content command/query/result types, the
   `v1.ContentService` interface, and the opaque `v1.Caller` all live there.
@@ -103,10 +103,10 @@ if you're changing the SDK, then tag/push a new version and bump the require.
   `StorageAdapter`), and the identity/config/event models in
   `internal/platform/domain`. A capability calls application services, never
   stores.
-- **Changing the SDK:** edit `../mosaic-sdk`, then for the Platform to see it
-  either add a `replace github.com/mosaic-media/mosaic-sdk => ../mosaic-sdk`
+- **Changing the SDK:** edit `../sdk`, then for the Platform to see it
+  either add a `replace github.com/mosaic-media/sdk => ../sdk`
   to `go.mod` for local work, or tag and push a new version and bump the
-  require. `../mosaic-sdk` is its own git repo; commit and push it separately.
+  require. `../sdk` is its own git repo; commit and push it separately.
   The reference capability (`capabilities/reference/`) and `test/sdkprobe/`
   import only the SDK, enforced by boundary tests — the stop point made
   executable: **if a capability needs a private Platform import, the contracts
@@ -139,10 +139,10 @@ this is the map, oldest first.
 | Content commands and queries | Nine application services over the graph (search, node read, external-id lookup; add work/child/part, relate, bind, resolve) — the command order into the content model |
 | Published contract surface (ADR 0016) | `contracts/platform/v1` populated: content models, the nine services, `ContentService`, opaque `Caller`; store contracts stay internal; a separate module compiles against it (`test/sdkprobe` / `test/sdkboundary`) |
 | Reference capability (the thesis test) | `capabilities/reference/` imports only the SDK, sources an anime over HTTP, dedupes, creates the tree + adaptation edge + bindings — proven end to end against PostgreSQL. **The extension model works.** |
-| SDK extraction | `contracts/platform/v1` moved out into `github.com/mosaic-media/mosaic-sdk` at `v0.1.0`; the Platform depends on it as an external module |
+| SDK extraction | `contracts/platform/v1` moved out into `github.com/mosaic-media/sdk` at `v0.1.0`; the Platform depends on it as an external module |
 | Runnable process | `main.go` constructs `app.Service`; GraphQL served over HTTP at `:8081/graphql` (health handoff on `:8080`); Argon2id password hasher; end-to-end HTTP test signs in and imports content |
 | Permissions management + bootstrap | `PermissionStore` gained `CreateRole`/`GrantRole` (+ commands + GraphQL mutations); `internal/composition/bootstrap.EnsureAdmin` seeds a first admin idempotently from env vars, so the binary is usable by a human |
-| Optional-module composition + invocation (ADR 0019, 0020) | The SDK gained a `Capability` interface (`Manifest()`/`Import()`) at `v0.2.0`; the Platform gained a `CapabilityRegistry`, an `ImportContent` command (action `content.import`) and an `importContent` GraphQL mutation. The **Stremio module** (its own repo `mosaic-module-stremio`, importing only the SDK) is statically composed in via `main.go` and invoked through the registry — sourcing movies/series from a Stremio addon and landing the tree + source binding + **`RemoteLocation` stream Parts** in PostgreSQL. Proven end to end. **The composition-and-invocation half of the extension story works.** |
+| Optional-module composition + invocation (ADR 0019, 0020) | The SDK gained a `Capability` interface (`Manifest()`/`Import()`) at `v0.2.0`; the Platform gained a `CapabilityRegistry`, an `ImportContent` command (action `content.import`) and an `importContent` GraphQL mutation. The **Stremio module** (its own repo `module-stremio-addons`, importing only the SDK) is statically composed in via `main.go` and invoked through the registry — sourcing movies/series from a Stremio addon and landing the tree + source binding + **`RemoteLocation` stream Parts** in PostgreSQL. Proven end to end. **The composition-and-invocation half of the extension story works.** |
 | User-managed module settings (ADR 0021) | The first SDK gap the Stremio module surfaced. A Platform-owned `ModuleSettingsStore` (one jsonb doc per module id, on `Tx`), generic `configureModule`/`moduleSettings` commands + GraphQL (actions `module.configure`/`module.read`), and SDK `v0.3.0` handing a module its settings via `ImportRequest{Caller, Query, Settings}`. A user adds a Stremio addon by manifest URL at runtime; the module reads `{"addons":[...]}`. Retired the `MOSAIC_STREMIO_ADDONS` env bridge. |
 
 **Reverted long ago:** uniform store resolution (`Store[T]`) under ADR 0012.
@@ -231,9 +231,9 @@ roughly in order of how cheaply they harden what exists:
 - **How an optional module is composed and invoked** (ADR 0019, 0020). A
   module is its **own Go module and its own repository** — the Stremio module
   now lives in the sibling repo
-  [`mosaic-module-stremio`](https://github.com/mosaic-media/mosaic-module-stremio)
-  (`../mosaic-module-stremio` on disk, module path
-  `github.com/mosaic-media/mosaic-module-stremio`), importing **only** the SDK —
+  [`module-stremio-addons`](https://github.com/mosaic-media/module-stremio-addons)
+  (`../module-stremio-addons` on disk, module path
+  `github.com/mosaic-media/module-stremio-addons`), importing **only** the SDK —
   enforced by a boundary test and by Go itself. It implements the SDK
   `Capability` interface. `main.go`'s `registerCapabilities` constructs it and
   registers it into an `app.CapabilityRegistry`; the platform `go.mod` requires

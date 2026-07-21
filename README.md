@@ -6,8 +6,8 @@ Mosaic is a home media center built around a single unified object model spannin
 
 **The code in this repository is authoritative.** It decides what Mosaic is.
 
-[`mosaic-architecture`](https://github.com/mosaic-media/mosaic-architecture) describes it and records the decisions behind it — three pages and a numbered ADR series, published at
-[mosaic-media.github.io/mosaic-architecture](https://mosaic-media.github.io/mosaic-architecture/) with a PDF of each page.
+[`architecture`](https://github.com/mosaic-media/architecture) describes it and records the decisions behind it — three pages and a numbered ADR series, published at
+[mosaic-media.github.io/architecture](https://mosaic-media.github.io/architecture/) with a PDF of each page.
 
 If the two disagree, the documentation is wrong. Fix it there rather than
 working around it here.
@@ -71,7 +71,7 @@ Platform code is organized into three tiers of trust and delivery (see `CLAUDE.m
 
 ```text
 cmd/
-  mosaic-platform/
+  platform/
     main.go
 internal/
   platform/            # Core Platform — domain, contracts, app services
@@ -105,7 +105,7 @@ test/
 
 - **Core Platform** (`internal/platform/*`) — fully trusted, compiled in, defines the rules everything else follows.
 - **Built-in module** (`internal/modules/*`) — required infrastructure (Postgres first) that satisfies Platform contracts through the same shape a future external Module would use, but compiled in and fully trusted.
-- **Optional (external-shaped) module** — product/domain capability packs, each its **own Go module in its own repository**, importing only the SDK and composed into the binary (the first is [`mosaic-module-stremio`](https://github.com/mosaic-media/mosaic-module-stremio)). Runtime discovery and distribution are still future; the composition mechanism exists (ADR 0019–0021).
+- **Optional (external-shaped) module** — product/domain capability packs, each its **own Go module in its own repository**, importing only the SDK and composed into the binary (the first is [`module-stremio-addons`](https://github.com/mosaic-media/module-stremio-addons)). Runtime discovery and distribution are still future; the composition mechanism exists (ADR 0019–0021).
 
 See `CLAUDE.md` for the full tier model and the current state of the build.
 
@@ -121,6 +121,6 @@ git config core.hooksPath .githooks
 
 The Mosaic Platform is licensed under the **GNU Affero General Public License, version 3** (see [`LICENSE`](LICENSE)), with a **Module Linking Exception** (see [`LICENSE-EXCEPTION`](LICENSE-EXCEPTION)).
 
-The AGPL protects the Platform: a modified Platform offered over a network must make its source available. The linking exception keeps the module ecosystem open — a Module that interacts with the Platform solely through the [Mosaic SDK](https://github.com/mosaic-media/mosaic-sdk) (Apache-2.0), including one compiled into a Platform binary, may be released under any license its author chooses. The exception frees the Module, not the Platform.
+The AGPL protects the Platform: a modified Platform offered over a network must make its source available. The linking exception keeps the module ecosystem open — a Module that interacts with the Platform solely through the [Mosaic SDK](https://github.com/mosaic-media/sdk) (Apache-2.0), including one compiled into a Platform binary, may be released under any license its author chooses. The exception frees the Module, not the Platform.
 
 > The linking exception is adapted from the FSF's own established exceptions — the [GPL Classpath exception](https://www.gnu.org/software/classpath/license.html) (used by OpenJDK) and the [GCC Runtime Library Exception](https://www.gnu.org/licenses/gcc-exception-3.1.html). It states the copyright holders' intent to permit module linking. It has not been individually reviewed by a lawyer, which is normal for a project this size; the practical effect if any wording were imperfect is only that modules could be more encumbered than intended, not any liability for users.
