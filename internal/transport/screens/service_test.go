@@ -103,14 +103,57 @@ func TestSearchScreenEmptyQueryPromptsWithNoBackendCall(t *testing.T) {
 	if node.Type != sdui.TypeScreen {
 		t.Fatalf("root type = %q, want Screen", node.Type)
 	}
-	if _, ok := find(node, sdui.TypeSearchBar); !ok {
-		t.Fatal("search screen has no SearchBar")
+	// The search screen carries no SearchBar of its own — the always-present
+	// top-bar search holds the query (ADR 0032). An empty query renders a prompt
+	// and hits no backend.
+	if _, ok := find(node, sdui.TypeSearchBar); ok {
+		t.Fatal("search screen must not carry its own SearchBar; the top bar holds the query")
 	}
 	if _, ok := find(node, sdui.TypeEmptyState); !ok {
 		t.Fatal("an empty query must render an EmptyState prompt")
 	}
 	if fake.gotText != "" {
 		t.Fatal("an empty query must not hit the search backend")
+	}
+}
+
+func TestHomeScreenRendersHeroAndCatalogRows(t *testing.T) {
+	fake := &fakeQueries{
+		catalogs: []app.ModuleCatalog{
+			{ModuleID: "stremio", Catalog: v1.Catalog{ID: "top", NativeType: "movie", Name: "Popular Movies"}},
+			{ModuleID: "stremio", Catalog: v1.Catalog{ID: "top", NativeType: "series", Name: "Popular Series"}},
+		},
+		items: []v1.CatalogItem{
+			{Ref: v1.ContentRef{Provider: "stremio", NativeID: "tt1", NativeType: "movie", MediaType: v1.MediaMovie}, Title: "A Movie", Year: 2020},
+		},
+		previewMeta: v1.ContentMetadata{Title: "A Movie", Backdrop: "http://cdn/bd.jpg", Overview: "Synopsis.", Rating: 8.0},
+	}
+	node := render(t, &Service{content: fake}, "home", nil)
+
+	// A hero (from the first catalog's first item, enriched via PreviewContent).
+	hero, ok := find(node, sdui.TypeHeroBanner)
+	if !ok {
+		t.Fatal("home screen has no hero")
+	}
+	if hero.Props["title"] != "A Movie" {
+		t.Fatalf("hero title = %v, want the enriched item title", hero.Props["title"])
+	}
+	if fake.gotPreviewRef.NativeID != "tt1" {
+		t.Fatalf("hero enriched ref = %+v, want the first item", fake.gotPreviewRef)
+	}
+	// A titled row per catalog, each a carousel of cards.
+	var sections, carousels []sdui.Node
+	findAll(node, sdui.TypeSection, &sections)
+	findAll(node, sdui.TypeCarousel, &carousels)
+	if len(sections) != 2 || len(carousels) != 2 {
+		t.Fatalf("sections=%d carousels=%d, want 2 each (one per catalog)", len(sections), len(carousels))
+	}
+}
+
+func TestHomeScreenEmptyWithoutCatalogs(t *testing.T) {
+	node := render(t, &Service{content: &fakeQueries{}}, "home", nil)
+	if _, ok := find(node, sdui.TypeEmptyState); !ok {
+		t.Fatal("home with no catalogs must render an EmptyState")
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -186,7 +187,7 @@ func (s *session) run(ctx context.Context) error {
 	if err := s.pushShell(ctx); err != nil {
 		return err
 	}
-	s.current = route{screen: "search"}
+	s.current = route{screen: "home"}
 	s.pushContent(ctx)
 
 	for {
@@ -287,6 +288,12 @@ func (s *session) onInput(ctx context.Context, text string) {
 		s.inputMu.Lock()
 		t := s.pendingIn
 		s.inputMu.Unlock()
+		if strings.TrimSpace(t) == "" {
+			// Cleared the field: return the content region to the current screen
+			// (home, a detail, …) rather than an empty search.
+			s.pushContent(ctx)
+			return
+		}
 		s.pushRender(ctx, "search", map[string]any{"text": t})
 	})
 }

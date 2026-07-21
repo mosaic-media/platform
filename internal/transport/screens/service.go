@@ -74,6 +74,8 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 	switch name {
 	case "shell":
 		return s.shellScreen()
+	case "home":
+		return s.homeScreen(ctx, caller)
 	case "search":
 		return s.searchScreen(ctx, caller, params)
 	case "collections":
@@ -373,6 +375,102 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 	), nil
 }
 
+// homeScreen is the default landing surface: a hero over rows of the enabled
+// modules' catalogs (Cinemeta's Popular Movies/Series, etc. — ADR 0028's virtual
+// plane, browsed not materialised). Each row is a carousel of cards that open a
+// detail; the hero is the first catalog's first item, enriched with its backdrop
+// and logo. Browsing is a read, so nothing here writes.
+func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, error) {
+	cats, err := s.content.ListModuleCatalogs(ctx, app.ListModuleCatalogsQuery{Caller: caller})
+	if err != nil {
+		return sdui.Node{}, err
+	}
+	if len(cats.Catalogs) == 0 {
+		return sdui.Screen(
+			sdui.Prop("title", "Home"),
+			sdui.Child(sdui.EmptyState("collections", "Nothing here yet — add an addon in Settings to browse content")),
+		), nil
+	}
+
+	const (
+		maxRows     = 6
+		maxRowItems = 20
+	)
+	body := make([]sdui.Node, 0, maxRows+1)
+	heroAdded := false
+	rows := 0
+	for _, c := range cats.Catalogs {
+		if rows >= maxRows {
+			break
+		}
+		items, err := s.content.ListCatalogItems(ctx, app.ListCatalogItemsQuery{
+			Caller: caller, ModuleID: c.ModuleID, CatalogID: c.Catalog.ID, NativeType: c.Catalog.NativeType,
+		})
+		if err != nil || len(items.Items) == 0 {
+			continue
+		}
+		if !heroAdded {
+			if hero, ok := s.heroFromItem(ctx, caller, items.Items[0]); ok {
+				body = append(body, hero)
+				heroAdded = true
+			}
+		}
+		cards := make([]sdui.Node, 0, maxRowItems)
+		for i, it := range items.Items {
+			if i >= maxRowItems {
+				break
+			}
+			cards = append(cards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary, it.NodeID))
+		}
+		body = append(body, sdui.Section(c.Catalog.Name, sdui.Child(sdui.Carousel(sdui.Child(cards...)))))
+		rows++
+	}
+	if len(body) == 0 {
+		return sdui.Screen(
+			sdui.Prop("title", "Home"),
+			sdui.Child(sdui.EmptyState("collections", "Nothing to show yet — try adding an addon in Settings")),
+		), nil
+	}
+	return sdui.Screen(sdui.Prop("title", "Home"), sdui.Child(body...)), nil
+}
+
+// heroFromItem builds a home hero from a catalog item, enriching it with the
+// backdrop, logo and overview its lightweight card lacks (ADR 0034). A metadata
+// fetch that fails just yields no hero rather than failing the home screen.
+func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.CatalogItem) (sdui.Node, bool) {
+	prev, err := s.content.PreviewContent(ctx, app.PreviewContentQuery{Caller: caller, Ref: it.Ref})
+	if err != nil {
+		return sdui.Node{}, false
+	}
+	m := prev.Metadata
+	title := m.Title
+	if title == "" {
+		title = it.Title
+	}
+	opts := []sdui.Option{
+		sdui.Backdrop(s.art(m.Backdrop)),
+		sdui.Slot("actions", sdui.Button("View", "primary",
+			sdui.Navigate("detail", map[string]any{"ref": refInput(it.Ref)}))),
+	}
+	if m.Logo != "" {
+		opts = append(opts, sdui.Logo(s.art(m.Logo)))
+	}
+	if m.Overview != "" {
+		opts = append(opts, sdui.Overview(m.Overview))
+	}
+	var pills []string
+	if y := yearLabel(m.Year); y != "" {
+		pills = append(pills, y)
+	}
+	if m.Rating > 0 {
+		pills = append(pills, fmt.Sprintf("★ %.1f", m.Rating))
+	}
+	if len(pills) > 0 {
+		opts = append(opts, sdui.Meta(pills...))
+	}
+	return sdui.HeroBanner(title, opts...), true
+}
+
 // shellScreen is the server-emitted application frame (ADR 0031): the nav rail
 // and top bar. The Shell renders this and fills its content region with the
 // current screen; it owns no chrome of its own. It is static for now — a live
@@ -381,14 +479,16 @@ func (s *Service) shellScreen() (sdui.Node, error) {
 	return sdui.Component("AppShell",
 		sdui.Prop("title", "Mosaic"),
 		sdui.Slot("nav",
-			navItem("Search", "search", "search"),
+			navItem("Home", "home", "home"),
 			navItem("Collections", "list", "collections"),
 			navItem("Settings", "settings", "settings"),
 		),
+		// The search bar lives in the top bar and is always present, so there is no
+		// Search nav item. Typing takes over the content region (a live `input`);
+		// clearing it returns to the current screen.
 		sdui.Slot("topbar",
 			sdui.Component(sdui.TypeSearchBar,
 				sdui.Prop("placeholder", "Search for anime, movies, shows…"),
-				sdui.Act(sdui.Navigate("search", map[string]any{"text": "$value"})),
 			),
 		),
 	), nil
@@ -402,25 +502,18 @@ func navItem(label, icon, screen string) sdui.Node {
 	)
 }
 
-// searchScreen is the user's discovery surface: a search bar over the results
-// grid. With no query it shows an empty prompt; with one it runs
-// SearchAvailableContent and renders each result as a card (ADR 0028's union —
-// in-library and virtual candidates in one list, told apart by their badge and
-// action).
+// searchScreen is the results surface that takes over the content region while a
+// user types in the always-present top-bar search (ADR 0032). It carries no
+// search bar of its own — the top bar holds the query. It runs
+// SearchAvailableContent and renders each result as a card (ADR 0028's union of
+// in-library and virtual candidates). An empty query does not reach here: the
+// live session re-renders the current screen instead of an empty search.
 func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
 	text := strings.TrimSpace(stringParam(params, "text"))
-	bar := sdui.Component(sdui.TypeSearchBar,
-		sdui.Prop("placeholder", "Search movies and shows"),
-		sdui.Prop("value", text),
-		// The client substitutes the field value for $value when it submits,
-		// re-rendering this screen with the new query.
-		sdui.Act(sdui.Navigate("search", map[string]any{"text": "$value"})),
-	)
-
 	if text == "" {
 		return sdui.Screen(
 			sdui.Prop("title", "Search"),
-			sdui.Child(bar, sdui.EmptyState("search", "Search for something to add")),
+			sdui.Child(sdui.EmptyState("search", "Type to search for something to add")),
 		), nil
 	}
 
@@ -431,7 +524,7 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 	if len(res.Results) == 0 {
 		return sdui.Screen(
 			sdui.Prop("title", "Search"),
-			sdui.Child(bar, sdui.EmptyState("search", "No results for \""+text+"\"")),
+			sdui.Child(sdui.EmptyState("search", "No results for \""+text+"\"")),
 		), nil
 	}
 
@@ -440,8 +533,8 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 		cards = append(cards, s.resultCard(r))
 	}
 	return sdui.Screen(
-		sdui.Prop("title", "Search"),
-		sdui.Child(bar, sdui.Grid(sdui.Child(cards...))),
+		sdui.Prop("title", "Search for \""+text+"\""),
+		sdui.Child(sdui.Grid(sdui.Child(cards...))),
 	), nil
 }
 
