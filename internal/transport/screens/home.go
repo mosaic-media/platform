@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	sdui "github.com/mosaic-media/sdui/sdui"
+	"github.com/mosaic-media/sdui/ui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
@@ -31,7 +32,8 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		return nil, err
 	}
 	if len(cats.Catalogs) == 0 {
-		return emptyScreen("Home", emptyIconCollections, "Nothing here yet — add an addon in Settings to browse content"), nil
+		return ui.Screen(ui.EmptyState(emptyIconCollections,
+			"Nothing here yet — add an addon in Settings to browse content")).Build(), nil
 	}
 
 	// Render at most homeMaxRows rows. Each row's items are a remote round-trip,
@@ -61,10 +63,10 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	}
 	wg.Wait()
 
-	// Assemble in catalog order: the hero comes from the first non-empty catalog's
-	// first item (one further round-trip to enrich it), then a row per non-empty
-	// catalog.
-	body := make([]sdui.Node, 0, len(catalogs)+1)
+	// Assemble the page as a widget tree: the hero from the first non-empty
+	// catalog's first item (one further round-trip to enrich it), then a carousel
+	// row per non-empty catalog.
+	body := make([]ui.El, 0, len(catalogs)+1)
 	heroAdded := false
 	for i, c := range catalogs {
 		items := itemsByCatalog[i].Items
@@ -72,50 +74,41 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 			continue
 		}
 		if !heroAdded {
-			if hero, ok := s.heroFromItem(ctx, caller, items[0]); ok {
+			if hero := s.heroFromItem(ctx, caller, items[0]); hero != nil {
 				body = append(body, hero)
 				heroAdded = true
 			}
 		}
-		cards := make([]sdui.Node, 0, homeMaxRowItems)
+		cards := make([]ui.El, 0, homeMaxRowItems)
 		for j, it := range items {
 			if j >= homeMaxRowItems {
 				break
 			}
 			cards = append(cards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
 		}
-		body = append(body, carouselSection(c.Catalog.Name, cards...))
+		body = append(body, ui.Section(c.Catalog.Name, ui.Carousel(cards...)))
 	}
 	if len(body) == 0 {
-		return emptyScreen("Home", emptyIconCollections, "Nothing to show yet — try adding an addon in Settings"), nil
+		return ui.Screen(ui.EmptyState(emptyIconCollections,
+			"Nothing to show yet — try adding an addon in Settings")).Build(), nil
 	}
-	return screen("Home", body...), nil
+	return ui.Screen(body...).Build(), nil
 }
 
 // heroFromItem builds a home hero from a catalog item, enriching it with the
 // backdrop, logo and overview its lightweight card lacks (ADR 0034). A metadata
-// fetch that fails just yields no hero rather than failing the home screen.
-func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.CatalogItem) (sdui.Node, bool) {
+// fetch that fails just yields no hero (nil) rather than failing the home screen.
+func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.CatalogItem) *ui.Element {
 	prev, err := s.content.PreviewContent(ctx, app.PreviewContentQuery{Caller: caller, Ref: it.Ref})
 	if err != nil {
-		return nil, false
+		return nil
 	}
 	m := prev.Metadata
 	title := m.Title
 	if title == "" {
 		title = it.Title
 	}
-	opts := []sdui.Option{
-		sdui.Backdrop(s.art(m.Backdrop)),
-		sdui.Slot("actions", sdui.Button("View", "primary",
-			sdui.Navigate(screenDetail, map[string]any{paramRef: refInput(it.Ref)}))),
-	}
-	if m.Logo != "" {
-		opts = append(opts, sdui.Logo(s.art(m.Logo)))
-	}
-	if m.Overview != "" {
-		opts = append(opts, sdui.Overview(m.Overview))
-	}
+
 	var pills []string
 	if y := yearLabel(m.Year); y != "" {
 		pills = append(pills, y)
@@ -123,8 +116,15 @@ func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.Cata
 	if m.Rating > 0 {
 		pills = append(pills, fmt.Sprintf("★ %.1f", m.Rating))
 	}
-	if len(pills) > 0 {
-		opts = append(opts, sdui.Meta(pills...))
-	}
-	return sdui.HeroBanner(title, opts...), true
+
+	return ui.Hero(title,
+		ui.Backdrop(s.art(m.Backdrop)),
+		ui.When(m.Logo != "", ui.Logo(s.art(m.Logo))),
+		ui.When(m.Overview != "", ui.Overview(m.Overview)),
+		ui.When(len(pills) > 0, ui.Meta(pills...)),
+		ui.Actions(
+			ui.Button("View", "primary",
+				ui.OnTap(ui.Navigate(screenDetail, map[string]any{paramRef: refInput(it.Ref)}))),
+		),
+	)
 }

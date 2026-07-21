@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	sdui "github.com/mosaic-media/sdui/sdui"
+	"github.com/mosaic-media/sdui/ui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
@@ -23,7 +24,8 @@ import (
 func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
 	text := strings.TrimSpace(stringParam(params, paramText))
 	if text == "" {
-		return emptyScreen("Search", emptyIconSearch, "Type to search for something to add"), nil
+		return ui.Screen(ui.Title("Search"),
+			ui.EmptyState(emptyIconSearch, "Type to search for something to add")).Build(), nil
 	}
 
 	res, err := s.content.SearchAvailableContent(ctx, app.SearchAvailableContentQuery{Caller: caller, Text: text})
@@ -31,12 +33,13 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 		return nil, err
 	}
 	if len(res.Results) == 0 {
-		return emptyScreen("Search", emptyIconSearch, "No results for \""+text+"\""), nil
+		return ui.Screen(ui.Title("Search"),
+			ui.EmptyState(emptyIconSearch, "No results for \""+text+"\"")).Build(), nil
 	}
 
-	cards := make([]sdui.Node, 0, len(res.Results))
+	cards := make([]ui.El, 0, len(res.Results))
 	for _, r := range res.Results {
 		cards = append(cards, s.contentCard(r.Ref, r.Title, r.Year, r.Poster, r.InLibrary))
 	}
-	return gridScreen("Search for \""+text+"\"", cards...), nil
+	return ui.Screen(ui.Title("Search for \""+text+"\""), ui.Grid(cards...)).Build(), nil
 }

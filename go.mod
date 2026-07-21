@@ -11,7 +11,7 @@ require (
 
 require golang.org/x/crypto v0.54.0
 
-require github.com/mosaic-media/sdui v0.4.0
+require github.com/mosaic-media/sdui v0.5.0
 
 require (
 	connectrpc.com/connect v1.20.0

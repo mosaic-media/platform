@@ -7,35 +7,11 @@ package screens
 import (
 	"strconv"
 
-	sdui "github.com/mosaic-media/sdui/sdui"
-
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The screen builders share a handful of shapes — a titled page, an
-// empty-state page, a titled grid or carousel of cards. These constructors name
-// those shapes once so the builders read as intent rather than nesting.
-
-// screen builds a titled Screen over the given body nodes.
-func screen(title string, body ...sdui.Node) sdui.Node {
-	return sdui.Screen(sdui.Prop("title", title), sdui.Child(body...))
-}
-
-// emptyScreen builds a titled Screen whose whole body is one EmptyState.
-func emptyScreen(title, icon, message string) sdui.Node {
-	return screen(title, sdui.EmptyState(icon, message))
-}
-
-// gridScreen builds a titled Screen whose body is a responsive grid of cards.
-func gridScreen(title string, cards ...sdui.Node) sdui.Node {
-	return screen(title, sdui.Grid(sdui.Child(cards...)))
-}
-
-// carouselSection is a titled band holding a horizontal snap-scrolling rail of
-// cards — one catalog row on the home screen.
-func carouselSection(title string, cards ...sdui.Node) sdui.Node {
-	return sdui.Section(title, sdui.Child(sdui.Carousel(sdui.Child(cards...))))
-}
+// Small helpers the screen builders share — ref (de)serialization and param
+// reads. The UI shapes themselves are composed inline with the ui package.
 
 // refInput serializes a ContentRef into the shape the importContent mutation's
 // ContentRefInput accepts, so a card's materialise action round-trips the ref.

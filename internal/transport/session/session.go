@@ -19,6 +19,7 @@ import (
 	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
 	"github.com/mosaic-media/sdui/gen/mosaic/session/v1/sessionv1connect"
 	sdui "github.com/mosaic-media/sdui/sdui"
+	"github.com/mosaic-media/sdui/ui"
 )
 
 // inputDebounce is the server-side coalescing window for search-as-you-type
@@ -250,8 +251,8 @@ func decodeParams(b []byte) map[string]any {
 // errorNode is the ErrorState UINode a failed render puts in the content region
 // (ADR 0029's error surface).
 func errorNode(message string) sdui.Node {
-	return sdui.Component("ErrorState",
-		sdui.Prop("category", "Unavailable"), sdui.Prop("message", message))
+	return ui.Component("ErrorState",
+		ui.Prop("category", "Unavailable"), ui.Prop("message", message)).Build()
 }
 
 // errorMessage extracts a user-facing message from a Platform error, falling

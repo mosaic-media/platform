@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	sdui "github.com/mosaic-media/sdui/sdui"
+	"github.com/mosaic-media/sdui/ui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
@@ -33,7 +34,7 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 	}
 	// The module returns its settings UI as a UINode; decode it into the typed
 	// node (protojson, since the tree is now protobuf — ADR 0044).
-	node := sdui.Component("")
+	node := ui.Component("").Build()
 	if err := protojson.Unmarshal(res.UI, node); err != nil {
 		return nil, contracts.WrapError(contracts.Internal, "decode module settings UI", err)
 	}

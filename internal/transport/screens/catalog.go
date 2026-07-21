@@ -8,6 +8,7 @@ import (
 	"context"
 
 	sdui "github.com/mosaic-media/sdui/sdui"
+	"github.com/mosaic-media/sdui/ui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
@@ -24,15 +25,17 @@ func (s *Service) collectionsScreen(ctx context.Context, caller v1.Caller) (sdui
 		return nil, err
 	}
 	if len(res.Catalogs) == 0 {
-		return emptyScreen("Collections", emptyIconCollections, "No collections yet — configure a module addon first"), nil
+		return ui.Screen(ui.Title("Collections"),
+			ui.EmptyState(emptyIconCollections, "No collections yet — configure a module addon first")).Build(), nil
 	}
-	rows := make([]sdui.Node, 0, len(res.Catalogs))
+	rows := make([]ui.El, 0, len(res.Catalogs))
 	for _, c := range res.Catalogs {
-		rows = append(rows, sdui.Button(c.Catalog.Name, "secondary", sdui.Navigate(screenCatalog, map[string]any{
-			paramModuleID: c.ModuleID, paramCatalogID: c.Catalog.ID, paramNativeType: c.Catalog.NativeType,
-		})))
+		rows = append(rows, ui.Button(c.Catalog.Name, "secondary",
+			ui.OnTap(ui.Navigate(screenCatalog, map[string]any{
+				paramModuleID: c.ModuleID, paramCatalogID: c.Catalog.ID, paramNativeType: c.Catalog.NativeType,
+			}))))
 	}
-	return screen("Collections", sdui.Stack("vertical", 8, sdui.Child(rows...))), nil
+	return ui.Screen(ui.Title("Collections"), ui.Stack("vertical", 8, rows...)).Build(), nil
 }
 
 // catalogScreen lists one collection's items as cards an admin can publish. Like
@@ -51,11 +54,12 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 		return nil, err
 	}
 	if len(res.Items) == 0 {
-		return emptyScreen("Collection", emptyIconCollections, "This collection is empty"), nil
+		return ui.Screen(ui.Title("Collection"),
+			ui.EmptyState(emptyIconCollections, "This collection is empty")).Build(), nil
 	}
-	cards := make([]sdui.Node, 0, len(res.Items))
+	cards := make([]ui.El, 0, len(res.Items))
 	for _, it := range res.Items {
 		cards = append(cards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
 	}
-	return gridScreen("Collection", cards...), nil
+	return ui.Screen(ui.Title("Collection"), ui.Grid(cards...)).Build(), nil
 }
