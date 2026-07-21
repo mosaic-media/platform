@@ -255,8 +255,22 @@ func (s *session) invoke(ctx context.Context, msg clientMsg) {
 		_ = s.write(ctx, serverMsg{T: "toast", Message: res.Errors[0].Message, Tone: "danger"})
 		return
 	}
-	_ = s.write(ctx, serverMsg{T: "toast", Message: "Added to library", Tone: "success"})
+	_ = s.write(ctx, serverMsg{T: "toast", Message: invokeToast(msg.Mutation), Tone: "success"})
 	s.pushContent(ctx)
+}
+
+// invokeToast is the confirmation shown when a mutation succeeds. It reflects the
+// action rather than assuming a library import, so a settings change does not
+// claim to have added something to the library.
+func invokeToast(mutation string) string {
+	switch mutation {
+	case "importContent":
+		return "Added to library"
+	case "configureModule":
+		return "Settings saved"
+	default:
+		return "Done"
+	}
 }
 
 // onInput records the latest search text and (re)arms the debounce timer, so a
