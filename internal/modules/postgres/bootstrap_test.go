@@ -43,7 +43,8 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 		domain.Permission(app.ActionRoleCreate),
 	}
 
-	created, err := bootstrap.EnsureAdmin(c, cs.UnitOfWork, hasher, cs.Clock, cs.IDs, username, password, perms)
+	created, err := bootstrap.EnsureAdmin(c, cs.UnitOfWork, hasher, cs.Clock, cs.IDs,
+		bootstrap.AdminSeed{Username: username, Password: password, Permissions: perms})
 	if err != nil {
 		t.Fatalf("EnsureAdmin: %v", err)
 	}
@@ -52,7 +53,8 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 	}
 
 	// A second run is idempotent — the admin already exists, nothing new.
-	again, err := bootstrap.EnsureAdmin(c, cs.UnitOfWork, hasher, cs.Clock, cs.IDs, username, "different password", perms)
+	again, err := bootstrap.EnsureAdmin(c, cs.UnitOfWork, hasher, cs.Clock, cs.IDs,
+		bootstrap.AdminSeed{Username: username, Password: "different password", Permissions: perms})
 	if err != nil {
 		t.Fatalf("second EnsureAdmin: %v", err)
 	}

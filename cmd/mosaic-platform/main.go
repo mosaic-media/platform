@@ -269,7 +269,11 @@ func run() error {
 		bootCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		created, err := bootstrap.EnsureAdmin(
 			bootCtx, set.UnitOfWork, crypto.NewPasswordHasher(), set.Clock, set.IDs,
-			adminUser, os.Getenv(bootstrapAdminPasswordEnv), adminPermissions(),
+			bootstrap.AdminSeed{
+				Username:    adminUser,
+				Password:    os.Getenv(bootstrapAdminPasswordEnv),
+				Permissions: adminPermissions(),
+			},
 		)
 		cancel()
 		if err != nil {
