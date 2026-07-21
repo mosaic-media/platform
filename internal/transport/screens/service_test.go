@@ -19,14 +19,14 @@ import (
 // fakeQueries stands in for the application query surface, so the screen
 // builders are tested without a full Service.
 type fakeQueries struct {
-	results          []v1.SearchResult
-	catalogs         []app.ModuleCatalog
-	items            []v1.CatalogItem
-	node             v1.Node
-	children         []v1.Node
-	previewMeta      v1.ContentMetadata
-	previewInLibrary bool
-	previewNodeID    v1.NodeID
+	results             []v1.SearchResult
+	catalogs            []app.ModuleCatalog
+	items               []v1.CatalogItem
+	node                v1.Node
+	children            []v1.Node
+	previewMeta         v1.ContentMetadata
+	previewInLibrary    bool
+	previewNodeID       v1.NodeID
 	settingsUI          []byte
 	gotText             string
 	gotCatalogID        string
