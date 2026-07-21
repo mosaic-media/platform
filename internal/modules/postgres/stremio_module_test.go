@@ -88,10 +88,12 @@ func TestStremioModuleAgainstPostgres(t *testing.T) {
 	caller := v1.CallerFromSession(string(session.ID))
 
 	// The user configures the module with the addon to source from — the gap-1
-	// path: addons are user-managed settings (ADR 0021), not composed-in.
+	// path: addons are user-managed settings (ADR 0021), not composed-in. The
+	// bundled default (Cinemeta) is opted out so this stays hermetic against the
+	// fake addon (ADR 0037) rather than importing the real series over the network.
 	if _, err := svc.ConfigureModule(c, app.ConfigureModuleCommand{
 		Caller: caller, ModuleID: stremio.CapabilityID,
-		Settings: []byte(`{"addons":["` + addon.URL + `"]}`),
+		Settings: []byte(`{"addons":["` + addon.URL + `"],"disableDefaultAddons":true}`),
 	}); err != nil {
 		t.Fatalf("ConfigureModule: %v", err)
 	}

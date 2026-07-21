@@ -86,6 +86,9 @@ func roleImplemented(c v1.Capability, role v1.Role) bool {
 	case v1.RoleStream:
 		_, ok := c.(v1.StreamProvider)
 		return ok
+	case v1.RoleSubtitles:
+		_, ok := c.(v1.SubtitlesProvider)
+		return ok
 	default:
 		return true
 	}
@@ -147,6 +150,18 @@ func (r *CapabilityRegistry) MetadataProvider(id string) (v1.MetadataProvider, b
 		return nil, false
 	}
 	p, ok := c.(v1.MetadataProvider)
+	return p, ok
+}
+
+// SubtitlesProvider returns the subtitles provider registered under id, if that
+// capability fills RoleSubtitles (ADR 0037). The consumer is a future player; the
+// resolver exists so that consumer has a seam to reach it, like the others.
+func (r *CapabilityRegistry) SubtitlesProvider(id string) (v1.SubtitlesProvider, bool) {
+	c, ok := r.byID[id]
+	if !ok {
+		return nil, false
+	}
+	p, ok := c.(v1.SubtitlesProvider)
 	return p, ok
 }
 
