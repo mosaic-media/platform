@@ -12,12 +12,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/adapters/crypto"
-	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
-	graphqltransport "github.com/mosaic-media/mosaic-platform/internal/transport/graphql"
+	"github.com/mosaic-media/platform/internal/adapters/crypto"
+	"github.com/mosaic-media/platform/internal/modules/postgres"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/policy"
+	graphqltransport "github.com/mosaic-media/platform/internal/transport/graphql"
 )
 
 // TestGraphQLHTTPImportsAndQueriesContent is the "make it runnable" proof end

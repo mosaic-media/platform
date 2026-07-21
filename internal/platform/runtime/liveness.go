@@ -4,7 +4,7 @@
 
 package runtime
 
-import "github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+import "github.com/mosaic-media/platform/internal/platform/domain"
 
 // LivenessResult is the Supervisor-facing answer to "should this process
 // keep running".

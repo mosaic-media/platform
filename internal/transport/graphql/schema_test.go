@@ -12,9 +12,9 @@ import (
 
 	graphqllib "github.com/graphql-go/graphql"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	graphql "github.com/mosaic-media/mosaic-platform/internal/transport/graphql"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	graphql "github.com/mosaic-media/platform/internal/transport/graphql"
 )
 
 var testNow = time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)

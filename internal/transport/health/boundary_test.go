@@ -18,7 +18,7 @@ import (
 // check: no transport may import the concrete Postgres module or a raw SQL
 // driver — the same rule, generalized to every transport.
 var forbiddenImportPrefixes = []string{
-	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres",
+	"github.com/mosaic-media/platform/internal/modules/postgres",
 	"github.com/jackc/pgx",
 	"database/sql",
 }

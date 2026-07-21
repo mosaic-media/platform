@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/config"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/config"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 type fakeClock struct{ now time.Time }

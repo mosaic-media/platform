@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
 // Engine is the first Platform Policy Decision Point. It

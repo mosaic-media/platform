@@ -21,8 +21,8 @@ package graphql
 import (
 	"github.com/graphql-go/graphql"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/transport/screens"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/transport/screens"
 )
 
 // NewSchema builds the executable GraphQL schema for svc. Every resolver

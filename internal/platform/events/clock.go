@@ -7,7 +7,7 @@ package events
 import (
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
 // systemClock is the default contracts.Clock a Worker/Bus uses for health

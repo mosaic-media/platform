@@ -8,9 +8,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/diagnostics"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/runtime"
+	"github.com/mosaic-media/platform/internal/platform/diagnostics"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/runtime"
 )
 
 func TestCheckReadinessTrueWhenNothingUnavailable(t *testing.T) {

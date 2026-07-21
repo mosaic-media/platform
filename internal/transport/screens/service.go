@@ -23,11 +23,11 @@ package screens
 import (
 	"context"
 
-	sdui "github.com/mosaic-media/mosaic-sdui/sdui"
+	sdui "github.com/mosaic-media/sdui/sdui"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // Screen names. A screen is reached both through Render (the dispatch below) and

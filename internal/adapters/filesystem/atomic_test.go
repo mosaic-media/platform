@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/adapters/filesystem"
+	"github.com/mosaic-media/platform/internal/adapters/filesystem"
 )
 
 func TestWriteFileAtomicThenReadFileRoundTrip(t *testing.T) {

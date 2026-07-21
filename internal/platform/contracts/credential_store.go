@@ -7,7 +7,7 @@ package contracts
 import (
 	"context"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // CredentialStore provides local credential persistence and lookup for the

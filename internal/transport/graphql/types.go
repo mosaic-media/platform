@@ -9,7 +9,7 @@ import (
 
 	"github.com/graphql-go/graphql"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // formatTime renders t as RFC3339, or "" for the zero time. Every

@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/adapters/filesystem"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/adapters/filesystem"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // bundleRedactedPlaceholder replaces any free-text detail a support bundle

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/diagnostics"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/diagnostics"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // fakeCredential is a deliberately secret-shaped string — the exit

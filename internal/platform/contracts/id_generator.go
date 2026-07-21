@@ -4,7 +4,7 @@
 
 package contracts
 
-import "github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+import "github.com/mosaic-media/platform/internal/platform/domain"
 
 // IDGenerator provides stable identity creation. It commits to nothing about
 // the generation strategy (UUID, ULID, sequence, ...); that choice belongs

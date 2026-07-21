@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // nodeStore is the PostgreSQL contracts.NodeStore. It owns SQL and row

@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/policy"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // trace records the order in which contract and policy boundary calls

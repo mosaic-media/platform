@@ -7,9 +7,9 @@ package screens
 import (
 	"strconv"
 
-	sdui "github.com/mosaic-media/mosaic-sdui/sdui"
+	sdui "github.com/mosaic-media/sdui/sdui"
 
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // The screen builders share a handful of shapes — a titled page, an

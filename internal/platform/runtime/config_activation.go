@@ -8,8 +8,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/config"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/config"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
 // ConfigActivationStatus reports the currently active configuration

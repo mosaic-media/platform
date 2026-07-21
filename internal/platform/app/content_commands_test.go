@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // The content write commands. These prove the command boundary — validate,

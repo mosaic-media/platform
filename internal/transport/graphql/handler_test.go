@@ -13,7 +13,7 @@ import (
 
 	graphqllib "github.com/graphql-go/graphql"
 
-	graphqltransport "github.com/mosaic-media/mosaic-platform/internal/transport/graphql"
+	graphqltransport "github.com/mosaic-media/platform/internal/transport/graphql"
 )
 
 // helloSchema is a trivial schema so the handler can be tested as pure

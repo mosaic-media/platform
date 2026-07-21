@@ -7,8 +7,8 @@ package graphql
 import (
 	"github.com/graphql-go/graphql"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // usersField is the Users list query. It calls

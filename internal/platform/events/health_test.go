@@ -9,9 +9,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/events"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/events"
 )
 
 // --- Bus.ReportHealth ---

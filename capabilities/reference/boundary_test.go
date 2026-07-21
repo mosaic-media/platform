@@ -25,8 +25,8 @@ import (
 // the GraphQL and health boundary tests.
 func TestCapabilityImportsOnlyTheSDK(t *testing.T) {
 	const (
-		sdkPrefix      = "github.com/mosaic-media/mosaic-sdk/"
-		platformPrefix = "github.com/mosaic-media/mosaic-platform/"
+		sdkPrefix      = "github.com/mosaic-media/sdk/"
+		platformPrefix = "github.com/mosaic-media/platform/"
 	)
 
 	entries, err := os.ReadDir(".")

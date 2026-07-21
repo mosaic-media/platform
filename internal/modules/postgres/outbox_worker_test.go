@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/events"
+	"github.com/mosaic-media/platform/internal/modules/postgres"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/events"
 )
 
 // TestOutboxRecordFailurePersistsExactBookkeeping verifies, via raw SQL

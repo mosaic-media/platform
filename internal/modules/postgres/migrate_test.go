@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/modules/postgres"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
 // TestMigrateFromEmptyDatabase exercises the migration gate: migrations run

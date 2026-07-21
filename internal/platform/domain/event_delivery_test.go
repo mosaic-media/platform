@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 func TestDeliveryPolicySchedulesExponentialBackoff(t *testing.T) {

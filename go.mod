@@ -1,4 +1,4 @@
-module github.com/mosaic-media/mosaic-platform
+module github.com/mosaic-media/platform
 
 go 1.25.0
 
@@ -11,7 +11,7 @@ require (
 
 require golang.org/x/crypto v0.54.0
 
-require github.com/mosaic-media/mosaic-sdui v0.2.0
+require github.com/mosaic-media/sdui v0.3.0
 
 require github.com/coder/websocket v1.8.15
 
@@ -22,8 +22,8 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
-	github.com/mosaic-media/mosaic-module-stremio v0.7.0
-	github.com/mosaic-media/mosaic-sdk v0.7.0
+	github.com/mosaic-media/module-stremio-addons v0.8.0
+	github.com/mosaic-media/sdk v0.8.0
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0 // indirect

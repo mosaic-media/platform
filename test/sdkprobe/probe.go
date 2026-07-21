@@ -11,7 +11,7 @@ package probe
 import (
 	"context"
 
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // SourceAndAdd is shaped like the reference capability's core: it acts as its

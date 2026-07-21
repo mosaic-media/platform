@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // redactedPlaceholder replaces any Field value not explicitly marked safe;

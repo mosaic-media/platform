@@ -7,9 +7,9 @@ package runtime_test
 import (
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/composition/builtin"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/runtime"
+	"github.com/mosaic-media/platform/internal/composition/builtin"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/runtime"
 )
 
 type fakeModule struct{ manifest builtin.Manifest }

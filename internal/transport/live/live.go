@@ -21,9 +21,9 @@ import (
 	"github.com/coder/websocket/wsjson"
 	"github.com/graphql-go/graphql"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/transport/screens"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/transport/screens"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // inputDebounce is the server-side coalescing window for search-as-you-type

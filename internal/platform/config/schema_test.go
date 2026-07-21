@@ -7,7 +7,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/config"
+	"github.com/mosaic-media/platform/internal/platform/config"
 )
 
 func TestNewSchemaRejectsDuplicateAndUnknownClass(t *testing.T) {

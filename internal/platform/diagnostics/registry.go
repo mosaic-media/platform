@@ -9,8 +9,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // registration is one component's reporter plus the names of the other

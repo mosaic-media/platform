@@ -8,12 +8,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/adapters/crypto"
-	"github.com/mosaic-media/mosaic-platform/internal/composition/bootstrap"
-	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
+	"github.com/mosaic-media/platform/internal/adapters/crypto"
+	"github.com/mosaic-media/platform/internal/composition/bootstrap"
+	"github.com/mosaic-media/platform/internal/modules/postgres"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/policy"
 )
 
 // TestBootstrapAdminIsUsable proves the seeded administrator is a real,

@@ -9,8 +9,8 @@ import (
 
 	"github.com/graphql-go/graphql"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/transport/screens"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/transport/screens"
 )
 
 // screenField serves a server-emitted SDUI screen (ADR 0029). It returns the

@@ -10,11 +10,11 @@ import (
 	"sync"
 	"testing"
 
-	sdui "github.com/mosaic-media/mosaic-sdui/sdui"
+	sdui "github.com/mosaic-media/sdui/sdui"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // fakeQueries stands in for the application query surface, so the screen

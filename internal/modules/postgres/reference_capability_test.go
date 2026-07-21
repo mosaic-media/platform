@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/capabilities/reference"
-	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	"github.com/mosaic-media/platform/capabilities/reference"
+	"github.com/mosaic-media/platform/internal/modules/postgres"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/policy"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // animeMetadataJSON is what the fake provider serves — a work with a season,

@@ -20,7 +20,7 @@ import (
 // is fine and expected — those are how a resolver is SUPPOSED to reach
 // state.
 var forbiddenImportPrefixes = []string{
-	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres",
+	"github.com/mosaic-media/platform/internal/modules/postgres",
 	"github.com/jackc/pgx",
 	"database/sql",
 }

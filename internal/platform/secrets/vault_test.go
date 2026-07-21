@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/secrets"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/secrets"
 )
 
 func TestLocalVaultAlwaysAvailable(t *testing.T) {

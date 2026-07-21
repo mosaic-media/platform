@@ -7,8 +7,8 @@ package secrets
 import (
 	"strings"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // scheme is the secret reference URI prefix, e.g.

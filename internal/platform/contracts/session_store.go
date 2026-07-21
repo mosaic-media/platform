@@ -7,7 +7,7 @@ package contracts
 import (
 	"context"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // SessionStore provides session persistence and revocation.

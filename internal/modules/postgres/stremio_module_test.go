@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	stremio "github.com/mosaic-media/mosaic-module-stremio"
-	"github.com/mosaic-media/mosaic-platform/internal/modules/postgres"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	stremio "github.com/mosaic-media/module-stremio-addons"
+	"github.com/mosaic-media/platform/internal/modules/postgres"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/policy"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // TestStremioModuleAgainstPostgres is the module slice end to end: the Platform

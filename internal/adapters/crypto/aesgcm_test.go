@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/adapters/crypto"
+	"github.com/mosaic-media/platform/internal/adapters/crypto"
 )
 
 func TestEncryptDecryptRoundTrip(t *testing.T) {

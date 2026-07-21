@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
 // mapError translates a pgx/PostgreSQL error into a Platform contract error.

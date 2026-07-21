@@ -7,7 +7,7 @@ package runtime
 import (
 	"sync"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // Lifecycle tracks this process's own position in its startup/shutdown

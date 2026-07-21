@@ -7,7 +7,7 @@ package runtime
 import (
 	"context"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/events"
+	"github.com/mosaic-media/platform/internal/platform/events"
 )
 
 // ShutdownResult reports what graceful shutdown actually did — the graceful

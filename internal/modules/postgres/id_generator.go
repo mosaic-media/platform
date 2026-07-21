@@ -8,8 +8,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // uuidGenerator is the runtime contracts.IDGenerator. It emits random

@@ -7,7 +7,7 @@ package contracts
 import (
 	"context"
 
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // PartStore persists the bytes-bearing Parts of item nodes (ADR 0013).

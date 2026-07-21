@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
 // Connect opens a connection pool to PostgreSQL using a libpq-style DSN or

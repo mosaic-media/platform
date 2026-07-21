@@ -7,10 +7,10 @@ package app
 import (
 	"context"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/policy"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/policy"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 func validateAddContentChildCommand(cmd v1.AddContentChildCommand) error {

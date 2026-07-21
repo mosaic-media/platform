@@ -4,7 +4,7 @@
 
 package postgres
 
-import "github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+import "github.com/mosaic-media/platform/internal/platform/domain"
 
 // permissionsToStrings and stringsToPermissions convert between the domain's
 // []Permission and the []string that pgx maps to a PostgreSQL text[] column.

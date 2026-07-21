@@ -10,8 +10,8 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // uuidV7Generator emits time-ordered version-7 UUIDs (RFC 9562 §5.7) for the

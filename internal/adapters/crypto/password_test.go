@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/adapters/crypto"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/adapters/crypto"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // PasswordHasher must satisfy the domain.PasswordVerifier port the composition

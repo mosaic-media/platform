@@ -5,8 +5,8 @@
 package runtime
 
 import (
-	"github.com/mosaic-media/mosaic-platform/internal/composition/builtin"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/composition/builtin"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
 // PlatformVersion is a first-cut Platform build identifier. A real build

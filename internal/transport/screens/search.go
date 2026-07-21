@@ -8,10 +8,10 @@ import (
 	"context"
 	"strings"
 
-	sdui "github.com/mosaic-media/mosaic-sdui/sdui"
+	sdui "github.com/mosaic-media/sdui/sdui"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/app"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	"github.com/mosaic-media/platform/internal/platform/app"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // searchScreen is the results surface that takes over the content region while a

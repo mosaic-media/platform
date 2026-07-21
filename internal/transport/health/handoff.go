@@ -18,9 +18,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/diagnostics"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/runtime"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/diagnostics"
+	"github.com/mosaic-media/platform/internal/platform/runtime"
 )
 
 // Handoff wires the Supervisor handoff surface to a real, executable

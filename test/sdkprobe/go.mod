@@ -10,6 +10,6 @@ module example.com/mosaic-sdk-probe
 
 go 1.25.0
 
-require github.com/mosaic-media/mosaic-sdk v0.0.0
+require github.com/mosaic-media/sdk v0.0.0
 
-replace github.com/mosaic-media/mosaic-sdk => ../../../mosaic-sdk
+replace github.com/mosaic-media/sdk => ../../../mosaic-sdk

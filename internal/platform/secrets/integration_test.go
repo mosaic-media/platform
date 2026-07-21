@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/secrets"
+	"github.com/mosaic-media/platform/internal/platform/secrets"
 )
 
 // TestSecretReferenceResolvesEndToEndThroughRealVault proves the full

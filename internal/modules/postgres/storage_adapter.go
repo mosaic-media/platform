@@ -7,7 +7,7 @@ package postgres
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
 // StorageAdapter is the PostgreSQL implementation of contracts.StorageAdapter.

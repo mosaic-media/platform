@@ -7,8 +7,8 @@ package runtime_test
 import (
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/runtime"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/runtime"
 )
 
 func TestLifecycleTransitions(t *testing.T) {

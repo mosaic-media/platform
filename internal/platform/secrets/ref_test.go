@@ -7,9 +7,9 @@ package secrets_test
 import (
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/secrets"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/secrets"
 )
 
 func TestParseRefRoundTripsWithFormatRef(t *testing.T) {

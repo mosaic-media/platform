@@ -7,8 +7,8 @@ package runtime
 import (
 	"context"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/diagnostics"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/diagnostics"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // ReadinessResult is the Supervisor-facing answer to "is activation safe

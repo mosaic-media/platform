@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/diagnostics"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/diagnostics"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 var testNow = time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)

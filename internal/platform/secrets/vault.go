@@ -9,9 +9,9 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/mosaic-media/mosaic-platform/internal/adapters/crypto"
-	"github.com/mosaic-media/mosaic-platform/internal/adapters/filesystem"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/adapters/crypto"
+	"github.com/mosaic-media/platform/internal/adapters/filesystem"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
 // LocalVault is the encrypted local vault fallback used when the OS keychain

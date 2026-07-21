@@ -10,8 +10,8 @@ import (
 	"encoding/base64"
 	"sync"
 
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
 // Broker is the Platform's contracts.SecretBroker implementation. It

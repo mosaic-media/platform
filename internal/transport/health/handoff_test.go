@@ -12,12 +12,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mosaic-media/mosaic-platform/internal/composition/builtin"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/contracts"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/diagnostics"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/domain"
-	"github.com/mosaic-media/mosaic-platform/internal/platform/runtime"
-	health "github.com/mosaic-media/mosaic-platform/internal/transport/health"
+	"github.com/mosaic-media/platform/internal/composition/builtin"
+	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/diagnostics"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/runtime"
+	health "github.com/mosaic-media/platform/internal/transport/health"
 )
 
 // fakeReporter is a contracts.ComponentHealthReporter stand-in.

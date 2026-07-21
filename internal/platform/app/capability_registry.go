@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sort"
 
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // CapabilityRegistry holds the optional-module capabilities the composition
