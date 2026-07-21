@@ -157,6 +157,12 @@ type session struct {
 	schema  graphql.Schema
 	caller  v1.Caller
 	sid     string
+
+	// routeMu guards current. The read loop writes it (on navigate); the input
+	// debounce timer, firing on its own goroutine, reads it to return to the open
+	// screen when the search field is cleared. Without the lock those two race on
+	// a struct holding a map.
+	routeMu sync.Mutex
 	current route
 
 	// writeMu serializes all writes to the socket. The read loop and the input
@@ -187,7 +193,7 @@ func (s *session) run(ctx context.Context) error {
 	if err := s.pushShell(ctx); err != nil {
 		return err
 	}
-	s.current = route{screen: "home"}
+	s.setCurrent(route{screen: "home"})
 	s.pushContent(ctx)
 
 	for {
@@ -197,7 +203,7 @@ func (s *session) run(ctx context.Context) error {
 		}
 		switch msg.Kind {
 		case "navigate":
-			s.current = route{screen: msg.Screen, params: msg.Params}
+			s.setCurrent(route{screen: msg.Screen, params: msg.Params})
 			s.pushContent(ctx)
 		case "input":
 			// Search-as-you-type: coalesce a burst of keystrokes and render the
@@ -223,9 +229,26 @@ func (s *session) pushShell(ctx context.Context) error {
 	return s.write(ctx, serverMsg{T: "shell", Node: node})
 }
 
+// setCurrent records the open route under routeMu.
+func (s *session) setCurrent(r route) {
+	s.routeMu.Lock()
+	s.current = r
+	s.routeMu.Unlock()
+}
+
+// currentRoute returns a snapshot of the open route under routeMu. A navigate
+// replaces the route (and its params map) wholesale, so the returned map is
+// never mutated after being read here.
+func (s *session) currentRoute() route {
+	s.routeMu.Lock()
+	defer s.routeMu.Unlock()
+	return s.current
+}
+
 // pushContent renders the current route into the content region.
 func (s *session) pushContent(ctx context.Context) {
-	s.pushRender(ctx, s.current.screen, s.current.params)
+	r := s.currentRoute()
+	s.pushRender(ctx, r.screen, r.params)
 }
 
 // pushRender renders a screen and replaces the content region with it.

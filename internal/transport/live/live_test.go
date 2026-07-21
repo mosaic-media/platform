@@ -9,11 +9,44 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
 )
+
+// TestConcurrentRouteAccessIsRaceFree guards the data race on session.current:
+// the read loop writes the open route (setCurrent, on a navigate) while the
+// input debounce timer, firing on its own goroutine, reads it (currentRoute, via
+// pushContent) to return to the open screen when the search field is cleared.
+// Under -race, this concurrent write/read of the route — a struct holding a map
+// — trips the detector unless routeMu guards it.
+func TestConcurrentRouteAccessIsRaceFree(t *testing.T) {
+	s := &session{}
+	const iterations = 2000
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			// A navigate replaces the route with a fresh params map each time.
+			s.setCurrent(route{screen: "detail", params: map[string]any{"nodeId": "n-1"}})
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			r := s.currentRoute()
+			_, _ = r.screen, r.params
+		}
+	}()
+
+	wg.Wait()
+}
 
 // safeName guards a client-supplied mutation name that is interpolated into a
 // GraphQL query, so it must reject anything that is not a plain identifier.
