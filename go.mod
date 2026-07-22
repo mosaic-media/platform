@@ -26,7 +26,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
-	github.com/mosaic-media/module-remote-playback v0.0.1
+	github.com/mosaic-media/module-remote-playback v0.1.1
 	github.com/mosaic-media/module-stremio-addons v0.15.0
 	github.com/mosaic-media/sdk v0.11.0
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
@@ -34,5 +34,3 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
-
-replace github.com/mosaic-media/module-remote-playback => ../module-remote-playback

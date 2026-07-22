@@ -68,13 +68,6 @@ services:
       MOSAIC_HEALTH_ADDR: ":8080"
     volumes:
       - .:/src/platform
-      # The one exception to "published": go.mod carries a `replace` for
-      # module-remote-playback, which has no remote yet, so the sibling has to be
-      # mounted even here or the build cannot resolve it. This line and the
-      # matching one on `web` are the only things standing between this file and
-      # a stack that needs no checkouts at all; both disappear the day their
-      # dependency is published.
-      - ../module-remote-playback:/src/module-remote-playback
       # Caches live in volumes, not on the bind mount. Source comes from the
       # host filesystem, and letting Go write thousands of cache files across
       # that boundary turns a warm rebuild from seconds into minutes.
@@ -105,10 +98,12 @@ services:
       MOSAIC_PLATFORM_URL: "http://platform:8081"
     volumes:
       - ../web:/src/web
-      # The other exception: the web lockfile links @mosaic-media/sdui to
-      # ../sdui rather than the registry. npm does not error when the target is
-      # missing — it silently resolves a stale hoisted version, and the failure
-      # surfaces two layers away as a missing export.
+      # The one remaining exception to "published": the web lockfile links
+      # @mosaic-media/sdui to ../sdui rather than the registry. npm does not
+      # error when the target is missing — it silently resolves a stale hoisted
+      # version, and the failure surfaces two layers away as a missing export.
+      # (module-remote-playback used to need a mount here too; it is published
+      # now, so the Go side of this file needs no checkouts at all.)
       - ../sdui:/src/sdui
       - mosaic-dev-npm:/root/.npm
       # node_modules are volumes rather than part of the bind mount: an npm
