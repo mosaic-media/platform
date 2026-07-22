@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-package session
+package rpc
 
 import (
 	"context"
@@ -18,11 +18,16 @@ import (
 // user's action enters the Platform. It continues the trace the Shell started
 // or begins one, binds a logger to it, and records the outcome of each call.
 //
-// Both lanes are covered, and they are covered differently on purpose
+// component names the surface in every record it produces ("auth", "session"),
+// so a record says which service answered rather than only that Connect did.
+// Since ADR 0061 those two are the whole client API, and both mount this.
+//
+// Both call shapes are covered, and they are covered differently on purpose
 // (ADR 0041 gives them different lifetimes):
 //
-//   - **Unary intents** — Attach, Navigate, Invoke, SubmitInput — get one
-//     record each, with the duration and whether they failed. These are short.
+//   - **Unary calls** — SignIn/SignOut, and the Attach/Navigate/Invoke/
+//     SubmitInput intents — get one record each, with the duration and whether
+//     they failed. These are short.
 //   - **Subscribe** — one long-lived server stream per session — gets an open
 //     and a close record with the elapsed time between them. A record per
 //     pushed message on a stream that lives for hours would drown everything
@@ -31,16 +36,16 @@ import (
 // Seeding the context here rather than in each method is what lets every
 // handler, every application service beneath it, and every module it invokes
 // reach telemetry without any of them taking a parameter for it.
-func TelemetryInterceptor() connect.Interceptor {
-	return &telemetryInterceptor{}
+func TelemetryInterceptor(component string) connect.Interceptor {
+	return &telemetryInterceptor{component: component}
 }
 
-type telemetryInterceptor struct{}
+type telemetryInterceptor struct{ component string }
 
-// WrapUnary handles lane 1.
+// WrapUnary handles every unary call on either service.
 func (i *telemetryInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx = start(ctx, req.Header().Get(telemetry.TraceparentHeader))
+		ctx = i.start(ctx, req.Header().Get(telemetry.TraceparentHeader))
 		lg := telemetry.From(ctx)
 
 		started := time.Now()
@@ -53,20 +58,20 @@ func (i *telemetryInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFu
 			// The Connect code is a closed vocabulary and safe verbatim; the
 			// error text is not necessarily, but it originates in the Platform
 			// rather than a user, so Err's standing caveat applies and no more.
-			lg.Error("intent failed", append(fields,
+			lg.Error("call failed", append(fields,
 				telemetry.String("code", connect.CodeOf(err).String()),
 				telemetry.Err(err))...)
 		} else {
-			lg.Info("intent", fields...)
+			lg.Info("call", fields...)
 		}
 		return res, err
 	}
 }
 
-// WrapStreamingHandler handles lane 2 — the Subscribe stream.
+// WrapStreamingHandler handles the session push lane — the Subscribe stream.
 func (i *telemetryInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		ctx = start(ctx, conn.RequestHeader().Get(telemetry.TraceparentHeader))
+		ctx = i.start(ctx, conn.RequestHeader().Get(telemetry.TraceparentHeader))
 		lg := telemetry.From(ctx).With(telemetry.String("procedure", conn.Spec().Procedure))
 
 		started := time.Now()
@@ -91,7 +96,7 @@ func (i *telemetryInterceptor) WrapStreamingClient(next connect.StreamingClientF
 	return next
 }
 
-// start seeds the trace and the component for a call on either lane.
-func start(ctx context.Context, traceparent string) context.Context {
-	return telemetry.For(telemetry.StartRequest(ctx, traceparent), "session")
+// start seeds the trace and the component for one call.
+func (i *telemetryInterceptor) start(ctx context.Context, traceparent string) context.Context {
+	return telemetry.For(telemetry.StartRequest(ctx, traceparent), i.component)
 }

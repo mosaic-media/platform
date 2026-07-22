@@ -7,7 +7,7 @@
 // unary calls (Attach/Navigate/Invoke/SubmitInput); server push travels as one
 // server-streaming Subscribe call. It supersedes the bespoke WebSocket of
 // ADR 0032 as the client transport and folds ADR 0033's handover into stream
-// resume. The same application services back both this and the GraphQL surface,
+// resume. The same application services back both this and the auth surface,
 // so this is a transport, not a second application layer.
 //
 // Concurrency follows ADR 0041's outbound-mailbox discipline: unary handlers

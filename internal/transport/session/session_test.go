@@ -29,7 +29,7 @@ func TestSafeAction(t *testing.T) {
 
 // TestImportRefFromInput proves the importContent action envelope decodes to the
 // ContentRef the application command takes — the action ABI (ADR 0029) the
-// GraphQL resolver also reads, unchanged by the transport.
+// dispatch reads off the wire, unchanged by which client sent it.
 func TestImportRefFromInput(t *testing.T) {
 	input := []byte(`{"ref":{"provider":"stremio","nativeId":"tt0111161","nativeType":"movie","mediaType":"movie","externalScheme":"imdb","externalId":"tt0111161"}}`)
 	ref, err := importRefFromInput(input)
@@ -47,7 +47,7 @@ func TestImportRefFromInput(t *testing.T) {
 		t.Fatal("importRefFromInput(invalid json) = nil error, want InvalidArgument")
 	}
 	// An empty envelope is not an error — it yields an empty ref the command
-	// then rejects on shape, matching the GraphQL path.
+	// then rejects on shape.
 	if _, err := importRefFromInput(nil); err != nil {
 		t.Fatalf("importRefFromInput(nil) = %v, want nil", err)
 	}

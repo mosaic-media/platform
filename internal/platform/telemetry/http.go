@@ -20,7 +20,7 @@ import (
 const TraceIDHeader = "Mosaic-Trace-Id"
 
 // HTTPMiddleware is the edge seam for every plain HTTP surface — the artwork
-// proxy, the playback origin, the GraphQL endpoint and the Supervisor handoff
+// proxy, the playback origin and the Supervisor handoff
 // (ADR 0055, seams 2 and 3). It continues an inbound trace or starts one,
 // binds a logger to it, and echoes the trace id back on the response.
 //

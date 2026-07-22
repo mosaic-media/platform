@@ -17,7 +17,7 @@ const ActionConfigDraft policy.Action = "config.draft"
 
 // DraftConfigVersionCommand saves a new, unvalidated configuration
 // candidate. The Platform exposes this as a callable service
-// so GraphQL or recovery tooling can drive it later; there is no admin UI
+// so a transport or recovery tooling can drive it later; there is no admin UI
 // yet.
 type DraftConfigVersionCommand struct {
 	CallerSessionID domain.SessionID

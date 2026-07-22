@@ -18,16 +18,19 @@ import (
 )
 
 // dispatch routes an Invoke action to the application command service that backs
-// it. This is the first-party GraphQL split of ADR 0041: the client session no
-// longer runs its mutations through the GraphQL schema (as ADR 0032's socket
-// did) — it calls the application services directly, the same services the
-// GraphQL resolvers call. GraphQL is retained only as the external/tooling
-// surface. The action's caller is the session's opaque ref (ADR 0017), so every
-// write re-authorises as the invoking user.
+// it. ADR 0041 moved the client's mutations off the GraphQL schema ADR 0032's
+// socket ran them through and onto the application services directly; ADR 0061
+// then removed that schema, so this switch is now the *only* way a client
+// mutation reaches the Platform. The action's caller is the session's opaque ref
+// (ADR 0017), so every write re-authorises as the invoking user.
 //
-// input is the SDUI runtime's action envelope in JSON (ADR 0029). Each case
-// decodes the same shape the corresponding GraphQL resolver accepts, so an
-// action ABI does not change with the transport.
+// That makes the switch a real boundary rather than a convenience: an action a
+// client can name and this function cannot map does not exist. Adding one is a
+// deliberate act here, which is the point — the surface a client can reach is
+// enumerated in one readable place instead of inferred from a schema.
+//
+// input is the SDUI runtime's action envelope in JSON (ADR 0029), so an action
+// ABI is a property of the action, not of the transport carrying it.
 func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, input []byte) (*sessionv1.ServerMessage, error) {
 	caller := s.caller
 	switch action {
@@ -167,7 +170,7 @@ func playbackMimeType(plan playback.Plan) string {
 
 // importEnvelope is the importContent action input: a content ref to materialise
 // (ADR 0028), under the runtime's `ref` key — the same shape the detail screen's
-// Add-to-library action emits and the GraphQL importContent resolver reads.
+// Add-to-library action emits.
 type importEnvelope struct {
 	Ref struct {
 		Provider       string `json:"provider"`
@@ -199,7 +202,7 @@ func importRefFromInput(input []byte) (v1.ContentRef, error) {
 
 // configureEnvelope is the configureModule action input: a module id and its
 // opaque settings document (ADR 0021), the shape a module's contributed settings
-// UI (ADR 0038) drives and the GraphQL configureModule resolver reads.
+// UI (ADR 0038) drives.
 type configureEnvelope struct {
 	ModuleID string          `json:"moduleId"`
 	Settings json.RawMessage `json:"settings"`

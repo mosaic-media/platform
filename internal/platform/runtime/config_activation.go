@@ -30,7 +30,7 @@ type ConfigActivationStatus struct {
 // CheckConfigActivation reads the active version directly from store. This
 // is an internal, Supervisor-facing operational surface — like a health
 // probe, not a user-facing query — so it intentionally bypasses the
-// app.Service authentication/policy gate a GraphQL caller goes through.
+// app.Service authentication/policy gate a client caller goes through.
 func CheckConfigActivation(ctx context.Context, store contracts.ConfigStore) ConfigActivationStatus {
 	active, err := store.FindActive(ctx)
 	if err != nil {

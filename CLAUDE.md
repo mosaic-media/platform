@@ -10,7 +10,7 @@
 - **`architecture`** — the docs and ADRs. Push doc updates here whenever code and docs diverge.
 - **`sdk`** — the **published contract surface**, extracted into its own module (`github.com/mosaic-media/sdk`). This is what a Module compiles against. See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
 - **`module-stremio-addons`** — the **first optional module**, in its own repo exactly as a third party's would be: a Go client of the Stremio addon protocol importing only the SDK, MIT-licensed, published at `v0.1.0`. The Platform requires it as a tagged dependency (ADR 0019–0021). Commit and push it separately.
-- **`mosaic-shell`** — the **Server-Driven-UI web client** (React/TypeScript/Vite, now a package in the `web` workspace repo), not a Module and not in the binary. A thin app: chrome/routing + the SDUI runtime below. Its component set is primitives + `ComponentDefinition` data on a token-driven skin, technology-agnostic so a future Flutter client renders the same payloads. AGPL-3.0-only (ADR 0022–0024). It runs on a **live session over the two-lane Connect `SessionService` (ADR 0041)** — it Subscribes to the Platform and renders the pushed shell + region updates; dev sign-in still mints a session over GraphQL. (Static mock screens remain in-tree as dead code.) Commit and push it separately.
+- **`mosaic-shell`** — the **Server-Driven-UI web client** (React/TypeScript/Vite, now a package in the `web` workspace repo), not a Module and not in the binary. A thin app: chrome/routing + the SDUI runtime below. Its component set is primitives + `ComponentDefinition` data on a token-driven skin, technology-agnostic so a future Flutter client renders the same payloads. AGPL-3.0-only (ADR 0022–0024). It runs on a **live session over the two-lane Connect `SessionService` (ADR 0041)** — it Subscribes to the Platform and renders the pushed shell + region updates; dev sign-in mints a session over the Connect `AuthService` (ADR 0061). (Static mock screens remain in-tree as dead code.) Commit and push it separately.
 - **`mosaic-sdui-react`** — **`@mosaic-media/sdui-react`**, the **React runtime** for the SDUI (primitives, registry, renderer, definition expander, `ShellProvider`, token skin). Extracted from the Shell into its own repo so the Shell and the storybook consume it as **peers**. AGPL-3.0-only (first-party client code, unlike the Apache contract). Builds to `dist` via tsc; React is a peer dep. Published: npm `@mosaic-media/sdui-react@0.1.0`.
 - **`mosaic-storybook`** — a **live, bespoke storybook** of the SDUI components (each shown as a live render beside its `UINode` JSON), on GitHub Pages at https://mosaic-media.github.io/mosaic-storybook/. React/TS/Vite, AGPL-3.0-only; a peer consumer of `@mosaic-media/sdui-react` + `@mosaic-media/sdui` from npm. Not part of the runtime path — pure showcase/docs.
 - **`sdui`** — the **published SDUI contract** the Platform, Modules and Shell share: JSON-Schema schema (`UINode`/`Action`/`ComponentDefinition`) is the single source of truth; the Go/TS bindings are **generated** from it. Ships a **Go producer binding** (`github.com/mosaic-media/sdui/sdui`, published at `v0.1.0` — `go get` it, the emit-side builds screens against it), an npm package (`@mosaic-media/sdui`), the standard definition library as data, and DTCG tokens. Apache-2.0, like the SDK (ADR 0025). When you build the Platform's SDUI emit-side, `go get` this and build against it (`replace => ../sdui` for local cross-repo work). Commit and push it separately.
@@ -48,7 +48,7 @@ Modules compile into the binary, so there is no runtime boundary between Platfor
 - **Dependency direction**: dependencies point inward. Transport → Application services → Contracts/Domain. Adapters/Modules → Contracts → External systems. Domain must never import transport, adapter, or database packages. Application services may depend on Platform contracts, never on concrete Postgres (or other module) types.
 - **Error categories**: every contract error maps to one of `InvalidArgument`, `Unauthenticated`, `PermissionDenied`, `NotFound`, `Conflict`, `Unavailable`, `Internal`. Adapters/modules may keep driver-specific errors internally; application services and transports must only ever see these Platform categories.
 - **Command handler order**: every command handler follows the same sequence — validate command shape → authenticate caller → authorize via policy → open a `UnitOfWork` → load state through contracts → apply domain rules → persist state and outbox events in the same transaction → return a Platform result type.
-- **GraphQL resolvers call services only**: GraphQL is a transport and projection surface, not a persistence layer. Resolvers must call application command or query services — never open a database connection or query Postgres (or any module) directly.
+- **Transports call services only**: a transport is a projection surface, not a persistence layer. A handler must call application command or query services — never open a database connection or query Postgres (or any module) directly. Boundary tests in `internal/transport/auth` and `internal/transport/health` enforce it by parsing import declarations.
 - **Config reload classes**: every configuration field declares a reload class — `Hot` (applies without restart), `Restart` (requires process restart), `Generation` (requires Supervisor to activate a new Generation), `Recovery` (applies only through recovery flow). Classify new config fields before adding them.
 
 ## Transaction shape (ADR 0012 supersedes ADR 0001)
@@ -146,31 +146,42 @@ this is the map, oldest first.
 
 | Slice | What it proves |
 |---|---|
-| Scaffold → Supervisor handoff (twelve slices) | Boot, contracts, the command order, ABAC policy, the PostgreSQL module + migrations, transactional outbox, event bus + worker, config versioning, secret broker, GraphQL schema, diagnostics, and a graceful serve loop |
+| Scaffold → Supervisor handoff (twelve slices) | Boot, contracts, the command order, ABAC policy, the PostgreSQL module + migrations, transactional outbox, event bus + worker, config versioning, secret broker, the (since-retired) GraphQL schema, diagnostics, and a graceful serve loop |
 | Content model | `nodes`, `parts`, `relations`, `source_bindings` in native `uuid`/UUIDv7 columns; four stores on `Tx`; ADR 0013's four non-uniformities pinned by contract tests |
 | Content commands and queries | Nine application services over the graph (search, node read, external-id lookup; add work/child/part, relate, bind, resolve) — the command order into the content model |
 | Published contract surface (ADR 0016) | `contracts/platform/v1` populated: content models, the nine services, `ContentService`, opaque `Caller`; store contracts stay internal; a separate module compiles against it (`test/sdkprobe` / `test/sdkboundary`) |
 | Reference capability (the thesis test) | `capabilities/reference/` imports only the SDK, sources an anime over HTTP, dedupes, creates the tree + adaptation edge + bindings — proven end to end against PostgreSQL. **The extension model works.** |
 | SDK extraction | `contracts/platform/v1` moved out into `github.com/mosaic-media/sdk` at `v0.1.0`; the Platform depends on it as an external module |
-| Runnable process | `main.go` constructs `app.Service`; GraphQL served over HTTP at `:8081/graphql` (health handoff on `:8080`); Argon2id password hasher; end-to-end HTTP test signs in and imports content |
-| Permissions management + bootstrap | `PermissionStore` gained `CreateRole`/`GrantRole` (+ commands + GraphQL mutations); `internal/composition/bootstrap.EnsureAdmin` seeds a first admin idempotently from env vars, so the binary is usable by a human |
-| Optional-module composition + invocation (ADR 0019, 0020) | The SDK gained a `Capability` interface (`Manifest()`/`Import()`) at `v0.2.0`; the Platform gained a `CapabilityRegistry`, an `ImportContent` command (action `content.import`) and an `importContent` GraphQL mutation. The **Stremio module** (its own repo `module-stremio-addons`, importing only the SDK) is statically composed in via `main.go` and invoked through the registry — sourcing movies/series from a Stremio addon and landing the tree + source binding + **`RemoteLocation` stream Parts** in PostgreSQL. Proven end to end. **The composition-and-invocation half of the extension story works.** |
-| User-managed module settings (ADR 0021) | The first SDK gap the Stremio module surfaced. A Platform-owned `ModuleSettingsStore` (one jsonb doc per module id, on `Tx`), generic `configureModule`/`moduleSettings` commands + GraphQL (actions `module.configure`/`module.read`), and SDK `v0.3.0` handing a module its settings via `ImportRequest{Caller, Query, Settings}`. A user adds a Stremio addon by manifest URL at runtime; the module reads `{"addons":[...]}`. Retired the `MOSAIC_STREMIO_ADDONS` env bridge. |
+| Runnable process | `main.go` constructs `app.Service`; the client API served over HTTP at `:8081` (health handoff on `:8080`); Argon2id password hasher; end-to-end HTTP test signs in and drives a screen |
+| Permissions management + bootstrap | `PermissionStore` gained `CreateRole`/`GrantRole` (+ commands; their GraphQL mutations went with ADR 0061 — see below); `internal/composition/bootstrap.EnsureAdmin` seeds a first admin idempotently from env vars, so the binary is usable by a human |
+| Optional-module composition + invocation (ADR 0019, 0020) | The SDK gained a `Capability` interface (`Manifest()`/`Import()`) at `v0.2.0`; the Platform gained a `CapabilityRegistry`, an `ImportContent` command (action `content.import`), invoked as the `importContent` action. The **Stremio module** (its own repo `module-stremio-addons`, importing only the SDK) is statically composed in via `main.go` and invoked through the registry — sourcing movies/series from a Stremio addon and landing the tree + source binding + **`RemoteLocation` stream Parts** in PostgreSQL. Proven end to end. **The composition-and-invocation half of the extension story works.** |
+| User-managed module settings (ADR 0021) | The first SDK gap the Stremio module surfaced. A Platform-owned `ModuleSettingsStore` (one jsonb doc per module id, on `Tx`), generic `configureModule`/`moduleSettings` commands (actions `module.configure`/`module.read`), and SDK `v0.3.0` handing a module its settings via `ImportRequest{Caller, Query, Settings}`. A user adds a Stremio addon by manifest URL at runtime; the module reads `{"addons":[...]}`. Retired the `MOSAIC_STREMIO_ADDONS` env bridge. |
+| One client transport (ADR 0061) | GraphQL is deleted. A new `mosaic.auth.v1.AuthService` (`SignIn`/`SignOut`, `internal/transport/auth`) mints the session that `SessionService` spends, so Connect is the *only* client transport. `internal/transport/rpc` maps the seven error categories onto Connect status codes — which GraphQL never actually did — and holds the telemetry interceptor for both services. The retained "external/tooling" surface ADR 0041 kept turned out to have no caller, so it went rather than being re-ported; the session transport's `dispatch` switch is now the complete list of what a client can invoke. |
 
 **Reverted long ago:** uniform store resolution (`Store[T]`) under ADR 0012.
 
 **Running it:** set `MOSAIC_POSTGRES_DSN`, and (optionally)
 `MOSAIC_BOOTSTRAP_ADMIN_USERNAME` + `MOSAIC_BOOTSTRAP_ADMIN_PASSWORD`, then
 `go run ./cmd/mosaic-platform`. It migrates, seeds the admin, registers the
-built-in modules, serves GraphQL on `:8081/graphql`, the SDUI session transport
-(the two-lane Connect `SessionService`, ADR 0041) on `:8081` over h2c, artwork on
-`:8081/artwork`, and the Supervisor handoff on `:8080`. The Stremio module is
-always registered; a user adds addons at
-runtime via the `configureModule` mutation (ADR 0021) — the
-`MOSAIC_STREMIO_ADDONS` env var is retired.
+built-in modules, and serves the whole client API on `:8081` over h2c — the
+Connect `AuthService` that mints a session (ADR 0061) and the two-lane Connect
+`SessionService` that spends it (ADR 0041) — plus artwork at `:8081/artwork`,
+playback at `:8081/playback/`, and the Supervisor handoff on `:8080`. There is
+no GraphQL endpoint: ADR 0061 deleted it. The Stremio module is always
+registered; a user adds addons at runtime via the `configureModule` action
+(ADR 0021) — the `MOSAIC_STREMIO_ADDONS` env var is retired.
 
 ## What is not built
 
+- **An admin surface.** Creating roles, granting them, drafting/validating/
+  activating config versions and setting user status have application services,
+  policy actions and tests — and no way for a user to reach them. They had
+  GraphQL mutations with no UI behind them, and ADR 0061 deleted rather than
+  re-ported those, on the grounds that a mutation nothing calls is not a
+  feature. They return as server-emitted screens (ADR 0029) whose affordances
+  dispatch through `Invoke`. `bootstrap.EnsureAdmin` stays the only in-band way
+  to establish the first authority. `SignOut` is implemented and tested but has
+  no caller — the Shell has no sign-out affordance.
 - **`ContentService` relation reads.** The service can create edges
   (`RelateContent`) but not read them back — there is no `ListFrom`/`ListTo`
   on the published surface. A capability that wants to query relations can't
@@ -256,7 +267,7 @@ roughly in order of how cheaply they harden what exists:
   `Capability` interface. `main.go`'s `registerCapabilities` constructs it and
   registers it into an `app.CapabilityRegistry`; the platform `go.mod` requires
   it at a tagged version (`v0.1.0`) from the module proxy, no `replace`. A caller
-  invokes it through the `ImportContent` command (GraphQL `importContent`),
+  invokes it through the `ImportContent` command (the `importContent` action),
   which authorises `content.import`, resolves the capability by id, and hands
   it the `app.Service` as its `ContentService` plus the caller — so the
   module's own writes each re-authorise as the invoking user (ADR 0017).

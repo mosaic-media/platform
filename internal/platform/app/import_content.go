@@ -21,7 +21,7 @@ const ActionContentImport policy.Action = "content.import"
 // ImportContentCommand materialises one virtual content item — a ContentRef a
 // search or catalog browse produced (ADR 0028) — into the graph. It names no
 // capability id of its own: the ref carries its Provider, the module that can
-// materialise it. It is a Platform command a transport issues (the GraphQL
+// materialise it. It is a Platform command a transport issues (the session
 // importContent mutation), deliberately not part of the published
 // ContentService: a capability is invoked by this command, it does not call it.
 type ImportContentCommand struct {

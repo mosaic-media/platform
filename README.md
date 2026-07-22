@@ -90,7 +90,12 @@ internal/
     filesystem/
     crypto/
   transport/
-    graphql/
+    auth/                # Connect AuthService — mints a session (ADR 0061)
+    session/             # Connect SessionService — the two-lane live session (ADR 0041)
+    screens/             # The SDUI emit-side (ADR 0029)
+    artwork/             # The artwork proxy (ADR 0030)
+    playback/            # The media origin (ADR 0045)
+    rpc/                 # Shared Connect plumbing: error codes, telemetry seam
     health/
   composition/
     builtin/           # Registers built-in modules the same way an external Module would be discovered

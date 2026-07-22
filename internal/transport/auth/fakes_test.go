@@ -2,12 +2,11 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-package graphql_test
+package auth_test
 
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -17,21 +16,22 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/policy"
 )
 
-// fakeDB is a minimal in-memory backing store for a real *app.Service,
-// so these GraphQL resolver tests exercise the real command/query boundary
-// (authenticate, authorize, transaction, outbox) end to end through
-// graphql.Do, not just a mocked Service. It mirrors
-// internal/platform/app's own fakes_test.go, trimmed to what resolver
-// tests need.
+// fakeDB is a minimal in-memory backing store for a real *app.Service, so the
+// auth transport tests exercise the real command boundary — authenticate,
+// authorize, transaction, outbox — rather than a mocked Service.
+//
+// It is the rig the GraphQL resolver tests used, carried over when ADR 0061
+// retired that transport and trimmed to what auth needs: users, sessions,
+// password credentials, roles and the outbox. Config and content stores are nil
+// here rather than fakes nothing exercises, so a method that starts reaching
+// for one fails loudly instead of passing against a stub.
 type fakeDB struct {
 	mu        sync.Mutex
 	users     map[domain.UserID]domain.User
 	usernames map[string]domain.UserID
 	sessions  map[domain.SessionID]domain.Session
 	passwords map[domain.UserID]domain.PasswordCredential
-	configs   map[domain.ConfigVersionID]domain.ConfigVersion
 	roles     map[domain.UserID][]domain.Role
-	rolesByID map[domain.RoleID]domain.Role
 	outbox    []domain.OutboxEvent
 }
 
@@ -41,10 +41,27 @@ func newFakeDB() *fakeDB {
 		usernames: make(map[string]domain.UserID),
 		sessions:  make(map[domain.SessionID]domain.Session),
 		passwords: make(map[domain.UserID]domain.PasswordCredential),
-		configs:   make(map[domain.ConfigVersionID]domain.ConfigVersion),
 		roles:     make(map[domain.UserID][]domain.Role),
-		rolesByID: make(map[domain.RoleID]domain.Role),
 	}
+}
+
+func (db *fakeDB) seedUser(user domain.User) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.users[user.ID] = user
+	db.usernames[user.Username] = user.ID
+}
+
+func (db *fakeDB) seedPassword(userID domain.UserID, plaintext string) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.passwords[userID] = domain.PasswordCredential{UserID: userID, Hash: "insecure-test-hash:" + plaintext}
+}
+
+func (db *fakeDB) seedRole(userID domain.UserID, role domain.Role) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.roles[userID] = append(db.roles[userID], role)
 }
 
 func (db *fakeDB) seedSession(id domain.SessionID, userID domain.UserID, now time.Time) {
@@ -57,35 +74,24 @@ func (db *fakeDB) seedSession(id domain.SessionID, userID domain.UserID, now tim
 	}
 }
 
-func (db *fakeDB) seedUser(user domain.User) {
+func (db *fakeDB) session(id domain.SessionID) (domain.Session, bool) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	db.users[user.ID] = user
-	db.usernames[user.Username] = user.ID
+	s, ok := db.sessions[id]
+	return s, ok
 }
 
-func (db *fakeDB) seedRole(userID domain.UserID, role domain.Role) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	db.roles[userID] = append(db.roles[userID], role)
-}
-
-// adminRole grants every action these resolver tests exercise.
-func adminRole() domain.Role {
+// authRole grants exactly the two actions this transport can reach. It is
+// deliberately not an all-permissions admin role: a test that passes only
+// because the caller could do everything would not prove the policy gate is
+// wired at all.
+func authRole() domain.Role {
 	return domain.Role{
-		ID:   "role-admin",
-		Name: "Administrator",
+		ID:   "role-auth",
+		Name: "Auth",
 		Permissions: []domain.Permission{
-			domain.Permission(app.ActionUserRead),
-			domain.Permission(app.ActionUserList),
-			domain.Permission(app.ActionUserStatusUpdate),
 			domain.Permission(app.ActionSessionCreate),
 			domain.Permission(app.ActionSessionRevoke),
-			domain.Permission(app.ActionPermissionRead),
-			domain.Permission(app.ActionConfigDraft),
-			domain.Permission(app.ActionConfigValidate),
-			domain.Permission(app.ActionConfigActivate),
-			domain.Permission(app.ActionConfigRead),
 		},
 	}
 }
@@ -127,16 +133,7 @@ func (s fakeUserStore) Update(_ context.Context, user domain.User) (domain.User,
 	return user, nil
 }
 
-func (s fakeUserStore) List(_ context.Context) ([]domain.User, error) {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-	users := make([]domain.User, 0, len(s.db.users))
-	for _, u := range s.db.users {
-		users = append(users, u)
-	}
-	sort.Slice(users, func(i, j int) bool { return users[i].CreatedAt.Before(users[j].CreatedAt) })
-	return users, nil
-}
+func (s fakeUserStore) List(context.Context) ([]domain.User, error) { return nil, nil }
 
 type fakeSessionStore struct{ db *fakeDB }
 
@@ -222,94 +219,11 @@ func (fakePermissionStore) AttributesForUser(context.Context, domain.UserID) ([]
 	return nil, nil
 }
 
-func (s fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (domain.Role, error) {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-	if _, exists := s.db.rolesByID[role.ID]; exists {
-		return domain.Role{}, contracts.NewError(contracts.Conflict, "role already exists")
-	}
-	s.db.rolesByID[role.ID] = role
+func (fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (domain.Role, error) {
 	return role, nil
 }
 
-func (s fakePermissionStore) GrantRole(_ context.Context, grant domain.Grant) error {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-	role, ok := s.db.rolesByID[grant.RoleID]
-	if !ok {
-		return contracts.NewError(contracts.Conflict, "role does not exist")
-	}
-	for _, existing := range s.db.roles[grant.UserID] {
-		if existing.ID == grant.RoleID {
-			return contracts.NewError(contracts.Conflict, "grant already exists")
-		}
-	}
-	s.db.roles[grant.UserID] = append(s.db.roles[grant.UserID], role)
-	return nil
-}
-
-type fakeConfigStore struct{ db *fakeDB }
-
-func (s fakeConfigStore) Save(_ context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-	s.db.configs[version.ID] = version
-	return version, nil
-}
-
-func (s fakeConfigStore) Latest(_ context.Context) (domain.ConfigVersion, error) {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-	var latest domain.ConfigVersion
-	found := false
-	for _, v := range s.db.configs {
-		if !found || v.CreatedAt.After(latest.CreatedAt) {
-			latest, found = v, true
-		}
-	}
-	if !found {
-		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no config version")
-	}
-	return latest, nil
-}
-
-func (s fakeConfigStore) FindByID(_ context.Context, id domain.ConfigVersionID) (domain.ConfigVersion, error) {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-	version, ok := s.db.configs[id]
-	if !ok {
-		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "config version not found")
-	}
-	return version, nil
-}
-
-func (s fakeConfigStore) FindActive(_ context.Context) (domain.ConfigVersion, error) {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-	for _, v := range s.db.configs {
-		if v.Status == domain.ConfigActive {
-			return v, nil
-		}
-	}
-	return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no active config version")
-}
-
-func (s fakeConfigStore) UpdateStatus(_ context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
-	s.db.mu.Lock()
-	defer s.db.mu.Unlock()
-	if _, ok := s.db.configs[version.ID]; !ok {
-		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "config version not found")
-	}
-	if version.Status == domain.ConfigActive {
-		for id, existing := range s.db.configs {
-			if id != version.ID && existing.Status == domain.ConfigActive {
-				return domain.ConfigVersion{}, contracts.NewError(contracts.Conflict, "another config version is already active")
-			}
-		}
-	}
-	s.db.configs[version.ID] = version
-	return version, nil
-}
+func (fakePermissionStore) GrantRole(context.Context, domain.Grant) error { return nil }
 
 type fakeEventOutbox struct{ db *fakeDB }
 
@@ -343,13 +257,12 @@ type fakeTx struct{ db *fakeDB }
 func (tx fakeTx) Users() contracts.UserStore             { return fakeUserStore{db: tx.db} }
 func (tx fakeTx) Sessions() contracts.SessionStore       { return fakeSessionStore{db: tx.db} }
 func (tx fakeTx) Permissions() contracts.PermissionStore { return fakePermissionStore{db: tx.db} }
-func (tx fakeTx) Config() contracts.ConfigStore          { return fakeConfigStore{db: tx.db} }
 func (tx fakeTx) Outbox() contracts.EventOutbox          { return fakeEventOutbox{db: tx.db} }
 func (tx fakeTx) Credentials() contracts.CredentialStore { return fakeCredentialStore{db: tx.db} }
 
-// No GraphQL resolver reaches the content model yet (ADR 0013's stores landed
-// without a transport surface), so these are nil rather than fake stores
-// nothing exercises. A resolver that starts using one fails loudly here.
+// The auth transport reaches none of these. They are nil rather than fake
+// stores nothing exercises, so a method that starts using one fails loudly.
+func (fakeTx) Config() contracts.ConfigStore                 { return nil }
 func (fakeTx) Nodes() contracts.NodeStore                    { return nil }
 func (fakeTx) Parts() contracts.PartStore                    { return nil }
 func (fakeTx) Relations() contracts.RelationStore            { return nil }
@@ -359,9 +272,8 @@ func (fakeTx) ModuleSettings() contracts.ModuleSettingsStore { return nil }
 type fakeUnitOfWork struct{ db *fakeDB }
 
 func (u fakeUnitOfWork) WithinTx(ctx context.Context, fn func(ctx context.Context, tx contracts.Tx) error) error {
-	// No rollback bookkeeping: these resolver tests only assert successful
-	// end-to-end routing, not the atomicity guarantees app's own test suite
-	// already covers.
+	// No rollback bookkeeping: these tests assert end-to-end routing, not the
+	// atomicity guarantees app's own suite already covers.
 	return fn(ctx, fakeTx{db: u.db})
 }
 
@@ -381,6 +293,10 @@ func (g *fakeIDGenerator) NewID() domain.ID {
 	return domain.ID(fmt.Sprintf("id-%d", g.next))
 }
 
+// fakePasswordVerifier is a reversible stand-in for Argon2id. The real hasher
+// is exercised over real PostgreSQL by the end-to-end test; here the point is
+// that a mismatch reaches the caller as Unauthenticated, which does not depend
+// on which KDF produced the hash.
 type fakePasswordVerifier struct{}
 
 func (fakePasswordVerifier) Hash(plaintext string) (string, error) {
@@ -392,14 +308,12 @@ func (fakePasswordVerifier) Verify(plaintext, hash string) (bool, error) {
 
 func newTestService(db *fakeDB, now time.Time) *app.Service {
 	return app.NewService(app.Deps{
-		UnitOfWork:  fakeUnitOfWork{db: db},
-		Sessions:    fakeSessionStore{db: db},
-		Users:       fakeUserStore{db: db},
-		Credentials: fakeCredentialStore{db: db},
-		Config:      fakeConfigStore{db: db},
-		Permissions: fakePermissionStore{db: db},
-		// No resolver reads content yet, so there is nothing for a fake node
-		// store to serve. A resolver that starts using one fails loudly here.
+		UnitOfWork:       fakeUnitOfWork{db: db},
+		Sessions:         fakeSessionStore{db: db},
+		Users:            fakeUserStore{db: db},
+		Credentials:      fakeCredentialStore{db: db},
+		Config:           nil,
+		Permissions:      fakePermissionStore{db: db},
 		Nodes:            nil,
 		Clock:            fakeClock{now: now},
 		IDs:              &fakeIDGenerator{},
@@ -407,7 +321,7 @@ func newTestService(db *fakeDB, now time.Time) *app.Service {
 		Policy:           policy.NewEngine(fakePermissionStore{db: db}),
 		Events:           fakeEventPublisher{},
 		PasswordVerifier: fakePasswordVerifier{},
-		Capabilities:     nil, // no capabilities registered in resolver tests
-		ModuleSettings:   nil, // no module settings store in resolver tests
+		Capabilities:     nil,
+		ModuleSettings:   nil,
 	})
 }

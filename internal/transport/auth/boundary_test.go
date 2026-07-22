@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-package graphql_test
+package auth_test
 
 import (
 	"go/parser"
@@ -14,24 +14,25 @@ import (
 	"testing"
 )
 
-// forbiddenImportPrefixes are exactly what the GraphQL resolver rule
-// forbids resolvers from reaching for: the concrete Postgres module
-// and any raw SQL driver/connection package. Reaching contracts/domain/app
-// is fine and expected — those are how a resolver is SUPPOSED to reach
-// state.
+// forbiddenImportPrefixes are what the transport rule forbids: the concrete
+// Postgres module and any raw SQL driver. Reaching app/contracts/domain is fine
+// and expected — those are how a transport is SUPPOSED to reach state.
+//
+// This check used to live in internal/transport/graphql, which was the
+// Platform's original transport and so the place the rule was first written
+// down. ADR 0061 retired that package; the rule is unchanged and it is stated
+// here now, alongside the sibling copy in internal/transport/health.
 var forbiddenImportPrefixes = []string{
 	"github.com/mosaic-media/platform/internal/modules/postgres",
 	"github.com/jackc/pgx",
 	"database/sql",
 }
 
-// TestResolversDoNotImportPostgresOrRawSQL is the import boundary check: no
-// file in this package imports internal/modules/postgres or a raw SQL
-// driver. Unlike a
-// text grep, this parses each file's actual import declarations (go/parser
-// with ImportsOnly), so it cannot be fooled by a comment or a substring
-// match and cannot miss an import written differently than expected.
-func TestResolversDoNotImportPostgresOrRawSQL(t *testing.T) {
+// TestAuthTransportDoesNotImportPostgresOrRawSQL parses each file's actual
+// import declarations (go/parser with ImportsOnly), so it cannot be fooled by a
+// comment or a substring match and cannot miss an import written differently
+// than expected.
+func TestAuthTransportDoesNotImportPostgresOrRawSQL(t *testing.T) {
 	dir := packageDir(t)
 
 	entries, err := os.ReadDir(dir)
@@ -55,7 +56,7 @@ func TestResolversDoNotImportPostgresOrRawSQL(t *testing.T) {
 			importPath := strings.Trim(imp.Path.Value, `"`)
 			for _, forbidden := range forbiddenImportPrefixes {
 				if strings.HasPrefix(importPath, forbidden) {
-					t.Errorf("%s: imports %q — GraphQL resolvers must call application services only, never internal/modules/postgres or a raw SQL driver", entry.Name(), importPath)
+					t.Errorf("%s: imports %q — a transport must call application services only, never internal/modules/postgres or a raw SQL driver", entry.Name(), importPath)
 				}
 			}
 		}
@@ -65,9 +66,8 @@ func TestResolversDoNotImportPostgresOrRawSQL(t *testing.T) {
 	}
 }
 
-// packageDir locates this test file's own directory via runtime.Caller, so
-// the check works regardless of the working directory `go test` was
-// invoked from.
+// packageDir locates this test file's own directory via runtime.Caller, so the
+// check works regardless of the working directory `go test` was invoked from.
 func packageDir(t *testing.T) string {
 	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)

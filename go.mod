@@ -4,14 +4,13 @@ go 1.25.0
 
 require (
 	github.com/fergusstrange/embedded-postgres v1.34.0
-	github.com/graphql-go/graphql v0.8.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/zalando/go-keyring v0.2.8
 )
 
 require golang.org/x/crypto v0.54.0
 
-require github.com/mosaic-media/sdui v0.8.0
+require github.com/mosaic-media/sdui v0.9.0
 
 require (
 	connectrpc.com/connect v1.20.0

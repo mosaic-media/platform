@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-// forbiddenImportPrefixes mirror internal/transport/graphql's own boundary
+// forbiddenImportPrefixes mirror internal/transport/auth's own boundary
 // check: no transport may import the concrete Postgres module or a raw SQL
 // driver — the same rule, generalized to every transport.
 var forbiddenImportPrefixes = []string{

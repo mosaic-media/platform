@@ -22,7 +22,7 @@ import (
 // Since the surface was extracted into its own module, Go itself would also
 // reject a Platform-internal import — but this parse keeps the intent explicit
 // and catches a third-party dependency creeping in too, in the same style as
-// the GraphQL and health boundary tests.
+// the auth and health transport boundary tests.
 func TestCapabilityImportsOnlyTheSDK(t *testing.T) {
 	const (
 		sdkPrefix      = "github.com/mosaic-media/sdk/"

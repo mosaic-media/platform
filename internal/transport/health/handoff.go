@@ -7,8 +7,8 @@
 // activation status. Every handler's entire body calls into
 // internal/platform/runtime — the same "transport calls Platform-tier
 // logic only, never a database or Module directly" rule
-// internal/transport/graphql already enforces, generalized to every
-// transport, not just GraphQL. boundary_test.go statically enforces it.
+// internal/transport/auth already enforces, generalized to every
+// transport. boundary_test.go statically enforces it.
 // The shutdown hook itself is not an HTTP endpoint — it is a hook, and a
 // process-level signal handler (the composition root) is what actually
 // invokes runtime.Shutdown; see cmd/mosaic-platform/main.go.

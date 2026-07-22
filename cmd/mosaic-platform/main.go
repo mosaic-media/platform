@@ -37,10 +37,12 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/runtime"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	"github.com/mosaic-media/platform/internal/transport/artwork"
-	graphqltransport "github.com/mosaic-media/platform/internal/transport/graphql"
+	authtransport "github.com/mosaic-media/platform/internal/transport/auth"
 	"github.com/mosaic-media/platform/internal/transport/health"
 	"github.com/mosaic-media/platform/internal/transport/playback"
+	"github.com/mosaic-media/platform/internal/transport/rpc"
 	"github.com/mosaic-media/platform/internal/transport/session"
+	"github.com/mosaic-media/sdui/gen/mosaic/auth/v1/authv1connect"
 	"github.com/mosaic-media/sdui/gen/mosaic/session/v1/sessionv1connect"
 )
 
@@ -58,7 +60,7 @@ const healthAddrEnv = "MOSAIC_HEALTH_ADDR"
 const defaultHealthAddr = ":8080"
 
 // apiAddrEnv names the environment variable carrying the address the
-// client-facing GraphQL API listens on. It is a separate surface from the
+// client-facing Connect API listens on. It is a separate surface from the
 // Supervisor handoff: the handoff is operational (readiness, liveness), the
 // API is where a client — or a compiled-in capability's caller — reaches the
 // application services. Read from the environment for the same bridging
@@ -353,10 +355,9 @@ func run() error {
 	}
 	logSnapshot(context.Background(), "boot-time health check")
 
-	// Assemble the application services over the wired contracts, and build
-	// the executable GraphQL schema that projects them. This is the first
-	// time the composition root constructs app.Service: every dependency it
-	// needs is already on the ContractSet, plus the ABAC policy engine, the
+	// Assemble the application services over the wired contracts. This is the
+	// first time the composition root constructs app.Service: every dependency
+	// it needs is already on the ContractSet, plus the ABAC policy engine, the
 	// event bus as the audit publisher, and the Argon2id password hasher.
 	// Register the optional-module capabilities the Platform can invoke. This
 	// is the composition-root stand-in for ADR 0007's build-time module
@@ -431,11 +432,6 @@ func run() error {
 		boot.Info("ffmpeg and ffprobe found; per-stream playback decisions enabled")
 	} else {
 		boot.Warn("ffmpeg/ffprobe not found; playback relays unprobed, so a release whose audio the client cannot decode will play silently")
-	}
-
-	schema, err := graphqltransport.NewSchema(svc, artworkSigner.Rewrite)
-	if err != nil {
-		return fmt.Errorf("build graphql schema failed: %w", err)
 	}
 
 	// Optionally seed the first administrator. There is no in-band way to
@@ -522,11 +518,18 @@ func run() error {
 	if apiAddr == "" {
 		apiAddr = defaultAPIAddr
 	}
-	// The first-party client session is the Connect two-lane RPC surface
-	// (ADR 0041): unary intents (Navigate/Invoke/SubmitInput/Attach) and one
-	// server-streaming Subscribe per session for push. It supersedes the ADR 0032
-	// WebSocket. GraphQL is retained only as the external/tooling surface, not on
-	// the hot client path.
+	// The client API is Connect, and only Connect (ADR 0061). Two services:
+	// AuthService mints the session, then the two-lane SessionService (ADR 0041)
+	// carries everything else — unary intents (Navigate/Invoke/SubmitInput/
+	// Attach) and one server-streaming Subscribe per session for push. Between
+	// them they are the whole surface a client speaks; the GraphQL transport
+	// that used to sit beside them is gone.
+	authHandler := authtransport.NewHandler(svc)
+	authPath, authConnect := authv1connect.NewAuthServiceHandler(
+		authHandler,
+		connect.WithInterceptors(rpc.TelemetryInterceptor("auth")),
+	)
+
 	sessionHandler := session.NewHandler(svc, artworkSigner.Rewrite, playbackSealer, playbackProber)
 	sessionHandler.Manager().StartReaper(serveCtx)
 	// The session interceptor is the first and most important edge seam
@@ -535,20 +538,20 @@ func run() error {
 	// handlers, application services, modules — inherits its telemetry.
 	sessionPath, sessionConnect := sessionv1connect.NewSessionServiceHandler(
 		sessionHandler,
-		connect.WithInterceptors(session.TelemetryInterceptor()),
+		connect.WithInterceptors(rpc.TelemetryInterceptor("session")),
 	)
 
 	apiMux := http.NewServeMux()
 	// Each plain-HTTP surface is wrapped at its own seam and names itself, so a
 	// record says which surface produced it rather than only that it was HTTP.
-	apiMux.Handle("/graphql", telemetry.HTTPMiddleware("graphql", graphqltransport.Handler(schema)))
 	apiMux.Handle("/artwork", telemetry.HTTPMiddleware("artwork", artwork.Handler(artworkSigner, artwork.GuardedClient())))
 	apiMux.Handle("/playback/", telemetry.HTTPMiddleware("playback", playback.Handler(playbackSealer, playback.Client(), playbackRemuxer)))
+	apiMux.Handle(authPath, authConnect)
 	apiMux.Handle(sessionPath, sessionConnect)
 	// Serve the API over h2c (cleartext HTTP/2) so the two session lanes —
 	// concurrent unary intents and the long-lived Subscribe stream — multiplex
 	// onto one connection (ADR 0041); Connect still degrades to HTTP/1.1 for the
-	// GraphQL and artwork handlers.
+	// artwork and playback handlers.
 	apiServer := &http.Server{
 		Addr:        apiAddr,
 		Handler:     h2c.NewHandler(apiMux, &http2.Server{}),
@@ -574,7 +577,7 @@ func run() error {
 
 	lifecycle.MarkRunning()
 	boot.Info("serving supervisor handoff surface", telemetry.String("addr", healthAddr))
-	boot.Info("serving graphql api", telemetry.String("addr", apiAddr+"/graphql"))
+	boot.Info("serving auth transport", telemetry.String("addr", apiAddr+authPath))
 	boot.Info("serving session transport",
 		telemetry.String("addr", apiAddr+sessionPath),
 		telemetry.String("transport", "connect-two-lane"))

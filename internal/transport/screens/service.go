@@ -5,13 +5,13 @@
 // Package screens is the Platform's SDUI emit-side (ADR 0029). It builds UINode
 // trees from the application query services using the mosaic-sdui Go producer
 // binding, and serves them through a name-keyed registry. It is a projection
-// surface, exactly like the GraphQL resolvers: every builder calls application
+// surface, exactly like a transport handler: every builder calls application
 // query services and nothing else — no store, no transaction.
 //
 // Screens are Platform-emitted. A module contributes content through its
 // provider roles (ADR 0027); the Platform owns how that content is shown. A
-// screen's Action names a Platform GraphQL operation, so the emitted tree and
-// the data its actions drive share one transport.
+// screen's Action names an action the session transport dispatches (ADR 0061),
+// so the emitted tree and the data its actions drive share one transport.
 //
 // The package is split one screen to a file — home.go, search.go, catalog.go,
 // detail.go, shell.go, settings.go — over the shared card builder (card.go) and
@@ -80,7 +80,7 @@ const paramPartID = "partId"
 
 // contentQueries is the slice of the application query surface the screen
 // builders read. Narrowing to an interface keeps the emit-side a projection of
-// the services (like a GraphQL resolver) and makes the builders testable without
+// the services (like any transport handler) and makes the builders testable without
 // standing up a full Service. *app.Service satisfies it.
 type contentQueries interface {
 	SearchAvailableContent(context.Context, app.SearchAvailableContentQuery) (app.SearchAvailableContentResult, error)
