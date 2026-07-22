@@ -124,7 +124,12 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 	if len(m.Cast) > 0 {
 		chips := make([]ui.El, 0, len(m.Cast))
 		for _, p := range m.Cast {
-			chips = append(chips, ui.PersonChip(p.Name, ui.When(p.Role != "", ui.Prop("role", p.Role))))
+			chips = append(chips, ui.PersonChip(p.Name,
+				ui.When(p.Role != "", ui.Prop("role", p.Role)),
+				// Through the artwork proxy like every other remote image
+				// (ADR 0030): a headshot on a third-party CDN would otherwise
+				// leak the viewer's IP and depend on that CDN's CORS.
+				ui.When(p.Photo != "", ui.Prop("avatar", s.art(p.Photo)))))
 		}
 		body = append(body, ui.Section("Cast", ui.Carousel(chips...)))
 	}

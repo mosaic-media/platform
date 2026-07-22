@@ -35,10 +35,14 @@ github.com/mosaic-media/module-stremio-addons v0.13.0 h1:UNyz3TWrVvXfbz3Ie8ke0m2
 github.com/mosaic-media/module-stremio-addons v0.13.0/go.mod h1:y7FgM3pkp0OuEQM38yy9byyK7HDhCZUXx1Uk4u/3mBk=
 github.com/mosaic-media/module-stremio-addons v0.14.0 h1:0dAMXdmcX3Mh77h5zlYBm++Ft5feR4XOtyqH5kOn0QI=
 github.com/mosaic-media/module-stremio-addons v0.14.0/go.mod h1:y7FgM3pkp0OuEQM38yy9byyK7HDhCZUXx1Uk4u/3mBk=
+github.com/mosaic-media/module-stremio-addons v0.15.0 h1:lAmaRpK1mQWfXy6RAboVhTmUXelkni9fduUr0mDovjQ=
+github.com/mosaic-media/module-stremio-addons v0.15.0/go.mod h1:kwKkHLH7YC2XpMNiEws0OzbSZUAgaCHjom2PE6t0wvI=
 github.com/mosaic-media/sdk v0.9.0 h1:NBzNgeQ/mN4B+jY626/F5fZi5Sg8R3laIWrFj+/3q58=
 github.com/mosaic-media/sdk v0.9.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
 github.com/mosaic-media/sdk v0.10.0 h1:N/CElYos1fVNSAIJ0TqfKrE0NjZgqNzH2zFGjHy/I7I=
 github.com/mosaic-media/sdk v0.10.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
+github.com/mosaic-media/sdk v0.11.0 h1:uLDFgH5HofY3q3BhP8+3wkq+4Su1C0HqCYsg5DiCc7Q=
+github.com/mosaic-media/sdk v0.11.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
 github.com/mosaic-media/sdui v0.6.1 h1:EFxbd8b1HmAl0mllEJ8GCStkfA6RSTaEIZilCUugiRM=
 github.com/mosaic-media/sdui v0.6.1/go.mod h1:U2jxF+nZzupVfSU/ysMXOX1XZ1COhP89UoYA5SE8FrM=
 github.com/mosaic-media/sdui v0.8.0 h1:g3Sbj79KWLS4n3ojb63+Y4yN6zr4d00jV8sgz37kAsU=
