@@ -62,6 +62,18 @@ type ResolvePlaybackResult struct {
 	// Headers are request headers the URL's origin requires, nil when it can be
 	// fetched bare.
 	Headers map[string]string
+
+	// What was chosen, and out of how many. Selection is invisible when it works
+	// and indistinguishable from a bug when it does not — "nothing changed"
+	// looks identical whether ranking picked badly or the item only ever had one
+	// candidate to pick from. Reporting both makes that answerable without a
+	// database query.
+	PartID     v1.PartID
+	Release    string
+	VideoCodec string
+	AudioCodec string
+	Height     int
+	Candidates int
 }
 
 // ResolvePlayback turns a Part into a playable upstream location by asking the
@@ -102,7 +114,8 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 	// whether a given client can play them at all; import stored the set
 	// precisely so this choice could be made with the caller in view. The Part
 	// named by the request is the item's entry point, not a verdict.
-	if chosen, ok := s.selectPlayable(ctx, part, q.Prefer); ok {
+	candidates, chosen, switched := s.selectPlayable(ctx, part, q.Prefer)
+	if switched {
 		part = chosen
 	}
 
@@ -137,7 +150,12 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 		return ResolvePlaybackResult{}, contracts.NewError(contracts.NotFound, "playback module resolved no location for this part")
 	}
 
-	return ResolvePlaybackResult{ModuleID: entry.ModuleID, URL: res.URL, Headers: res.Headers}, nil
+	return ResolvePlaybackResult{
+		ModuleID: entry.ModuleID, URL: res.URL, Headers: res.Headers,
+		PartID: part.ID, Release: part.EditionLabel,
+		VideoCodec: part.VideoCodec, AudioCodec: part.AudioCodec, Height: part.Height,
+		Candidates: candidates,
+	}, nil
 }
 
 // playbackProvider picks the playback provider to resolve through, tolerating a
@@ -172,13 +190,15 @@ func (s *Service) playbackProvider() (PlaybackProviderEntry, bool) {
 // That is acceptable *because* it only orders a list — what the chosen release
 // actually contains is settled by probing the bytes before they play (ADR 0050),
 // so a bad parse costs a suboptimal choice rather than a failed play.
-func (s *Service) selectPlayable(ctx context.Context, entry v1.Part, prefer PlaybackPreference) (v1.Part, bool) {
+// It returns how many candidates it had to choose from, which is the difference
+// between "ranking picked this" and "there was nothing else".
+func (s *Service) selectPlayable(ctx context.Context, entry v1.Part, prefer PlaybackPreference) (int, v1.Part, bool) {
 	if entry.NodeID == "" || s.parts == nil {
-		return entry, false
+		return 1, entry, false
 	}
 	candidates, err := s.parts.ListByNode(ctx, entry.NodeID)
 	if err != nil || len(candidates) < 2 {
-		return entry, false
+		return len(candidates), entry, false
 	}
 
 	best, bestScore := entry, playbackScore(entry, prefer)
@@ -190,7 +210,7 @@ func (s *Service) selectPlayable(ctx context.Context, entry v1.Part, prefer Play
 			best, bestScore = c, score
 		}
 	}
-	return best, best.ID != entry.ID
+	return len(candidates), best, best.ID != entry.ID
 }
 
 // codecScore rates one codec against what a client can decode: known-good,

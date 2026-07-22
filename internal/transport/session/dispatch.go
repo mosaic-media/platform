@@ -7,6 +7,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
@@ -101,6 +102,14 @@ func (h *Handler) playPart(ctx context.Context, caller v1.Caller, input []byte) 
 	// film. The plan travels sealed inside the ticket, so the origin does not
 	// re-probe on every range request a seeking player makes.
 	plan := h.planFor(ctx, res.URL, res.Headers)
+
+	// One line saying what was chosen and what will happen to it. Playback has
+	// three independent places to go wrong — selection, probing, and the encode
+	// plan — and from the outside every one of them looks like "it still
+	// buffers". This makes which of them fired answerable from the log.
+	log.Printf("playback: chose %q of %d candidates (%s/%s %dp) -> direct=%v %s",
+		res.Release, res.Candidates, res.VideoCodec, res.AudioCodec, res.Height,
+		plan.DirectPlay, plan.Reason)
 	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, plan)
 	if err != nil {
 		return nil, contracts.WrapError(contracts.Internal, "mint playback ticket", err)
