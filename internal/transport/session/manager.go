@@ -21,10 +21,10 @@ package session
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
 )
@@ -173,8 +173,18 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 	s.cond.Broadcast()
 	s.mu.Unlock()
 
+	// Bind the session identity once; every line below inherits it. The ref is
+	// an opaque session reference (ADR 0017) — credential-adjacent, and never
+	// safe to write verbatim — so it is digested rather than dropped, which
+	// keeps two records about one session tied together without the log
+	// holding the reference itself.
+	lg := telemetry.From(ctx).For("session").With(telemetry.Identifier("session", s.ref))
+
 	started := time.Now()
-	log.Printf("session %s: stream open (resume=%d rebuild=%v epoch=%d)", s.ref, cursor, rebuild, myEpoch)
+	lg.Info("stream open",
+		telemetry.Int64("resume", int64(cursor)),
+		telemetry.Bool("rebuild", rebuild),
+		telemetry.Int64("epoch", int64(myEpoch)))
 	defer func() {
 		s.mu.Lock()
 		s.streams--
@@ -184,8 +194,9 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 		// Why a stream ended is the question that cannot be answered after the
 		// fact without recording it, and every one of these looks identical to a
 		// user: the page says "Reconnecting".
-		log.Printf("session %s: stream closed after %s (%s)", s.ref, time.Since(started).Round(time.Millisecond),
-			streamEndReason(ctx, superseded, closed))
+		lg.Info("stream closed",
+			telemetry.Duration("elapsed", time.Since(started).Round(time.Millisecond)),
+			telemetry.String("reason", streamEndReason(ctx, superseded, closed)))
 	}()
 
 	// Wake the sender when the request context ends, so a client that vanishes
@@ -340,15 +351,18 @@ func (m *Manager) session(ref string) *liveSession {
 // reap discards sessions with no active stream that have been idle past ttl,
 // returning how many were removed. It is pure over the injected now, so a test
 // drives it without waiting on wall-clock.
-func (m *Manager) reap(now time.Time, ttl time.Duration) int {
+func (m *Manager) reap(ctx context.Context, now time.Time, ttl time.Duration) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	lg := telemetry.From(ctx).For("session")
 	removed := 0
 	for ref, s := range m.sessions {
 		s.mu.Lock()
 		idle := s.streams == 0 && now.Sub(s.lastSeen) > ttl
 		if idle {
-			log.Printf("session %s: reaped after %s idle with no stream", ref, now.Sub(s.lastSeen).Round(time.Second))
+			lg.Info("session reaped",
+				telemetry.Identifier("session", ref),
+				telemetry.Duration("idle", now.Sub(s.lastSeen).Round(time.Second)))
 		}
 		s.mu.Unlock()
 		if idle {
@@ -371,7 +385,7 @@ func (m *Manager) StartReaper(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case now := <-t.C:
-				m.reap(now, defaultSessionTTL)
+				m.reap(ctx, now, defaultSessionTTL)
 			}
 		}
 	}()

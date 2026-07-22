@@ -260,7 +260,7 @@ func TestReapDiscardsIdleSessions(t *testing.T) {
 	active.streams = 1 // a live stream: never reaped, however old
 	active.mu.Unlock()
 
-	removed := m.reap(base.Add(2*defaultSessionTTL), defaultSessionTTL)
+	removed := m.reap(context.Background(), base.Add(2*defaultSessionTTL), defaultSessionTTL)
 	if removed != 1 {
 		t.Fatalf("reap removed %d, want 1", removed)
 	}

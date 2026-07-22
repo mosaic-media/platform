@@ -7,10 +7,10 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"log"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	"github.com/mosaic-media/platform/internal/transport/playback"
 	"github.com/mosaic-media/platform/internal/transport/screens"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
@@ -103,13 +103,22 @@ func (h *Handler) playPart(ctx context.Context, caller v1.Caller, input []byte) 
 	// re-probe on every range request a seeking player makes.
 	plan := h.planFor(ctx, res.URL, res.Headers)
 
-	// One line saying what was chosen and what will happen to it. Playback has
+	// One record saying what was chosen and what will happen to it. Playback has
 	// three independent places to go wrong — selection, probing, and the encode
 	// plan — and from the outside every one of them looks like "it still
 	// buffers". This makes which of them fired answerable from the log.
-	log.Printf("playback: chose %q of %d candidates (%s/%s %dp) -> direct=%v %s",
-		res.Release, res.Candidates, res.VideoCodec, res.AudioCodec, res.Height,
-		plan.DirectPlay, plan.Reason)
+	//
+	// The release name is the one field here that is not structural: it is
+	// free text from a third-party source and it names what someone is
+	// watching, so it is classified rather than written verbatim.
+	telemetry.From(ctx).For("playback").Info("stream chosen",
+		telemetry.Sensitive("release", res.Release),
+		telemetry.Int("candidates", res.Candidates),
+		telemetry.String("video_codec", res.VideoCodec),
+		telemetry.String("audio_codec", res.AudioCodec),
+		telemetry.Int("height", res.Height),
+		telemetry.Bool("direct_play", plan.DirectPlay),
+		telemetry.String("reason", plan.Reason))
 	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, plan)
 	if err != nil {
 		return nil, contracts.WrapError(contracts.Internal, "mint playback ticket", err)

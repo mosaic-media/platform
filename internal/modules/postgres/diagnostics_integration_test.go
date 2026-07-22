@@ -15,6 +15,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/diagnostics"
 	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/platform/events"
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
 // TestDiagnosticsRegistryReportsRealStateAcrossPostgresWorkerAndBus is the
@@ -110,15 +111,16 @@ func TestDiagnosticsRegistryReportsRealStateAcrossPostgresWorkerAndBus(t *testin
 	}
 
 	logPath := filepath.Join(t.TempDir(), "diagnostics.log")
-	logger, err := diagnostics.NewFileLogger(logPath)
+	sink, err := telemetry.NewFileSink(logPath)
 	if err != nil {
-		t.Fatalf("NewFileLogger: %v", err)
+		t.Fatalf("NewFileSink: %v", err)
 	}
-	defer logger.Close()
+	defer sink.Close()
+	logger := telemetry.New(sink, telemetry.Resource{ServiceName: "mosaic-platform"}, telemetry.LevelInfo)
 	for _, health := range registry.Snapshot(c) {
-		logger.Info(health.Component, "health check", diagnostics.ComponentHealthFields(health)...)
+		logger.For(health.Component).Info("health check", telemetry.ComponentHealthFields(health)...)
 	}
-	if err := logger.Close(); err != nil {
+	if err := sink.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 	logData, err := os.ReadFile(logPath)

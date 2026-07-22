@@ -18,6 +18,13 @@ import (
 
 var testNow = time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 
+// fakeCredential is a deliberately secret-shaped string. The support bundle
+// must never carry it verbatim. It is declared here rather than shared with
+// the telemetry package's identical constant on purpose: a test that proves
+// something is not leaked should not depend on another package to supply the
+// thing it is looking for.
+const fakeCredential = "hunter2-super-secret-password-AKIAFAKEEXAMPLE1234"
+
 func TestBuildSupportBundleRedactsAnythingNotExplicitlyNone(t *testing.T) {
 	components := []domain.ComponentHealth{
 		{

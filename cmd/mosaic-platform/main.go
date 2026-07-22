@@ -33,6 +33,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/events"
 	"github.com/mosaic-media/platform/internal/platform/policy"
 	"github.com/mosaic-media/platform/internal/platform/runtime"
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	"github.com/mosaic-media/platform/internal/transport/artwork"
 	graphqltransport "github.com/mosaic-media/platform/internal/transport/graphql"
 	"github.com/mosaic-media/platform/internal/transport/health"
@@ -71,6 +72,26 @@ const (
 	bootstrapAdminUserEnv     = "MOSAIC_BOOTSTRAP_ADMIN_USERNAME"
 	bootstrapAdminPasswordEnv = "MOSAIC_BOOTSTRAP_ADMIN_PASSWORD"
 )
+
+// logLevelEnv names the environment variable carrying the minimum level this
+// process records. It is read from the environment for the same bridging
+// reason as the DSN above: the level is a Hot-class configuration field once
+// the config pipeline owns it, and this stands in until then.
+const logLevelEnv = "MOSAIC_LOG_LEVEL"
+
+// serviceName and serviceVersion identify this process on every record it
+// emits. Mosaic is one host running more than one process — this one, the
+// Supervisor when it exists — so which process spoke is a required dimension
+// rather than a decoration (ADR 0053).
+const (
+	serviceName    = "mosaic-platform"
+	serviceVersion = "0.1.0"
+)
+
+// telemetryLogPath is the durable local sink. It is the one that survives a
+// crash and keeps working when PostgreSQL does not, which is the case it
+// exists for (ADR 0058).
+const telemetryLogPath = "logs/mosaic-platform.log"
 
 // adminPermissions is the authority the bootstrapped administrator receives:
 // every action the application services check. It is assembled from the app
@@ -113,25 +134,59 @@ func registerCapabilities(reg *app.CapabilityRegistry) {
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "mosaic-platform:", err)
+		// The last resort, and the only write in this process that does not go
+		// through telemetry. It runs when run() failed — possibly because
+		// building telemetry itself is what failed — so there may be nothing
+		// structured left to write to. Written directly rather than through fmt
+		// so the standing gate in test/logging stays able to cover this file
+		// rather than having to exempt it.
+		_, _ = os.Stderr.WriteString("mosaic-platform: " + err.Error() + "\n")
 		os.Exit(1)
 	}
 }
 
 func run() error {
+	// Telemetry is constructed before anything else, because every line after
+	// this one has something worth saying and the only alternative available
+	// to it would be fmt.Printf (ADR 0053). Two sinks, neither optional
+	// (ADR 0058): the console keeps the boot narration legible to a human at a
+	// terminal, and the file is the durable record that survives a crash and
+	// still works when the database does not.
+	resource := telemetry.NewResource(serviceName, serviceVersion)
+	fileSink, err := telemetry.NewFileSink(telemetryLogPath)
+	if err != nil {
+		return fmt.Errorf("open telemetry log failed: %w", err)
+	}
+	defer fileSink.Close()
+	root := telemetry.New(
+		telemetry.MultiSink{telemetry.NewConsoleSink(os.Stdout), fileSink},
+		resource,
+		telemetry.ParseLevel(os.Getenv(logLevelEnv)),
+	)
+	boot := root.For("composition-root")
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("config load failed: %w", err)
 	}
-	fmt.Printf("mosaic-platform: booting (environment=%s)\n", cfg.Environment)
+	// The boot id names this start of the process. It is minted here today and
+	// adopted from the environment when something started us and supplied one
+	// — which is the single piece of ADR 0060 that can exist before the
+	// Supervisor does, so there is something to hand over to when it arrives.
+	boot.Info("booting",
+		telemetry.String("environment", cfg.Environment),
+		telemetry.String("boot_id", resource.BootID),
+		telemetry.String("version", serviceVersion))
 
 	// Register built-in modules the same way an external Module would be
 	// discovered. Postgres is the first, required storage module.
 	moduleRegistry := builtin.NewRegistry()
 	moduleRegistry.Register(postgres.New())
 	for _, m := range moduleRegistry.Manifests() {
-		fmt.Printf("mosaic-platform: registered built-in module %s@%s (fulfills %d contracts)\n",
-			m.ID, m.Version, len(m.Fulfills))
+		boot.Info("registered built-in module",
+			telemetry.String("module", m.ID),
+			telemetry.String("version", m.Version),
+			telemetry.Int("fulfills", len(m.Fulfills)))
 	}
 	generationMetadata := runtime.BuildGenerationMetadata(moduleRegistry)
 
@@ -140,8 +195,13 @@ func run() error {
 		// Storage is not configured yet. Keep the scaffold's boot-and-exit
 		// behaviour rather than failing, so the process still starts before
 		// a DSN is provided by another means.
-		fmt.Printf("mosaic-platform: %s not set; skipping storage bootstrap\n", postgresDSNEnv)
-		fmt.Println("mosaic-platform: exiting cleanly")
+		// This exits 0, which is indistinguishable from a healthy boot to
+		// anything watching exit codes — so it must at least be unmistakable in
+		// the log. ADR 0060 names this as one of the failures only a
+		// supervising process can properly report.
+		boot.Warn("storage not configured; skipping storage bootstrap",
+			telemetry.String("expected_env", postgresDSNEnv))
+		boot.Info("exiting cleanly")
 		return nil
 	}
 
@@ -180,8 +240,12 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("storage health check failed: %w", err)
 	}
-	fmt.Printf("mosaic-platform: storage ready (%s: %s — %s)\n",
-		storageHealth.Component, storageHealth.State, storageHealth.Detail)
+	// Detail is free text a reporter attached, so it is classified rather than
+	// printed: it is exactly where a DSN with a password in it would surface.
+	boot.Info("storage ready",
+		telemetry.String("component", storageHealth.Component),
+		telemetry.String("state", string(storageHealth.State)),
+		telemetry.Sensitive("detail", storageHealth.Detail))
 
 	// Wire the in-process Event Bus and the outbox worker that drains
 	// committed outbox rows into it.
@@ -194,7 +258,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("outbox drain failed: %w", err)
 	}
-	fmt.Printf("mosaic-platform: outbox worker drained %d event(s)\n", published)
+	boot.Info("outbox drained at boot", telemetry.Int("events", published))
 
 	// Aggregate real component health per the diagnostics model, backing
 	// both the local structured log and the /readyz endpoint below.
@@ -203,15 +267,9 @@ func run() error {
 	diagRegistry.Register("event-bus", bus)
 	diagRegistry.Register("outbox-worker", worker, "postgres", "event-bus")
 
-	logger, err := diagnostics.NewFileLogger("logs/mosaic-platform.log")
-	if err != nil {
-		return fmt.Errorf("open diagnostics log failed: %w", err)
-	}
-	defer logger.Close()
-
 	logSnapshot := func(ctx context.Context, label string) {
 		for _, h := range diagRegistry.Snapshot(ctx) {
-			logger.Info(h.Component, label, diagnostics.ComponentHealthFields(h)...)
+			root.For(h.Component).Info(label, telemetry.ComponentHealthFields(h)...)
 		}
 	}
 	logSnapshot(context.Background(), "boot-time health check")
@@ -234,7 +292,11 @@ func run() error {
 		return fmt.Errorf("capability registry invalid: %w", err)
 	}
 	for _, m := range capRegistry.Manifests() {
-		fmt.Printf("mosaic-platform: registered capability %s@%s (%s) — provides %v\n", m.ID, m.Version, m.Name, m.Provides)
+		boot.Info("registered capability",
+			telemetry.String("module", m.ID),
+			telemetry.String("version", m.Version),
+			telemetry.String("name", m.Name),
+			telemetry.String("provides", fmt.Sprint(m.Provides)))
 	}
 
 	svc := app.NewService(app.Deps{
@@ -287,9 +349,9 @@ func run() error {
 	playbackRemuxer := playback.NewRemuxer()
 	playbackProber := playback.NewProber()
 	if playbackRemuxer.Available() && playbackProber.Available() {
-		fmt.Println("mosaic-platform: ffmpeg + ffprobe found; per-stream playback decisions enabled (ADR 0050)")
+		boot.Info("ffmpeg and ffprobe found; per-stream playback decisions enabled")
 	} else {
-		fmt.Println("mosaic-platform: ffmpeg/ffprobe not found; playback relays unprobed, so a release whose audio the client cannot decode will play silently")
+		boot.Warn("ffmpeg/ffprobe not found; playback relays unprobed, so a release whose audio the client cannot decode will play silently")
 	}
 
 	schema, err := graphqltransport.NewSchema(svc, artworkSigner.Rewrite)
@@ -316,10 +378,14 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("bootstrap admin failed: %w", err)
 		}
+		// The username is a person, so it is classified rather than printed —
+		// and Identifier rather than Sensitive, so two records about the same
+		// administrator can still be tied together without the log holding who
+		// they are.
 		if created {
-			fmt.Printf("mosaic-platform: bootstrapped administrator %q\n", adminUser)
+			boot.Info("bootstrapped administrator", telemetry.Identifier("username", adminUser))
 		} else {
-			fmt.Printf("mosaic-platform: administrator %q already present\n", adminUser)
+			boot.Info("administrator already present", telemetry.Identifier("username", adminUser))
 		}
 	}
 
@@ -331,6 +397,12 @@ func run() error {
 	// status until a shutdown signal arrives.
 	serveCtx, stopServe := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopServe()
+	// Seed the root logger into the serving context. This is the composition
+	// root doing its one job as an edge (ADR 0053): everything started from
+	// serveCtx — the outbox worker's poll loop, the session reaper, and every
+	// request handler beneath them — reaches telemetry through the context it
+	// already receives, and nothing below needs a logger parameter.
+	serveCtx = telemetry.Into(serveCtx, root)
 
 	worker.Start(serveCtx)
 
@@ -389,18 +461,20 @@ func run() error {
 	go serve(apiServer)
 
 	lifecycle.MarkRunning()
-	fmt.Printf("mosaic-platform: serving Supervisor handoff surface on %s\n", healthAddr)
-	fmt.Printf("mosaic-platform: serving GraphQL API on %s/graphql\n", apiAddr)
-	fmt.Printf("mosaic-platform: serving session transport on %s%s* (Connect two-lane, ADR 0041)\n", apiAddr, sessionPath)
-	fmt.Println("mosaic-platform: ready")
+	boot.Info("serving supervisor handoff surface", telemetry.String("addr", healthAddr))
+	boot.Info("serving graphql api", telemetry.String("addr", apiAddr+"/graphql"))
+	boot.Info("serving session transport",
+		telemetry.String("addr", apiAddr+sessionPath),
+		telemetry.String("transport", "connect-two-lane"))
+	boot.Info("ready")
 
 	var serveErr error
 	select {
 	case <-serveCtx.Done():
-		fmt.Println("mosaic-platform: shutdown signal received")
+		boot.Info("shutdown signal received")
 	case serveErr = <-serveErrCh:
 		if serveErr != nil {
-			fmt.Fprintf(os.Stderr, "mosaic-platform: health server error: %v\n", serveErr)
+			boot.Error("http server failed", telemetry.Err(serveErr))
 		}
 	}
 
@@ -418,12 +492,12 @@ func run() error {
 
 	result := runtime.Shutdown(shutdownCtx, lifecycle, worker)
 	if result.FinalDrainErr != nil {
-		fmt.Fprintf(os.Stderr, "mosaic-platform: final outbox drain failed: %v\n", result.FinalDrainErr)
+		boot.Error("final outbox drain failed", telemetry.Err(result.FinalDrainErr))
 	} else {
-		fmt.Printf("mosaic-platform: final outbox drain published %d event(s)\n", result.FinalDrainPublished)
+		boot.Info("final outbox drain complete", telemetry.Int("events", result.FinalDrainPublished))
 	}
 	logSnapshot(context.Background(), "shutdown health check")
 
-	fmt.Println("mosaic-platform: exiting cleanly")
+	boot.Info("exiting cleanly")
 	return serveErr
 }

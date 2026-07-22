@@ -25,6 +25,13 @@ const (
 	// material and must never appear in diagnostics. Audit payloads should
 	// never be this class; it exists as an explicit guard.
 	RedactionSecret RedactionClass = "secret"
+	// RedactionIdentifier marks a value emitted as a stable salted digest
+	// rather than verbatim. It answers "is this the same subject as before"
+	// without recording who the subject is — which RedactionSensitive cannot,
+	// since it drops the value entirely. It is pseudonymous, not anonymous:
+	// a digest can be re-linked to a person given the salt and a small user
+	// set, so it is still treated as personal data for retention and access.
+	RedactionIdentifier RedactionClass = "identifier"
 )
 
 // Event is a Platform domain event and its envelope. Modules own event
