@@ -89,6 +89,9 @@ func (t *tx) Sessions() contracts.SessionStore       { return &sessionStore{q: t
 func (t *tx) Permissions() contracts.PermissionStore { return &permissionStore{q: t.q} }
 func (t *tx) Config() contracts.ConfigStore          { return &configStore{q: t.q} }
 func (t *tx) Outbox() contracts.EventOutbox          { return &eventOutbox{q: t.q} }
+func (t *tx) UserPreferences() contracts.UserPreferenceStore {
+	return &userPreferenceStore{q: t.q}
+}
 func (t *tx) Credentials() contracts.CredentialStore { return &credentialStore{q: t.q} }
 
 // The content model (ADR 0013). These share the same pgx.Tx as every store

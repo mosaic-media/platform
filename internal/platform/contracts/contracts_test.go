@@ -35,11 +35,12 @@ func (mockTx) Credentials() contracts.CredentialStore { return mockCredentialSto
 // The content-model stores (ADR 0013) are nil here. This mock exists only to
 // assert that contracts.Tx is satisfiable; no test calls through it, and a
 // nil return fails loudly if that ever stops being true.
-func (mockTx) Nodes() contracts.NodeStore                    { return nil }
-func (mockTx) Parts() contracts.PartStore                    { return nil }
-func (mockTx) Relations() contracts.RelationStore            { return nil }
-func (mockTx) SourceBindings() contracts.SourceBindingStore  { return nil }
-func (mockTx) ModuleSettings() contracts.ModuleSettingsStore { return nil }
+func (mockTx) Nodes() contracts.NodeStore                     { return nil }
+func (mockTx) Parts() contracts.PartStore                     { return nil }
+func (mockTx) Relations() contracts.RelationStore             { return nil }
+func (mockTx) SourceBindings() contracts.SourceBindingStore   { return nil }
+func (mockTx) ModuleSettings() contracts.ModuleSettingsStore  { return nil }
+func (mockTx) UserPreferences() contracts.UserPreferenceStore { return nil }
 
 type mockUserStore struct{}
 

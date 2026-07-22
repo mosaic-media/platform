@@ -137,6 +137,7 @@ func adminPermissions() []domain.Permission {
 		app.ActionContentCreate, app.ActionContentRead, app.ActionContentRelate,
 		app.ActionContentBind, app.ActionContentResolve, app.ActionContentImport,
 		app.ActionModuleConfigure, app.ActionModuleRead,
+		app.ActionPreferenceWrite, app.ActionPreferenceRead,
 	}
 	perms := make([]domain.Permission, len(actions))
 	for i, a := range actions {
@@ -418,6 +419,7 @@ func run() error {
 		PasswordVerifier: crypto.NewPasswordHasher(),
 		Capabilities:     capRegistry,
 		ModuleSettings:   set.ModuleSettings,
+		UserPreferences:  set.UserPreferences,
 	})
 	// The artwork proxy (ADR 0030) re-serves remote poster/backdrop images from
 	// the Platform's origin, so a client gets same-origin (CORS-clean) artwork.

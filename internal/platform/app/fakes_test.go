@@ -43,17 +43,18 @@ func (t *trace) snapshot() []string {
 // fakeDBSnapshot is a point-in-time copy of every mutable fakeDB field, so
 // fakeUnitOfWork can restore it on rollback.
 type fakeDBSnapshot struct {
-	users          map[domain.UserID]domain.User
-	usernames      map[string]domain.UserID
-	sessions       map[domain.SessionID]domain.Session
-	passwords      map[domain.UserID]domain.PasswordCredential
-	configs        map[domain.ConfigVersionID]domain.ConfigVersion
-	outbox         []domain.OutboxEvent
-	nodes          map[v1.NodeID]v1.Node
-	parts          map[v1.PartID]v1.Part
-	relations      map[v1.RelationID]v1.Relation
-	bindings       map[v1.SourceBindingID]v1.SourceBinding
-	moduleSettings map[string]domain.ModuleSettings
+	users           map[domain.UserID]domain.User
+	usernames       map[string]domain.UserID
+	sessions        map[domain.SessionID]domain.Session
+	passwords       map[domain.UserID]domain.PasswordCredential
+	configs         map[domain.ConfigVersionID]domain.ConfigVersion
+	outbox          []domain.OutboxEvent
+	nodes           map[v1.NodeID]v1.Node
+	parts           map[v1.PartID]v1.Part
+	relations       map[v1.RelationID]v1.Relation
+	bindings        map[v1.SourceBindingID]v1.SourceBinding
+	moduleSettings  map[string]domain.ModuleSettings
+	userPreferences map[string]domain.UserPreference
 }
 
 // fakeDB is the shared backing store behind every fake contract in this
@@ -78,27 +79,29 @@ type fakeDB struct {
 
 	// nodes and parts back the content commands and queries; relations and
 	// bindings back the graph and identity commands.
-	nodes          map[v1.NodeID]v1.Node
-	parts          map[v1.PartID]v1.Part
-	relations      map[v1.RelationID]v1.Relation
-	bindings       map[v1.SourceBindingID]v1.SourceBinding
-	moduleSettings map[string]domain.ModuleSettings
+	nodes           map[v1.NodeID]v1.Node
+	parts           map[v1.PartID]v1.Part
+	relations       map[v1.RelationID]v1.Relation
+	bindings        map[v1.SourceBindingID]v1.SourceBinding
+	moduleSettings  map[string]domain.ModuleSettings
+	userPreferences map[string]domain.UserPreference
 }
 
 func newFakeDB() *fakeDB {
 	return &fakeDB{
-		users:          make(map[domain.UserID]domain.User),
-		usernames:      make(map[string]domain.UserID),
-		sessions:       make(map[domain.SessionID]domain.Session),
-		passwords:      make(map[domain.UserID]domain.PasswordCredential),
-		configs:        make(map[domain.ConfigVersionID]domain.ConfigVersion),
-		roles:          make(map[domain.UserID][]domain.Role),
-		rolesByID:      make(map[domain.RoleID]domain.Role),
-		nodes:          make(map[v1.NodeID]v1.Node),
-		parts:          make(map[v1.PartID]v1.Part),
-		relations:      make(map[v1.RelationID]v1.Relation),
-		bindings:       make(map[v1.SourceBindingID]v1.SourceBinding),
-		moduleSettings: make(map[string]domain.ModuleSettings),
+		users:           make(map[domain.UserID]domain.User),
+		usernames:       make(map[string]domain.UserID),
+		sessions:        make(map[domain.SessionID]domain.Session),
+		passwords:       make(map[domain.UserID]domain.PasswordCredential),
+		configs:         make(map[domain.ConfigVersionID]domain.ConfigVersion),
+		roles:           make(map[domain.UserID][]domain.Role),
+		rolesByID:       make(map[domain.RoleID]domain.Role),
+		nodes:           make(map[v1.NodeID]v1.Node),
+		parts:           make(map[v1.PartID]v1.Part),
+		relations:       make(map[v1.RelationID]v1.Relation),
+		bindings:        make(map[v1.SourceBindingID]v1.SourceBinding),
+		moduleSettings:  make(map[string]domain.ModuleSettings),
+		userPreferences: make(map[string]domain.UserPreference),
 	}
 }
 
@@ -147,6 +150,8 @@ func adminRole() domain.Role {
 			domain.Permission(app.ActionUserList),
 			domain.Permission(app.ActionUserStatusUpdate),
 			domain.Permission(app.ActionPermissionRead),
+			domain.Permission(app.ActionPreferenceWrite),
+			domain.Permission(app.ActionPreferenceRead),
 			domain.Permission(app.ActionConfigRead),
 			domain.Permission(app.ActionContentRead),
 			domain.Permission(app.ActionContentCreate),
@@ -596,6 +601,61 @@ func (tx *fakeTx) SourceBindings() contracts.SourceBindingStore {
 func (tx *fakeTx) ModuleSettings() contracts.ModuleSettingsStore {
 	return &fakeModuleSettingsStore{db: tx.db, trace: tx.trace}
 }
+func (tx *fakeTx) UserPreferences() contracts.UserPreferenceStore {
+	return &fakeUserPreferenceStore{db: tx.db, trace: tx.trace}
+}
+
+// fakeUserPreferenceStore implements contracts.UserPreferenceStore over
+// fakeDB, keyed the same way the real table is: one entry per (user, key).
+type fakeUserPreferenceStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func prefKey(userID domain.UserID, key string) string { return string(userID) + "\u0000" + key }
+
+func (s *fakeUserPreferenceStore) Get(_ context.Context, userID domain.UserID, key string) (domain.UserPreference, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	pref, ok := s.db.userPreferences[prefKey(userID, key)]
+	if !ok {
+		return domain.UserPreference{}, contracts.NewError(contracts.NotFound, "preference not set")
+	}
+	return pref, nil
+}
+
+func (s *fakeUserPreferenceStore) List(_ context.Context, userID domain.UserID) ([]domain.UserPreference, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var out []domain.UserPreference
+	for _, pref := range s.db.userPreferences {
+		if pref.UserID == userID {
+			out = append(out, pref)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out, nil
+}
+
+func (s *fakeUserPreferenceStore) Set(_ context.Context, pref domain.UserPreference) (domain.UserPreference, error) {
+	s.trace.record("user_preferences.set:" + pref.Key)
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.userPreferences[prefKey(pref.UserID, pref.Key)] = pref
+	return pref, nil
+}
+
+func (s *fakeUserPreferenceStore) Delete(_ context.Context, userID domain.UserID, key string) error {
+	s.trace.record("user_preferences.delete:" + key)
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	k := prefKey(userID, key)
+	if _, ok := s.db.userPreferences[k]; !ok {
+		return contracts.NewError(contracts.NotFound, "preference not set")
+	}
+	delete(s.db.userPreferences, k)
+	return nil
+}
 
 // fakeModuleSettingsStore implements contracts.ModuleSettingsStore over
 // fakeDB, backing both the direct read handle and the fakeTx write path.
@@ -708,6 +768,7 @@ func newTestServiceWithCapabilities(db *fakeDB, tr *trace, now time.Time, caps *
 		PasswordVerifier: fakePasswordVerifier{},
 		Capabilities:     caps,
 		ModuleSettings:   &fakeModuleSettingsStore{db: db, trace: tr},
+		UserPreferences:  &fakeUserPreferenceStore{db: db, trace: tr},
 	})
 }
 

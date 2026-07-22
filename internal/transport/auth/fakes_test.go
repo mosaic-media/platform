@@ -269,6 +269,8 @@ func (fakeTx) Relations() contracts.RelationStore            { return nil }
 func (fakeTx) SourceBindings() contracts.SourceBindingStore  { return nil }
 func (fakeTx) ModuleSettings() contracts.ModuleSettingsStore { return nil }
 
+func (fakeTx) UserPreferences() contracts.UserPreferenceStore { return nil }
+
 type fakeUnitOfWork struct{ db *fakeDB }
 
 func (u fakeUnitOfWork) WithinTx(ctx context.Context, fn func(ctx context.Context, tx contracts.Tx) error) error {

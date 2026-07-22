@@ -31,6 +31,7 @@ type Service struct {
 	configStore      contracts.ConfigStore
 	permissions      contracts.PermissionStore
 	moduleSettings   contracts.ModuleSettingsStore
+	userPreferences  contracts.UserPreferenceStore
 	nodes            contracts.NodeStore
 	parts            contracts.PartStore
 	clock            contracts.Clock
@@ -75,6 +76,9 @@ type Deps struct {
 	PasswordVerifier domain.PasswordVerifier
 	Capabilities     *CapabilityRegistry
 	ModuleSettings   contracts.ModuleSettingsStore
+	// UserPreferences is the direct read handle for a user's own settings.
+	// Writes go through the UnitOfWork like every other mutation.
+	UserPreferences contracts.UserPreferenceStore
 }
 
 // NewService wires a Service to its Platform contracts, policy decision point
@@ -88,6 +92,7 @@ func NewService(d Deps) *Service {
 		configStore:      d.Config,
 		permissions:      d.Permissions,
 		moduleSettings:   d.ModuleSettings,
+		userPreferences:  d.UserPreferences,
 		nodes:            d.Nodes,
 		parts:            d.Parts,
 		clock:            d.Clock,

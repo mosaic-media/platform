@@ -43,4 +43,10 @@ type Tx interface {
 	// document (ADR 0021). It joins the set so a settings change and its
 	// outbox event commit in one transaction, like every other write.
 	ModuleSettings() ModuleSettingsStore
+
+	// UserPreferences persists what a user chose for themselves — expert mode
+	// (ADR 0058) first, and more to come. It joins the set for the same reason
+	// ModuleSettings did: a preference change emits an outbox event, and the
+	// two must commit together or neither.
+	UserPreferences() UserPreferenceStore
 }
