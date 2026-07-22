@@ -21,6 +21,7 @@ package session
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -141,6 +142,20 @@ func (s *liveSession) nextLocked(cursor uint64) *sessionv1.ServerMessage {
 	return nil
 }
 
+// keepaliveInterval is how often an idle push lane sends a no-op.
+//
+// A Subscribe stream only carries traffic when the server has something to say,
+// so a user reading a page sends nothing for minutes — and an idle HTTP
+// connection is exactly what proxies, load balancers and container port
+// forwarders reap. The client then correctly reports "Reconnecting" for a stream
+// nothing was wrong with, and a reader who has touched nothing sees the
+// connection drop repeatedly.
+//
+// Well inside the 60s that intermediaries commonly use, and cheap: an empty
+// ServerMessage carries no body, so a client ignores it by the same default
+// branch that ignores a message type it does not know.
+const keepaliveInterval = 20 * time.Second
+
 // serve is the single sender goroutine for a Subscribe stream. It supersedes any
 // prior stream for this session (so a reconnect wins), runs onConnect for a
 // fresh/rebuild connect, then drains the mailbox to send, replaying from the
@@ -157,10 +172,20 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 	// and exits — a reconnect promptly retires the stream it replaces.
 	s.cond.Broadcast()
 	s.mu.Unlock()
+
+	started := time.Now()
+	log.Printf("session %s: stream open (resume=%d rebuild=%v epoch=%d)", s.ref, cursor, rebuild, myEpoch)
 	defer func() {
 		s.mu.Lock()
 		s.streams--
+		superseded := s.epoch != myEpoch
+		closed := s.closed
 		s.mu.Unlock()
+		// Why a stream ended is the question that cannot be answered after the
+		// fact without recording it, and every one of these looks identical to a
+		// user: the page says "Reconnecting".
+		log.Printf("session %s: stream closed after %s (%s)", s.ref, time.Since(started).Round(time.Millisecond),
+			streamEndReason(ctx, superseded, closed))
 	}()
 
 	// Wake the sender when the request context ends, so a client that vanishes
@@ -184,8 +209,27 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 		onConnect()
 	}
 
+	// A ticker broadcasts on cond so the parked sender wakes on a schedule and
+	// can emit a keepalive. It has to go through cond rather than sending
+	// directly, because send is only safe from this one goroutine.
+	ka := time.NewTicker(keepaliveInterval)
+	defer ka.Stop()
+	go func() {
+		for {
+			select {
+			case <-ka.C:
+				s.mu.Lock()
+				s.cond.Broadcast()
+				s.mu.Unlock()
+			case <-stop:
+				return
+			}
+		}
+	}()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	lastSend := time.Now()
 	for {
 		if ctx.Err() != nil {
 			return nil
@@ -195,6 +239,18 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 		}
 		msg := s.nextLocked(from)
 		if msg == nil {
+			// Caught up. Emit a keepalive if the lane has been quiet long
+			// enough, then park again.
+			if time.Since(lastSend) >= keepaliveInterval {
+				s.mu.Unlock()
+				err := send(&sessionv1.ServerMessage{})
+				s.mu.Lock()
+				if err != nil {
+					return err
+				}
+				lastSend = time.Now()
+				continue
+			}
 			s.cond.Wait()
 			continue
 		}
@@ -204,7 +260,22 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 		if err != nil {
 			return err
 		}
+		lastSend = time.Now()
 		from = msg.Seq
+	}
+}
+
+// streamEndReason names why a sender returned, for the close log.
+func streamEndReason(ctx context.Context, superseded, closed bool) string {
+	switch {
+	case superseded:
+		return "superseded by a reconnect"
+	case closed:
+		return "session closed"
+	case ctx.Err() != nil:
+		return "client disconnected: " + ctx.Err().Error()
+	default:
+		return "send failed"
 	}
 }
 
@@ -276,6 +347,9 @@ func (m *Manager) reap(now time.Time, ttl time.Duration) int {
 	for ref, s := range m.sessions {
 		s.mu.Lock()
 		idle := s.streams == 0 && now.Sub(s.lastSeen) > ttl
+		if idle {
+			log.Printf("session %s: reaped after %s idle with no stream", ref, now.Sub(s.lastSeen).Round(time.Second))
+		}
 		s.mu.Unlock()
 		if idle {
 			s.stopInput()

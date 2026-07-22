@@ -344,3 +344,85 @@ func TestConcurrentRouteAccessIsRaceFree(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+// TestIdleStreamSendsKeepalives is the fix for a reconnect nobody caused.
+//
+// A Subscribe stream only carries traffic when the server has something to say,
+// so a user reading a page sends nothing for minutes — and an idle HTTP
+// connection is what proxies, load balancers and container port forwarders reap.
+// The client then reports "Reconnecting" for a stream that was working fine.
+//
+// The keepalive is an empty ServerMessage: no body, so a client ignores it
+// through the same branch that ignores a message type it does not recognise.
+func TestIdleStreamSendsKeepalives(t *testing.T) {
+	s := newLiveSession("s-keepalive", time.Now())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	got := make(chan *sessionv1.ServerMessage, 8)
+	send := func(m *sessionv1.ServerMessage) error {
+		select {
+		case got <- m:
+		default:
+		}
+		return nil
+	}
+
+	done := make(chan struct{})
+	go func() { _ = s.serve(ctx, 0, func() {}, send); close(done) }()
+
+	// The stream is idle: nothing is ever enqueued. Without a keepalive it would
+	// sit silent indefinitely, which is exactly the condition that gets it cut.
+	deadline := time.After(keepaliveInterval * 3)
+	for {
+		select {
+		case m := <-got:
+			if m.GetBody() == nil {
+				cancel()
+				<-done
+				return // a bodyless message is the keepalive
+			}
+		case <-deadline:
+			cancel()
+			<-done
+			t.Fatalf("no keepalive within %s on an idle stream", keepaliveInterval*3)
+		}
+	}
+}
+
+// TestKeepaliveYieldsToRealMessages — a keepalive must never delay or displace
+// actual content. It only fills silence.
+func TestKeepaliveYieldsToRealMessages(t *testing.T) {
+	s := newLiveSession("s-yield", time.Now())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	got := make(chan *sessionv1.ServerMessage, 8)
+	send := func(m *sessionv1.ServerMessage) error { got <- m; return nil }
+
+	// Enqueue only once the stream is actually open. A fresh connect (cursor 0)
+	// starts from the session's current seq and deliberately does not replay
+	// what came before it — onConnect rebuilds instead — so a message enqueued
+	// in the window before the stream opens is correctly skipped. An earlier
+	// version of this test enqueued there and failed, which was the test being
+	// wrong rather than the loop.
+	ready := make(chan struct{})
+	done := make(chan struct{})
+	go func() { _ = s.serve(ctx, 0, func() { close(ready) }, send); close(done) }()
+	<-ready
+
+	s.enqueue(toastMsg("hello", "success"))
+
+	select {
+	case m := <-got:
+		if m.GetBody() == nil {
+			t.Fatal("a keepalive was sent ahead of a queued message")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("queued message never arrived")
+	}
+	cancel()
+	<-done
+}
