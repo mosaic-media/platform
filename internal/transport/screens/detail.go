@@ -67,13 +67,27 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 		pills = append(pills, m.Runtime)
 	}
 
-	// Primary action: Add to library (virtual) or an in-library marker.
+	// Primary action. A virtual item can only be added; an in-library one can be
+	// played, when something in its tree actually has bytes. Play is offered on
+	// the presence of a Part rather than on being in the library, so the button
+	// never appears with nothing behind it — the dead-end affordance ADR 0036
+	// exists to prevent.
 	var actions ui.El
-	if res.InLibrary {
-		actions = ui.Actions(ui.Badge("In library", ui.ToneSuccess))
-	} else {
+	switch {
+	case !res.InLibrary:
 		actions = ui.Actions(ui.Button("Add to library", "primary",
 			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
+	default:
+		els := []ui.El{}
+		if part, ok := s.content.FirstPlayablePart(ctx, caller, res.NodeID); ok {
+			els = append(els, ui.Button("Play", "primary", ui.OnTap(ui.Invoke(playPartAction, map[string]any{
+				paramPartID: string(part.ID),
+				"title":     title,
+				"poster":    s.art(m.Poster),
+			}))))
+		}
+		els = append(els, ui.Badge("In library", ui.ToneSuccess))
+		actions = ui.Actions(els...)
 	}
 
 	// The paneled detail hero: a full-bleed backdrop (the light source) with the

@@ -5,3 +5,9 @@
 
 # Runtime output — the diagnostics file logger writes here (main.go)
 logs/
+
+# Local developer environment. Holds real credentials — an AIOStreams manifest
+# URL embeds an encrypted debrid config blob, so this must never be committed.
+.env
+.env.*
+!.env.example

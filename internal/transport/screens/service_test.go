@@ -24,6 +24,8 @@ import (
 // reads out across goroutines, so the fake guards its captured-arg fields with a
 // mutex — as any concurrency-safe stand-in must.
 type fakeQueries struct {
+	playablePart v1.Part
+
 	results          []v1.SearchResult
 	catalogs         []app.ModuleCatalog
 	items            []v1.CatalogItem
@@ -65,6 +67,17 @@ func (f *fakeQueries) GetContentNode(_ context.Context, q v1.GetContentNodeQuery
 	f.gotNodeID = q.NodeID
 	f.mu.Unlock()
 	return v1.GetContentNodeResult{Node: f.node, Children: f.children}, nil
+}
+
+// playablePart, when set, is what FirstPlayablePart reports — the fake's way of
+// saying "this library item has bytes", which is what gates the Play button.
+func (f *fakeQueries) FirstPlayablePart(_ context.Context, _ v1.Caller, _ v1.NodeID) (v1.Part, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.playablePart.ID == "" {
+		return v1.Part{}, false
+	}
+	return f.playablePart, true
 }
 
 func (f *fakeQueries) PreviewContent(_ context.Context, q app.PreviewContentQuery) (app.PreviewContentResult, error) {
@@ -132,6 +145,29 @@ func findAll(n sdui.Node, typ string, acc *[]sdui.Node) {
 
 // prop reads a node's prop from the protobuf Struct (ADR 0044 — props is an open
 // Struct, decoded to a Go map for assertions).
+// findButton finds a Button anywhere in the tree by its label.
+func findButton(n sdui.Node, label string) (sdui.Node, bool) {
+	if n == nil {
+		return nil, false
+	}
+	if n.GetType() == sdui.TypeButton && prop(n, "label") == label {
+		return n, true
+	}
+	for _, c := range n.GetChildren() {
+		if got, ok := findButton(c, label); ok {
+			return got, true
+		}
+	}
+	for _, list := range n.GetSlots() {
+		for _, c := range list.GetNodes() {
+			if got, ok := findButton(c, label); ok {
+				return got, true
+			}
+		}
+	}
+	return nil, false
+}
+
 func prop(n sdui.Node, key string) any { return n.GetProps().AsMap()[key] }
 
 // actionOf reads the action riding in a node's open props bag (JSON-in-Struct).
@@ -497,5 +533,45 @@ func TestDetailScreenRequiresNodeId(t *testing.T) {
 	_, err := (&Service{content: &fakeQueries{}}).Render(context.Background(), "detail", v1.CallerFromSession("s-1"), nil)
 	if got := contracts.CategoryOf(err); got != contracts.InvalidArgument {
 		t.Fatalf("category = %s, want InvalidArgument", got)
+	}
+}
+
+// TestDetailPlayAffordanceIsGatedOnAPartExisting is ADR 0036's rule made
+// executable on the emit-side: an affordance must never appear with nothing
+// behind it. Being in the library is not enough — a Work has no bytes of its
+// own, and a metadata-only import has none anywhere in its tree, so Play is
+// offered on the presence of a Part and on nothing else.
+func TestDetailPlayAffordanceIsGatedOnAPartExisting(t *testing.T) {
+	inLibrary := func(part v1.Part) *fakeQueries {
+		return &fakeQueries{
+			previewMeta:      v1.ContentMetadata{Title: "Avatar", Year: 2009},
+			previewInLibrary: true,
+			previewNodeID:    v1.NodeID("work-1"),
+			playablePart:     part,
+		}
+	}
+
+	// No Part anywhere in the tree: In library, and no Play.
+	node := render(t, &Service{content: inLibrary(v1.Part{})}, "detail",
+		map[string]any{"ref": map[string]any{"provider": "stremio", "nativeId": "tt0499549", "nativeType": "movie"}})
+	if btn, ok := findButton(node, "Play"); ok {
+		t.Fatalf("Play offered with no playable part: %+v", btn)
+	}
+
+	// A Part exists: Play appears, and carries that part's id.
+	withPart := v1.Part{ID: v1.PartID("part-7"), Role: v1.PartEdition}
+	node = render(t, &Service{content: inLibrary(withPart)}, "detail",
+		map[string]any{"ref": map[string]any{"provider": "stremio", "nativeId": "tt0499549", "nativeType": "movie"}})
+	btn, ok := findButton(node, "Play")
+	if !ok {
+		t.Fatal("a library item with a part must offer Play")
+	}
+	act := actionOf(btn)
+	if act["kind"] != sdui.KindInvoke || act["mutation"] != "playPart" {
+		t.Fatalf("Play action = %+v, want an Invoke of playPart", act)
+	}
+	input, _ := act["input"].(map[string]any)
+	if input["partId"] != string(withPart.ID) {
+		t.Fatalf("Play carried partId %v, want %q", input["partId"], withPart.ID)
 	}
 }

@@ -355,7 +355,7 @@ func run() error {
 	// server-streaming Subscribe per session for push. It supersedes the ADR 0032
 	// WebSocket. GraphQL is retained only as the external/tooling surface, not on
 	// the hot client path.
-	sessionHandler := session.NewHandler(svc, artworkSigner.Rewrite)
+	sessionHandler := session.NewHandler(svc, artworkSigner.Rewrite, playbackSealer)
 	sessionHandler.Manager().StartReaper(serveCtx)
 	sessionPath, sessionConnect := sessionv1connect.NewSessionServiceHandler(sessionHandler)
 

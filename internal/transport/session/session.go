@@ -40,6 +40,12 @@ const debounceRenderTimeout = 15 * time.Second
 // A navigate/input replaces this region; the shell frame around it persists.
 const contentRegion = "content"
 
+// playerRegion is where a playback surface is pushed (ADR 0047). It is a region
+// of its own rather than a replacement for the content region: a player sits
+// *over* the current context, and the screen underneath must still be there when
+// it closes.
+const playerRegion = "player"
+
 // definitionsLibrary is the standard SDUI component-definition library as data
 // (ADR 0024): every presentational component — Screen, AppShell, HeroBanner,
 // PosterCard, Section … — expressed as a tree of primitives. The Platform pushes
@@ -64,6 +70,7 @@ type Handler struct {
 	mgr     *Manager
 	screens *screens.Service
 	svc     *app.Service
+	tickets TicketMinter
 }
 
 // Compile-time proof the handler satisfies the generated service contract.
@@ -71,12 +78,21 @@ var _ sessionv1connect.SessionServiceHandler = (*Handler)(nil)
 
 // NewHandler wires the session transport over the application services and the
 // artwork rewriter (ADR 0030), the same inputs the screen emit-side takes.
-func NewHandler(svc *app.Service, artwork func(string) string) *Handler {
+func NewHandler(svc *app.Service, artwork func(string) string, tickets TicketMinter) *Handler {
 	return &Handler{
 		mgr:     NewManager(),
 		screens: screens.NewService(svc, artwork),
 		svc:     svc,
+		tickets: tickets,
 	}
+}
+
+// TicketMinter seals a resolved upstream location into the opaque ticket a
+// client fetches bytes through (ADR 0045). It is an interface here so the
+// session transport does not depend on the playback transport: both are
+// transports, and one importing the other would be the wrong direction.
+type TicketMinter interface {
+	Mint(url string, headers map[string]string, session string, remux bool) (string, error)
 }
 
 // Manager exposes the session store for lifecycle wiring (reaper, shutdown).
@@ -126,8 +142,17 @@ func (h *Handler) Invoke(ctx context.Context, req *connect.Request[sessionv1.Inv
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown action"))
 	}
 	s := h.mgr.session(r.GetSession())
-	if err := h.dispatch(ctx, s.caller, r.GetAction(), r.GetInput()); err != nil {
+	outcome, err := h.dispatch(ctx, s, r.GetAction(), r.GetInput())
+	if err != nil {
 		s.enqueue(toastMsg(errorMessage(err), "danger"))
+		return connect.NewResponse(&sessionv1.Ack{}), nil
+	}
+	// An action that produced its own surface (a player) pushes that instead of
+	// a confirmation toast, and must not re-render the content region — the
+	// screen underneath the player has not changed and re-rendering it would
+	// tear the player down.
+	if outcome != nil {
+		s.enqueue(outcome)
 		return connect.NewResponse(&sessionv1.Ack{}), nil
 	}
 	s.enqueue(toastMsg(invokeToast(r.GetAction()), "success"))

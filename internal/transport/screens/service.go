@@ -70,6 +70,14 @@ const defaultSettingsModule = "stremio"
 // invokes to materialise a virtual ref (ADR 0028).
 const importContentMutation = "importContent"
 
+// playPartAction is the action a detail's Play button emits (ADR 0047). It
+// resolves server-side to a playback ticket and a Player surface rather than to
+// a screen, which is why it is an action name rather than a route.
+const playPartAction = "playPart"
+
+// paramPartID is the key the play action carries its Part under.
+const paramPartID = "partId"
+
 // contentQueries is the slice of the application query surface the screen
 // builders read. Narrowing to an interface keeps the emit-side a projection of
 // the services (like a GraphQL resolver) and makes the builders testable without
@@ -81,6 +89,11 @@ type contentQueries interface {
 	GetContentNode(context.Context, v1.GetContentNodeQuery) (v1.GetContentNodeResult, error)
 	PreviewContent(context.Context, app.PreviewContentQuery) (app.PreviewContentResult, error)
 	ModuleSettingsUI(context.Context, app.ModuleSettingsUIQuery) (app.ModuleSettingsUIResult, error)
+	// FirstPlayablePart backs the detail screen's Play affordance: a Work has no
+	// bytes of its own, so the emit-side has to look one level down for an item
+	// that does before it can offer Play at all (ADR 0036 — an affordance with
+	// nothing behind it is the dead end this whole thread exists to remove).
+	FirstPlayablePart(context.Context, v1.Caller, v1.NodeID) (v1.Part, bool)
 }
 
 // Service renders named screens. It holds the query surface the builders read
