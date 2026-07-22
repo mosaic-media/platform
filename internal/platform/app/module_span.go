@@ -9,6 +9,7 @@ import (
 
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // moduleSpan brackets a call into a module (ADR 0055, seam 8).
@@ -31,7 +32,16 @@ import (
 func moduleSpan(ctx context.Context, moduleID, operation string) (context.Context, *telemetry.Span) {
 	// The logger is re-bound to the module so log records emitted beneath this
 	// call are attributed to it too, not only the span.
-	ctx = telemetry.Into(ctx, telemetry.From(ctx).ForModule("module", moduleID))
+	lg := telemetry.From(ctx).ForModule("module", moduleID)
+	ctx = telemetry.Into(ctx, lg)
+
+	// Install the module's own telemetry surface (ADR 0059). This is the only
+	// place it is installed, which is what makes attribution unforgeable: the
+	// module id is fixed here from the registry, not taken from anything the
+	// module said, and the SDK's context key is unexported so a module cannot
+	// plant a different one.
+	ctx = v1.WithTelemetry(ctx, newModuleTelemetry(lg, moduleID))
+
 	return telemetry.Start(ctx, "module."+operation,
 		telemetry.String("module", moduleID),
 		telemetry.String("operation", operation))
