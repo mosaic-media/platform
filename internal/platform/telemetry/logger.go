@@ -99,6 +99,23 @@ func (l *Logger) ForModule(component, module string) *Logger {
 	return d
 }
 
+// WithSink returns a Logger writing to sink instead of the receiver's.
+//
+// The composition root uses it to attach the queryable sink once storage is
+// up: everything logged before that point is the narration of *bringing
+// storage up*, which must not depend on storage existing (ADR 0058). Rebuilding
+// the logger rather than mutating it keeps Logger immutable, so a context
+// seeded earlier is unaffected — which is correct, since those records
+// genuinely predate the sink.
+func (l *Logger) WithSink(sink Sink) *Logger {
+	if sink == nil {
+		return l
+	}
+	d := l.derive()
+	d.sink = sink
+	return d
+}
+
 // WithTrace returns a Logger whose records carry tc. The trace and span ids
 // are first-class columns on a record rather than ordinary fields, because
 // they are what the telemetry store indexes and what the expert-mode viewer

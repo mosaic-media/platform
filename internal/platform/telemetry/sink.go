@@ -104,7 +104,7 @@ func (s *JSONSink) Write(r Record) {
 	if len(r.Fields) > 0 {
 		e.Fields = make(map[string]any, len(r.Fields))
 		for _, f := range r.Fields {
-			e.Fields[f.Key] = f.emitValue()
+			e.Fields[f.Key] = f.EmitValue()
 		}
 	}
 	line, err := json.Marshal(e)
@@ -159,7 +159,7 @@ func (s *ConsoleSink) Write(r Record) {
 	fields := append([]Field(nil), r.Fields...)
 	sort.SliceStable(fields, func(i, j int) bool { return fields[i].Key < fields[j].Key })
 	for _, f := range fields {
-		fmt.Fprintf(&b, " %s=%v", f.Key, f.emitValue())
+		fmt.Fprintf(&b, " %s=%v", f.Key, f.EmitValue())
 	}
 	b.WriteByte('\n')
 

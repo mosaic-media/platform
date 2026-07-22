@@ -105,6 +105,19 @@ func PlatformSchema() *Schema {
 		FieldSpec{Name: "composition.modules", ReloadClass: Generation},
 		FieldSpec{Name: "storage.postgres.dsn", ReloadClass: Recovery},
 		FieldSpec{Name: "storage.postgres.password", ReloadClass: Recovery, Secret: true},
+		// Telemetry retention, per signal (ADR 0058). Hot because shortening
+		// retention should take effect without a restart — an administrator
+		// reclaiming disk should not have to bounce the process to do it.
+		//
+		// Audit is listed here for completeness of the vocabulary, but it is
+		// the one an operator may not freely shorten: ADR 0057 floors it in
+		// code, not in config, because "set audit retention to an hour, act,
+		// wait" is the standard way to defeat an audit log. The audit store
+		// itself is not built yet.
+		FieldSpec{Name: "telemetry.retention.logs_days", ReloadClass: Hot},
+		FieldSpec{Name: "telemetry.retention.traces_hours", ReloadClass: Hot},
+		FieldSpec{Name: "telemetry.retention.metrics_days", ReloadClass: Hot},
+		FieldSpec{Name: "telemetry.retention.audit_days", ReloadClass: Hot},
 	)
 	if err != nil {
 		// Unreachable: the field list above is a fixed, valid literal.

@@ -143,11 +143,17 @@ func isEmpty(value any) bool {
 	return ok && s == ""
 }
 
-// emitValue returns what a sink should write for f. It re-applies redaction on
-// the way out so a hand-built Field literal — whose zero-value Redaction is not
-// RedactionNone — fails closed, and so an Identifier's digest (already computed
-// at construction) passes through unchanged.
-func (f Field) emitValue() any {
+// EmitValue returns what a sink should write for f.
+//
+// It re-applies redaction on the way out, so a hand-built Field literal —
+// whose zero-value Redaction is not RedactionNone — fails closed, while an
+// Identifier's digest (already computed at construction) passes through
+// unchanged.
+//
+// It is exported because the storage module serialises records too, and a
+// second copy of this rule living over there is exactly how a fail-closed
+// guarantee quietly stops being one.
+func (f Field) EmitValue() any {
 	switch f.Redaction {
 	case domain.RedactionNone, domain.RedactionIdentifier:
 		return f.Value

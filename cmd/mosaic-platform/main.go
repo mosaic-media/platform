@@ -95,6 +95,25 @@ const (
 // exists for (ADR 0058).
 const telemetryLogPath = "logs/mosaic-platform.log"
 
+// telemetryPartitionsAhead is how many days of telemetry partitions to keep
+// created in advance. Generous on purpose: partition creation belongs in a
+// scheduled job, the jobs runner does not exist (ADR 0058), and a process that
+// runs for a fortnight without restarting must not reach a midnight with
+// nowhere to put its records.
+const telemetryPartitionsAhead = 14
+
+// telemetryLogRetention is how long queryable log records are kept before
+// their partition is dropped. It is the default for
+// telemetry.retention.logs_days, which is a Hot config field an administrator
+// can change — reading it from Active config is the work that lands with the
+// expert-mode surface; until then this constant is the value in force.
+const telemetryLogRetention = 14 * 24 * time.Hour
+
+// telemetryMaintenanceInterval is how often partitions are extended and
+// expired ones dropped. Hourly is far more often than a daily boundary needs,
+// which is the point: it means a missed tick costs nothing.
+const telemetryMaintenanceInterval = time.Hour
+
 // adminPermissions is the authority the bootstrapped administrator receives:
 // every action the application services check. It is assembled from the app
 // package's action constants rather than string literals so a new action is a
@@ -144,6 +163,40 @@ func main() {
 		// rather than having to exempt it.
 		_, _ = os.Stderr.WriteString("mosaic-platform: " + err.Error() + "\n")
 		os.Exit(1)
+	}
+}
+
+// telemetryMaintenance extends the partition window and drops expired
+// partitions on a ticker until ctx ends.
+//
+// This is a scheduled job wearing a goroutine, and it says so: it wants the
+// jobs runner, a scheduler and the system principal (ADR 0017, ADR 0058),
+// none of which exist. Running it here is the honest interim rather than
+// leaving retention unenforced and calling the phase done — but it means
+// retention runs only while the process does, and a Platform that is down for
+// a month comes back with a month of records it intended to have dropped.
+func telemetryMaintenance(ctx context.Context, store *postgres.TelemetryStore, lg *telemetry.Logger) {
+	ticker := time.NewTicker(telemetryMaintenanceInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			if err := store.EnsurePartitions(ctx, now.UTC(), telemetryPartitionsAhead); err != nil {
+				lg.Error("extend telemetry partitions failed", telemetry.Err(err))
+			}
+			dropped, err := store.DropExpiredPartitions(ctx, now.UTC(), telemetryLogRetention)
+			if err != nil {
+				lg.Error("drop expired telemetry partitions failed", telemetry.Err(err))
+				continue
+			}
+			if dropped > 0 {
+				lg.Info("dropped expired telemetry partitions",
+					telemetry.Int("partitions", dropped),
+					telemetry.Duration("retention", telemetryLogRetention))
+			}
+		}
 	}
 }
 
@@ -268,6 +321,30 @@ func run() error {
 	diagRegistry.Register("postgres", set.HealthReporter)
 	diagRegistry.Register("event-bus", bus)
 	diagRegistry.Register("outbox-worker", worker, "postgres", "event-bus")
+
+	// The second sink (ADR 0058). The file above is durable and survives the
+	// database; this one makes records *queryable*, which is what the
+	// expert-mode viewer needs and what a flat file cannot serve. Neither is
+	// optional and neither replaces the other.
+	//
+	// It is deliberately attached only now, after storage is up: everything
+	// logged before this point describes bringing the database up, and is
+	// exactly the narration that must not depend on the database existing.
+	telemetryStore := postgres.NewTelemetryStore(set.Pool)
+	partitionCtx, partitionCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	err = telemetryStore.EnsurePartitions(partitionCtx, time.Now().UTC(), telemetryPartitionsAhead)
+	partitionCancel()
+	if err != nil {
+		// Not fatal. A Platform that refuses to start because it cannot store
+		// its own logs has turned an observability problem into an outage, and
+		// the file sink still has everything.
+		boot.Error("could not create telemetry partitions; the queryable sink will drop records", telemetry.Err(err))
+	}
+	bufferedSink := telemetry.NewBufferedSink(telemetryStore, 0, 0, 0)
+	root = root.WithSink(telemetry.MultiSink{
+		telemetry.NewConsoleSink(os.Stdout), fileSink, bufferedSink,
+	})
+	boot = root.For("composition-root")
 
 	logSnapshot := func(ctx context.Context, label string) {
 		for _, h := range diagRegistry.Snapshot(ctx) {
@@ -407,6 +484,12 @@ func run() error {
 	serveCtx = telemetry.Into(serveCtx, root)
 
 	worker.Start(serveCtx)
+	// Drain the queryable sink in the background. Started here rather than at
+	// construction so records buffered during boot are flushed by the same
+	// loop, and stopped in the shutdown block below so the last second of
+	// records is not silently discarded.
+	bufferedSink.Start(serveCtx)
+	go telemetryMaintenance(serveCtx, telemetryStore, root.For("telemetry"))
 
 	handoff := &health.Handoff{
 		Metadata:    generationMetadata,
@@ -526,6 +609,20 @@ func run() error {
 		boot.Info("final outbox drain complete", telemetry.Int("events", result.FinalDrainPublished))
 	}
 	logSnapshot(context.Background(), "shutdown health check")
+
+	// Flush the queryable sink last, after the shutdown health snapshot above,
+	// so the records describing shutdown are themselves stored rather than
+	// lost to the thing that stores them closing first. The file sink has had
+	// them all along; this is about the queryable copy agreeing.
+	if dropped, failed := bufferedSink.Dropped(), bufferedSink.Failed(); dropped > 0 || failed > 0 {
+		// Reported before the flush, since reporting it is itself a record.
+		// A sink that silently loses records looks exactly like a quiet
+		// system, and the difference matters most during whatever caused it.
+		boot.Warn("telemetry records were lost",
+			telemetry.Int64("dropped_buffer_full", int64(dropped)),
+			telemetry.Int64("failed_write", int64(failed)))
+	}
+	_ = bufferedSink.Close()
 
 	boot.Info("exiting cleanly")
 	return serveErr
