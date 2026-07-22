@@ -116,7 +116,19 @@ if you're changing the SDK, then tag/push a new version and bump the require.
 
 - Develop and commit directly on `main`. This repository does not use feature branches for Platform implementation work.
 - **Commit author identity:** every commit in this repository must be authored (and committed) by `AdamNi-7080 <anicholls41@gmail.com>`. This is the repo owner's identity — do not commit as `Claude`/`noreply@anthropic.com` or any other identity. If git has no identity configured on the machine, set it repo-locally (`git config user.name "AdamNi-7080"` / `git config user.email "anicholls41@gmail.com"`), not globally. Keep the `Co-Authored-By: Claude ...` trailer in the message body; it does not change the commit author.
-- **Do not push unless explicitly asked.** Commit locally on `main`; leave pushing to the remote (and any force-push) to an explicit request from the owner each time.
+- **Push when the work has been shown to pass, in this conversation.** The rule
+  used to be "never push without asking each time", which produced long queues of
+  unpushed commits and made the remote a lagging, unreliable picture of the
+  build. The bar is now evidence rather than permission: push once the change has
+  been *demonstrated* working — `go build`, `go vet`, `go test ./...`, gofmt and
+  the license-header check green, and where the change is user-visible, exercised
+  against the running stack.
+  - **Demonstrated, not asserted.** Tests that were skipped are not tests that
+    passed, and "it should work" is not evidence. If the verification could not
+    be run, commit locally and say so rather than pushing on optimism.
+  - **Force-push still requires asking**, every time. It rewrites history other
+    checkouts may hold, and no amount of local green makes that safe to decide
+    alone.
 - Build one slice at a time, in the order defined by the roadmap. Do not start a slice whose prerequisites have not landed.
 - Each slice must pass the standing test gates in the architecture page before the next dependent slice begins.
 - Run `go build ./...` and `go test ./...` before declaring any slice done.
