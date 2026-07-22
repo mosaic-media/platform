@@ -19,11 +19,12 @@ Required reading, and it is short:
 
 - **[Architecture](https://github.com/mosaic-media/architecture/blob/main/docs/architecture.md)** — the package map, the invariants, the standing test gates. Read before changing structure.
 - **[Roadmap](https://github.com/mosaic-media/architecture/blob/main/docs/roadmap.md)** — where the build is and what the open threads are. The critical path is complete.
+- **[Unreachable capability](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md)** — the register of what the Platform can do that nobody can ask it to do. **Read it with the roadmap, not instead of it:** a slice marked done there means the capability landed, not that a user can reach it, and no build or test failure will ever tell you the difference.
 - **[Decision records](https://github.com/mosaic-media/architecture/tree/main/docs/adr)** — numbered ADRs. Most load-bearing here: 0007 (static composition), 0012 (capabilities do not own stores), 0013 (the object graph), 0014 (storage authority), 0015 (open vs closed vocabularies), 0016 (the published contract surface), 0017 (how a capability acts).
 
 Everything else is published at [mosaic-media.github.io/architecture](https://mosaic-media.github.io/architecture/), with a PDF of each page.
 
-> **The MDL/MDS/MEG/MAC/MIP/MOP/MAD/MDP specification library no longer exists.** It grew to 200+ largely unvalidated documents, accumulated contradictions faster than they could be resolved, and produced concrete wrong work — a roadmap built against an abandoned DuckDB storage model, and an invented module transport layer the architecture explicitly forbids. It was retired on 2026-07-19 and is preserved only at git tag `pre-reset-2026-07-19`. **Do not cite MEG-015 or any other retired identifier, and do not attempt to read those paths.** If something you need is missing from the three documents above, say so rather than reconstructing it.
+> **The MDL/MDS/MEG/MAC/MIP/MOP/MAD/MDP specification library no longer exists.** It grew to 200+ largely unvalidated documents, accumulated contradictions faster than they could be resolved, and produced concrete wrong work — a roadmap built against an abandoned DuckDB storage model, and an invented module transport layer the architecture explicitly forbids. It was retired on 2026-07-19 and is preserved only at git tag `pre-reset-2026-07-19`. **Do not cite MEG-015 or any other retired identifier, and do not attempt to read those paths.** If something you need is missing from the documents above, say so rather than reconstructing it.
 
 ## Package tier model
 
@@ -173,15 +174,26 @@ registered; a user adds addons at runtime via the `configureModule` action
 
 ## What is not built
 
-- **An admin surface.** Creating roles, granting them, drafting/validating/
-  activating config versions and setting user status have application services,
-  policy actions and tests — and no way for a user to reach them. They had
-  GraphQL mutations with no UI behind them, and ADR 0061 deleted rather than
-  re-ported those, on the grounds that a mutation nothing calls is not a
-  feature. They return as server-emitted screens (ADR 0029) whose affordances
-  dispatch through `Invoke`. `bootstrap.EnsureAdmin` stays the only in-band way
-  to establish the first authority. `SignOut` is implemented and tested but has
-  no caller — the Shell has no sign-out affordance.
+- **An admin surface — and read the register before assuming otherwise.**
+  Creating users, creating roles, granting them, drafting/validating/activating
+  config versions and setting user status all have application services, policy
+  actions and passing tests — and no way for a user to reach them. The full,
+  classified list is
+  **[Unreachable capability](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md)**
+  in the architecture repo; consult it before telling anyone Mosaic can do
+  something, because the code and the tests will not tell you.
+  **`app.CreateLocalUser` is the case that proves the point:** a complete,
+  well-tested command — boundary order, policy denial, unauthenticated
+  rejection, real-PostgreSQL integration — whose *only callers are its own
+  tests*. No transport has ever exposed it, so Mosaic has never had a way to
+  create a second user. That predates ADR 0061 and nothing in this repository
+  reports it.
+  These return as server-emitted screens (ADR 0029) whose affordances dispatch
+  through `Invoke`. `bootstrap.EnsureAdmin` (ADR 0018) stays the only in-band
+  way to establish the first authority. `SignOut` is implemented and tested but
+  has no caller — the Shell has no sign-out affordance.
+  **If you delete a client path, add its row to that register in the same
+  change.**
 - **`ContentService` relation reads.** The service can create edges
   (`RelateContent`) but not read them back — there is no `ListFrom`/`ListTo`
   on the published surface. A capability that wants to query relations can't
