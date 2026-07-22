@@ -101,15 +101,19 @@ type Span struct {
 // an instrumented path needs no telemetry setup at all.
 func Start(ctx context.Context, name string, attrs ...Field) (context.Context, *Span) {
 	parent, ok := TraceFrom(ctx)
-	if !ok || !parent.Valid() {
-		parent = NewTraceContext()
+	if !ok || parent.TraceID == [16]byte{} {
+		// No trace at all: this span begins one, and is its root.
+		parent = NewRootTrace()
 	}
 	current := parent.Child()
 
 	lg := From(ctx)
 	span := &Span{
 		record: SpanRecord{
-			Trace:     current,
+			Trace: current,
+			// Empty for a root span. SpanIDString already renders a zero span
+			// id as "", so a trace started here records no parent rather than
+			// a run of zeros that looks like a real id.
 			ParentID:  parent.SpanIDString(),
 			Name:      name,
 			Component: lg.component,

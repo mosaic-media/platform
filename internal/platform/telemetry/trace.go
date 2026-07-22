@@ -35,12 +35,31 @@ type TraceContext struct {
 	Sampled bool
 }
 
-// NewTraceContext mints a fresh, sampled trace. An edge calls this when no
-// caller supplied a usable traceparent.
+// NewTraceContext mints a fresh, sampled trace with a span id of its own.
+//
+// Prefer NewRootTrace at an edge. This is for callers that need a complete,
+// immediately propagatable context — tests, and anything formatting a
+// traceparent before it has started a span.
 func NewTraceContext() TraceContext {
 	tc := TraceContext{Sampled: true}
 	_, _ = rand.Read(tc.TraceID[:])
 	_, _ = rand.Read(tc.SpanID[:])
+	return tc
+}
+
+// NewRootTrace mints a fresh trace whose span id is deliberately **zero**.
+//
+// A TraceContext in a context means "the trace, and the span anything started
+// here should hang off". At the start of a brand-new trace there is no such
+// span yet — so a minted span id would name nothing, and the first real span
+// would record a parent that does not exist. That produces a tree a viewer
+// cannot root: it holds a parent id matching no span.
+//
+// A zero span id says exactly that: nothing precedes this. Start turns it into
+// an empty ParentID, which is what a root span should carry.
+func NewRootTrace() TraceContext {
+	tc := TraceContext{Sampled: true}
+	_, _ = rand.Read(tc.TraceID[:])
 	return tc
 }
 
@@ -168,11 +187,18 @@ func TraceFrom(ctx context.Context) (TraceContext, bool) {
 // It simply means this process is the start of the trace.
 func StartRequest(ctx context.Context, traceparent string) context.Context {
 	tc, ok := ParseTraceparent(traceparent)
-	if ok {
-		tc = tc.Child()
-	} else {
-		tc = NewTraceContext()
+	if !ok {
+		tc = NewRootTrace()
 	}
+	// The inbound context is carried **as parsed**, with the caller's span id
+	// intact — it is not Child()ed here.
+	//
+	// It used to be, and the effect was only visible in a real trace: Child()
+	// here plus the Child() inside Start meant the first span's parent was an
+	// id no span ever had. The request appeared to descend from something
+	// missing, and nothing linked it back to the caller's span across the wire.
+	// The first Start is what creates this process's span; this call's job is
+	// only to say which trace it belongs to and what it hangs off.
 	ctx = TraceInto(ctx, tc)
 	return Into(ctx, From(ctx).WithTrace(tc))
 }

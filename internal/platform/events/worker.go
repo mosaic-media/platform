@@ -119,7 +119,7 @@ func (w *Worker) RunOnce(ctx context.Context) (published int, err error) {
 	// appear to hang for minutes. Cause is not lost — every row carries the
 	// correlation id of the request that produced it (ADR 0054), so the join
 	// is one query away — and duration stays honest.
-	ctx, span := telemetry.Start(telemetry.TraceInto(ctx, telemetry.NewTraceContext()),
+	ctx, span := telemetry.Start(telemetry.TraceInto(ctx, telemetry.NewRootTrace()),
 		"outbox.drain", telemetry.String("component", "outbox-worker"))
 	defer span.End()
 

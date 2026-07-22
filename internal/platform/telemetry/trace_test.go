@@ -83,8 +83,13 @@ func TestStartRequestContinuesAnInboundTrace(t *testing.T) {
 	if got.TraceID != upstream.TraceID {
 		t.Fatalf("trace id changed across the edge: %s != %s", got.TraceIDString(), upstream.TraceIDString())
 	}
-	if got.SpanID == upstream.SpanID {
-		t.Fatal("this process's work must be its own span, not the caller's")
+	// The caller's span id is carried through deliberately: it is the parent
+	// the first Start will attach to. This process's own span is created by
+	// Start, not here — creating one here too is what produced a parent naming
+	// no span (see TestEntrySpanParentsToTheCallersOwnSpan).
+	if got.SpanID != upstream.SpanID {
+		t.Fatalf("StartRequest must carry the caller's span as the parent-to-be, got %s want %s",
+			got.SpanIDString(), upstream.SpanIDString())
 	}
 }
 
@@ -92,8 +97,13 @@ func TestStartRequestMintsWhenTheHeaderIsAbsentOrJunk(t *testing.T) {
 	for _, header := range []string{"", "not-a-traceparent"} {
 		ctx := telemetry.StartRequest(context.Background(), header)
 		tc, ok := telemetry.TraceFrom(ctx)
-		if !ok || !tc.Valid() {
+		if !ok || tc.TraceIDString() == "" {
 			t.Fatalf("header %q: a malformed or absent header must start a fresh trace, not leave none", header)
+		}
+		// ...and that fresh trace has no span yet, so the first span becomes a
+		// true root rather than hanging off an id nothing ever recorded.
+		if tc.SpanIDString() != "" {
+			t.Fatalf("header %q: a fresh trace must have no parent span, got %s", header, tc.SpanIDString())
 		}
 	}
 }
@@ -175,5 +185,90 @@ func TestHTTPMiddlewareStartsATraceWithoutAHeader(t *testing.T) {
 	got := rec.Header().Get(telemetry.TraceIDHeader)
 	if len(got) != 32 || strings.Trim(got, "0") == "" {
 		t.Fatalf("expected a freshly minted trace id, got %q", got)
+	}
+}
+
+// TestEntrySpanParentsToTheCallersOwnSpan is a regression test for a defect
+// only a real trace showed: the tree was unrootable.
+//
+// StartRequest used to Child() the inbound context, and Start Child()s again —
+// so the first span's parent was an id no span ever had. Every trace looked
+// like it descended from something missing, and nothing linked the request
+// back to the caller's span across the wire. Both halves of a
+// cross-repository trace were present and could not be joined.
+func TestEntrySpanParentsToTheCallersOwnSpan(t *testing.T) {
+	caller := telemetry.NewTraceContext()
+
+	ctx := telemetry.StartRequest(context.Background(), caller.Traceparent())
+	sink := &captureSpans{}
+	ctx = telemetry.WithSpanSink(ctx, sink)
+
+	_, span := telemetry.Start(ctx, "rpc")
+	span.End()
+
+	got, ok := sink.byName("rpc")
+	if !ok {
+		t.Fatal("no span recorded")
+	}
+	if got.Trace.TraceIDString() != caller.TraceIDString() {
+		t.Fatalf("entry span left the caller's trace: %s", got.Trace.TraceIDString())
+	}
+	if got.ParentID != caller.SpanIDString() {
+		t.Fatalf("entry span parent = %q, want the caller's span %q — a parent naming no span makes the tree unrootable",
+			got.ParentID, caller.SpanIDString())
+	}
+}
+
+// TestAFreshTraceHasATrulyParentlessRoot is the other half: with no inbound
+// header there is no caller span, so the root must record no parent at all
+// rather than a minted id that names nothing.
+func TestAFreshTraceHasATrulyParentlessRoot(t *testing.T) {
+	ctx := telemetry.StartRequest(context.Background(), "")
+	sink := &captureSpans{}
+	ctx = telemetry.WithSpanSink(ctx, sink)
+
+	ctx, root := telemetry.Start(ctx, "root")
+	_, child := telemetry.Start(ctx, "child")
+	child.End()
+	root.End()
+
+	gotRoot, _ := sink.byName("root")
+	gotChild, _ := sink.byName("child")
+
+	if gotRoot.ParentID != "" {
+		t.Fatalf("root span parent = %q, want empty", gotRoot.ParentID)
+	}
+	if gotChild.ParentID != gotRoot.Trace.SpanIDString() {
+		t.Fatalf("child parent = %q, want the root span %q", gotChild.ParentID, gotRoot.Trace.SpanIDString())
+	}
+}
+
+// TestEveryParentIDNamesARealSpan is the property both cases above serve, and
+// the one a trace viewer actually depends on: within a trace, every non-empty
+// parent must resolve to a span that exists.
+func TestEveryParentIDNamesARealSpan(t *testing.T) {
+	caller := telemetry.NewTraceContext()
+	ctx := telemetry.StartRequest(context.Background(), caller.Traceparent())
+	sink := &captureSpans{}
+	ctx = telemetry.WithSpanSink(ctx, sink)
+
+	rpcCtx, rpc := telemetry.Start(ctx, "rpc")
+	txCtx, tx := telemetry.Start(rpcCtx, "tx")
+	_, sql := telemetry.Start(txCtx, "sql")
+	sql.End()
+	tx.End()
+	rpc.End()
+
+	ids := map[string]bool{}
+	for _, s := range sink.all() {
+		ids[s.Trace.SpanIDString()] = true
+	}
+	// The caller's span is legitimately outside this process.
+	ids[caller.SpanIDString()] = true
+
+	for _, s := range sink.all() {
+		if s.ParentID != "" && !ids[s.ParentID] {
+			t.Fatalf("span %q has parent %q, which names no span in the trace", s.Name, s.ParentID)
+		}
 	}
 }
