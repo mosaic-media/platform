@@ -7,6 +7,7 @@ package playback
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os/exec"
@@ -104,11 +105,11 @@ func (r *Remuxer) Available() bool { return r != nil && r.binary != "" }
 // ContentType is the media type a remuxed stream is served as.
 func (r *Remuxer) ContentType() string { return "video/mp4" }
 
-// Stream starts ffmpeg against upstreamURL and returns its stdout. The caller
-// reads to completion (or closes) and the returned cancel func must be called to
-// reap the process — a reader that goes away without it leaves ffmpeg pulling
-// bytes from the upstream forever.
-func (r *Remuxer) Stream(ctx context.Context, upstreamURL string, headers map[string]string) (io.ReadCloser, func(), error) {
+// Stream starts ffmpeg against upstreamURL and returns its stdout, carrying out
+// plan. The caller reads to completion (or closes) and the returned cancel func
+// must be called to reap the process — a reader that goes away without it leaves
+// ffmpeg pulling bytes from the upstream forever.
+func (r *Remuxer) Stream(ctx context.Context, upstreamURL string, headers map[string]string, plan Plan) (io.ReadCloser, func(), error) {
 	if !r.Available() {
 		return nil, nil, ErrRemuxUnavailable
 	}
@@ -118,15 +119,9 @@ func (r *Remuxer) Stream(ctx context.Context, upstreamURL string, headers map[st
 	if h := ffmpegHeaderArg(headers); h != "" {
 		args = append(args, "-headers", h)
 	}
+	args = append(args, "-i", upstreamURL)
+	args = append(args, plan.ffmpegArgs()...)
 	args = append(args,
-		"-i", upstreamURL,
-		// Video and audio only. An MKV's subtitles are usually ASS, which has no
-		// MP4 mapping — copying them in fails the whole command, so they are
-		// dropped here and resolved as separate tracks instead (ADR 0037's
-		// subtitles role). The "?" makes audio optional so a video-only source
-		// still remuxes.
-		"-map", "0:v:0", "-map", "0:a:0?",
-		"-c", "copy",
 		// Fragmented output, written without seeking back to patch a header —
 		// which is what makes it streamable down a pipe at all.
 		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
@@ -174,8 +169,8 @@ func ffmpegHeaderArg(headers map[string]string) string {
 // request cannot be honoured. Saying so with Accept-Ranges: none is the honest
 // signal — a player that asks for a byte range gets told the source does not do
 // them, rather than being handed a wrong answer.
-func serveRemuxed(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket) {
-	body, stop, err := rx.Stream(r.Context(), t.URL, t.Headers)
+func serveRemuxed(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket, plan Plan) {
+	body, stop, err := rx.Stream(r.Context(), t.URL, t.Headers, plan)
 	if err != nil {
 		http.Error(w, "remux unavailable", http.StatusBadGateway)
 		return
@@ -191,4 +186,42 @@ func serveRemuxed(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket)
 		return
 	}
 	_, _ = io.Copy(w, body)
+}
+
+// ffmpegArgs renders a Plan as ffmpeg stream mapping and codec flags.
+//
+// The whole point is the asymmetry: video is copied wherever it can be, because
+// re-encoding a 4K HDR stream is the one operation that will not keep up on a
+// home server, while an audio encode is cheap enough to be unremarkable. The
+// chosen audio track is named by index rather than taken as "the first one",
+// which is how a release whose first track is Hindi ends up playing English.
+func (p Plan) ffmpegArgs() []string {
+	args := []string{"-map", fmt.Sprintf("0:%d", p.VideoIndex)}
+	if p.Video == ActionEncode {
+		// Only reached when the client cannot decode the source video at all.
+		// veryfast because a slower preset on a 4K source is not a trade a
+		// viewer waiting for a first frame would accept.
+		args = append(args, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20")
+	} else {
+		args = append(args, "-c:v", "copy")
+	}
+
+	switch p.Audio {
+	case ActionCopy:
+		args = append(args, "-map", fmt.Sprintf("0:%d", p.AudioIndex), "-c:a", "copy")
+	case ActionEncode:
+		// Downmixed to stereo deliberately: a browser is overwhelmingly on
+		// stereo output, and a 5.1 AAC track it renders as two channels loses
+		// the centre dialogue that matters most.
+		args = append(args, "-map", fmt.Sprintf("0:%d", p.AudioIndex),
+			"-c:a", "aac", "-b:a", "192k", "-ac", "2")
+	case ActionDrop:
+		args = append(args, "-an")
+	}
+
+	// Subtitles never travel in the muxed output. An MKV's are usually SubRip or
+	// ASS, neither of which maps into MP4, and copying them in fails the whole
+	// command. They are resolved as separate tracks instead (ADR 0037).
+	args = append(args, "-sn")
+	return args
 }

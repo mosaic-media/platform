@@ -115,7 +115,7 @@ func TestPlaybackResolutionAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSealer: %v", err)
 	}
-	ticket, err := sealer.Mint(res.URL, res.Headers, caller.Session, false)
+	ticket, err := sealer.Mint(res.URL, res.Headers, caller.Session, playback.Plan{DirectPlay: true})
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}

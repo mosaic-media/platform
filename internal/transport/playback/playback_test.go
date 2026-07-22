@@ -29,7 +29,7 @@ func TestTicketRoundTripAndTamper(t *testing.T) {
 	s := newTestSealer(t)
 	const upstream = "https://cdn.example/movie.mkv?token=supersecret"
 
-	raw, err := s.Mint(upstream, map[string]string{"Authorization": "Bearer abc"}, "session-1", false)
+	raw, err := s.Mint(upstream, map[string]string{"Authorization": "Bearer abc"}, "session-1", Plan{DirectPlay: true})
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestTicketRoundTripAndTamper(t *testing.T) {
 
 func TestExpiredTicketDoesNotOpen(t *testing.T) {
 	s := newTestSealer(t)
-	raw, err := s.Mint("https://cdn.example/movie.mp4", nil, "session-1", false)
+	raw, err := s.Mint("https://cdn.example/movie.mp4", nil, "session-1", Plan{DirectPlay: true})
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestHandlerRelaysRangeRequests(t *testing.T) {
 	defer upstream.Close()
 
 	s := newTestSealer(t)
-	raw, err := s.Mint(upstream.URL+"/movie.mp4", map[string]string{"Authorization": "Bearer abc"}, "session-1", false)
+	raw, err := s.Mint(upstream.URL+"/movie.mp4", map[string]string{"Authorization": "Bearer abc"}, "session-1", Plan{DirectPlay: true})
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestHandlerRejectsBadTickets(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	raw, _ := s.Mint("https://cdn.example/x.mp4", nil, "s", false)
+	raw, _ := s.Mint("https://cdn.example/x.mp4", nil, "s", Plan{DirectPlay: true})
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/playback/"+raw, nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)

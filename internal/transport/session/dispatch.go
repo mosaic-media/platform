@@ -88,11 +88,13 @@ func (h *Handler) playPart(ctx context.Context, caller v1.Caller, input []byte) 
 		return nil, err
 	}
 
-	// Whether the container needs rewriting is decided here, with the resolved
-	// location in hand, and travels sealed inside the ticket — the origin does
-	// not re-derive it per range request (ADR 0048).
-	remux := playback.ShouldRemux(res.URL)
-	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, remux)
+	// Probe the winner, then decide per stream (ADR 0050). This is where a 4K
+	// HEVC release with four E-AC3 audio tracks becomes "copy the video, encode
+	// the English audio" rather than either a whole-file transcode or a silent
+	// film. The plan travels sealed inside the ticket, so the origin does not
+	// re-probe on every range request a seeking player makes.
+	plan := h.planFor(ctx, res.URL, res.Headers)
+	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, plan)
 	if err != nil {
 		return nil, contracts.WrapError(contracts.Internal, "mint playback ticket", err)
 	}
@@ -101,18 +103,38 @@ func (h *Handler) playPart(ctx context.Context, caller v1.Caller, input []byte) 
 		Src:    "/playback/" + ticket,
 		Title:  env.Title,
 		Poster: env.Poster,
-		// A remuxed stream is fragmented MP4 off a pipe; naming the type lets a
-		// client pick its pipeline before it fetches a byte.
-		MimeType: playbackMimeType(remux),
+		// Anything ffmpeg produces is fragmented MP4; naming the type lets a
+		// client pick its pipeline before it fetches a byte. A relayed stream
+		// keeps whatever the upstream sends, which the client discovers from
+		// the response rather than being told up front.
+		MimeType: playbackMimeType(plan),
 	})
 	return regionMsg(playerRegion, sessionv1.RegionUpdate_REPLACE, node), nil
 }
 
-// playbackMimeType names what the origin will serve. A remuxed stream is always
-// fragmented MP4; a relayed one keeps whatever the upstream sends, which the
-// client discovers from the response rather than being told up front.
-func playbackMimeType(remux bool) string {
-	if remux {
+// planFor probes the resolved location and decides how to carry each stream
+// (ADR 0050).
+//
+// A probe failure is not a playback failure: relaying unprobed is exactly what
+// happened before probing existed, so an absent ffprobe — or a source that will
+// not answer one — degrades to the previous behaviour rather than refusing to
+// play. The cost of that fallback is a silent film when the audio turns out to
+// be undecodable, which is the bug this exists to fix; it is still better than
+// no picture at all.
+func (h *Handler) planFor(ctx context.Context, url string, headers map[string]string) playback.Plan {
+	if h.prober == nil || !h.prober.Available() {
+		return playback.Plan{DirectPlay: true}
+	}
+	info, err := h.prober.Probe(ctx, url, headers)
+	if err != nil {
+		return playback.Plan{DirectPlay: true}
+	}
+	return playback.Decide(info, playback.DefaultBrowserCodecs, nil)
+}
+
+// playbackMimeType names what the origin will serve.
+func playbackMimeType(plan playback.Plan) string {
+	if !plan.DirectPlay {
 		return "video/mp4"
 	}
 	return ""

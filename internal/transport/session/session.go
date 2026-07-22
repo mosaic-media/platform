@@ -16,6 +16,7 @@ import (
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/transport/playback"
 	"github.com/mosaic-media/platform/internal/transport/screens"
 	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
 	"github.com/mosaic-media/sdui/gen/mosaic/session/v1/sessionv1connect"
@@ -71,6 +72,7 @@ type Handler struct {
 	screens *screens.Service
 	svc     *app.Service
 	tickets TicketMinter
+	prober  *playback.Prober
 }
 
 // Compile-time proof the handler satisfies the generated service contract.
@@ -78,12 +80,13 @@ var _ sessionv1connect.SessionServiceHandler = (*Handler)(nil)
 
 // NewHandler wires the session transport over the application services and the
 // artwork rewriter (ADR 0030), the same inputs the screen emit-side takes.
-func NewHandler(svc *app.Service, artwork func(string) string, tickets TicketMinter) *Handler {
+func NewHandler(svc *app.Service, artwork func(string) string, tickets TicketMinter, prober *playback.Prober) *Handler {
 	return &Handler{
 		mgr:     NewManager(),
 		screens: screens.NewService(svc, artwork),
 		svc:     svc,
 		tickets: tickets,
+		prober:  prober,
 	}
 }
 
@@ -92,7 +95,7 @@ func NewHandler(svc *app.Service, artwork func(string) string, tickets TicketMin
 // session transport does not depend on the playback transport: both are
 // transports, and one importing the other would be the wrong direction.
 type TicketMinter interface {
-	Mint(url string, headers map[string]string, session string, remux bool) (string, error)
+	Mint(url string, headers map[string]string, session string, plan playback.Plan) (string, error)
 }
 
 // Manager exposes the session store for lifecycle wiring (reaper, shutdown).

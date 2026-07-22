@@ -44,7 +44,7 @@ func TestRemuxerWithoutFFmpegIsUnavailable(t *testing.T) {
 	if rx.Available() {
 		t.Fatal("a Remuxer with no binary reported itself available")
 	}
-	if _, _, err := rx.Stream(t.Context(), "https://cdn.example/a.mkv", nil); err != ErrRemuxUnavailable {
+	if _, _, err := rx.Stream(t.Context(), "https://cdn.example/a.mkv", nil, Plan{}); err != ErrRemuxUnavailable {
 		t.Errorf("Stream error = %v, want ErrRemuxUnavailable", err)
 	}
 }
@@ -54,7 +54,7 @@ func TestRemuxerWithoutFFmpegIsUnavailable(t *testing.T) {
 // things is missing rather than getting a generic playback error.
 func TestRemuxTicketWithoutFFmpegSaysSo(t *testing.T) {
 	s := newTestSealer(t)
-	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", true)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", Plan{Reason: "audio codec eac3 is not decodable by this client"})
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}

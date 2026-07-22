@@ -285,10 +285,11 @@ func run() error {
 	// ffmpeg is optional — without it the Platform still boots and direct-plays,
 	// and a release needing a remux says so rather than failing obscurely.
 	playbackRemuxer := playback.NewRemuxer()
-	if playbackRemuxer.Available() {
-		fmt.Println("mosaic-platform: ffmpeg found; stream-copy remux enabled")
+	playbackProber := playback.NewProber()
+	if playbackRemuxer.Available() && playbackProber.Available() {
+		fmt.Println("mosaic-platform: ffmpeg + ffprobe found; per-stream playback decisions enabled (ADR 0050)")
 	} else {
-		fmt.Println("mosaic-platform: ffmpeg not found; playback is direct-play only (Matroska releases will not play in a browser)")
+		fmt.Println("mosaic-platform: ffmpeg/ffprobe not found; playback relays unprobed, so a release whose audio the client cannot decode will play silently")
 	}
 
 	schema, err := graphqltransport.NewSchema(svc, artworkSigner.Rewrite)
@@ -355,7 +356,7 @@ func run() error {
 	// server-streaming Subscribe per session for push. It supersedes the ADR 0032
 	// WebSocket. GraphQL is retained only as the external/tooling surface, not on
 	// the hot client path.
-	sessionHandler := session.NewHandler(svc, artworkSigner.Rewrite, playbackSealer)
+	sessionHandler := session.NewHandler(svc, artworkSigner.Rewrite, playbackSealer, playbackProber)
 	sessionHandler.Manager().StartReaper(serveCtx)
 	sessionPath, sessionConnect := sessionv1connect.NewSessionServiceHandler(sessionHandler)
 

@@ -52,11 +52,11 @@ type ticket struct {
 	// today's handler enforces only the expiry, which is stated plainly here
 	// rather than described as binding it does not do.
 	Session string `json:"s,omitempty"`
-	// Remux says the container has to be rewritten before a browser can play
-	// it. The decision is made here, at mint time, with the server-side
-	// knowledge that grows into ADR 0048's profile-driven selection — not
-	// re-derived on every range request.
-	Remux   bool  `json:"r,omitempty"`
+	// Plan is the per-stream decision (ADR 0050): which video and audio streams
+	// travel and whether each is copied or re-encoded. It is decided once, at
+	// mint time, with the probe results in hand — not re-derived on every range
+	// request, which for a seeking player would mean probing dozens of times.
+	Plan    Plan  `json:"p,omitempty"`
 	Expires int64 `json:"e"`
 }
 
@@ -88,12 +88,12 @@ var ErrInvalidTicket = errors.New("playback: invalid ticket")
 
 // Mint seals an upstream location into an opaque ticket string, safe to put in
 // a URL path.
-func (s *Sealer) Mint(url string, headers map[string]string, session string, remux bool) (string, error) {
+func (s *Sealer) Mint(url string, headers map[string]string, session string, plan Plan) (string, error) {
 	payload, err := json.Marshal(ticket{
 		URL:     url,
 		Headers: headers,
 		Session: session,
-		Remux:   remux,
+		Plan:    plan,
 		Expires: s.now().Add(TicketTTL).Unix(),
 	})
 	if err != nil {
@@ -182,15 +182,16 @@ func Handler(sealer *Sealer, client *http.Client, remuxer *Remuxer) http.Handler
 			return
 		}
 
-		// A container MSE cannot accept goes through ffmpeg instead of being
-		// relayed. The branch is here rather than in the module because a remux
-		// is a transform on the serving side, and the module never serves.
-		if t.Remux {
+		// Anything the client cannot decode as-is goes through ffmpeg; anything
+		// it can is relayed untouched, which keeps byte-range seeking. The
+		// branch is here rather than in the module because this is a transform
+		// on the serving side, and a module never serves (ADR 0045).
+		if !t.Plan.DirectPlay {
 			if !remuxer.Available() {
-				http.Error(w, "this release needs remuxing and ffmpeg is not installed", http.StatusNotImplemented)
+				http.Error(w, "this release needs re-encoding ("+t.Plan.Reason+") and ffmpeg is not installed", http.StatusNotImplemented)
 				return
 			}
-			serveRemuxed(w, r, remuxer, t)
+			serveRemuxed(w, r, remuxer, t, t.Plan)
 			return
 		}
 
