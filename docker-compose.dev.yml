@@ -45,6 +45,14 @@ services:
       - .:/src/platform
       - ../module-remote-playback:/src/module-remote-playback
       - ../web:/src/web
+      # The web lockfile links @mosaic-media/sdui to ../sdui — the sibling
+      # checkout — rather than the registry copy, which is the documented local
+      # cross-repo pattern. The link is relative to the web root, so the sibling
+      # has to sit at the same relative path inside the container or npm
+      # silently falls back to a stale hoisted version and Vite fails with
+      # `Missing "./session" specifier`, which reads as a broken package rather
+      # than a missing mount.
+      - ../sdui:/src/sdui
       - mosaic-dev-pgdata:/var/lib/postgresql/data
       # Caches and dependency trees live in volumes rather than on the bind
       # mount. Source comes from the Windows filesystem, and letting Go and npm
