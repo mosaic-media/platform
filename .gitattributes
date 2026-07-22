@@ -1,5 +1,8 @@
-# Shell scripts and git hooks must keep LF line endings, or they fail to run on
-# Unix (a CRLF shebang line breaks `/bin/sh`). Pin them regardless of a
-# contributor's core.autocrlf setting.
-*.sh text eol=lf
-.githooks/** text eol=lf
+# Scripts that run inside a Linux container must keep LF endings whatever the
+# checkout platform. A CRLF shebang fails as "bad interpreter: /usr/bin/env
+# bash^M", which reads as a missing binary rather than a line-ending problem and
+# costs an hour the first time.
+docker/entrypoint.sh   text eol=lf
+docker/supervisord.conf text eol=lf
+*.sh                   text eol=lf
+Dockerfile*            text eol=lf

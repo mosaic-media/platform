@@ -1,92 +1,77 @@
-# The whole Mosaic dev stack in one command.
+# The Mosaic dev stack: one container, three processes.
 #
-#   docker compose -f docker-compose.dev.yml up
+#   docker compose -f docker-compose.dev.yml up --build
 #
-# Postgres + Platform + the web Shell, wired together. It exists because running
-# Mosaic by hand had grown to three terminals, a native PostgreSQL service and a
-# dependency (ffmpeg) that is easy to forget and whose absence looks like a
-# playback bug rather than a missing binary.
+# PostgreSQL, the Platform and the web Shell run side by side under supervisord
+# (see Dockerfile.dev for why one container rather than three). Compose is still
+# worth keeping for the parts it does well — volumes, ports, bind mounts and a
+# single memorable command — even with only one service to define.
 #
-# It is a *development* stack, deliberately:
-#   - Source is bind-mounted from the sibling repositories and run with `go run`
-#     and `vite`, so an edit is a restart, not an image rebuild.
-#   - It reaches out of this repository into ../module-remote-playback and ../web.
-#     That is the price of a multi-repo layout, and it is why the sibling checkout
-#     order in the platform CLAUDE.md matters.
-#   - Nothing here is a release artifact.
+# It reaches out of this repository into ../module-remote-playback and ../web.
+# That is the price of a multi-repo layout, and it is why the sibling checkout
+# order in CLAUDE.md matters: the local `replace` in go.mod cannot resolve unless
+# the module is mounted at the same relative path it names.
 #
 # The existing docker-compose.yml stays as it is: postgres alone, for running the
 # integration tests against a persistent database.
 name: mosaic-dev
 
 services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: mosaic
-      POSTGRES_PASSWORD: mosaic
-      POSTGRES_DB: mosaic
-    ports:
-      # 5433 on the host on purpose. A natively-installed PostgreSQL already
-      # holds 5432 on at least one dev machine, and a port clash here surfaces as
-      # the Platform connecting to the *wrong* database rather than as a failure
-      # to start — which is a far worse afternoon.
-      - "5433:5432"
-    volumes:
-      - mosaic-dev-postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mosaic -d mosaic"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-  platform:
+  mosaic:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
-      # Inside the compose network postgres is reachable by service name on its
-      # own port, so this is 5432 and not the 5433 the host sees.
-      MOSAIC_POSTGRES_DSN: "postgres://mosaic:mosaic@postgres:5432/mosaic?sslmode=disable"
+      # Postgres is a sibling process, so this is loopback rather than a service
+      # name. Trust auth on a container-local database (see docker/entrypoint.sh).
+      MOSAIC_POSTGRES_DSN: "postgres://mosaic@127.0.0.1:5432/mosaic?sslmode=disable"
       MOSAIC_BOOTSTRAP_ADMIN_USERNAME: "admin"
       MOSAIC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
       MOSAIC_API_ADDR: ":8081"
       MOSAIC_HEALTH_ADDR: ":8080"
+      # Vite dev-proxies /graphql, /artwork, /playback and the session service
+      # here; in-container that is loopback too.
+      MOSAIC_PLATFORM_URL: "http://127.0.0.1:8081"
+    ports:
+      - "5173:5173"   # web Shell
+      - "8081:8081"   # API, session transport, artwork, playback origin
+      - "8080:8080"   # Supervisor handoff surface
+      # 5433 on the host on purpose. A natively-installed PostgreSQL already
+      # holds 5432 on at least one dev machine, and that clash surfaces as
+      # something connecting to the *wrong* database rather than failing to
+      # start — a far worse afternoon.
+      - "5433:5432"
     volumes:
       - .:/src/platform
-      # The local `replace` in go.mod points at ../module-remote-playback, so the
-      # module has to be inside the container at the same relative path or the
-      # build cannot resolve it.
       - ../module-remote-playback:/src/module-remote-playback
-      - mosaic-dev-gomod:/go/pkg/mod
-    working_dir: /src/platform
-    ports:
-      - "8081:8081"
-      - "8080:8080"
-
-  web:
-    image: node:22-bookworm
-    depends_on:
-      - platform
-    working_dir: /src/web/packages/shell
-    environment:
-      # Vite dev-proxies /graphql, /artwork, /playback and the session service
-      # here (see the shell's vite.config.ts).
-      MOSAIC_PLATFORM_URL: "http://platform:8081"
-    volumes:
       - ../web:/src/web
+      - mosaic-dev-pgdata:/var/lib/postgresql/data
+      # Caches and dependency trees live in volumes rather than on the bind
+      # mount. Source comes from the Windows filesystem, and letting Go and npm
+      # write tens of thousands of small files across that boundary turns a warm
+      # start from seconds into minutes. Keeping node_modules out of the mount
+      # also stops the container's Linux binaries colliding with a host install.
+      - mosaic-dev-gomod:/go/pkg/mod
+      - mosaic-dev-gobuild:/root/.cache/go-build
       - mosaic-dev-npm:/root/.npm
-    # --host is required: without it Vite binds to loopback inside the container
-    # and nothing on the host can reach it, which looks exactly like the server
-    # failing to start.
-    command: sh -c "npm install --workspaces --include-workspace-root && npm run build --workspace @mosaic-media/sdui-react && npm run dev --workspace @mosaic-media/shell -- --host 0.0.0.0 --port 5173"
-    ports:
-      - "5173:5173"
+      - mosaic-dev-node-root:/src/web/node_modules
+      - mosaic-dev-node-shell:/src/web/packages/shell/node_modules
+      - mosaic-dev-node-sdui:/src/web/packages/sdui-react/node_modules
+    healthcheck:
+      # The Platform answering is what "up" means here; postgres being alive is
+      # necessary and not sufficient, and the Shell can be restarted without the
+      # stack being considered down.
+      test: ["CMD-SHELL", "curl -fsS -X POST -H 'Content-Type: application/json' -d '{\"query\":\"{__typename}\"}' http://127.0.0.1:8081/graphql >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
 
 volumes:
-  mosaic-dev-postgres:
+  mosaic-dev-pgdata:
   mosaic-dev-gomod:
+  mosaic-dev-gobuild:
   mosaic-dev-npm:
+  mosaic-dev-node-root:
+  mosaic-dev-node-shell:
+  mosaic-dev-node-sdui:

@@ -1,32 +1,57 @@
-# Development image for the Mosaic Platform.
+# The whole Mosaic dev stack in one container: PostgreSQL, the Platform, and the
+# web Shell, run side by side under supervisord.
 #
-# It is deliberately NOT a production build: source is bind-mounted and the
-# binary is run with `go run`, so an edit is a restart rather than an image
-# rebuild. A release image is a separate, later concern.
+# One container rather than three is a deliberate development-only choice. It is
+# the wrong shape for production — a process per container is right there, so
+# each can be restarted, scaled and health-checked on its own — but for a
+# developer it removes an orchestration layer from something that is always
+# started and stopped as a unit anyway.
 #
-# The reason this exists rather than running the Platform on the host is
-# **ffmpeg**. Playback needs ffprobe to decide what a release actually is, and
-# ffmpeg to rewrite a container or re-encode an audio track (ADR 0050); without
-# them the Platform boots in direct-play-only mode and most real content will not
-# play. Putting them in the image makes that a property of the environment rather
-# than a thing every developer has to remember to install.
+# It is also genuinely smaller. Three images (golang + node + postgres) pull
+# three separate Debian bases and three toolchains; sharing one base roughly
+# halves it. The size that remains is the Go and Node toolchains, which a
+# bind-mounted `go run` / `vite` workflow needs whatever the layout.
+#
+# ffmpeg is here for the same reason it was always going to be: playback needs
+# ffprobe to decide what a release actually is and ffmpeg to rewrite a container
+# or re-encode an audio track (ADR 0050). Without them the Platform boots
+# direct-play-only, and that failure looks like a playback bug rather than a
+# missing binary. In the image, it is a property of the environment.
 FROM golang:1.25-bookworm
 
-# ffmpeg brings ffprobe with it. No-install-recommends keeps the layer from
-# pulling in an X stack that a headless server has no use for.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
- && rm -rf /var/lib/apt/lists/* \
- && ffmpeg -version | head -n 1 \
- && ffprobe -version | head -n 1
+ENV DEBIAN_FRONTEND=noninteractive \
+    PG_MAJOR=18 \
+    PGDATA=/var/lib/postgresql/data \
+    GOFLAGS=-buildvcs=false
 
-WORKDIR /src/platform
+# PostgreSQL 18 comes from PGDG: Debian bookworm's own archive carries 15, and
+# the Platform should be developed against the version it will be deployed on
+# rather than whichever the base image happened to ship.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg supervisor ffmpeg; \
+    install -d /usr/share/postgresql-common/pgdg; \
+    curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc; \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list; \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends "postgresql-${PG_MAJOR}" nodejs; \
+    rm -rf /var/lib/apt/lists/*; \
+    ffprobe -version | head -n 1; \
+    node --version; \
+    /usr/lib/postgresql/${PG_MAJOR}/bin/postgres --version
 
-# The module cache is a named volume in compose, so a restart does not re-download
-# the world. Nothing is COPYed: compose bind-mounts the sibling repositories,
-# which is what lets the local `replace` for module-remote-playback resolve.
-ENV GOFLAGS=-buildvcs=false
+ENV PATH="/usr/lib/postgresql/${PG_MAJOR}/bin:${PATH}"
 
-EXPOSE 8080 8081
+COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
-CMD ["go", "run", "./cmd/mosaic-platform"]
+# 5432 postgres · 8080 Supervisor handoff · 8081 API/session/artwork/playback
+# · 5173 the web Shell
+EXPOSE 5432 8080 8081 5173
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
