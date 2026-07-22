@@ -27,7 +27,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mosaic-media/module-remote-playback v0.0.1
-	github.com/mosaic-media/module-stremio-addons v0.11.0
+	github.com/mosaic-media/module-stremio-addons v0.12.0
 	github.com/mosaic-media/sdk v0.10.0
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	golang.org/x/sync v0.22.0
