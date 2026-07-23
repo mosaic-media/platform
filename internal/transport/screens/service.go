@@ -108,6 +108,10 @@ type contentQueries interface {
 	// that does before it can offer Play at all (ADR 0036 — an affordance with
 	// nothing behind it is the dead end this whole thread exists to remove).
 	FirstPlayablePart(context.Context, v1.Caller, v1.NodeID) (v1.Part, bool, error)
+	// GetPlaybackState backs Resume (ADR 0046): a detail screen has to know
+	// whether this viewer already started this item before it can decide
+	// whether its primary action says Play or Resume.
+	GetPlaybackState(context.Context, v1.GetPlaybackStateQuery) (v1.GetPlaybackStateResult, error)
 
 	// The expert-mode reads (ADR 0058). Each authorises telemetry.read for
 	// itself, so a screen calling one cannot be reached without the grant even

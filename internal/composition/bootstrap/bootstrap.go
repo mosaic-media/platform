@@ -64,10 +64,10 @@ func EnsureAdmin(
 	}
 
 	err = uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// Already provisioned? Then this is a no-op — the common case on every
-		// start after the first.
-		if _, err := tx.Users().FindByUsername(ctx, seed.Username); err == nil {
-			return nil
+		// Already provisioned? Then all that remains is keeping this account's
+		// authority current — the common case on every start after the first.
+		if existing, err := tx.Users().FindByUsername(ctx, seed.Username); err == nil {
+			return reconcileSuperuser(ctx, tx, existing.ID, seed.Permissions)
 		} else if contracts.CategoryOf(err) != contracts.NotFound {
 			return err
 		}
@@ -112,4 +112,59 @@ func EnsureAdmin(
 		return false, err
 	}
 	return created, nil
+}
+
+// reconcileSuperuser brings the owner account's role back in line with the
+// Platform's current action set.
+//
+// A preset is *snapshotted* into a role row when the role is created, so adding
+// an action to the Platform never reaches an account that already exists. That
+// is correct for every other role — an administrator's authority should not
+// silently widen because the software was upgraded — and wrong for exactly one:
+// the superuser is the root of every other grant, and an authority it does not
+// hold can never be given to anyone. An install would quietly become unable to
+// delegate a permission it now has.
+//
+// It was found the way these things are: a new action was added, the tests
+// passed, and playback progress silently failed to record on a running install
+// whose admin had been seeded before that action existed.
+//
+// **It matches on "this account holds exactly one role", not on the role's
+// name.** Matching by name was the first attempt and it failed against the very
+// install that motivated this: that account's role is called "Administrator",
+// because it was seeded by a build that named it differently. A name is a label
+// someone may have changed; holding a single role is the structural signature of
+// an account nobody has reshaped. An account holding several has been arranged
+// deliberately, and re-granting everything to it would undo that arrangement on
+// the next restart — a worse failure than the one this fixes.
+func reconcileSuperuser(ctx context.Context, tx contracts.Tx, userID domain.UserID, perms []domain.Permission) error {
+	roles, err := tx.Permissions().RolesForUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if len(roles) != 1 {
+		return nil
+	}
+	if samePermissions(roles[0].Permissions, perms) {
+		return nil
+	}
+	return tx.Permissions().SetRolePermissions(ctx, roles[0].ID, perms)
+}
+
+// samePermissions compares two permission sets irrespective of order, so a boot
+// that changes nothing writes nothing.
+func samePermissions(a, b []domain.Permission) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	have := make(map[domain.Permission]bool, len(a))
+	for _, p := range a {
+		have[p] = true
+	}
+	for _, p := range b {
+		if !have[p] {
+			return false
+		}
+	}
+	return true
 }

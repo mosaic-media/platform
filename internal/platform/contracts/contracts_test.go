@@ -41,6 +41,7 @@ func (mockTx) Relations() contracts.RelationStore             { return nil }
 func (mockTx) SourceBindings() contracts.SourceBindingStore   { return nil }
 func (mockTx) ModuleSettings() contracts.ModuleSettingsStore  { return nil }
 func (mockTx) UserPreferences() contracts.UserPreferenceStore { return nil }
+func (mockTx) PlaybackStates() contracts.PlaybackStateStore   { return nil }
 
 type mockUserStore struct{}
 
@@ -93,6 +94,9 @@ func (mockPermissionStore) CreateRole(context.Context, domain.Role) (domain.Role
 }
 
 func (mockPermissionStore) GrantRole(context.Context, domain.Grant) error { return nil }
+func (mockPermissionStore) SetRolePermissions(context.Context, domain.RoleID, []domain.Permission) error {
+	return nil
+}
 
 func (mockPermissionStore) AttributesForUser(ctx context.Context, userID domain.UserID) ([]domain.Attribute, error) {
 	return nil, nil

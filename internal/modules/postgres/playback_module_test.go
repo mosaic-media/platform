@@ -209,6 +209,8 @@ func seedPlaybackUser(t *testing.T, c context.Context, cs *postgres.ContractSet,
 		domain.Permission(app.ActionContentCreate),
 		domain.Permission(app.ActionContentBind),
 		domain.Permission(app.ActionContentRead),
+		domain.Permission(app.ActionPlaybackRead),
+		domain.Permission(app.ActionPlaybackWrite),
 		domain.Permission(app.ActionModuleConfigure),
 	}
 	if err := seedRoleGrant(c, pool, user.ID, "Viewer", actions); err != nil {
@@ -463,5 +465,128 @@ func TestPartProbeIsDurableAgainstPostgres(t *testing.T) {
 	}
 	if !reflect.DeepEqual(stored, info) {
 		t.Errorf("probe changed in storage:\n got %+v\nwant %+v", stored, info)
+	}
+}
+
+// TestPlaybackStateAgainstPostgres exercises the per-user store against real SQL
+// (ADR 0046).
+//
+// The fake in the app package encodes the same rules in Go, which is exactly why
+// this is worth having: the two can agree with each other and both be wrong
+// about what the database does. The filters here — NotFound for an item never
+// started, and a continue-watching list that excludes finished items and items
+// opened at zero — live in the SQL and the partial index, not in Go.
+func TestPlaybackStateAgainstPostgres(t *testing.T) {
+	requirePostgres(t)
+
+	pool := freshDatabase(t)
+	c := context.Background()
+	if err := postgres.Migrate(c, pool); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	var mod postgres.Module
+	cs := mod.Bind(pool)
+
+	svc := app.NewService(app.Deps{
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Parts: cs.Parts, Clock: cs.Clock,
+		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
+		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},
+		Capabilities: app.NewCapabilityRegistry(), ModuleSettings: cs.ModuleSettings,
+		PlaybackStates: cs.PlaybackStates,
+	})
+	caller := seedPlaybackUser(t, c, cs, pool)
+
+	// Three items: one part-way through, one finished, one opened and abandoned
+	// at zero. Only the first belongs in a continue-watching rail.
+	items := map[string]v1.NodeID{}
+	for _, title := range []string{"Watching", "Finished", "Opened"} {
+		work, err := svc.AddContentWork(c, v1.AddContentWorkCommand{
+			Caller: caller, Title: title, MediaType: v1.MediaMovie,
+		})
+		if err != nil {
+			t.Fatalf("AddContentWork(%s): %v", title, err)
+		}
+		item, err := svc.AddContentChild(c, v1.AddContentChildCommand{
+			Caller: caller, ParentID: work.Work.ID, Kind: v1.NodeItem, Title: title, ItemType: v1.ItemFeature,
+		})
+		if err != nil {
+			t.Fatalf("AddContentChild(%s): %v", title, err)
+		}
+		items[title] = item.Node.ID
+	}
+
+	// Never started reads as absent rather than as a zero position.
+	if res, err := svc.GetPlaybackState(c, v1.GetPlaybackStateQuery{
+		Caller: caller, NodeID: items["Watching"],
+	}); err != nil {
+		t.Fatalf("GetPlaybackState: %v", err)
+	} else if res.Found {
+		t.Error("an item nobody has started reported a state")
+	}
+
+	const runtime = 100 * time.Minute
+	progress := func(node v1.NodeID, position time.Duration) v1.PlaybackState {
+		t.Helper()
+		res, err := svc.RecordPlaybackProgress(c, v1.RecordPlaybackProgressCommand{
+			Caller: caller, NodeID: node, Position: position, Duration: runtime,
+		})
+		if err != nil {
+			t.Fatalf("RecordPlaybackProgress: %v", err)
+		}
+		return res.State
+	}
+
+	watching := progress(items["Watching"], 40*time.Minute)
+	finished := progress(items["Finished"], 99*time.Minute)
+	progress(items["Opened"], 0)
+
+	if watching.Finished {
+		t.Error("40 of 100 minutes was marked finished")
+	}
+	if !finished.Finished {
+		t.Error("99 of 100 minutes was not marked finished")
+	}
+
+	// Round-tripping the duration through bigint milliseconds must not drift.
+	if back, err := svc.GetPlaybackState(c, v1.GetPlaybackStateQuery{
+		Caller: caller, NodeID: items["Watching"],
+	}); err != nil {
+		t.Fatalf("GetPlaybackState: %v", err)
+	} else if back.State.Position != 40*time.Minute || back.State.Duration != runtime {
+		t.Errorf("position/duration came back as %v/%v", back.State.Position, back.State.Duration)
+	}
+
+	// The continue-watching query, and the two exclusions that live in its SQL.
+	list, err := svc.ListInProgress(c, v1.ListInProgressQuery{Caller: caller})
+	if err != nil {
+		t.Fatalf("ListInProgress: %v", err)
+	}
+	if len(list.Items) != 1 {
+		t.Fatalf("in-progress list has %d items, want 1: %+v", len(list.Items), list.Items)
+	}
+	if list.Items[0].State.NodeID != items["Watching"] {
+		t.Errorf("in-progress list contains %q", list.Items[0].Node.Title)
+	}
+	// And the Node travels with it, so a rail can render without a second query.
+	if list.Items[0].Node.Title != "Watching" {
+		t.Errorf("in-progress item carries node %q, want the item it belongs to", list.Items[0].Node.Title)
+	}
+
+	// The batch read a season of episodes uses: present for what exists, absent
+	// for what does not, in one query.
+	states, err := svc.ListPlaybackStates(c, v1.ListPlaybackStatesQuery{
+		Caller:  caller,
+		NodeIDs: []v1.NodeID{items["Watching"], items["Finished"], "00000000-0000-7000-8000-000000000000"},
+	})
+	if err != nil {
+		t.Fatalf("ListPlaybackStates: %v", err)
+	}
+	if len(states.States) != 2 {
+		t.Errorf("batch read returned %d states, want 2", len(states.States))
+	}
+	if _, ok := states.States[items["Opened"]]; ok {
+		t.Error("an item at position zero has no state to return, but one came back")
 	}
 }

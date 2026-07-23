@@ -46,6 +46,14 @@ func userActions() []policy.Action {
 	return []policy.Action{
 		ActionContentRead,
 		ActionContentResolve,
+		// Where they got to (ADR 0046). These belong to the *ordinary* preset
+		// and not to the administrator one, which is the whole reason they are
+		// separate actions from content.read and content.create: a household
+		// member who may watch everything and change nothing is the normal
+		// arrangement, and folding progress into the content actions would make
+		// resume a librarian's privilege.
+		ActionPlaybackWrite,
+		ActionPlaybackRead,
 		ActionPreferenceWrite,
 		ActionPreferenceRead,
 	}

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
@@ -212,6 +213,37 @@ func boundaryCases() []boundaryCase {
 			return discard(s.RecordPartProbe(ctx, app.RecordPartProbeCommand{
 				Caller: caller(sid), PartID: "part-1", Probe: []byte(`{"v":1}`),
 			}))
+		}},
+
+		// --- playback state (ADR 0046) ---
+		//
+		// The first per-user rows in the content domain, and the boundary matters
+		// more here than anywhere above it: these methods resolve *whose* state
+		// they touch from the caller's own session, so a session that does not
+		// authenticate must never reach a store. There is no user parameter to
+		// get wrong, and this is what keeps it that way.
+		{"RecordPlaybackProgress", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.RecordPlaybackProgress(ctx, v1.RecordPlaybackProgressCommand{
+				Caller: caller(sid), NodeID: "node-1", Position: time.Minute,
+			}))
+		}},
+		{"SetPlaybackFinished", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.SetPlaybackFinished(ctx, v1.SetPlaybackFinishedCommand{
+				Caller: caller(sid), NodeID: "node-1", Finished: true,
+			}))
+		}},
+		{"GetPlaybackState", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.GetPlaybackState(ctx, v1.GetPlaybackStateQuery{
+				Caller: caller(sid), NodeID: "node-1",
+			}))
+		}},
+		{"ListPlaybackStates", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListPlaybackStates(ctx, v1.ListPlaybackStatesQuery{
+				Caller: caller(sid), NodeIDs: []v1.NodeID{"node-1"},
+			}))
+		}},
+		{"ListInProgress", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListInProgress(ctx, v1.ListInProgressQuery{Caller: caller(sid)}))
 		}},
 
 		// --- user preferences and telemetry reads ---

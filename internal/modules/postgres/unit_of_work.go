@@ -104,6 +104,12 @@ func (t *tx) SourceBindings() contracts.SourceBindingStore {
 	return &sourceBindingStore{q: t.q}
 }
 
+// PlaybackStates joins the set (ADR 0046) so a position change and its outbox
+// event share the one transaction, like every other content write.
+func (t *tx) PlaybackStates() contracts.PlaybackStateStore {
+	return &playbackStateStore{q: t.q}
+}
+
 // ModuleSettings joins the set (ADR 0021) so a module's settings change and
 // its outbox event share the one transaction.
 func (t *tx) ModuleSettings() contracts.ModuleSettingsStore {

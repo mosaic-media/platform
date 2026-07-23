@@ -408,6 +408,7 @@ func run() error {
 		TelemetryQueries: set.TelemetryQueries,
 
 		PlaybackResolutions: set.PlaybackResolutions,
+		PlaybackStates:      set.PlaybackStates,
 	})
 	// The artwork proxy (ADR 0030) re-serves remote poster/backdrop images from
 	// the Platform's origin, so a client gets same-origin (CORS-clean) artwork.

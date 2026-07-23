@@ -7,6 +7,9 @@ package session
 import (
 	"encoding/json"
 	"testing"
+	"time"
+
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // TestSafeAction guards the action name a client submits: it must be a plain
@@ -131,5 +134,70 @@ func TestInvokeToast(t *testing.T) {
 		if got := invokeToast(action); got != want {
 			t.Errorf("invokeToast(%q) = %q, want %q", action, got, want)
 		}
+	}
+}
+
+// TestSilentActionsAreOnlyThePeriodicOnes guards a bug that would have shipped
+// looking like a feature request.
+//
+// Invoke's default is to confirm and re-render, which is right for something a
+// person pressed. A player reports its position every fifteen seconds, so under
+// that default a playing film would have raised a "Done" toast four times a
+// minute and re-rendered the screen underneath itself each time — tearing down
+// the very player that was reporting.
+func TestSilentActionsAreOnlyThePeriodicOnes(t *testing.T) {
+	if !silentAction("reportProgress") {
+		t.Error("reportProgress would toast and re-render on every position report")
+	}
+	// Everything a person presses still confirms. setWatched especially: it is
+	// the one whose whole visible effect is the re-render.
+	for _, action := range []string{"importContent", "configureModule", "setPreference", "setWatched", "playPart"} {
+		if silentAction(action) {
+			t.Errorf("%q was made silent; a user action needs its confirmation", action)
+		}
+	}
+}
+
+// TestProgressEnvelopeDecoding covers the action ABI the Player emits, including
+// the two values a media element genuinely produces for an unknown length.
+func TestProgressEnvelopeDecoding(t *testing.T) {
+	env, err := progressFromInput([]byte(`{"nodeId":"n-1","partId":"p-1","position":91.5,"duration":5400,"final":true}`))
+	if err != nil {
+		t.Fatalf("progressFromInput: %v", err)
+	}
+	if env.NodeID != "n-1" || env.PartID != "p-1" || !env.Final {
+		t.Errorf("decoded %+v", env)
+	}
+	cmd := env.command(v1.Caller{Session: "s-1"})
+	if cmd.Position != 91500*time.Millisecond {
+		t.Errorf("position = %v, want 91.5s", cmd.Position)
+	}
+	if cmd.Duration != 90*time.Minute {
+		t.Errorf("duration = %v, want 90m", cmd.Duration)
+	}
+
+	// A report with no node has nothing to be a position of.
+	if _, err := progressFromInput([]byte(`{"position":10}`)); err == nil {
+		t.Error("a progress report with no node id was accepted")
+	}
+	// Negative values are not a player's honest output; they are a bug
+	// somewhere, and storing one would put an item at a position no seek can
+	// reach.
+	if _, err := progressFromInput([]byte(`{"nodeId":"n-1","position":-5}`)); err == nil {
+		t.Error("a negative position was accepted")
+	}
+}
+
+// TestSecondsRoundsToTheStoredPrecision pins the float-to-Duration conversion at
+// the millisecond the store keeps. A float carried further than the column's
+// precision is a value that compares unequal to itself across a round trip.
+func TestSecondsRoundsToTheStoredPrecision(t *testing.T) {
+	if got := seconds(12.3456); got != 12345*time.Millisecond {
+		t.Errorf("seconds(12.3456) = %v, want 12.345s", got)
+	}
+	// A media element reports 0 for a stream whose length it does not know, and
+	// the client already converts NaN/Infinity to 0 before sending.
+	if got := seconds(0); got != 0 {
+		t.Errorf("seconds(0) = %v, want 0", got)
 	}
 }

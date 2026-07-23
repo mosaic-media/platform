@@ -31,6 +31,8 @@ github.com/mosaic-media/sdk v0.12.0 h1:EBlPxOBa3gZ/db8eEa6SfwqCkMn3K0kOzMMGWwJwU
 github.com/mosaic-media/sdk v0.12.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
 github.com/mosaic-media/sdk v0.13.0 h1:JO16S/KmRDA8G/6bv46JNcIJQIdRYU+Py/M9vI6hbIA=
 github.com/mosaic-media/sdk v0.13.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
+github.com/mosaic-media/sdk v0.14.0 h1:gWx8iGr1asIMnS1bJQ1QCm9PUptv0drxA/NL2m/suNA=
+github.com/mosaic-media/sdk v0.14.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
 github.com/mosaic-media/sdui v0.9.0 h1:+vm76QE1F5GUHW0s7SGcY9nbrgXq6/ej0c4snq4LY6g=
 github.com/mosaic-media/sdui v0.9.0/go.mod h1:U2jxF+nZzupVfSU/ysMXOX1XZ1COhP89UoYA5SE8FrM=
 github.com/mosaic-media/sdui v0.10.0 h1:CJYd0FnR6TPDmmPEN5G88JLRbSs6YUtXhG2nhCtzpsA=

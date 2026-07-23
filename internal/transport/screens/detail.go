@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	sdui "github.com/mosaic-media/sdui/sdui"
 	"github.com/mosaic-media/sdui/ui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -84,11 +86,53 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 			return nil, err
 		}
 		if playable {
-			els = append(els, ui.Button("Play", "primary", ui.OnTap(ui.Invoke(playPartAction, map[string]any{
+			// Where this viewer got to, if anywhere (ADR 0046). The state is
+			// keyed on the *item* that has the bytes rather than on the work
+			// above it, because that is what a viewer resumes — an episode, not
+			// a series.
+			state, stateErr := s.content.GetPlaybackState(ctx, v1.GetPlaybackStateQuery{
+				Caller: caller, NodeID: part.NodeID,
+			})
+			// Not fatal — a detail screen without a resume offset is still a
+			// detail screen — but not silent either. Swallowing this outright
+			// makes "Resume never appears" indistinguishable from "nothing has
+			// been watched", which is a difference only a log can carry.
+			if stateErr != nil {
+				telemetry.From(ctx).For("screens").Warn("reading playback state failed; offering Play instead of Resume",
+					telemetry.Identifier("node", string(part.NodeID)),
+					telemetry.Err(stateErr))
+			}
+			resumable := state.Found && state.State.ResumeAt() > 0
+
+			playInput := map[string]any{
 				paramPartID: string(part.ID),
+				"nodeId":    string(part.NodeID),
 				"title":     title,
 				"poster":    s.art(m.Poster),
-			}))))
+			}
+
+			label := "Play"
+			if resumable {
+				// Naming the time is the difference between an affordance a
+				// viewer trusts and one they test. "Resume" alone leaves them
+				// wondering whether it remembers the right place.
+				label = "Resume " + positionLabel(state.State.ResumeAt())
+			}
+			els = append(els, ui.Button(label, "primary", ui.OnTap(ui.Invoke(playPartAction, playInput))))
+
+			if resumable {
+				// Start over is offered rather than assumed, and it does not
+				// clear the position: someone who starts again and stops after
+				// five minutes should not have lost the hour they had before
+				// they will inevitably change their mind.
+				restart := map[string]any{}
+				for k, v := range playInput {
+					restart[k] = v
+				}
+				restart["restart"] = true
+				els = append(els, ui.Button("Start over", "secondary",
+					ui.OnTap(ui.Invoke(playPartAction, restart))))
+			}
 		}
 		// Re-importing an in-library item refreshes its candidate releases
 		// (additive — nothing is removed). It is offered explicitly rather than
@@ -284,4 +328,17 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 		body = append(body, ui.Section("Contents", ui.Grid(cards...)))
 	}
 	return ui.Screen(ui.Title(n.Title), ui.Group(body...)).Build(), nil
+}
+
+// positionLabel renders a resume offset the way a viewer reads a clock.
+//
+// Hours are omitted below an hour rather than shown as 0:, because "0:47:12"
+// reads as a duration and "47:12" reads as a place in a film.
+func positionLabel(d time.Duration) string {
+	total := int(d.Round(time.Second).Seconds())
+	h, m, sec := total/3600, (total%3600)/60, total%60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, sec)
+	}
+	return fmt.Sprintf("%d:%02d", m, sec)
 }

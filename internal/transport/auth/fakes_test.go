@@ -224,6 +224,9 @@ func (fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (doma
 }
 
 func (fakePermissionStore) GrantRole(context.Context, domain.Grant) error { return nil }
+func (fakePermissionStore) SetRolePermissions(context.Context, domain.RoleID, []domain.Permission) error {
+	return nil
+}
 
 type fakeEventOutbox struct{ db *fakeDB }
 
@@ -270,6 +273,7 @@ func (fakeTx) SourceBindings() contracts.SourceBindingStore  { return nil }
 func (fakeTx) ModuleSettings() contracts.ModuleSettingsStore { return nil }
 
 func (fakeTx) UserPreferences() contracts.UserPreferenceStore { return nil }
+func (fakeTx) PlaybackStates() contracts.PlaybackStateStore   { return nil }
 
 type fakeUnitOfWork struct{ db *fakeDB }
 

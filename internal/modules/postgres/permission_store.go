@@ -111,6 +111,20 @@ func (s *permissionStore) CreateRole(ctx context.Context, role domain.Role) (dom
 	return role, nil
 }
 
+func (s *permissionStore) SetRolePermissions(ctx context.Context, roleID domain.RoleID, perms []domain.Permission) error {
+	tag, err := s.q.Exec(ctx,
+		`UPDATE roles SET permissions = $2 WHERE id = $1`,
+		string(roleID), permissionsToStrings(perms),
+	)
+	if err != nil {
+		return mapError("set role permissions", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return contracts.NewError(contracts.NotFound, "role not found")
+	}
+	return nil
+}
+
 func (s *permissionStore) GrantRole(ctx context.Context, grant domain.Grant) error {
 	_, err := s.q.Exec(ctx,
 		`INSERT INTO grants (user_id, role_id) VALUES ($1, $2)`,

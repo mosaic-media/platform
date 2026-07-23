@@ -59,6 +59,19 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		return nil, err
 	case "playPart":
 		return h.playPart(ctx, s, input)
+	case "reportProgress":
+		// The one action a client sends unprompted and repeatedly. It produces
+		// no surface and no toast: a confirmation for something a player emits
+		// every few seconds would be noise over the film it is reporting on.
+		return nil, h.reportProgress(ctx, s, input)
+	case "setWatched":
+		cmd, err := setWatchedFromInput(input)
+		if err != nil {
+			return nil, err
+		}
+		cmd.Caller = caller
+		_, err = h.svc.SetPlaybackFinished(ctx, cmd)
+		return nil, err
 	default:
 		return nil, contracts.NewError(contracts.InvalidArgument, "unknown action: "+action)
 	}
@@ -68,8 +81,17 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 // action emits `partId` (ADR 0029's action ABI), so that is the key read here.
 type playEnvelope struct {
 	PartID string `json:"partId"`
+	// NodeID is the item being played, and the key playback state is stored
+	// under (ADR 0046). It is what the client reports its position against, so
+	// a play without it works and simply remembers nothing.
+	NodeID string `json:"nodeId"`
 	Title  string `json:"title"`
 	Poster string `json:"poster"`
+	// Restart asks for the beginning rather than the stored position — the
+	// "Start over" affordance beside Resume. It is a property of *this* play
+	// rather than a change to the state, so choosing it does not throw away
+	// where the viewer had got to until they watch past it.
+	Restart bool `json:"restart"`
 }
 
 // playPart resolves a Part to playable bytes, seals the result into a ticket and
@@ -156,10 +178,23 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) (*
 		return nil, contracts.WrapError(contracts.Internal, "mint playback ticket", err)
 	}
 
+	// Where this viewer got to (ADR 0046). Read after the ticket is minted
+	// rather than before, because a resume offset is a refinement and minting
+	// is the thing that can fail — ordering it this way means a state read that
+	// goes wrong costs the offset, never the play.
+	var resumeAt float64
+	if !env.Restart {
+		resumeAt = h.resumeFor(ctx, caller, env.NodeID).Seconds()
+	}
+
 	node := screens.PlayerNode(screens.PlayerParams{
 		Src:    "/playback/" + ticket,
 		Title:  env.Title,
 		Poster: env.Poster,
+		NodeID: env.NodeID,
+		PartID: string(res.PartID),
+
+		ResumeAt: resumeAt,
 		// Anything ffmpeg produces is fragmented MP4; naming the type lets a
 		// client pick its pipeline before it fetches a byte. A relayed stream
 		// keeps whatever the upstream sends, which the client discovers from

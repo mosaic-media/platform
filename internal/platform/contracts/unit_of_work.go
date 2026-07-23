@@ -39,6 +39,13 @@ type Tx interface {
 	Relations() RelationStore
 	SourceBindings() SourceBindingStore
 
+	// PlaybackStates persists where each viewer got to (ADR 0046). It is the
+	// fifth content store and the first per-user one — everything above it is
+	// install-global. It joins the set for the same reason the others did: a
+	// position change emits an outbox event, and the two commit together or
+	// neither does.
+	PlaybackStates() PlaybackStateStore
+
 	// ModuleSettings persists an optional module's user-managed settings
 	// document (ADR 0021). It joins the set so a settings change and its
 	// outbox event commit in one transaction, like every other write.

@@ -78,6 +78,14 @@ type liveSession struct {
 	inputTimer *time.Timer
 	pendingIn  string
 
+	// progress-coalescing state (ADR 0046). Separate from the input lock
+	// because the two coalesce independently: someone can be typing in the
+	// search field while a player behind the overlay reports its position, and
+	// one timer must not be able to block the other.
+	progressMu      sync.Mutex
+	progressTimer   *time.Timer
+	pendingProgress progressEnvelope
+
 	// mu guards the outbound mailbox and lifecycle fields below; cond signals
 	// the sender goroutine that new history is available (or that it should
 	// exit). history is append-only per session, ordered by seq, trimmed to
@@ -297,6 +305,17 @@ func streamEndReason(ctx context.Context, superseded, closed bool) string {
 	}
 }
 
+// stopTimers cancels any pending debounced work, so a timer does not fire
+// against a discarded session.
+//
+// The position is *not* discarded with it — the Handler flushes it first, in
+// reap and in Shutdown. Discarding it here would make being reaped the one way
+// to lose exactly the position that mattered most.
+func (s *liveSession) stopTimers() {
+	s.stopInput()
+	s.cancelProgress()
+}
+
 // stopInput cancels any pending debounced render, so a timer does not fire
 // against a discarded session.
 func (s *liveSession) stopInput() {
@@ -350,11 +369,36 @@ type Manager struct {
 	sessions map[string]*liveSession
 	closed   bool
 	clock    func() time.Time
+	// onRetire runs once per session as it is discarded — reaped or shut down.
+	//
+	// It exists because coalescing creates a way to lose the one write that
+	// matters (ADR 0046): a pending position is held for a few seconds, and
+	// being reaped or shut down inside that window would drop the position a
+	// viewer actually stopped at. The Manager cannot write it itself — it owns
+	// sessions, not services — so the Handler supplies this.
+	onRetire func(*liveSession)
 }
 
 // NewManager builds an empty session store.
 func NewManager() *Manager {
 	return &Manager{sessions: make(map[string]*liveSession), clock: time.Now}
+}
+
+// OnRetire registers what to do with a session before it is discarded.
+func (m *Manager) OnRetire(fn func(*liveSession)) {
+	m.mu.Lock()
+	m.onRetire = fn
+	m.mu.Unlock()
+}
+
+// retire runs the retirement hook and cancels the session's timers, in that
+// order. The order is the point: flushing has to read the pending position
+// before stopTimers clears it.
+func (m *Manager) retire(s *liveSession) {
+	if m.onRetire != nil {
+		m.onRetire(s)
+	}
+	s.stopTimers()
 }
 
 // session finds or creates the live state for a ref and marks it seen. Every
@@ -395,7 +439,7 @@ func (m *Manager) reap(ctx context.Context, now time.Time, ttl time.Duration) in
 		}
 		s.mu.Unlock()
 		if idle {
-			s.stopInput()
+			m.retire(s)
 			delete(m.sessions, ref)
 			removed++
 		}
@@ -438,6 +482,6 @@ func (m *Manager) Shutdown() {
 		s.closed = true
 		s.cond.Broadcast()
 		s.mu.Unlock()
-		s.stopInput()
+		m.retire(s)
 	}
 }

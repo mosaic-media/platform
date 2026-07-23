@@ -26,8 +26,17 @@ type PlayerParams struct {
 	// whatever the source had.
 	MimeType string
 	// ResumeAt is the position in seconds to start from (ADR 0046). Zero starts
-	// at the beginning, which is all playback state currently supports.
+	// at the beginning.
 	ResumeAt float64
+	// NodeID and PartID name what is playing, so the client can report its
+	// position back against them (ADR 0046).
+	//
+	// Both are server decisions carried on the node rather than things a client
+	// works out, which keeps ADR 0047's limit where it is: the client owns the
+	// decoding pipeline and the transport controls, and reports what it sees.
+	// It does not decide what it is watching.
+	NodeID string
+	PartID string
 }
 
 // PlayerNode builds the Player surface pushed into the player region.
@@ -49,6 +58,12 @@ func PlayerNode(p PlayerParams) sdui.Node {
 	}
 	if p.ResumeAt > 0 {
 		els = append(els, ui.ResumeAt(p.ResumeAt))
+	}
+	if p.NodeID != "" {
+		els = append(els, ui.Prop("nodeId", p.NodeID))
+	}
+	if p.PartID != "" {
+		els = append(els, ui.Prop("partId", p.PartID))
 	}
 	return ui.Player(p.Src, els...).Build()
 }

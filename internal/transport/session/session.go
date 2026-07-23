@@ -82,13 +82,19 @@ var _ sessionv1connect.SessionServiceHandler = (*Handler)(nil)
 // NewHandler wires the session transport over the application services and the
 // artwork rewriter (ADR 0030), the same inputs the screen emit-side takes.
 func NewHandler(svc *app.Service, artwork func(string) string, tickets TicketMinter, prober *playback.Prober) *Handler {
-	return &Handler{
+	h := &Handler{
 		mgr:     NewManager(),
 		screens: screens.NewService(svc, artwork),
 		svc:     svc,
 		tickets: tickets,
 		prober:  prober,
 	}
+	// A reaped or shut-down session flushes whatever position it was holding
+	// (ADR 0046). Coalescing is what makes this necessary: without it, closing
+	// the lid on a paused film would lose the last few seconds of where you got
+	// to, which is the only part of a position anyone notices.
+	h.mgr.OnRetire(h.flushProgress)
+	return h
 }
 
 // TicketMinter seals a resolved upstream location into the opaque ticket a
@@ -176,6 +182,13 @@ func (h *Handler) Invoke(ctx context.Context, req *connect.Request[sessionv1.Inv
 	// tear the player down.
 	if outcome != nil {
 		s.enqueue(outcome)
+		return connect.NewResponse(&sessionv1.Ack{}), nil
+	}
+	// A silent action gets neither. Confirming something the user did not do is
+	// noise, and re-rendering underneath a player would tear it down mid-scene
+	// — which is what a position report, arriving every few seconds while a film
+	// plays, would otherwise do to itself.
+	if silentAction(r.GetAction()) {
 		return connect.NewResponse(&sessionv1.Ack{}), nil
 	}
 	s.enqueue(toastMsg(invokeToast(r.GetAction()), "success"))
@@ -296,6 +309,21 @@ func definitionsMsg() *sessionv1.ServerMessage {
 	return &sessionv1.ServerMessage{Body: &sessionv1.ServerMessage_Event{Event: &sessionv1.Event{Type: definitionsEvent, Payload: definitionsLibrary}}}
 }
 
+// silentAction reports whether an action's success should pass without a toast
+// or a re-render.
+//
+// The default is the right one for an action a person pressed: say it worked,
+// and show the change. It is wrong for one a *client* emits on a timer, and
+// progress reporting is the first of those — a "Done" toast every fifteen
+// seconds over a playing film, and a content re-render underneath it each time.
+//
+// A list rather than a flag on the action, because the property belongs to the
+// action rather than to the caller: whoever sends reportProgress, it is still
+// not something to confirm.
+func silentAction(action string) bool {
+	return action == "reportProgress"
+}
+
 // invokeToast is the confirmation shown when an action succeeds. It reflects the
 // action rather than assuming a library import, so a settings change does not
 // claim to have added something to the library.
@@ -305,6 +333,8 @@ func invokeToast(action string) string {
 		return "Added to library"
 	case "configureModule":
 		return "Settings saved"
+	case "setWatched":
+		return "Updated"
 	default:
 		return "Done"
 	}

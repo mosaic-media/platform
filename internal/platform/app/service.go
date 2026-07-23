@@ -36,6 +36,7 @@ type Service struct {
 	nodes            contracts.NodeStore
 	parts            contracts.PartStore
 	resolutions      contracts.PlaybackResolutionStore
+	playbackStates   contracts.PlaybackStateStore
 	clock            contracts.Clock
 	ids              contracts.IDGenerator
 	contentIDs       contracts.IDGenerator
@@ -74,14 +75,17 @@ type Deps struct {
 	// (ADR 0049). Optional: a Service built without one simply resolves through
 	// the provider every time, which is what happened before the cache existed.
 	PlaybackResolutions contracts.PlaybackResolutionStore
-	Clock               contracts.Clock
-	IDs                 contracts.IDGenerator
-	ContentIDs          contracts.IDGenerator
-	Policy              policy.PolicyDecisionPoint
-	Events              contracts.EventPublisher
-	PasswordVerifier    domain.PasswordVerifier
-	Capabilities        *CapabilityRegistry
-	ModuleSettings      contracts.ModuleSettingsStore
+	// PlaybackStates is the direct read handle for where a viewer got to
+	// (ADR 0046). Writes go through the UnitOfWork like every other mutation.
+	PlaybackStates   contracts.PlaybackStateStore
+	Clock            contracts.Clock
+	IDs              contracts.IDGenerator
+	ContentIDs       contracts.IDGenerator
+	Policy           policy.PolicyDecisionPoint
+	Events           contracts.EventPublisher
+	PasswordVerifier domain.PasswordVerifier
+	Capabilities     *CapabilityRegistry
+	ModuleSettings   contracts.ModuleSettingsStore
 	// UserPreferences is the direct read handle for a user's own settings.
 	// Writes go through the UnitOfWork like every other mutation.
 	UserPreferences contracts.UserPreferenceStore
@@ -107,6 +111,7 @@ func NewService(d Deps) *Service {
 		nodes:            d.Nodes,
 		parts:            d.Parts,
 		resolutions:      d.PlaybackResolutions,
+		playbackStates:   d.PlaybackStates,
 		clock:            d.Clock,
 		ids:              d.IDs,
 		contentIDs:       d.ContentIDs,

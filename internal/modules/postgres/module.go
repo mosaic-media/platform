@@ -58,6 +58,7 @@ func (Module) Manifest() builtin.Manifest {
 			"ModuleSettingsStore",
 			"UserPreferenceStore",
 			"PlaybackResolutionStore",
+			"PlaybackStateStore",
 			"TelemetryQueryStore",
 			"Clock",
 			"IDGenerator",
@@ -93,6 +94,10 @@ type ContractSet struct {
 	// after playback has already started, so it must not be inside anything's
 	// unit of work.
 	PlaybackResolutions contracts.PlaybackResolutionStore
+	// PlaybackStates is the direct read handle for where a viewer got to
+	// (ADR 0046) — a detail screen's resume offset and the continue-watching
+	// rail. Writes go through the UnitOfWork.
+	PlaybackStates contracts.PlaybackStateStore
 	// TelemetryQueries reads stored telemetry back (ADR 0058).
 	TelemetryQueries contracts.TelemetryQueryStore
 	Clock            contracts.Clock
@@ -154,6 +159,7 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		UserPreferences: NewUserPreferenceStore(pool),
 
 		PlaybackResolutions: NewPlaybackResolutionStore(pool),
+		PlaybackStates:      NewPlaybackStateStore(pool),
 
 		TelemetryQueries: NewTelemetryQueryStore(pool),
 		Clock:            NewClock(),

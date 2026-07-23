@@ -26,7 +26,8 @@ import (
 // reads out across goroutines, so the fake guards its captured-arg fields with a
 // mutex — as any concurrency-safe stand-in must.
 type fakeQueries struct {
-	playablePart v1.Part
+	playbackState v1.PlaybackState
+	playablePart  v1.Part
 
 	results          []v1.SearchResult
 	catalogs         []app.ModuleCatalog
@@ -125,6 +126,18 @@ func (f *fakeQueries) FirstPlayablePart(_ context.Context, _ v1.Caller, _ v1.Nod
 		return v1.Part{}, false, nil
 	}
 	return f.playablePart, true, nil
+}
+
+// playbackState, when set, is what GetPlaybackState reports — the fake's way of
+// saying "this viewer already started this", which is what turns Play into
+// Resume (ADR 0046).
+func (f *fakeQueries) GetPlaybackState(_ context.Context, _ v1.GetPlaybackStateQuery) (v1.GetPlaybackStateResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.playbackState.Position == 0 && !f.playbackState.Finished {
+		return v1.GetPlaybackStateResult{}, nil
+	}
+	return v1.GetPlaybackStateResult{State: f.playbackState, Found: true}, nil
 }
 
 func (f *fakeQueries) PreviewContent(_ context.Context, q app.PreviewContentQuery) (app.PreviewContentResult, error) {

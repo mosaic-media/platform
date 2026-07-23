@@ -56,6 +56,7 @@ type fakeDBSnapshot struct {
 	bindings        map[v1.SourceBindingID]v1.SourceBinding
 	moduleSettings  map[string]domain.ModuleSettings
 	userPreferences map[string]domain.UserPreference
+	playbackStates  map[playbackKey]v1.PlaybackState
 }
 
 // fakeDB is the shared backing store behind every fake contract in this
@@ -86,6 +87,15 @@ type fakeDB struct {
 	bindings        map[v1.SourceBindingID]v1.SourceBinding
 	moduleSettings  map[string]domain.ModuleSettings
 	userPreferences map[string]domain.UserPreference
+	// playbackStates is the first per-user content state (ADR 0046), so it is
+	// the first fake here keyed by a pair rather than by an id.
+	playbackStates map[playbackKey]v1.PlaybackState
+}
+
+// playbackKey is the (user, node) pair playback state is stored under.
+type playbackKey struct {
+	user domain.UserID
+	node v1.NodeID
 }
 
 func newFakeDB() *fakeDB {
@@ -103,6 +113,7 @@ func newFakeDB() *fakeDB {
 		bindings:        make(map[v1.SourceBindingID]v1.SourceBinding),
 		moduleSettings:  make(map[string]domain.ModuleSettings),
 		userPreferences: make(map[string]domain.UserPreference),
+		playbackStates:  make(map[playbackKey]v1.PlaybackState),
 	}
 }
 
@@ -281,6 +292,17 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 	for k, v := range db.moduleSettings {
 		moduleSettings[k] = v
 	}
+	// userPreferences was missing from this snapshot, which quietly meant a
+	// rollback did not discard a preference write — a fake that cannot fail the
+	// test it exists for. playbackStates joins it here rather than repeating it.
+	userPreferences := make(map[string]domain.UserPreference, len(db.userPreferences))
+	for k, v := range db.userPreferences {
+		userPreferences[k] = v
+	}
+	playbackStates := make(map[playbackKey]v1.PlaybackState, len(db.playbackStates))
+	for k, v := range db.playbackStates {
+		playbackStates[k] = v
+	}
 
 	return fakeDBSnapshot{
 		users:          users,
@@ -294,6 +316,9 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 		relations:      relations,
 		bindings:       bindings,
 		moduleSettings: moduleSettings,
+
+		userPreferences: userPreferences,
+		playbackStates:  playbackStates,
 	}
 }
 
@@ -311,6 +336,8 @@ func (db *fakeDB) restore(snap fakeDBSnapshot) {
 	db.relations = snap.relations
 	db.bindings = snap.bindings
 	db.moduleSettings = snap.moduleSettings
+	db.userPreferences = snap.userPreferences
+	db.playbackStates = snap.playbackStates
 }
 
 // fakeUserStore implements contracts.UserStore. It deliberately does not
@@ -489,6 +516,30 @@ func (s fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (do
 	}
 	s.db.rolesByID[role.ID] = role
 	return role, nil
+}
+
+// SetRolePermissions replaces what a role carries, in both the catalogue and
+// the per-user view — the fake's two copies of one row in the real schema.
+// Updating only the catalogue would leave a reconciled role invisible to the
+// policy engine, which reads through RolesForUser.
+func (s fakePermissionStore) SetRolePermissions(_ context.Context, roleID domain.RoleID, perms []domain.Permission) error {
+	s.trace.record("permissions.set_role_permissions")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	role, ok := s.db.rolesByID[roleID]
+	if !ok {
+		return contracts.NewError(contracts.NotFound, "role not found")
+	}
+	role.Permissions = append([]domain.Permission(nil), perms...)
+	s.db.rolesByID[roleID] = role
+	for user, roles := range s.db.roles {
+		for i, held := range roles {
+			if held.ID == roleID {
+				s.db.roles[user][i] = role
+			}
+		}
+	}
+	return nil
 }
 
 func (s fakePermissionStore) GrantRole(_ context.Context, grant domain.Grant) error {
@@ -675,6 +726,9 @@ func (tx *fakeTx) ModuleSettings() contracts.ModuleSettingsStore {
 func (tx *fakeTx) UserPreferences() contracts.UserPreferenceStore {
 	return &fakeUserPreferenceStore{db: tx.db, trace: tx.trace}
 }
+func (tx *fakeTx) PlaybackStates() contracts.PlaybackStateStore {
+	return &fakePlaybackStateStore{db: tx.db, trace: tx.trace}
+}
 
 // fakeUserPreferenceStore implements contracts.UserPreferenceStore over
 // fakeDB, keyed the same way the real table is: one entry per (user, key).
@@ -841,6 +895,7 @@ func newTestServiceWithCapabilities(db *fakeDB, tr *trace, now time.Time, caps *
 		Capabilities:     caps,
 		ModuleSettings:   &fakeModuleSettingsStore{db: db, trace: tr},
 		UserPreferences:  &fakeUserPreferenceStore{db: db, trace: tr},
+		PlaybackStates:   &fakePlaybackStateStore{db: db, trace: tr},
 		TelemetryQueries: fakeTelemetryQueryStore{},
 	})
 }
@@ -1278,4 +1333,66 @@ func (s fakePermissionStore) FindRole(_ context.Context, roleID domain.RoleID) (
 		return domain.Role{}, contracts.NewError(contracts.NotFound, "no role with that id")
 	}
 	return role, nil
+}
+
+// fakePlaybackStateStore implements contracts.PlaybackStateStore over fakeDB
+// (ADR 0046). It reproduces the two behaviours the real store's SQL encodes and
+// a caller depends on: NotFound for a node never started, and an in-progress
+// list that excludes both finished items and items opened at position zero.
+type fakePlaybackStateStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func (s *fakePlaybackStateStore) Get(_ context.Context, userID domain.UserID, nodeID v1.NodeID) (v1.PlaybackState, error) {
+	s.trace.record("playback.get")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	state, ok := s.db.playbackStates[playbackKey{user: userID, node: nodeID}]
+	if !ok {
+		return v1.PlaybackState{}, contracts.NewError(contracts.NotFound, "no playback state for this item")
+	}
+	return state, nil
+}
+
+func (s *fakePlaybackStateStore) ListByNodes(_ context.Context, userID domain.UserID, nodeIDs []v1.NodeID) (map[v1.NodeID]v1.PlaybackState, error) {
+	s.trace.record("playback.listByNodes")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	out := map[v1.NodeID]v1.PlaybackState{}
+	for _, id := range nodeIDs {
+		if state, ok := s.db.playbackStates[playbackKey{user: userID, node: id}]; ok {
+			out[id] = state
+		}
+	}
+	return out, nil
+}
+
+func (s *fakePlaybackStateStore) ListInProgress(_ context.Context, userID domain.UserID, limit int) ([]v1.PlaybackState, error) {
+	s.trace.record("playback.listInProgress")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var out []v1.PlaybackState
+	for key, state := range s.db.playbackStates {
+		if key.user != userID || !state.InProgress() {
+			continue
+		}
+		out = append(out, state)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (s *fakePlaybackStateStore) Upsert(_ context.Context, userID domain.UserID, state v1.PlaybackState) (v1.PlaybackState, error) {
+	s.trace.record("playback.upsert")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if s.db.playbackStates == nil {
+		s.db.playbackStates = map[playbackKey]v1.PlaybackState{}
+	}
+	s.db.playbackStates[playbackKey{user: userID, node: state.NodeID}] = state
+	return state, nil
 }

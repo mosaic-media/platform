@@ -103,3 +103,90 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 		t.Fatal("sign-in with the wrong password should fail")
 	}
 }
+
+// TestBootstrapReconcilesTheSuperuserRole covers the failure that needs a
+// *pre-existing* install to show, which is why nothing caught it.
+//
+// A preset is snapshotted into a role row when the role is created, so adding an
+// action to the Platform never reaches an account that already exists. For every
+// other role that is correct — an administrator should not silently widen
+// because the software was upgraded — and for the superuser it is not: it is the
+// root of every other grant, so an authority it does not hold can never be given
+// to anyone. It surfaced live as playback progress failing to record on an
+// install whose admin predated `playback.write`.
+func TestBootstrapReconcilesTheSuperuserRole(t *testing.T) {
+	requirePostgres(t)
+
+	pool := freshDatabase(t)
+	c := context.Background()
+	if err := postgres.Migrate(c, pool); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	var mod postgres.Module
+	cs := mod.Bind(pool)
+	hasher := crypto.NewPasswordHasher()
+
+	seed := bootstrap.AdminSeed{
+		Username:    "owner",
+		Password:    "a strong bootstrap password",
+		Permissions: []domain.Permission{domain.Permission(app.ActionContentRead)},
+	}
+	created, err := bootstrap.EnsureAdmin(c, cs.UnitOfWork, hasher, cs.Clock, cs.IDs, seed)
+	if err != nil || !created {
+		t.Fatalf("first boot: created=%v err=%v", created, err)
+	}
+
+	// A later release adds an action to the preset. The account already exists,
+	// so the bootstrap's create path is skipped entirely.
+	seed.Permissions = append(seed.Permissions, domain.Permission(app.ActionPlaybackWrite))
+	created, err = bootstrap.EnsureAdmin(c, cs.UnitOfWork, hasher, cs.Clock, cs.IDs, seed)
+	if err != nil {
+		t.Fatalf("second boot: %v", err)
+	}
+	if created {
+		t.Error("the second boot re-created an existing account")
+	}
+
+	// Read it back the way the policy engine does, rather than out of the roles
+	// table: the grant is what actually decides an authorisation.
+	user, err := cs.Users.FindByUsername(c, seed.Username)
+	if err != nil {
+		t.Fatalf("FindByUsername: %v", err)
+	}
+	roles, err := cs.Permissions.RolesForUser(c, user.ID)
+	if err != nil {
+		t.Fatalf("RolesForUser: %v", err)
+	}
+	held := map[domain.Permission]bool{}
+	for _, role := range roles {
+		for _, p := range role.Permissions {
+			held[p] = true
+		}
+	}
+	if !held[domain.Permission(app.ActionPlaybackWrite)] {
+		t.Error("the new action never reached the owner account; an install upgraded past it stays unable to grant it")
+	}
+	if !held[domain.Permission(app.ActionContentRead)] {
+		t.Error("reconciling dropped an action the role already held")
+	}
+
+	// It must not key on the role's *name*. The install that motivated this has
+	// a bootstrap role called "Administrator", from a build that named it
+	// differently — matching by name found nothing and silently did nothing,
+	// against exactly the install it was written for.
+	if len(roles) != 1 || roles[0].Name == "" {
+		t.Fatalf("expected one named role, got %+v", roles)
+	}
+
+	// And the engine agrees, which is the only form of this that matters.
+	engine := policy.NewEngine(cs.Permissions)
+	decision, err := engine.Authorize(c, policy.Subject{UserID: user.ID},
+		app.ActionPlaybackWrite, policy.Resource{Type: "playback"}, policy.PolicyContext{})
+	if err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	if !decision.Allowed {
+		t.Errorf("policy still denies the reconciled action: %s", decision.Reason)
+	}
+}

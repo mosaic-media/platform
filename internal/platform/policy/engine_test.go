@@ -30,6 +30,9 @@ func (fakePermissionStore) CreateRole(context.Context, domain.Role) (domain.Role
 }
 
 func (fakePermissionStore) GrantRole(context.Context, domain.Grant) error { return nil }
+func (fakePermissionStore) SetRolePermissions(context.Context, domain.RoleID, []domain.Permission) error {
+	return nil
+}
 
 func (s fakePermissionStore) AttributesForUser(context.Context, domain.UserID) ([]domain.Attribute, error) {
 	return nil, nil
@@ -116,6 +119,9 @@ func (failingPermissionStore) CreateRole(context.Context, domain.Role) (domain.R
 }
 
 func (failingPermissionStore) GrantRole(context.Context, domain.Grant) error { return nil }
+func (failingPermissionStore) SetRolePermissions(context.Context, domain.RoleID, []domain.Permission) error {
+	return nil
+}
 
 func (failingPermissionStore) AttributesForUser(context.Context, domain.UserID) ([]domain.Attribute, error) {
 	return nil, nil
