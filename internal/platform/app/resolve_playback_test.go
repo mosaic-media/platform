@@ -96,3 +96,49 @@ func TestSelectionIgnoresUnknownMetadata(t *testing.T) {
 		t.Error("an unparsed candidate must not outrank a known-playable one")
 	}
 }
+
+// TestSelectionAvoidsHDRAClientCannotRender is the purple-and-green case moved
+// one step earlier (ADR 0050). A browser decodes HEVC perfectly well and still
+// renders an HDR10 stream as nonsense, so the fix is a tone-map, which is a full
+// video re-encode — by far the most expensive outcome selection can cause.
+// Preferring an SDR release of the same quality avoids it entirely.
+func TestSelectionAvoidsHDRAClientCannotRender(t *testing.T) {
+	hdr := v1.Part{
+		ID: "p-hdr", NaturalOrder: 0, VideoCodec: "hevc", AudioCodec: "aac",
+		Height: 1080, HDRFormat: "hdr10",
+	}
+	sdr := v1.Part{
+		ID: "p-sdr", NaturalOrder: 4, VideoCodec: "hevc", AudioCodec: "aac",
+		Height: 1080,
+	}
+	if playbackScore(sdr, browser) <= playbackScore(hdr, browser) {
+		t.Errorf("an SDR release (%d) must outrank an HDR one (%d) for a client that cannot render it",
+			playbackScore(sdr, browser), playbackScore(hdr, browser))
+	}
+
+	// A client that *can* render HDR must see no penalty at all, or televisions
+	// would be steered away from the releases they exist to play.
+	tv := PlaybackPreference{
+		VideoCodecs: map[string]bool{"hevc": true}, AudioCodecs: map[string]bool{"aac": true}, HDR: true,
+	}
+	if playbackScore(hdr, tv) <= playbackScore(sdr, tv) {
+		t.Error("an HDR-capable client must not be penalised for HDR content")
+	}
+}
+
+// TestSelectionPenalisesHDRLessThanUndecodability keeps the two costs in the
+// right order. Tone-mapped HDR does eventually play; a codec the client cannot
+// decode never does.
+func TestSelectionPenalisesHDRLessThanUndecodability(t *testing.T) {
+	hdrPlayable := v1.Part{
+		ID: "p-hdr", NaturalOrder: 0, VideoCodec: "hevc", AudioCodec: "aac",
+		Height: 1080, HDRFormat: "hdr10",
+	}
+	sdrSilent := v1.Part{
+		ID: "p-silent", NaturalOrder: 0, VideoCodec: "hevc", AudioCodec: "eac3",
+		Height: 1080,
+	}
+	if playbackScore(hdrPlayable, browser) <= playbackScore(sdrSilent, browser) {
+		t.Error("HDR needing a tone-map must outrank audio that cannot be decoded at all")
+	}
+}

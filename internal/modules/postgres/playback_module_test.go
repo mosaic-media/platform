@@ -214,3 +214,108 @@ func seedPlaybackUser(t *testing.T, c context.Context, cs *postgres.ContractSet,
 	}
 	return v1.CallerFromSession(string(session.ID))
 }
+
+// TestPlaybackResolutionCacheAgainstPostgres proves the durable/perishable split
+// does what it is for (ADR 0049): the second play of the same release, for a
+// client of the same capability class, does not ask the source at all.
+//
+// The proof is the absence of the module rather than a timing measurement. A
+// second Service is built over the same database with **no** playback capability
+// registered — the exact configuration the test above shows failing with
+// "no playback module is installed" — and asked to resolve the same part. If it
+// answers, the answer can only have come from the cache.
+func TestPlaybackResolutionCacheAgainstPostgres(t *testing.T) {
+	requirePostgres(t)
+
+	pool := freshDatabase(t)
+	c := context.Background()
+	if err := postgres.Migrate(c, pool); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	var mod postgres.Module
+	cs := mod.Bind(pool)
+
+	registry := app.NewCapabilityRegistry()
+	registry.Register(remoteplayback.New())
+
+	deps := func(reg *app.CapabilityRegistry) app.Deps {
+		return app.Deps{
+			UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+			Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Parts: cs.Parts, Clock: cs.Clock,
+			IDs: cs.IDs, ContentIDs: cs.ContentIDs,
+			Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},
+			Capabilities: reg, ModuleSettings: cs.ModuleSettings,
+			PlaybackResolutions: cs.PlaybackResolutions,
+		}
+	}
+	svc := app.NewService(deps(registry))
+	caller := seedPlaybackUser(t, c, cs, pool)
+
+	work, err := svc.AddContentWork(c, v1.AddContentWorkCommand{
+		Caller: caller, Title: "Cached", MediaType: v1.MediaMovie,
+	})
+	if err != nil {
+		t.Fatalf("AddContentWork: %v", err)
+	}
+	item, err := svc.AddContentChild(c, v1.AddContentChildCommand{
+		Caller: caller, ParentID: work.Work.ID, Kind: v1.NodeItem, Title: "Cached", ItemType: v1.ItemFeature,
+	})
+	if err != nil {
+		t.Fatalf("AddContentChild: %v", err)
+	}
+	attached, err := svc.AttachContentPart(c, v1.AttachContentPartCommand{
+		Caller: caller, NodeID: item.Node.ID, Role: v1.PartEdition,
+		Location: v1.MediaLocation{Scheme: v1.RemoteLocation, Provider: "stremio", Ref: "https://cdn.example/cached.mp4"},
+	})
+	if err != nil {
+		t.Fatalf("AttachContentPart: %v", err)
+	}
+
+	const class = "class-browser"
+
+	// Cold: the module resolves, and the answer is written to the cache.
+	cold, err := svc.ResolvePlayback(c, app.ResolvePlaybackQuery{
+		Caller: caller, PartID: attached.Part.ID, CapabilityClass: class,
+	})
+	if err != nil {
+		t.Fatalf("cold ResolvePlayback: %v", err)
+	}
+	if cold.Cached {
+		t.Error("the first resolution reported itself as cached")
+	}
+	if cold.ModuleID != remoteplayback.CapabilityID {
+		t.Errorf("cold resolution came from %q, want the playback module", cold.ModuleID)
+	}
+
+	// Warm, and deliberately crippled: no playback capability at all.
+	starved := app.NewService(deps(app.NewCapabilityRegistry()))
+	warm, err := starved.ResolvePlayback(c, app.ResolvePlaybackQuery{
+		Caller: caller, PartID: attached.Part.ID, CapabilityClass: class,
+	})
+	if err != nil {
+		t.Fatalf("warm ResolvePlayback with no module installed: %v", err)
+	}
+	if !warm.Cached {
+		t.Error("the second resolution did not report itself as cached")
+	}
+	if warm.URL != cold.URL {
+		t.Errorf("cached URL = %q, want %q", warm.URL, cold.URL)
+	}
+
+	// A different class is a different key, and must miss. Sharing one entry
+	// across classes is the bug the key exists to prevent — it is how a phone
+	// ends up served the answer chosen for a television.
+	if _, err := starved.ResolvePlayback(c, app.ResolvePlaybackQuery{
+		Caller: caller, PartID: attached.Part.ID, CapabilityClass: "class-television",
+	}); err == nil {
+		t.Fatal("a different capability class read another class's cache entry")
+	}
+
+	// And no class at all disables the cache rather than sharing one bucket.
+	if _, err := starved.ResolvePlayback(c, app.ResolvePlaybackQuery{
+		Caller: caller, PartID: attached.Part.ID,
+	}); err == nil {
+		t.Fatal("an unclassed client read a cache entry")
+	}
+}

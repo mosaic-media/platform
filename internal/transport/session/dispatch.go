@@ -58,7 +58,7 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		})
 		return nil, err
 	case "playPart":
-		return h.playPart(ctx, caller, input)
+		return h.playPart(ctx, s, input)
 	default:
 		return nil, contracts.NewError(contracts.InvalidArgument, "unknown action: "+action)
 	}
@@ -82,7 +82,15 @@ type playEnvelope struct {
 // The ticket is minted here, in the transport, and never leaves the server in
 // readable form — the resolved URL may carry a debrid credential, so the client
 // receives an opaque handle to the Platform's own origin instead.
-func (h *Handler) playPart(ctx context.Context, caller v1.Caller, input []byte) (*sessionv1.ServerMessage, error) {
+func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) (*sessionv1.ServerMessage, error) {
+	caller := s.caller
+	// What this client said it can decode, declared on Attach (ADR 0047). It is
+	// read once and used twice — to rank candidates and to plan the streams —
+	// because those two must agree: choosing a release for its codecs and then
+	// planning against a different profile would re-encode the thing selection
+	// picked precisely to avoid re-encoding.
+	profile := s.clientProfile()
+
 	var env playEnvelope
 	if len(input) > 0 {
 		if err := json.Unmarshal(input, &env); err != nil {
@@ -98,11 +106,7 @@ func (h *Handler) playPart(ctx context.Context, caller v1.Caller, input []byte) 
 
 	res, err := h.svc.ResolvePlayback(ctx, app.ResolvePlaybackQuery{
 		Caller: caller, PartID: v1.PartID(env.PartID),
-		// The browser's decoding limits, stated where selection can use them.
-		// It stands in until clients declare a profile on Attach (ADR 0047) —
-		// hard-coding it here is honest for one client and would be a lie for
-		// four, which is why the declaration is the real answer.
-		Prefer: browserPreference(),
+		Prefer: profile.prefer, CapabilityClass: profile.class,
 	})
 	if err != nil {
 		return nil, err
@@ -113,7 +117,7 @@ func (h *Handler) playPart(ctx context.Context, caller v1.Caller, input []byte) 
 	// the English audio" rather than either a whole-file transcode or a silent
 	// film. The plan travels sealed inside the ticket, so the origin does not
 	// re-probe on every range request a seeking player makes.
-	plan := h.planFor(ctx, res.URL, res.Headers)
+	plan := h.planFor(ctx, res.URL, res.Headers, profile.codecs())
 
 	// One record saying what was chosen and what will happen to it. Playback has
 	// three independent places to go wrong — selection, probing, and the encode
@@ -130,7 +134,15 @@ func (h *Handler) playPart(ctx context.Context, caller v1.Caller, input []byte) 
 		telemetry.String("audio_codec", res.AudioCodec),
 		telemetry.Int("height", res.Height),
 		telemetry.Bool("direct_play", plan.DirectPlay),
-		telemetry.String("reason", plan.Reason))
+		telemetry.String("reason", plan.Reason),
+		// Which profile the choice was made against. Two clients asking for the
+		// same item can correctly get different releases, and without this the
+		// second one reads as the first one having gone wrong.
+		telemetry.String("capability_class", profile.class),
+		// Whether the aggregator was asked at all (ADR 0049). A cache that has
+		// silently stopped hitting is indistinguishable from one that was never
+		// warm — both just look like playback being slow.
+		telemetry.Bool("cached", res.Cached))
 	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, plan)
 	if err != nil {
 		return nil, contracts.WrapError(contracts.Internal, "mint playback ticket", err)
@@ -158,7 +170,7 @@ func (h *Handler) playPart(ctx context.Context, caller v1.Caller, input []byte) 
 // play. The cost of that fallback is a silent film when the audio turns out to
 // be undecodable, which is the bug this exists to fix; it is still better than
 // no picture at all.
-func (h *Handler) planFor(ctx context.Context, url string, headers map[string]string) playback.Plan {
+func (h *Handler) planFor(ctx context.Context, url string, headers map[string]string, codecs playback.ClientCodecs) playback.Plan {
 	if h.prober == nil || !h.prober.Available() {
 		return playback.Plan{DirectPlay: true}
 	}
@@ -166,7 +178,7 @@ func (h *Handler) planFor(ctx context.Context, url string, headers map[string]st
 	if err != nil {
 		return playback.Plan{DirectPlay: true}
 	}
-	return playback.Decide(info, playback.DefaultBrowserCodecs, nil)
+	return playback.Decide(info, codecs, nil)
 }
 
 // playbackMimeType names what the origin will serve.
@@ -235,7 +247,9 @@ func configureFromInput(input []byte) (string, []byte, error) {
 }
 
 // browserPreference is what a desktop browser can play, in the shape selection
-// ranks on.
+// ranks on. It is now the *fallback* rather than the answer: a client that
+// declares a profile on Attach (ADR 0047) is ranked against what it said, and
+// this stands in only for one that declares nothing.
 //
 // It mirrors playback.DefaultBrowserCodecs and exists for the same reason: HEVC
 // is included because a live test proved Chrome decodes it, and AC3/E-AC3/DTS/

@@ -57,6 +57,7 @@ func (Module) Manifest() builtin.Manifest {
 			// missing from it is a quiet lie about what this module provides.
 			"ModuleSettingsStore",
 			"UserPreferenceStore",
+			"PlaybackResolutionStore",
 			"TelemetryQueryStore",
 			"Clock",
 			"IDGenerator",
@@ -87,6 +88,11 @@ type ContractSet struct {
 	ModuleSettings contracts.ModuleSettingsStore
 	// UserPreferences is the direct read handle for a user's own settings.
 	UserPreferences contracts.UserPreferenceStore
+	// PlaybackResolutions caches where a release's bytes are, per capability
+	// class (ADR 0049). Direct rather than transaction-scoped: it is written
+	// after playback has already started, so it must not be inside anything's
+	// unit of work.
+	PlaybackResolutions contracts.PlaybackResolutionStore
 	// TelemetryQueries reads stored telemetry back (ADR 0058).
 	TelemetryQueries contracts.TelemetryQueryStore
 	Clock            contracts.Clock
@@ -132,20 +138,23 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 	// ContractSet's shape and main.go are unchanged.
 	storage := NewStorageAdapter(pool)
 	return &ContractSet{
-		Pool:             pool,
-		UnitOfWork:       storage.UnitOfWork(),
-		Users:            NewUserStore(pool),
-		Sessions:         NewSessionStore(pool),
-		Permissions:      NewPermissionStore(pool),
-		Config:           NewConfigStore(pool),
-		Outbox:           NewEventOutbox(pool),
-		Credentials:      NewCredentialStore(pool),
-		Nodes:            NewNodeStore(pool),
-		Parts:            NewPartStore(pool),
-		Relations:        NewRelationStore(pool),
-		SourceBindings:   NewSourceBindingStore(pool),
-		ModuleSettings:   NewModuleSettingsStore(pool),
-		UserPreferences:  NewUserPreferenceStore(pool),
+		Pool:            pool,
+		UnitOfWork:      storage.UnitOfWork(),
+		Users:           NewUserStore(pool),
+		Sessions:        NewSessionStore(pool),
+		Permissions:     NewPermissionStore(pool),
+		Config:          NewConfigStore(pool),
+		Outbox:          NewEventOutbox(pool),
+		Credentials:     NewCredentialStore(pool),
+		Nodes:           NewNodeStore(pool),
+		Parts:           NewPartStore(pool),
+		Relations:       NewRelationStore(pool),
+		SourceBindings:  NewSourceBindingStore(pool),
+		ModuleSettings:  NewModuleSettingsStore(pool),
+		UserPreferences: NewUserPreferenceStore(pool),
+
+		PlaybackResolutions: NewPlaybackResolutionStore(pool),
+
 		TelemetryQueries: NewTelemetryQueryStore(pool),
 		Clock:            NewClock(),
 		IDs:              NewIDGenerator(),

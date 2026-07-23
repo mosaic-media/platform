@@ -8,7 +8,9 @@ import (
 	"context"
 
 	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/platform/policy"
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -26,6 +28,16 @@ type ResolvePlaybackQuery struct {
 	// "no preference expressed", and selection falls back to the source's own
 	// ranking rather than inventing one.
 	Prefer PlaybackPreference
+	// CapabilityClass is the stable digest of that same profile, and the key the
+	// resolution cache is read and written under (ADR 0049).
+	//
+	// It is passed in rather than derived here because deriving it is the
+	// transport's job — the transport is what receives the declaration — and two
+	// independent derivations of one digest is exactly how a cache quietly stops
+	// hitting. An empty class disables the cache for this call rather than
+	// keying everything under one shared bucket, which would serve a phone an
+	// answer chosen for a television.
+	CapabilityClass string
 }
 
 // PlaybackPreference is the client-shaped half of selection: what it can decode,
@@ -36,12 +48,22 @@ type PlaybackPreference struct {
 	Containers  map[string]bool
 	VideoCodecs map[string]bool
 	AudioCodecs map[string]bool
+	// HDR reports whether the client can *render* high dynamic range, which is a
+	// different question from whether it decodes the codec carrying it. A client
+	// that cannot is not merely missing an enhancement: an HDR stream rendered as
+	// SDR comes out wrong, and fixing it means tone-mapping, which means a full
+	// video re-encode — the most expensive thing selection can cause.
+	HDR bool
 	// MaxHeight caps resolution, 0 for uncapped. A phone asking for 2160p is
 	// spending bandwidth on pixels it cannot show.
 	MaxHeight int
 }
 
 // Empty reports whether the preference expresses nothing at all.
+//
+// HDR is absent from this test on purpose. It is a bool, so "cannot render HDR"
+// and "did not say" are the same value, and a client that declared only
+// `hdr: true` has said nothing selection can act on by itself.
 func (p PlaybackPreference) Empty() bool {
 	return len(p.Containers) == 0 && len(p.VideoCodecs) == 0 && len(p.AudioCodecs) == 0 && p.MaxHeight == 0
 }
@@ -74,6 +96,12 @@ type ResolvePlaybackResult struct {
 	AudioCodec string
 	Height     int
 	Candidates int
+
+	// Cached reports that this answer came from the resolution cache rather than
+	// from the source. It is the one field that distinguishes a fast play from a
+	// slow one after the fact, and without it a cache that has silently stopped
+	// hitting looks exactly like a cache that was never warm.
+	Cached bool
 }
 
 // ResolvePlayback turns a Part into a playable upstream location by asking the
@@ -115,6 +143,25 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 		part = chosen
 	}
 
+	// The cache is read after selection, not before it, and the order is the
+	// whole point (ADR 0049). Selection is a ranking over Parts already in the
+	// database — free, and it names *which* release this client should get. Only
+	// then is there a key to look up. Reading the cache first would mean caching
+	// the choice as well as the address, and the choice is cheap to remake and
+	// changes whenever the candidate set does.
+	if cached, ok := s.cachedResolution(ctx, part, q.CapabilityClass); ok {
+		// ModuleID is left empty, and that is the accurate report: no module was
+		// asked. A cached play therefore also works while a playback module is
+		// uninstalled or unreachable, which is a side effect rather than a
+		// designed guarantee — the entry still dies when its link does.
+		return ResolvePlaybackResult{
+			URL: cached.URL, Headers: cached.Headers,
+			PartID: part.ID, Release: part.EditionLabel,
+			VideoCodec: part.VideoCodec, AudioCodec: part.AudioCodec, Height: part.Height,
+			Candidates: candidates, Cached: true,
+		}, nil
+	}
+
 	entry, ok := s.playbackProvider()
 	if !ok {
 		// This is ADR 0036's inert library, reported honestly rather than as a
@@ -149,12 +196,63 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 		return ResolvePlaybackResult{}, contracts.NewError(contracts.NotFound, "playback module resolved no location for this part")
 	}
 
+	s.cacheResolution(ctx, part.ID, q.CapabilityClass, res.URL, res.Headers)
+
 	return ResolvePlaybackResult{
 		ModuleID: entry.ModuleID, URL: res.URL, Headers: res.Headers,
 		PartID: part.ID, Release: part.EditionLabel,
 		VideoCodec: part.VideoCodec, AudioCodec: part.AudioCodec, Height: part.Height,
 		Candidates: candidates,
 	}, nil
+}
+
+// cachedResolution reads a previously resolved location for this part and class
+// (ADR 0049).
+//
+// There is deliberately no liveness check. Pre-checking would spend a round trip
+// on every single play to catch a failure that is rare — which is the exact
+// latency this cache exists to remove — so a dead entry is discovered by using
+// it and corrected then.
+//
+// Every failure here degrades to a miss rather than an error. A cache that
+// cannot be read must cost a slow play, never a failed one.
+func (s *Service) cachedResolution(ctx context.Context, part v1.Part, class string) (domain.PlaybackResolution, bool) {
+	if s.resolutions == nil || class == "" || part.ID == "" {
+		return domain.PlaybackResolution{}, false
+	}
+	res, err := s.resolutions.Get(ctx, string(part.ID), class)
+	if err != nil || res.URL == "" {
+		return domain.PlaybackResolution{}, false
+	}
+	return res, true
+}
+
+// cacheResolution stores what the source just answered, for the next client of
+// the same class to reuse.
+//
+// It writes on the request's own goroutine rather than in the background, and
+// that is a smaller compromise than it looks: ADR 0049's requirement is that the
+// cache write must not block the *stream*, and nothing has started streaming
+// yet — the client has not even been handed a ticket. What it must not do is
+// fail the play, so a write error is logged and swallowed. Being unable to make
+// the next play fast is not a reason to refuse this one.
+func (s *Service) cacheResolution(ctx context.Context, partID v1.PartID, class, url string, headers map[string]string) {
+	if s.resolutions == nil || class == "" || partID == "" || url == "" {
+		return
+	}
+	err := s.resolutions.Set(ctx, domain.PlaybackResolution{
+		PartID:          string(partID),
+		CapabilityClass: class,
+		URL:             url,
+		Headers:         headers,
+		ResolvedAt:      s.clock.Now(),
+	})
+	if err != nil {
+		telemetry.From(ctx).For("playback").Warn("caching the resolved location failed",
+			telemetry.Identifier("part", string(partID)),
+			telemetry.String("capability_class", class),
+			telemetry.Err(err))
+	}
 }
 
 // playbackProvider picks the playback provider to resolve through, tolerating a
@@ -252,6 +350,15 @@ func playbackScore(p v1.Part, prefer PlaybackPreference) int {
 	score += codecScore(p.AudioCodec, prefer.AudioCodecs)
 	if len(prefer.Containers) > 0 && p.Container != "" && prefer.Containers[p.Container] {
 		score += 200
+	}
+
+	// HDR the client cannot render is a video re-encode, and a video re-encode is
+	// the most expensive outcome selection can produce — so it is penalised harder
+	// than an audio mismatch, which costs almost nothing to fix. It sits below
+	// outright undecodability because a tone-mapped HDR release does eventually
+	// play, where an undecodable one never does.
+	if !prefer.HDR && p.HDRFormat != "" {
+		score -= 400
 	}
 
 	// Resolution, once compatibility is settled. A capped client gains nothing

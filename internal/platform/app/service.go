@@ -35,6 +35,7 @@ type Service struct {
 	telemetryQueries contracts.TelemetryQueryStore
 	nodes            contracts.NodeStore
 	parts            contracts.PartStore
+	resolutions      contracts.PlaybackResolutionStore
 	clock            contracts.Clock
 	ids              contracts.IDGenerator
 	contentIDs       contracts.IDGenerator
@@ -68,15 +69,19 @@ type Deps struct {
 	// Parts is the direct read handle for an item's playable parts. Writes
 	// still go through the UnitOfWork; this exists because playback resolution
 	// is a read that must not open a transaction (ADR 0045).
-	Parts            contracts.PartStore
-	Clock            contracts.Clock
-	IDs              contracts.IDGenerator
-	ContentIDs       contracts.IDGenerator
-	Policy           policy.PolicyDecisionPoint
-	Events           contracts.EventPublisher
-	PasswordVerifier domain.PasswordVerifier
-	Capabilities     *CapabilityRegistry
-	ModuleSettings   contracts.ModuleSettingsStore
+	Parts contracts.PartStore
+	// PlaybackResolutions caches resolved locations per capability class
+	// (ADR 0049). Optional: a Service built without one simply resolves through
+	// the provider every time, which is what happened before the cache existed.
+	PlaybackResolutions contracts.PlaybackResolutionStore
+	Clock               contracts.Clock
+	IDs                 contracts.IDGenerator
+	ContentIDs          contracts.IDGenerator
+	Policy              policy.PolicyDecisionPoint
+	Events              contracts.EventPublisher
+	PasswordVerifier    domain.PasswordVerifier
+	Capabilities        *CapabilityRegistry
+	ModuleSettings      contracts.ModuleSettingsStore
 	// UserPreferences is the direct read handle for a user's own settings.
 	// Writes go through the UnitOfWork like every other mutation.
 	UserPreferences contracts.UserPreferenceStore
@@ -101,6 +106,7 @@ func NewService(d Deps) *Service {
 		telemetryQueries: d.TelemetryQueries,
 		nodes:            d.Nodes,
 		parts:            d.Parts,
+		resolutions:      d.PlaybackResolutions,
 		clock:            d.Clock,
 		ids:              d.IDs,
 		contentIDs:       d.ContentIDs,

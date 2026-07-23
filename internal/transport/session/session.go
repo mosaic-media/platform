@@ -16,6 +16,7 @@ import (
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	"github.com/mosaic-media/platform/internal/transport/playback"
 	"github.com/mosaic-media/platform/internal/transport/screens"
 	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
@@ -111,6 +112,25 @@ func (h *Handler) Attach(ctx context.Context, req *connect.Request[sessionv1.Att
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session is required"))
 	}
 	s := h.mgr.session(r.GetSession())
+	// The declaration rides Attach because it cannot change without a reconnect
+	// and Attach is the one call every client makes on every connect. It is
+	// recorded before anything renders, so the first screen a client sees is
+	// already built against what that client can actually play.
+	//
+	// The field is optional, and an absent one is not an error: a client built
+	// against an older contract still works, on the assumption that used to be
+	// hard-coded for everybody.
+	if p := r.GetProfile(); p != nil {
+		cp := profileFrom(p)
+		s.setProfile(cp)
+		telemetry.From(ctx).For("session").Info("client profile declared",
+			telemetry.Identifier("session", s.ref),
+			telemetry.String("class", cp.class),
+			telemetry.Int("video_codecs", len(cp.prefer.VideoCodecs)),
+			telemetry.Int("audio_codecs", len(cp.prefer.AudioCodecs)),
+			telemetry.Bool("hdr", cp.prefer.HDR),
+			telemetry.Int("max_height", cp.prefer.MaxHeight))
+	}
 	if r.GetScreen() != "" {
 		s.setCurrent(route{screen: r.GetScreen(), params: decodeParams(r.GetParams())})
 		h.pushContent(ctx, s)

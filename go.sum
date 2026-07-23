@@ -33,6 +33,8 @@ github.com/mosaic-media/sdk v0.13.0 h1:JO16S/KmRDA8G/6bv46JNcIJQIdRYU+Py/M9vI6hb
 github.com/mosaic-media/sdk v0.13.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
 github.com/mosaic-media/sdui v0.9.0 h1:+vm76QE1F5GUHW0s7SGcY9nbrgXq6/ej0c4snq4LY6g=
 github.com/mosaic-media/sdui v0.9.0/go.mod h1:U2jxF+nZzupVfSU/ysMXOX1XZ1COhP89UoYA5SE8FrM=
+github.com/mosaic-media/sdui v0.10.0 h1:CJYd0FnR6TPDmmPEN5G88JLRbSs6YUtXhG2nhCtzpsA=
+github.com/mosaic-media/sdui v0.10.0/go.mod h1:U2jxF+nZzupVfSU/ysMXOX1XZ1COhP89UoYA5SE8FrM=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 h1:lZUw3E0/J3roVtGQ+SCrUrg3ON6NgVqpn3+iol9aGu4=

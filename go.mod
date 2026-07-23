@@ -10,7 +10,7 @@ require (
 
 require golang.org/x/crypto v0.54.0
 
-require github.com/mosaic-media/sdui v0.9.0
+require github.com/mosaic-media/sdui v0.10.0
 
 require (
 	connectrpc.com/connect v1.20.0

@@ -65,6 +65,13 @@ type liveSession struct {
 	routeMu sync.Mutex
 	current route
 
+	// profileMu guards the declared client profile. Attach writes it and a
+	// later Invoke reads it, on separate unary calls, so it needs its own lock
+	// rather than riding the mailbox mutex the sender goroutine holds while it
+	// is parked in cond.Wait.
+	profileMu sync.Mutex
+	profile   clientProfile
+
 	// input-debounce state (ADR 0041's server-side coalescing, moved from the
 	// ordered read loop of ADR 0032 into session state).
 	inputMu    sync.Mutex
@@ -311,6 +318,28 @@ func (s *liveSession) currentRoute() route {
 	s.routeMu.Lock()
 	defer s.routeMu.Unlock()
 	return s.current
+}
+
+// setProfile records what the client declared it can decode (ADR 0047).
+func (s *liveSession) setProfile(p clientProfile) {
+	s.profileMu.Lock()
+	s.profile = p
+	s.profileMu.Unlock()
+}
+
+// clientProfile returns what the client declared, or the assumption the Platform
+// made for everyone before the declaration existed.
+//
+// The fallback is deliberate rather than defensive. A session can exist before
+// any Attach — an intent may arrive first, and the manager finds-or-creates on
+// either — so "no profile yet" is a normal state and not an error to report.
+func (s *liveSession) clientProfile() clientProfile {
+	s.profileMu.Lock()
+	defer s.profileMu.Unlock()
+	if !s.profile.declared {
+		return clientProfile{prefer: browserPreference(), class: legacyBrowserClass}
+	}
+	return s.profile
 }
 
 // Manager is the session store. It finds-or-creates a liveSession per opaque
