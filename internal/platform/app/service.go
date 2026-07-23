@@ -32,6 +32,7 @@ type Service struct {
 	permissions      contracts.PermissionStore
 	moduleSettings   contracts.ModuleSettingsStore
 	userPreferences  contracts.UserPreferenceStore
+	telemetryQueries contracts.TelemetryQueryStore
 	nodes            contracts.NodeStore
 	parts            contracts.PartStore
 	clock            contracts.Clock
@@ -79,6 +80,10 @@ type Deps struct {
 	// UserPreferences is the direct read handle for a user's own settings.
 	// Writes go through the UnitOfWork like every other mutation.
 	UserPreferences contracts.UserPreferenceStore
+	// TelemetryQueries reads stored telemetry back for the expert-mode
+	// surface (ADR 0058). Read-only and outside any transaction, like the
+	// write side and for the mirror-image reason.
+	TelemetryQueries contracts.TelemetryQueryStore
 }
 
 // NewService wires a Service to its Platform contracts, policy decision point
@@ -93,6 +98,7 @@ func NewService(d Deps) *Service {
 		permissions:      d.Permissions,
 		moduleSettings:   d.ModuleSettings,
 		userPreferences:  d.UserPreferences,
+		telemetryQueries: d.TelemetryQueries,
 		nodes:            d.Nodes,
 		parts:            d.Parts,
 		clock:            d.Clock,

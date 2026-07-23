@@ -132,6 +132,48 @@ func (db *fakeDB) seedRole(userID domain.UserID, role domain.Role) {
 	db.roles[userID] = append(db.roles[userID], role)
 }
 
+// grantPermission adds one permission to a user, as its own role.
+//
+// Separate from adminRole on purpose: the actions that are deliberately *not*
+// part of an administrator's default grants — telemetry.read, and audit.read
+// when it exists — must be grantable in a test without widening the role that
+// stands for "an ordinary admin", or the tests proving they are withheld would
+// quietly stop proving it.
+func (db *fakeDB) grantPermission(userID domain.UserID, perm domain.Permission) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.roles[userID] = append(db.roles[userID], domain.Role{
+		ID:          domain.RoleID("role-" + string(perm)),
+		Name:        string(perm),
+		Permissions: []domain.Permission{perm},
+	})
+}
+
+// fakeTelemetryQueryStore implements contracts.TelemetryQueryStore with one
+// canned record, enough to prove a filter reaches the store and a gate opens.
+type fakeTelemetryQueryStore struct{}
+
+func (fakeTelemetryQueryStore) QueryLogs(_ context.Context, f domain.TelemetryLogFilter) ([]domain.TelemetryLogRecord, error) {
+	return []domain.TelemetryLogRecord{{
+		Level:     "warn",
+		Component: f.Component,
+		Message:   "canned",
+		Fields:    []byte("{}"),
+	}}, nil
+}
+
+func (fakeTelemetryQueryStore) Trace(context.Context, string) ([]domain.TelemetrySpanRecord, error) {
+	return nil, nil
+}
+
+func (fakeTelemetryQueryStore) TraceLogs(context.Context, string) ([]domain.TelemetryLogRecord, error) {
+	return nil, nil
+}
+
+func (fakeTelemetryQueryStore) RecentTraces(context.Context, domain.TelemetryTraceFilter) ([]domain.TelemetryTraceSummary, error) {
+	return nil, nil
+}
+
 // adminRole grants every action this slice's commands check. Tests that
 // need an authorized caller seed it for that caller's user ID; tests
 // proving the policy gate simply don't.
@@ -769,6 +811,7 @@ func newTestServiceWithCapabilities(db *fakeDB, tr *trace, now time.Time, caps *
 		Capabilities:     caps,
 		ModuleSettings:   &fakeModuleSettingsStore{db: db, trace: tr},
 		UserPreferences:  &fakeUserPreferenceStore{db: db, trace: tr},
+		TelemetryQueries: fakeTelemetryQueryStore{},
 	})
 }
 

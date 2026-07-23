@@ -57,6 +57,7 @@ func (Module) Manifest() builtin.Manifest {
 			// missing from it is a quiet lie about what this module provides.
 			"ModuleSettingsStore",
 			"UserPreferenceStore",
+			"TelemetryQueryStore",
 			"Clock",
 			"IDGenerator",
 			"HealthProbe",
@@ -86,8 +87,10 @@ type ContractSet struct {
 	ModuleSettings contracts.ModuleSettingsStore
 	// UserPreferences is the direct read handle for a user's own settings.
 	UserPreferences contracts.UserPreferenceStore
-	Clock           contracts.Clock
-	IDs             contracts.IDGenerator
+	// TelemetryQueries reads stored telemetry back (ADR 0058).
+	TelemetryQueries contracts.TelemetryQueryStore
+	Clock            contracts.Clock
+	IDs              contracts.IDGenerator
 	// ContentIDs generates UUIDv7 identifiers for the content model, whose
 	// tables use native uuid columns. IDs stays UUIDv4 for the
 	// infrastructure tables, which keep their text ids and are not migrated
@@ -129,25 +132,26 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 	// ContractSet's shape and main.go are unchanged.
 	storage := NewStorageAdapter(pool)
 	return &ContractSet{
-		Pool:            pool,
-		UnitOfWork:      storage.UnitOfWork(),
-		Users:           NewUserStore(pool),
-		Sessions:        NewSessionStore(pool),
-		Permissions:     NewPermissionStore(pool),
-		Config:          NewConfigStore(pool),
-		Outbox:          NewEventOutbox(pool),
-		Credentials:     NewCredentialStore(pool),
-		Nodes:           NewNodeStore(pool),
-		Parts:           NewPartStore(pool),
-		Relations:       NewRelationStore(pool),
-		SourceBindings:  NewSourceBindingStore(pool),
-		ModuleSettings:  NewModuleSettingsStore(pool),
-		UserPreferences: NewUserPreferenceStore(pool),
-		Clock:           NewClock(),
-		IDs:             NewIDGenerator(),
-		ContentIDs:      NewUUIDv7Generator(),
-		Health:          NewHealthProbe(pool),
-		HealthReporter:  NewComponentHealthReporter(pool),
+		Pool:             pool,
+		UnitOfWork:       storage.UnitOfWork(),
+		Users:            NewUserStore(pool),
+		Sessions:         NewSessionStore(pool),
+		Permissions:      NewPermissionStore(pool),
+		Config:           NewConfigStore(pool),
+		Outbox:           NewEventOutbox(pool),
+		Credentials:      NewCredentialStore(pool),
+		Nodes:            NewNodeStore(pool),
+		Parts:            NewPartStore(pool),
+		Relations:        NewRelationStore(pool),
+		SourceBindings:   NewSourceBindingStore(pool),
+		ModuleSettings:   NewModuleSettingsStore(pool),
+		UserPreferences:  NewUserPreferenceStore(pool),
+		TelemetryQueries: NewTelemetryQueryStore(pool),
+		Clock:            NewClock(),
+		IDs:              NewIDGenerator(),
+		ContentIDs:       NewUUIDv7Generator(),
+		Health:           NewHealthProbe(pool),
+		HealthReporter:   NewComponentHealthReporter(pool),
 	}
 }
 
