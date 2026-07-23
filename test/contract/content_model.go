@@ -431,6 +431,93 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		}
 	})
 
+	// Containment over the module-owned attributes document. This is a
+	// storage-engine obligation rather than a Postgres convenience: the SDK
+	// promises any StorageAdapter answers it, because it is the only filter that
+	// can be asked of a document the Platform never interprets (ADR 0013).
+	t.Run("search filters on attribute containment", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+
+		onTwo := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		onTwo.Attributes = []byte(`{"watch":{"region":"GB","providers":["Netflix","Prime Video"]}}`)
+		onOne := newWork(nodeID(2), v1.MediaMovie, "Dune", now)
+		onOne.Attributes = []byte(`{"watch":{"region":"GB","providers":["Prime Video"]}}`)
+		untagged := newWork(nodeID(3), v1.MediaMovie, "Solaris", now)
+		for _, node := range []v1.Node{onTwo, onOne, untagged} {
+			if _, err := d.Nodes.Create(c, node); err != nil {
+				t.Fatalf("Create %s: %v", node.Title, err)
+			}
+		}
+
+		// Nested containment: a document whose array is a *superset* matches.
+		netflix, err := d.Nodes.Search(c, contracts.NodeQuery{
+			AttributesContain: []byte(`{"watch":{"providers":["Netflix"]}}`), Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("Search by attributes: %v", err)
+		}
+		if len(netflix) != 1 || netflix[0].Title != "Arrival" {
+			t.Fatalf("containment search = %v, want only Arrival", titles(netflix))
+		}
+
+		prime, err := d.Nodes.Search(c, contracts.NodeQuery{
+			AttributesContain: []byte(`{"watch":{"providers":["Prime Video"]}}`), Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("Search by attributes: %v", err)
+		}
+		if len(prime) != 2 {
+			t.Fatalf("containment search = %v, want both", titles(prime))
+		}
+
+		// The filter composes with the others rather than replacing them.
+		combined, err := d.Nodes.Search(c, contracts.NodeQuery{
+			Title:             "dune",
+			AttributesContain: []byte(`{"watch":{"providers":["Prime Video"]}}`),
+			Limit:             10,
+		})
+		if err != nil {
+			t.Fatalf("Search combined: %v", err)
+		}
+		if len(combined) != 1 || combined[0].Title != "Dune" {
+			t.Fatalf("combined search = %v", titles(combined))
+		}
+
+		// No match is an empty result, not an error.
+		none, err := d.Nodes.Search(c, contracts.NodeQuery{
+			AttributesContain: []byte(`{"watch":{"providers":["Nonesuch"]}}`), Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("Search unmatched: %v", err)
+		}
+		if len(none) != 0 {
+			t.Fatalf("unmatched containment = %v, want none", titles(none))
+		}
+
+		// An absent filter does not exclude the nodes that have no attributes at
+		// all — the criterion is optional, not a requirement to carry a document.
+		all, err := d.Nodes.Search(c, contracts.NodeQuery{Limit: 10})
+		if err != nil {
+			t.Fatalf("Search all: %v", err)
+		}
+		if len(all) != 3 {
+			t.Fatalf("unfiltered search = %v, want all three", titles(all))
+		}
+	})
+
+	// A malformed filter is the caller's mistake. Handed to the engine it would
+	// surface as a driver error and cross the boundary as Internal, which says
+	// nothing useful; an empty result would be worse still, reading as "you have
+	// none of these" rather than "that filter is not a document".
+	t.Run("a malformed attribute filter is rejected", func(t *testing.T) {
+		d := newDeps(t)
+		_, err := d.Nodes.Search(ctx(t), contracts.NodeQuery{
+			AttributesContain: []byte(`{"watch":`), Limit: 10,
+		})
+		requireCategory(t, err, contracts.InvalidArgument)
+	})
+
 	// A user's library is not a place to run an unbounded scan from.
 	t.Run("a non-positive search limit is rejected", func(t *testing.T) {
 		d := newDeps(t)

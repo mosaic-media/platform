@@ -86,6 +86,19 @@ type NodeQuery struct {
 	// is the common case — a capability asks whether a *show* exists, not
 	// whether some episode does.
 	Kind v1.NodeKind
+	// AttributesContain narrows to nodes whose attributes document contains
+	// this JSON document. Empty means no filter.
+	//
+	// Containment rather than a typed filter because attributes are
+	// module-owned and the Platform never interprets them (ADR 0013). It is
+	// the same question FindByExternalID asks of the neighbouring document,
+	// and it is answered by the same kind of index.
+	//
+	// A store must validate that the value is a JSON document. Passing
+	// unparseable bytes through to the engine turns a caller's mistake into
+	// a driver error, which crosses the boundary as Internal rather than as
+	// the InvalidArgument it is.
+	AttributesContain []byte
 	// Limit caps the result set and must be positive. Search is a
 	// user-facing read and an unbounded one is a denial of service against
 	// a large library.

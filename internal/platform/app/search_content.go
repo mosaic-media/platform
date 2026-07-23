@@ -6,6 +6,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/policy"
@@ -34,6 +35,13 @@ func validateSearchContentQuery(query v1.SearchContentQuery) error {
 		query.Kind != v1.NodeItem {
 		return contracts.NewError(contracts.InvalidArgument, "unknown node kind")
 	}
+	// Rejected at the boundary as well as in the store. A malformed filter is a
+	// caller's mistake and should be reported as one before a connection is
+	// taken, and validating only in the store would leave a second entry point
+	// free to pass it through unchecked.
+	if len(query.AttributesContain) > 0 && !json.Valid(query.AttributesContain) {
+		return contracts.NewError(contracts.InvalidArgument, "attributes filter must be a valid JSON document")
+	}
 	return nil
 }
 
@@ -56,10 +64,11 @@ func (s *Service) SearchContent(ctx context.Context, query v1.SearchContentQuery
 
 	// 4. load state through a read contract.
 	nodes, err := s.nodes.Search(ctx, contracts.NodeQuery{
-		Title:     query.Title,
-		MediaType: query.MediaType,
-		Kind:      query.Kind,
-		Limit:     clampSearchLimit(query.Limit),
+		Title:             query.Title,
+		MediaType:         query.MediaType,
+		Kind:              query.Kind,
+		AttributesContain: query.AttributesContain,
+		Limit:             clampSearchLimit(query.Limit),
 	})
 	if err != nil {
 		return v1.SearchContentResult{}, err

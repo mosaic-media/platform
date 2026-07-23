@@ -141,16 +141,33 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
 	}
 
+	// The attribute filter is the one criterion that can be *malformed* rather
+	// than merely empty, so it is rejected here instead of being handed to the
+	// driver — a cast failure inside the engine would surface as Internal, which
+	// tells the caller nothing about the mistake being theirs.
+	var attributes any
+	if len(query.AttributesContain) > 0 {
+		if !json.Valid(query.AttributesContain) {
+			return nil, contracts.NewError(contracts.InvalidArgument, "attributes filter must be a valid JSON document")
+		}
+		attributes = query.AttributesContain
+	}
+
+	// `@>` over the nodes_attributes_gin index, exactly as FindByExternalID
+	// reads the neighbouring external_ids document. The NULL check is what makes
+	// the filter optional without building the SQL by concatenation.
 	rows, err := s.q.Query(ctx,
 		`SELECT `+nodeColumns+` FROM nodes
 		 WHERE ($1 = '' OR title ILIKE $2 ESCAPE '\')
 		   AND ($3 = '' OR media_type = $3)
 		   AND ($4 = '' OR node_kind = $4)
+		   AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)
 		 ORDER BY title, id
-		 LIMIT $5`,
+		 LIMIT $6`,
 		query.Title, likeContains(query.Title),
 		string(v1.NormaliseMediaType(string(query.MediaType))),
 		string(query.Kind),
+		attributes,
 		query.Limit,
 	)
 	if err != nil {
