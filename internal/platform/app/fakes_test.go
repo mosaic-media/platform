@@ -131,6 +131,11 @@ func (db *fakeDB) seedRole(userID domain.UserID, role domain.Role) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.roles[userID] = append(db.roles[userID], role)
+	// Registered by id as well. In the real schema a role is one row that
+	// grants reference; seeding only the per-user view made a seeded role
+	// invisible to FindRole and to GrantRole, which is a property of the fake
+	// rather than of the Platform.
+	db.rolesByID[role.ID] = role
 }
 
 // seedActiveConfig stores an Active configuration version carrying fields, so
@@ -148,6 +153,19 @@ func (db *fakeDB) seedActiveConfig(t *testing.T, fields map[string]any) {
 		Payload: payload,
 		Status:  domain.ConfigActive,
 	}
+}
+
+// replaceRoles makes role the user's *only* role.
+//
+// seedRole appends, and importFixture already seeds an administrator — so
+// seeding a deliberately narrow role on top of that leaves the caller holding
+// both, and a test meaning to prove "this grantor is limited" proves nothing.
+// This is for exactly that case.
+func (db *fakeDB) replaceRoles(userID domain.UserID, role domain.Role) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.roles[userID] = []domain.Role{role}
+	db.rolesByID[role.ID] = role
 }
 
 // grantPermission adds one permission to a user, as its own role.
@@ -192,37 +210,30 @@ func (fakeTelemetryQueryStore) RecentTraces(context.Context, domain.TelemetryTra
 	return nil, nil
 }
 
-// adminRole grants every action this slice's commands check. Tests that
-// need an authorized caller seed it for that caller's user ID; tests
-// proving the policy gate simply don't.
+// adminRole is the Administrator preset (ADR 0069): everything operational,
+// and no insight.
+//
+// Derived from app.AdministratorActions rather than listed by hand, so the
+// fixture cannot drift from the real tier. That matters most for the actions it
+// deliberately lacks: a hand-written list that quietly gained telemetry.read
+// would turn every test asserting the tier boundary into one that asserts
+// nothing.
 func adminRole() domain.Role {
-	return domain.Role{
-		ID:   "role-admin",
-		Name: "Administrator",
-		Permissions: []domain.Permission{
-			domain.Permission(app.ActionUserCreate),
-			domain.Permission(app.ActionUserRead),
-			domain.Permission(app.ActionSessionCreate),
-			domain.Permission(app.ActionSessionRevoke),
-			domain.Permission(app.ActionConfigDraft),
-			domain.Permission(app.ActionConfigValidate),
-			domain.Permission(app.ActionConfigActivate),
-			domain.Permission(app.ActionUserList),
-			domain.Permission(app.ActionUserStatusUpdate),
-			domain.Permission(app.ActionPermissionRead),
-			domain.Permission(app.ActionPreferenceWrite),
-			domain.Permission(app.ActionPreferenceRead),
-			domain.Permission(app.ActionConfigRead),
-			domain.Permission(app.ActionContentRead),
-			domain.Permission(app.ActionContentCreate),
-			domain.Permission(app.ActionContentRelate),
-			domain.Permission(app.ActionContentBind),
-			domain.Permission(app.ActionContentResolve),
-			domain.Permission(app.ActionContentImport),
-			domain.Permission(app.ActionModuleConfigure),
-			domain.Permission(app.ActionModuleRead),
-		},
+	return roleFrom("role-admin", app.PresetNameAdministrator, app.AdministratorActions())
+}
+
+// superuserRole is the first user's tier: every action, including the ones an
+// administrator has to be granted individually.
+func superuserRole() domain.Role {
+	return roleFrom("role-superuser", app.PresetNameSuperuser, app.SuperuserActions())
+}
+
+func roleFrom(id domain.RoleID, name string, actions []policy.Action) domain.Role {
+	perms := make([]domain.Permission, len(actions))
+	for i, a := range actions {
+		perms[i] = domain.Permission(a)
 	}
+	return domain.Role{ID: id, Name: name, Permissions: perms}
 }
 
 func (db *fakeDB) snapshot() fakeDBSnapshot {
@@ -1251,4 +1262,20 @@ func (db *fakeDB) seedPart(part v1.Part) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.parts[part.ID] = part
+}
+
+// FindRole resolves a role across every user's roles, mirroring the real
+// store's id lookup. The delegation check (ADR 0069) reads through it, so it
+// has to return the role's real permissions rather than a stub.
+func (s fakePermissionStore) FindRole(_ context.Context, roleID domain.RoleID) (domain.Role, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	// rolesByID, not the per-user map: a role exists once in the real schema
+	// regardless of who holds it, and the delegation check has to be able to
+	// see a role nobody has been granted yet.
+	role, ok := s.db.rolesByID[roleID]
+	if !ok {
+		return domain.Role{}, contracts.NewError(contracts.NotFound, "no role with that id")
+	}
+	return role, nil
 }

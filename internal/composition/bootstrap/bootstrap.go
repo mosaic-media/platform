@@ -21,8 +21,8 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// AdminSeed is the initial administrator to provision: its login and the
-// permissions its Administrator role carries. Username and Password are grouped
+// AdminSeed is the first user to provision: its login and the permissions its
+// Superuser role carries (ADR 0069). Username and Password are grouped
 // into a named pair so the two same-typed strings cannot be transposed at the
 // call site — a swap that would otherwise create the admin with the password as
 // its username, and vice versa, without a compile error.
@@ -32,9 +32,21 @@ type AdminSeed struct {
 	Permissions []domain.Permission
 }
 
-// EnsureAdmin creates an administrator — a user with a password credential, an
-// Administrator role carrying seed.Permissions, and a grant binding them —
-// unless a user with the username already exists. It is idempotent: an existing
+// superuserRoleName is what the first user's role is called. It is the string
+// app.RoleNameSuperuser, repeated here rather than imported: this package is
+// composition wiring that writes through store contracts, and it has never
+// depended on the application services (ADR 0018). One constant is a smaller
+// price than that dependency.
+const superuserRoleName = "Superuser"
+
+// EnsureAdmin creates the first user — a user with a password credential, a
+// Superuser role carrying seed.Permissions, and a grant binding them — unless a
+// user with the username already exists.
+//
+// The account it creates is the superuser (ADR 0069): the one privileged
+// account established out-of-band, from which all other authority is
+// allocated. Every later account is created *by* this one and starts with
+// less. It is idempotent: an existing
 // user is left untouched and Created is false.
 //
 // The whole seeding runs in one transaction, so a partial admin (a user with
@@ -84,7 +96,7 @@ func EnsureAdmin(
 		}
 
 		role, err := tx.Permissions().CreateRole(ctx, domain.Role{
-			ID: domain.RoleID(ids.NewID()), Name: "Administrator", Permissions: seed.Permissions,
+			ID: domain.RoleID(ids.NewID()), Name: superuserRoleName, Permissions: seed.Permissions,
 		})
 		if err != nil {
 			return err

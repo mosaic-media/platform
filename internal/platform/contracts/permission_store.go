@@ -23,6 +23,12 @@ type PermissionStore interface {
 	// CreateRole persists a role and the permissions it carries. A duplicate
 	// id is Conflict.
 	CreateRole(ctx context.Context, role domain.Role) (domain.Role, error)
+	// FindRole returns the role with the given id, or NotFound.
+	//
+	// It exists for the delegation check (ADR 0069): granting a role must be
+	// bounded by what the grantor holds, and that cannot be decided without
+	// seeing what the role carries.
+	FindRole(ctx context.Context, roleID domain.RoleID) (domain.Role, error)
 	// GrantRole binds an existing role to an existing user. A duplicate grant
 	// is Conflict; a grant naming a role or user that does not exist is
 	// Conflict as well, surfaced from the foreign keys.

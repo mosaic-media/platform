@@ -21,9 +21,10 @@ import (
 // (ADR 0056), the *shape* of someone's activity is still visible. Granting
 // telemetry.read is a decision about trust, not a convenience.
 //
-// They are deliberately absent from the bootstrapped administrator's grant set
-// for the same reason ADR 0057 keeps audit.read out of it: being the first
-// account should not silently confer the ability to watch everyone.
+// They belong to the superuser and to nobody else by default (ADR 0069). The
+// *first* account holds them — withholding an action from the only account that
+// exists would create a permission nobody could ever be granted — while an
+// administrator it allocates must be given them individually.
 const (
 	ActionTelemetryRead      policy.Action = "telemetry.read"
 	ActionTelemetryExport    policy.Action = "telemetry.export"

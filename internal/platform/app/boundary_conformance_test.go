@@ -214,6 +214,11 @@ func boundaryCases() []boundaryCase {
 		{"GetUserPreferences", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetUserPreferences(ctx, app.GetUserPreferencesQuery{Caller: caller(sid)}))
 		}},
+		{"GrantablePermissions", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.GrantablePermissions(ctx, app.GrantablePermissionsQuery{
+				Caller: caller(sid), Preset: app.PresetNameUser,
+			}))
+		}},
 		{"QueryTelemetryLogs", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.QueryTelemetryLogs(ctx, app.QueryTelemetryLogsQuery{Caller: caller(sid)}))
 		}},

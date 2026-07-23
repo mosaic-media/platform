@@ -327,3 +327,7 @@ func newTestService(db *fakeDB, now time.Time) *app.Service {
 		ModuleSettings:   nil,
 	})
 }
+
+func (fakePermissionStore) FindRole(context.Context, domain.RoleID) (domain.Role, error) {
+	return domain.Role{}, nil
+}

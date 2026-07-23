@@ -110,21 +110,14 @@ const telemetryPartitionsAhead = 14
 // which is the point: it means a missed tick costs nothing.
 const telemetryMaintenanceInterval = time.Hour
 
-// adminPermissions is the authority the bootstrapped administrator receives:
-// every action the application services check. It is assembled from the app
-// package's action constants rather than string literals so a new action is a
-// compile-time addition here, not a silently missing grant.
-func adminPermissions() []domain.Permission {
-	actions := []policy.Action{
-		app.ActionUserCreate, app.ActionUserRead, app.ActionUserList, app.ActionUserStatusUpdate,
-		app.ActionSessionCreate, app.ActionSessionRevoke,
-		app.ActionPermissionRead, app.ActionRoleCreate, app.ActionRoleGrant,
-		app.ActionConfigDraft, app.ActionConfigValidate, app.ActionConfigActivate, app.ActionConfigRead,
-		app.ActionContentCreate, app.ActionContentRead, app.ActionContentRelate,
-		app.ActionContentBind, app.ActionContentResolve, app.ActionContentImport,
-		app.ActionModuleConfigure, app.ActionModuleRead,
-		app.ActionPreferenceWrite, app.ActionPreferenceRead,
-	}
+// superuserPermissions is the authority the first user receives: every action
+// the application services check (ADR 0069).
+//
+// The set lives in the app package beside the action constants, so adding an
+// action is a compile-time decision about which tier holds it rather than
+// something a reader of this file has to notice was omitted.
+func superuserPermissions() []domain.Permission {
+	actions := app.SuperuserActions()
 	perms := make([]domain.Permission, len(actions))
 	for i, a := range actions {
 		perms[i] = domain.Permission(a)
@@ -463,7 +456,7 @@ func run() error {
 			bootstrap.AdminSeed{
 				Username:    adminUser,
 				Password:    os.Getenv(bootstrapAdminPasswordEnv),
-				Permissions: adminPermissions(),
+				Permissions: superuserPermissions(),
 			},
 		)
 		cancel()

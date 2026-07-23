@@ -56,6 +56,15 @@ func (s *Service) GrantRole(ctx context.Context, cmd GrantRoleCommand) (GrantRol
 		return GrantRoleResult{}, err
 	}
 
+	// 3b. the role's authority must be within the grantor's own (ADR 0069).
+	// Checked here as well as at creation because the two are separate acts: a
+	// role the superuser created can be granted by an administrator, and it is
+	// the granting that must be bounded — otherwise "grant an existing role"
+	// reopens exactly what bounding creation closed.
+	if err := s.ensureCanDelegateRole(ctx, az, cmd.RoleID); err != nil {
+		return GrantRoleResult{}, err
+	}
+
 	grant := domain.Grant{UserID: cmd.UserID, RoleID: cmd.RoleID}
 
 	// 4. open a UnitOfWork.

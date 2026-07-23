@@ -38,9 +38,15 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 		username = "root"
 		password = "a strong bootstrap password"
 	)
-	perms := []domain.Permission{
-		domain.Permission(app.ActionSessionCreate),
-		domain.Permission(app.ActionRoleCreate),
+	// The full superuser set, as main.go seeds (ADR 0069). It used to be two
+	// permissions, which stopped working once delegation was bounded by what
+	// the grantor holds: an account with only role.create could no longer mint
+	// a role carrying content.read, which is the escalation that check closes.
+	// Seeding what the composition root seeds keeps this test about bootstrap
+	// rather than about a permission set no real install has.
+	perms := make([]domain.Permission, 0)
+	for _, a := range app.SuperuserActions() {
+		perms = append(perms, domain.Permission(a))
 	}
 
 	created, err := bootstrap.EnsureAdmin(c, cs.UnitOfWork, hasher, cs.Clock, cs.IDs,

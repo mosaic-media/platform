@@ -225,3 +225,7 @@ var (
 	_ contracts.CredentialStore         = mockCredentialStore{}
 	_ contracts.ComponentHealthReporter = mockComponentHealthReporter{}
 )
+
+func (mockPermissionStore) FindRole(context.Context, domain.RoleID) (domain.Role, error) {
+	return domain.Role{}, nil
+}
