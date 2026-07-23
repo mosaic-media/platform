@@ -27,10 +27,10 @@ github.com/mosaic-media/module-remote-playback v0.2.0 h1:mzOorq9lxzeVrLsr9qhZHxc
 github.com/mosaic-media/module-remote-playback v0.2.0/go.mod h1:juh4cwllwHbQedTEVaP9szvWgCXXQ9F2e48huEk6Cc4=
 github.com/mosaic-media/module-stremio-addons v0.20.0 h1:yR2n8vSjdcMD6GaVvC6uhpOTW/OQ2VX0u6Y2j68k2us=
 github.com/mosaic-media/module-stremio-addons v0.20.0/go.mod h1:InpuyuG6s2ZqE6sBwqMFvdpQ5BW2XA9PM/0iViEV4v8=
-github.com/mosaic-media/module-tmdb v0.2.0 h1:cq+2o61bzzxwCbJDBYosnnhCLMh9FV1Ra6R/35yVqX4=
-github.com/mosaic-media/module-tmdb v0.2.0/go.mod h1:RSinbElu6slm5yQcE/6dLwgGhIgfGPINlkbwAHmtjRk=
-github.com/mosaic-media/sdk v0.17.0 h1:XktoAvhontdoQV4SJHa2j2BVPZkxhzFo1kFMop2QPuQ=
-github.com/mosaic-media/sdk v0.17.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
+github.com/mosaic-media/module-tmdb v0.3.1 h1:4X+pzIxtLgd8SpWkvNuIEwZTon7GuVh3h2zRhW9mW9Q=
+github.com/mosaic-media/module-tmdb v0.3.1/go.mod h1:4HOtBRy4Oqn5iPuw0Jws2umlvzzWS9fgRrs/RKCYeN0=
+github.com/mosaic-media/sdk v0.18.0 h1:1t1IbROhUeQnFNNPiD5q9ZQ4uTJwf5N/Fpn1XJw0BfQ=
+github.com/mosaic-media/sdk v0.18.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
 github.com/mosaic-media/sdui v0.10.0 h1:CJYd0FnR6TPDmmPEN5G88JLRbSs6YUtXhG2nhCtzpsA=
 github.com/mosaic-media/sdui v0.10.0/go.mod h1:U2jxF+nZzupVfSU/ysMXOX1XZ1COhP89UoYA5SE8FrM=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
