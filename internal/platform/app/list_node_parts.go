@@ -67,22 +67,59 @@ func (s *Service) ListNodeParts(ctx context.Context, q ListNodePartsQuery) (List
 // deliberately not enough for a series, where which episode plays is the user's
 // choice rather than a default this should invent — so a series returns nothing
 // and the detail screen offers Play per episode instead.
-func (s *Service) FirstPlayablePart(ctx context.Context, caller v1.Caller, workID v1.NodeID) (v1.Part, bool) {
-	node, err := s.GetContentNode(ctx, v1.GetContentNodeQuery{Caller: caller, NodeID: workID, WithChildren: true})
-	if err != nil {
-		return v1.Part{}, false
+//
+// It is an entry point — the screens transport calls it directly (ADR 0036's
+// affordance gate) — so it clears the boundary itself, once, and then reads
+// stores directly rather than re-entering GetContentNode and ListNodeParts.
+// Re-entering was the ADR 0066 defect in its most expensive form: a work whose
+// playable item is its twentieth child cost twenty-one authenticate-plus-
+// authorize cycles to discover one Part id.
+//
+// Collapsing them is decision-equivalent under today's policy engine, which
+// ignores Resource entirely. The per-child calls also authorised bare
+// "content" with no id, so the single check made here — against the work — is
+// the more specific of the two. If relationship- or attribute-based rules ever
+// make Resource load-bearing, authorising each child becomes a real decision to
+// take deliberately, rather than one this loop was silently making.
+//
+// The two failure paths are deliberately different. A boundary failure is
+// returned: an expired session must not look like a work with nothing to play,
+// which is how the swallow here previously rendered it. A store read that fails
+// still degrades to "nothing playable", so a transient blip omits the Play
+// button rather than failing a detail screen whose metadata already arrived.
+func (s *Service) FirstPlayablePart(ctx context.Context, caller v1.Caller, workID v1.NodeID) (v1.Part, bool, error) {
+	if caller.Session == "" {
+		return v1.Part{}, false, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
-	for _, child := range node.Children {
+	if workID == "" {
+		return v1.Part{}, false, contracts.NewError(contracts.InvalidArgument, "work id is required")
+	}
+
+	if _, err := s.enter(ctx, caller, ActionContentRead,
+		policy.Resource{Type: "content", ID: string(workID)}); err != nil {
+		return v1.Part{}, false, err
+	}
+	if s.parts == nil {
+		return v1.Part{}, false, contracts.NewError(contracts.Unavailable, "no part store configured")
+	}
+
+	// ListChildren rather than a node read: the work itself was never used,
+	// only its children, so fetching it was a query spent on nothing.
+	children, err := s.nodes.ListChildren(ctx, workID)
+	if err != nil {
+		return v1.Part{}, false, nil
+	}
+	for _, child := range children {
 		if child.Kind != v1.NodeItem {
 			continue
 		}
-		res, err := s.ListNodeParts(ctx, ListNodePartsQuery{Caller: caller, NodeID: child.ID})
-		if err != nil || len(res.Parts) == 0 {
+		parts, err := s.parts.ListByNode(ctx, child.ID)
+		if err != nil || len(parts) == 0 {
 			continue
 		}
-		return res.Parts[0], true
+		return parts[0], true, nil
 	}
-	return v1.Part{}, false
+	return v1.Part{}, false, nil
 }
 
 // ListContentParts satisfies the published ContentService (SDK v0.10.0). It is a

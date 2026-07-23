@@ -64,16 +64,7 @@ type boundaryCase struct {
 // boundaryExempt lists caller-bearing methods that are not entry points, with
 // the reason each is safe to leave out. It exists so that "not in the table"
 // is always a stated decision rather than an oversight.
-var boundaryExempt = map[string]string{
-	// Returns (Part, bool), so it has no error to assert a category on. It is
-	// a convenience over GetContentNode and ListNodeParts, both of which are
-	// covered here, and it reaches the store through them rather than
-	// directly. It is also the last remaining instance of the pattern this
-	// slice removed elsewhere — it re-enters a public entry point once per
-	// child — so it should become an inside-the-boundary read and lose its
-	// v1.Caller parameter, at which point this entry goes away.
-	"FirstPlayablePart": "returns no error; delegates to two covered entry points",
-}
+var boundaryExempt = map[string]string{}
 
 func boundaryCases() []boundaryCase {
 	return []boundaryCase{
@@ -136,6 +127,14 @@ func boundaryCases() []boundaryCase {
 			return discard(s.ListNodeParts(ctx, app.ListNodePartsQuery{
 				Caller: caller(sid), NodeID: "node-1",
 			}))
+		}},
+		// Three results rather than two, so discard does not fit. It is the one
+		// entry point that reports playability as well as an error, because the
+		// screens transport asks it a yes/no question (ADR 0036) and must still
+		// be able to tell "no bytes here" from "your session expired".
+		{"FirstPlayablePart", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			_, _, err := s.FirstPlayablePart(ctx, caller(sid), "node-1")
+			return err
 		}},
 
 		// --- discovery and modules ---

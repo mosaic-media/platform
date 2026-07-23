@@ -79,7 +79,11 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
 	default:
 		els := []ui.El{}
-		if part, ok := s.content.FirstPlayablePart(ctx, caller, res.NodeID); ok {
+		part, playable, err := s.content.FirstPlayablePart(ctx, caller, res.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		if playable {
 			els = append(els, ui.Button("Play", "primary", ui.OnTap(ui.Invoke(playPartAction, map[string]any{
 				paramPartID: string(part.ID),
 				"title":     title,

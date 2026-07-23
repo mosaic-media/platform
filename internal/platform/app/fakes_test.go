@@ -802,6 +802,7 @@ func newTestServiceWithCapabilities(db *fakeDB, tr *trace, now time.Time, caps *
 		Config:           &fakeConfigStore{db: db, trace: tr},
 		Permissions:      fakePermissionStore{db: db, trace: tr},
 		Nodes:            &fakeNodeStore{db: db, trace: tr},
+		Parts:            &fakePartStore{db: db, trace: tr},
 		Clock:            fakeClock{now: now},
 		IDs:              &fakeIDGenerator{},
 		ContentIDs:       &fakeIDGenerator{},
@@ -1224,4 +1225,12 @@ func (s *fakeSourceBindingStore) list(match func(v1.SourceBinding) bool) []v1.So
 	}
 	sort.Slice(found, func(i, j int) bool { return found[i].ID < found[j].ID })
 	return found
+}
+
+// seedPart puts a Part in place without going through the command path, so a
+// read test can describe the library state it needs rather than build it.
+func (db *fakeDB) seedPart(part v1.Part) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.parts[part.ID] = part
 }

@@ -93,7 +93,7 @@ type contentQueries interface {
 	// bytes of its own, so the emit-side has to look one level down for an item
 	// that does before it can offer Play at all (ADR 0036 — an affordance with
 	// nothing behind it is the dead end this whole thread exists to remove).
-	FirstPlayablePart(context.Context, v1.Caller, v1.NodeID) (v1.Part, bool)
+	FirstPlayablePart(context.Context, v1.Caller, v1.NodeID) (v1.Part, bool, error)
 }
 
 // Service renders named screens. It holds the query surface the builders read

@@ -71,13 +71,13 @@ func (f *fakeQueries) GetContentNode(_ context.Context, q v1.GetContentNodeQuery
 
 // playablePart, when set, is what FirstPlayablePart reports — the fake's way of
 // saying "this library item has bytes", which is what gates the Play button.
-func (f *fakeQueries) FirstPlayablePart(_ context.Context, _ v1.Caller, _ v1.NodeID) (v1.Part, bool) {
+func (f *fakeQueries) FirstPlayablePart(_ context.Context, _ v1.Caller, _ v1.NodeID) (v1.Part, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.playablePart.ID == "" {
-		return v1.Part{}, false
+		return v1.Part{}, false, nil
 	}
-	return f.playablePart, true
+	return f.playablePart, true, nil
 }
 
 func (f *fakeQueries) PreviewContent(_ context.Context, q app.PreviewContentQuery) (app.PreviewContentResult, error) {
