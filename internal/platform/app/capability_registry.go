@@ -69,6 +69,48 @@ func (r *CapabilityRegistry) Verify() error {
 	return nil
 }
 
+// RequireRoles fails when no registered capability fills every role in required
+// (ADR 0035, re-expressed by ADR 0063 over the composed set — core and extension
+// together). Metadata and search are a required capability *class*: a Mosaic
+// that cannot identify or find content is not a degraded Mosaic, it is inert,
+// and the honest signal is refusing to serve rather than serving something that
+// can do nothing.
+//
+// It is separate from Verify rather than folded into it because the two bind
+// different things. Verify is about a module's internal consistency — a role
+// declared but unbacked — and holds for any registry. This is about the
+// *composition* being serviceable, so the serving composition root calls it and
+// nothing else does; a test that builds a registry with one stream-only
+// capability is not thereby broken.
+func (r *CapabilityRegistry) RequireRoles(required ...v1.Role) error {
+	for _, role := range required {
+		filled := false
+		for _, id := range r.sortedIDs() {
+			if roleImplemented(r.byID[id], role) && declares(r.byID[id], role) {
+				filled = true
+				break
+			}
+		}
+		if !filled {
+			return fmt.Errorf("no registered module provides the required %q role; a serving Mosaic needs one", role)
+		}
+	}
+	return nil
+}
+
+// declares reports whether c names role in its manifest. Implementing the
+// interface is not enough: a module that fills a role it did not declare is not
+// resolvable by role at runtime, so counting it here would let boot succeed and
+// every lookup fail.
+func declares(c v1.Capability, role v1.Role) bool {
+	for _, declared := range c.Manifest().Provides {
+		if declared == role {
+			return true
+		}
+	}
+	return false
+}
+
 // roleImplemented reports whether c backs role with the matching provider
 // interface. An unrecognised role is not rejected — a newer module may declare a
 // role this Platform build does not know, and that is not this check's concern.

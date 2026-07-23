@@ -13,6 +13,7 @@
 #     platform/            <- this repository
 #     sdk/  sdui/
 #     module-stremio-addons/  module-remote-playback/
+#     module-tmdb/  module-cinemeta/
 #     web/
 #
 # **Go side: a workspace, not a `replace`.** `go.work` overrides the module
@@ -33,6 +34,8 @@ services:
       - ../sdui:/src/sdui
       - ../module-stremio-addons:/src/module-stremio-addons
       - ../module-remote-playback:/src/module-remote-playback
+      - ../module-tmdb:/src/module-tmdb
+      - ../module-cinemeta:/src/module-cinemeta
     environment:
       # GOWORK points the workspace *outside* the bind mount. Writing go.work
       # into /src/platform would put it on the host, where its container paths
@@ -46,7 +49,7 @@ services:
       sh -c "mkdir -p /work &&
              rm -f /work/go.work &&
              go work init &&
-             go work use /src/platform /src/sdk /src/sdui /src/module-stremio-addons /src/module-remote-playback &&
+             go work use /src/platform /src/sdk /src/sdui /src/module-stremio-addons /src/module-remote-playback /src/module-tmdb /src/module-cinemeta &&
              cd /src/platform &&
              exec go run ./cmd/mosaic-platform"
 

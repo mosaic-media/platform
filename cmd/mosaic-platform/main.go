@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	cinemeta "github.com/mosaic-media/module-cinemeta"
 	remoteplayback "github.com/mosaic-media/module-remote-playback"
 	stremio "github.com/mosaic-media/module-stremio-addons"
+	tmdb "github.com/mosaic-media/module-tmdb"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
@@ -45,6 +47,8 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/session"
 	"github.com/mosaic-media/sdui/gen/mosaic/auth/v1/authv1connect"
 	"github.com/mosaic-media/sdui/gen/mosaic/session/v1/sessionv1connect"
+
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // postgresDSNEnv names the environment variable carrying the PostgreSQL
@@ -125,12 +129,38 @@ func superuserPermissions() []domain.Permission {
 	return perms
 }
 
-// registerCapabilities wires the optional-module capabilities compiled into
-// this binary into the registry the Platform resolves through. It is the one
-// place that names concrete modules — the composition-root equivalent of the
-// Build Pipeline's generated imports (ADR 0007). Modules land here as they are
-// added; the Stremio addon-source module is the first.
+// registerCapabilities wires the module capabilities compiled into this binary
+// into the registry the Platform resolves through. It is the one place that
+// names concrete modules — the composition-root equivalent of the Build
+// Pipeline's generated imports (ADR 0007). Modules land here as they are added;
+// the Stremio addon-source module was the first.
+//
+// Three of the four are *core* modules under ADR 0062's guarantee clause —
+// Cinemeta and TMDB back the metadata/search class ADR 0035 requires, remote
+// playback backs the consumer class without which the library is inert — and
+// one, Stremio, is an extension module. Nothing here distinguishes them, and
+// that is the design: the tier is a delivery and coupling decision, not a
+// contract decision, so all four implement the same SDK interfaces and register
+// identically. The distinction becomes visible when the Supervisor selects which
+// core modules a Generation wires in (ADR 0063); until then this function is the
+// selection.
 func registerCapabilities(reg *app.CapabilityRegistry, httpClient *http.Client) {
+	// The Cinemeta metadata module — the zero-configuration floor under the
+	// required metadata/search class (ADR 0072). It is what makes a fresh install
+	// work with nothing set: no key, no URL, no settings document at all, so
+	// there is nothing about it a deployment can get wrong.
+	//
+	// It is registered *before* TMDB because the registry resolves in module-id
+	// order, and "cinemeta" sorting ahead of "tmdb" is an accident rather than a
+	// policy — which is worth saying plainly, since which provider wins for a
+	// given field is an open seam and neither this ordering nor that one answers
+	// it.
+	reg.Register(cinemeta.New(httpClient))
+	// The TMDB metadata module — the richer provider of the same class, for a
+	// deployment willing to hold an API key. It needs one, set through its own
+	// settings screen (ADR 0038), and every role reports that plainly until one
+	// exists; Cinemeta is what keeps the class satisfied in the meantime.
+	reg.Register(tmdb.New(httpClient))
 	// The Stremio addon-source module. It is always registered: the addons it
 	// sources from are user-managed settings (ADR 0021), set at runtime through
 	// configureModule rather than baked in at composition, so the module is
@@ -378,6 +408,15 @@ func run() error {
 	// provider at invocation, not at composition.
 	if err := capRegistry.Verify(); err != nil {
 		return fmt.Errorf("capability registry invalid: %w", err)
+	}
+	// Metadata and search are a required capability class, not a required module
+	// (ADR 0035, re-expressed by ADR 0063 over the composed set). A Mosaic that
+	// cannot identify or find content is inert rather than degraded, so this is
+	// the same class of fatal startup error as a missing required built-in
+	// module. It binds the serving composition and not the app.Service
+	// constructor, so tests that build a service directly are unaffected.
+	if err := capRegistry.RequireRoles(v1.RoleMetadata, v1.RoleSearch); err != nil {
+		return fmt.Errorf("required capability missing: %w", err)
 	}
 	for _, m := range capRegistry.Manifests() {
 		boot.Info("registered capability",
