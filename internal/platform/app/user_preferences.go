@@ -144,3 +144,21 @@ func (s *Service) BoolPreference(ctx context.Context, userID domain.UserID, key 
 	}
 	return value
 }
+
+// ExpertModeEnabled reports whether the caller has turned expert mode on.
+//
+// It authenticates but does not authorise, and that split is the whole design
+// (ADR 0058): the *permission* decides whether the diagnostics surface may be
+// reached, and this preference decides whether the person currently wants to
+// see it. Collapsing the two would make a display setting into an access
+// control.
+//
+// It fails closed to off, so an unauthenticated or unreadable caller simply
+// gets the plain interface.
+func (s *Service) ExpertModeEnabled(ctx context.Context, caller v1.Caller) bool {
+	userID, err := s.authenticateCaller(ctx, caller)
+	if err != nil {
+		return false
+	}
+	return s.BoolPreference(ctx, userID, domain.PreferenceExpertMode, false)
+}

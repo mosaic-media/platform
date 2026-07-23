@@ -105,20 +105,6 @@ const telemetryLogPath = "logs/mosaic-platform.log"
 // nowhere to put its records.
 const telemetryPartitionsAhead = 14
 
-// telemetryRetention is how long each queryable signal is kept before its
-// partitions are dropped. These are the defaults for the
-// telemetry.retention.* Hot config fields an administrator can change —
-// reading them from Active config is the work that lands with the expert-mode
-// surface; until then these are the values in force.
-//
-// Spans expire far sooner than logs, and deliberately: a log line is still
-// evidence weeks later, a span is diagnosis while the problem is fresh, and
-// there are many more of them.
-var telemetryRetention = postgres.Retention{
-	Logs:  14 * 24 * time.Hour,
-	Spans: 72 * time.Hour,
-}
-
 // telemetryMaintenanceInterval is how often partitions are extended and
 // expired ones dropped. Hourly is far more often than a daily boundary needs,
 // which is the point: it means a missed tick costs nothing.
@@ -191,7 +177,7 @@ func main() {
 // leaving retention unenforced and calling the phase done — but it means
 // retention runs only while the process does, and a Platform that is down for
 // a month comes back with a month of records it intended to have dropped.
-func telemetryMaintenance(ctx context.Context, store *postgres.TelemetryStore, lg *telemetry.Logger) {
+func telemetryMaintenance(ctx context.Context, store *postgres.TelemetryStore, svc *app.Service, lg *telemetry.Logger) {
 	ticker := time.NewTicker(telemetryMaintenanceInterval)
 	defer ticker.Stop()
 	for {
@@ -202,7 +188,13 @@ func telemetryMaintenance(ctx context.Context, store *postgres.TelemetryStore, l
 			if err := store.EnsurePartitions(ctx, now.UTC(), telemetryPartitionsAhead); err != nil {
 				lg.Error("extend telemetry partitions failed", telemetry.Err(err))
 			}
-			dropped, err := store.DropExpiredPartitions(ctx, now.UTC(), telemetryRetention)
+			// Read per sweep rather than cached at boot, which is what makes
+			// the retention fields Hot (ADR 0058): an administrator shortening
+			// retention should take effect on the next sweep, not the next
+			// restart.
+			r := svc.TelemetryRetention(ctx)
+			retention := postgres.Retention{Logs: r.Logs, Spans: r.Spans}
+			dropped, err := store.DropExpiredPartitions(ctx, now.UTC(), retention)
 			if err != nil {
 				lg.Error("drop expired telemetry partitions failed", telemetry.Err(err))
 				continue
@@ -210,8 +202,8 @@ func telemetryMaintenance(ctx context.Context, store *postgres.TelemetryStore, l
 			if dropped > 0 {
 				lg.Info("dropped expired telemetry partitions",
 					telemetry.Int("partitions", dropped),
-					telemetry.Duration("log_retention", telemetryRetention.Logs),
-					telemetry.Duration("span_retention", telemetryRetention.Spans))
+					telemetry.Duration("log_retention", retention.Logs),
+					telemetry.Duration("span_retention", retention.Spans))
 			}
 		}
 	}
@@ -511,7 +503,7 @@ func run() error {
 	// records is not silently discarded.
 	bufferedSink.Start(serveCtx)
 	spanSink.Start(serveCtx)
-	go telemetryMaintenance(serveCtx, telemetryStore, root.For("telemetry"))
+	go telemetryMaintenance(serveCtx, telemetryStore, svc, root.For("telemetry"))
 
 	handoff := &health.Handoff{
 		Metadata:    generationMetadata,

@@ -134,7 +134,7 @@ func (s *Service) authorizeTelemetryRead(ctx context.Context, caller v1.Caller) 
 	return err
 }
 
-// CallerHolds reports whether a user holds an action, for deciding what to
+// CallerCan reports whether a caller holds an action, for deciding what to
 // *draw* rather than what to permit.
 //
 // It exists because an affordance nobody may use should not be rendered: the
@@ -144,12 +144,20 @@ func (s *Service) authorizeTelemetryRead(ctx context.Context, caller v1.Caller) 
 // the toggle visible to everyone and the data denied, which means routinely
 // showing people a control that fails.
 //
-// It does not authorise and must never be mistaken for authorisation. The
-// screens and services behind the affordance each run the real check; this only
-// suppresses a button. It fails closed — any error means "do not draw it" — and
+// It does not authorise and must never be mistaken for authorisation. It
+// returns no authorized, so nothing downstream can mistake its answer for the
+// proof ADR 0066 requires — the screens and services behind the affordance each
+// run the real check, and this only suppresses a button. It fails closed, and
 // it deliberately does not require permission.read, because asking "may I?"
 // about oneself is not reading the permission system.
-func (s *Service) CallerHolds(ctx context.Context, userID domain.UserID, action policy.Action, resourceType string) bool {
+func (s *Service) CallerCan(ctx context.Context, caller v1.Caller, action policy.Action, resourceType string) bool {
+	// It authenticates rather than taking an authorized (ADR 0066): the
+	// emit-side holds a v1.Caller and has not entered the boundary for this
+	// action — asking whether it *could* is the whole question.
+	userID, err := s.authenticateCaller(ctx, caller)
+	if err != nil {
+		return false
+	}
 	decision, err := s.policy.Authorize(ctx, policy.Subject{UserID: userID}, action,
 		policy.Resource{Type: resourceType}, policy.PolicyContext{})
 	if err != nil {

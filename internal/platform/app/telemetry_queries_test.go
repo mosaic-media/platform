@@ -89,25 +89,26 @@ func TestGetTraceReportsNotFoundForAnUnknownTrace(t *testing.T) {
 	}
 }
 
-// TestCallerHoldsGatesTheAffordance is the visibility rule: a normal user must
+// TestCallerCanGatesTheAffordance is the visibility rule: a normal user must
 // not even see the expert-mode toggle, so the emit-side asks this before
 // drawing it. It answers about authority without granting any, and fails
 // closed.
-func TestCallerHoldsGatesTheAffordance(t *testing.T) {
+func TestCallerCanGatesTheAffordance(t *testing.T) {
 	ctx := context.Background()
-	svc, db, _, _ := importFixture(t)
+	svc, db, _, session := importFixture(t)
+	caller := v1.Caller{Session: string(session)}
 
-	if svc.CallerHolds(ctx, "u-1", app.ActionTelemetryRead, "telemetry") {
+	if svc.CallerCan(ctx, caller, app.ActionTelemetryRead, "telemetry") {
 		t.Fatal("a user without the grant must not be offered the affordance")
 	}
 
 	db.grantPermission("u-1", domain.Permission(app.ActionTelemetryRead))
-	if !svc.CallerHolds(ctx, "u-1", app.ActionTelemetryRead, "telemetry") {
+	if !svc.CallerCan(ctx, caller, app.ActionTelemetryRead, "telemetry") {
 		t.Fatal("a user with the grant should be offered the affordance")
 	}
 
-	// An unknown user is not an error and not a yes.
-	if svc.CallerHolds(ctx, "nobody", app.ActionTelemetryRead, "telemetry") {
-		t.Fatal("an unknown subject must fail closed")
+	// An unauthenticated caller is not an error and not a yes.
+	if svc.CallerCan(ctx, v1.Caller{Session: "nope"}, app.ActionTelemetryRead, "telemetry") {
+		t.Fatal("an unauthenticated caller must fail closed")
 	}
 }

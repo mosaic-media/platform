@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
@@ -130,6 +131,23 @@ func (db *fakeDB) seedRole(userID domain.UserID, role domain.Role) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.roles[userID] = append(db.roles[userID], role)
+}
+
+// seedActiveConfig stores an Active configuration version carrying fields, so
+// a test can exercise a value read from configuration rather than a default.
+func (db *fakeDB) seedActiveConfig(t *testing.T, fields map[string]any) {
+	t.Helper()
+	payload, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatalf("marshal config payload: %v", err)
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.configs["cfg-active"] = domain.ConfigVersion{
+		ID:      "cfg-active",
+		Payload: payload,
+		Status:  domain.ConfigActive,
+	}
 }
 
 // grantPermission adds one permission to a user, as its own role.

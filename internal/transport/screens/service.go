@@ -27,6 +27,7 @@ import (
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/policy"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -34,13 +35,21 @@ import (
 // through a Navigate action another screen emits; naming them once keeps the two
 // sides from drifting.
 const (
-	screenShell       = "shell"
-	screenHome        = "home"
-	screenSearch      = "search"
+	screenShell  = "shell"
+	screenHome   = "home"
+	screenSearch = "search"
+	// The expert-mode diagnostics screens (ADR 0058). Reaching any of them
+	// requires telemetry.read; the affordance that leads here is hidden from
+	// anyone without it.
+	screenLogs        = "logs"
+	screenTraces      = "traces"
+	screenTrace       = "trace"
 	screenCollections = "collections"
 	screenCatalog     = "catalog"
 	screenDetail      = "detail"
 	screenSettings    = "settings"
+	// setPreferenceMutation is the Invoke action the expert-mode toggle emits.
+	setPreferenceMutation = "setPreference"
 )
 
 // Screen param keys. Each is written into a Navigate action's params by the
@@ -54,6 +63,11 @@ const (
 	paramNodeID     = "nodeId"
 	paramSeason     = "season"
 	paramText       = "text"
+	paramLevel      = "level"
+	paramComponent  = "component"
+	paramTrace      = "trace"
+	paramOrder      = "order"
+	paramFailed     = "failed"
 )
 
 // Empty-state illustration keys the client maps to an icon.
@@ -94,6 +108,22 @@ type contentQueries interface {
 	// that does before it can offer Play at all (ADR 0036 — an affordance with
 	// nothing behind it is the dead end this whole thread exists to remove).
 	FirstPlayablePart(context.Context, v1.Caller, v1.NodeID) (v1.Part, bool, error)
+
+	// The expert-mode reads (ADR 0058). Each authorises telemetry.read for
+	// itself, so a screen calling one cannot be reached without the grant even
+	// if the affordance leading to it were ever drawn by mistake.
+	QueryTelemetryLogs(context.Context, app.QueryTelemetryLogsQuery) (app.QueryTelemetryLogsResult, error)
+	ListTraces(context.Context, app.ListTracesQuery) (app.ListTracesResult, error)
+	GetTrace(context.Context, app.GetTraceQuery) (app.GetTraceResult, error)
+	// CallerCan decides whether an affordance is drawn at all. It is the only
+	// method here that answers about authority rather than returning data, and
+	// it never substitutes for the checks above.
+	CallerCan(context.Context, v1.Caller, policy.Action, string) bool
+	// ExpertModeEnabled reads the caller's own preference. Separate from
+	// CallerCan because they answer different questions: one is authority, the
+	// other is taste, and collapsing them is how a toggle becomes an access
+	// control (ADR 0058).
+	ExpertModeEnabled(context.Context, v1.Caller) bool
 }
 
 // Service renders named screens. It holds the query surface the builders read
@@ -141,6 +171,12 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.detailScreen(ctx, caller, params)
 	case screenSettings:
 		return s.settingsScreen(ctx, caller, params)
+	case screenLogs:
+		return s.logsScreen(ctx, caller, params)
+	case screenTraces:
+		return s.tracesScreen(ctx, caller, params)
+	case screenTrace:
+		return s.traceScreen(ctx, caller, params)
 	default:
 		return nil, contracts.NewError(contracts.NotFound, "no screen named "+name)
 	}

@@ -64,7 +64,28 @@ type boundaryCase struct {
 // boundaryExempt lists caller-bearing methods that are not entry points, with
 // the reason each is safe to leave out. It exists so that "not in the table"
 // is always a stated decision rather than an oversight.
-var boundaryExempt = map[string]string{}
+var boundaryExempt = map[string]string{
+	// CallerCan answers whether an affordance should be *drawn*, not whether
+	// an operation may proceed (ADR 0058). It returns a bool and no
+	// authorized, so nothing downstream can mistake its answer for the proof
+	// ADR 0066 requires — the screens and services behind every affordance run
+	// the real boundary themselves, and a test asserts telemetry.read is
+	// enforced there.
+	//
+	// Holding it to the entry-point contract would be actively wrong: an entry
+	// point must deny, and this one must *answer* — returning "no" for an
+	// unauthenticated caller is its correct behaviour, not a missing gate.
+	"CallerCan": "affordance visibility hint; returns a bool, grants nothing, and the surfaces behind it each enter the boundary",
+	// ExpertModeEnabled reads the caller's own display preference. It
+	// authenticates but deliberately does not authorize: a preference is taste,
+	// not authority, and requiring a permission to read your own setting would
+	// make the plain interface fail for anyone who lacks it.
+	//
+	// It returns a bool and no authorized, and it can reveal nothing on its
+	// own — the affordance it feeds is separately gated on telemetry.read, and
+	// a test asserts a stored preference cannot surface it without the grant.
+	"ExpertModeEnabled": "display preference; authenticates but does not authorize, returns a bool, and reveals nothing the permission has not already allowed",
+}
 
 func boundaryCases() []boundaryCase {
 	return []boundaryCase{

@@ -15,6 +15,8 @@ import (
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/policy"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -36,12 +38,57 @@ type fakeQueries struct {
 	previewNodeID    v1.NodeID
 	settingsUI       []byte
 
+	// canReadTelemetry is what CallerCan reports — the fake's way of saying
+	// "this caller holds telemetry.read", which is what decides whether the
+	// expert-mode affordance is drawn at all.
+	canReadTelemetry bool
+	expertModeOn     bool
+	logs             []domain.TelemetryLogRecord
+	traces           []domain.TelemetryTraceSummary
+	spans            []domain.TelemetrySpanRecord
+
 	mu                  sync.Mutex
 	gotText             string
 	gotCatalogID        string
 	gotNodeID           v1.NodeID
 	gotPreviewRef       v1.ContentRef
 	gotSettingsModuleID string
+	gotLogFilter        domain.TelemetryLogFilter
+	gotTraceFilter      domain.TelemetryTraceFilter
+	gotTraceID          string
+}
+
+func (f *fakeQueries) ExpertModeEnabled(context.Context, v1.Caller) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.expertModeOn
+}
+
+func (f *fakeQueries) CallerCan(context.Context, v1.Caller, policy.Action, string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.canReadTelemetry
+}
+
+func (f *fakeQueries) QueryTelemetryLogs(_ context.Context, q app.QueryTelemetryLogsQuery) (app.QueryTelemetryLogsResult, error) {
+	f.mu.Lock()
+	f.gotLogFilter = q.Filter
+	f.mu.Unlock()
+	return app.QueryTelemetryLogsResult{Records: f.logs}, nil
+}
+
+func (f *fakeQueries) ListTraces(_ context.Context, q app.ListTracesQuery) (app.ListTracesResult, error) {
+	f.mu.Lock()
+	f.gotTraceFilter = q.Filter
+	f.mu.Unlock()
+	return app.ListTracesResult{Traces: f.traces}, nil
+}
+
+func (f *fakeQueries) GetTrace(_ context.Context, q app.GetTraceQuery) (app.GetTraceResult, error) {
+	f.mu.Lock()
+	f.gotTraceID = q.TraceID
+	f.mu.Unlock()
+	return app.GetTraceResult{Spans: f.spans, Logs: f.logs}, nil
 }
 
 func (f *fakeQueries) SearchAvailableContent(_ context.Context, q app.SearchAvailableContentQuery) (app.SearchAvailableContentResult, error) {

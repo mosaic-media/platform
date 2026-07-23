@@ -48,6 +48,15 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		}
 		_, err = h.svc.ConfigureModule(ctx, app.ConfigureModuleCommand{Caller: caller, ModuleID: moduleID, Settings: settings})
 		return nil, err
+	case "setPreference":
+		key, value, err := preferenceFromInput(input)
+		if err != nil {
+			return nil, err
+		}
+		_, err = h.svc.SetUserPreference(ctx, app.SetUserPreferenceCommand{
+			Caller: caller, Key: key, Value: value,
+		})
+		return nil, err
 	case "playPart":
 		return h.playPart(ctx, caller, input)
 	default:
@@ -240,4 +249,33 @@ func browserPreference() app.PlaybackPreference {
 		VideoCodecs: map[string]bool{"h264": true, "hevc": true, "vp9": true, "av1": true, "vp8": true},
 		AudioCodecs: map[string]bool{"aac": true, "mp3": true, "opus": true, "vorbis": true, "flac": true},
 	}
+}
+
+// preferenceEnvelope is the setPreference action input: which setting, and what
+// to set it to.
+//
+// The value is json.RawMessage rather than a concrete type because a preference
+// is stored uninterpreted (ADR 0058) — expert mode is a boolean, a theme is a
+// string, and the transport should not need editing when the second one
+// arrives.
+type preferenceEnvelope struct {
+	Key   string          `json:"key"`
+	Value json.RawMessage `json:"value"`
+}
+
+// preferenceFromInput decodes the setPreference envelope.
+//
+// It does not check the key against a list. A preference is a user's own
+// setting and the surfaces that read one apply their own default for anything
+// they do not recognise, so an unknown key is inert rather than dangerous —
+// and enumerating them here would mean editing the transport to add a checkbox.
+func preferenceFromInput(input []byte) (string, []byte, error) {
+	var env preferenceEnvelope
+	if err := json.Unmarshal(input, &env); err != nil {
+		return "", nil, contracts.WrapError(contracts.InvalidArgument, "decode setPreference input", err)
+	}
+	if env.Key == "" {
+		return "", nil, contracts.NewError(contracts.InvalidArgument, "setPreference needs a key")
+	}
+	return env.Key, env.Value, nil
 }
