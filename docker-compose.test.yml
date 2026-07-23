@@ -1,0 +1,113 @@
+# The Mosaic Platform test container.
+#
+#   docker compose -f docker-compose.test.yml run --rm test
+#
+# This is the sanctioned way to run this repository's gates, and nothing is
+# built, tested or run on the host. That is not tidiness: this repository's
+# tests depend on two things that are invisible when absent, and both fail
+# *soft* rather than red.
+#
+#   - **PostgreSQL.** The contract tests in internal/modules/postgres skip,
+#     with a reason, when no database is reachable. A host run with no database
+#     prints `ok` and has tested none of the storage layer.
+#   - **ffprobe.** Playback probing shells out to it (ADR 0050). Without it the
+#     Platform relays unprobed rather than failing.
+#
+# A skipped test is not a passed test — the CLAUDE.md push rule turns on
+# exactly that distinction — and this file is what makes the difference
+# structural instead of a thing each developer has to remember.
+#
+# For a shell in the same environment, to iterate on one package:
+#
+#   docker compose -f docker-compose.test.yml run --rm test bash
+#
+# Three other compose files live here and none of them is this one:
+# docker-compose.yml is postgres alone, docker-compose.dev.yml is the running
+# dev stack, and docker-compose.local.yml is that stack's sibling-checkout
+# overlay.
+name: mosaic-test
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: mosaic
+      POSTGRES_PASSWORD: mosaic
+      POSTGRES_DB: mosaic
+    # No host port and no volume, both deliberate. Nothing outside the compose
+    # network reaches this database, so it cannot collide with the 5432 a
+    # natively installed PostgreSQL holds nor the 5433 the dev stack publishes;
+    # and the data living in the container's own writable layer means a test
+    # run cannot inherit a previous run's state through a volume that outlived
+    # it. The migration tests create and drop databases freely on that basis.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mosaic -d mosaic"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  test:
+    build:
+      context: .
+      # The dev image is reused rather than copied. It already carries ffmpeg
+      # (hence ffprobe) and curl on the pinned Go toolchain, which is exactly
+      # what the tests need; a second near-identical Dockerfile would drift
+      # from it, and the drift would show up as tests passing in one and
+      # skipping in the other.
+      dockerfile: Dockerfile.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # This changes *what runs*, not merely where. Left unset, the harness
+      # starts an embedded PostgreSQL — which refuses to run as root, as this
+      # container does, so every contract test would skip with a reason nobody
+      # reads. Pointing at the service turns them back into tests. The user
+      # must be able to CREATE and DROP databases, which the owner of this
+      # cluster can.
+      MOSAIC_TEST_POSTGRES_DSN: "postgres://mosaic:mosaic@postgres:5432/mosaic?sslmode=disable"
+    volumes:
+      - .:/src/platform
+      # The sibling SDK working tree, read-only, at the exact path
+      # test/sdkprobe/go.mod resolves its `replace` to: `../../../sdk` from
+      # /src/platform/test/sdkprobe is /src/sdk. That nested module stands in
+      # for a third party's Module and is compiled by test/sdkboundary
+      # (TestPublishedSurfaceCompilesFromAnExternalModule) to prove the
+      # published surface imports cleanly (ADR 0016). Without this mount the
+      # build fails with "replacement directory ../../../sdk does not exist"
+      # and the boundary test — one of the standing gates — cannot run. It is
+      # read-only because the test only *builds against* the SDK; it never
+      # writes to it.
+      - ../sdk:/src/sdk:ro
+      # Caches in volumes rather than on the bind mount. Go writes thousands of
+      # small files, and doing that across the host boundary turns a warm test
+      # run from seconds into minutes.
+      - mosaic-test-gomod:/go/pkg/mod
+      - mosaic-test-gobuild:/root/.cache/go-build
+    working_dir: /src/platform
+    # The full gate, in the order .github/workflows/verify.yml runs it, failing
+    # at the first thing that fails. Keep the two in step: this command is what
+    # a contributor runs, that workflow is what refuses the push. `go test` is
+    # the one step CI does not run — it has no database — which is the whole
+    # reason this file exists.
+    command:
+      - bash
+      - -eu
+      - -o
+      - pipefail
+      - -c
+      - |
+        go run ./tools/licenseheader -check
+        gofmt -l . > /tmp/unformatted
+        if [ -s /tmp/unformatted ]; then
+          echo "These files are not gofmt-clean:" >&2
+          cat /tmp/unformatted >&2
+          exit 1
+        fi
+        go vet ./...
+        go build ./...
+        go test ./...
+
+volumes:
+  mosaic-test-gomod:
+  mosaic-test-gobuild:

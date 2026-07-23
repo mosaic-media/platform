@@ -22,48 +22,61 @@ See `CLAUDE.md` for what is built, what is next, and the rules for working here.
 
 ## Quick Start
 
-```bash
-go build ./...
-go test ./...
-```
-
-### Running the Platform against PostgreSQL
-
-PostgreSQL is the mandatory first storage adapter. The process
-reads its connection string from `MOSAIC_POSTGRES_DSN`; when that variable is
-unset the process still boots but skips storage bootstrap. When it is set,
-startup connects, runs schema
-migrations, and **fails fast** if the schema is missing, incompatible, or
-partially applied — it will not run against a mismatched database.
+**Everything runs in a container; nothing is built or run on the host.** The
+full gate — license headers, gofmt, `go vet`, `go build`, `go test` — is one
+command, and it brings its own PostgreSQL and ffmpeg:
 
 ```bash
-docker compose up -d   # starts local PostgreSQL 16 (see docker-compose.yml)
-export MOSAIC_POSTGRES_DSN="postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable"
-go run ./cmd/mosaic-platform
+docker compose -f docker-compose.test.yml run --rm test
 ```
+
+Append `bash` to that command for a shell in the same environment when
+iterating on one package. See `CLAUDE.md` for *why* this is not optional here:
+two of this repository's most important test dependencies (a real PostgreSQL,
+and `ffprobe`) fail **soft** when absent — a host run passes while testing far
+less than it appears to.
+
+The container expects the sibling `sdk` checkout present at `../sdk` (mounted
+read-only): `test/sdkboundary` compiles `test/sdkprobe` against it to prove the
+published surface imports cleanly from outside (ADR 0016), and that nested
+module's `go.mod` resolves the SDK through a relative `replace`.
+
+### Running the Platform
+
+PostgreSQL is the mandatory first storage adapter. The process reads its
+connection string from `MOSAIC_POSTGRES_DSN`; when that variable is unset the
+process still boots but skips storage bootstrap. When it is set, startup
+connects, runs schema migrations, and **fails fast** if the schema is missing,
+incompatible, or partially applied — it will not run against a mismatched
+database.
+
+The dev stack brings the Platform, its PostgreSQL and the web Shell up together
+and wires those variables for you:
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
+
+Add `-f docker-compose.local.yml` after the first `-f` file to build against the
+sibling working copies of `sdk`, `sdui` and the modules instead of their
+published versions.
 
 ### PostgreSQL for tests
 
 The storage contract tests (`test/contract`, run by the Postgres module's
-integration tests) execute against a **real** PostgreSQL instance. Two ways to
-provide one:
+integration tests) execute against a **real** PostgreSQL instance. The test
+container above supplies one — a throwaway `postgres:18` service on the compose
+network, with no host port and no persistent volume — and points
+`MOSAIC_TEST_POSTGRES_DSN` at it. There is nothing to install and nothing to
+set.
 
-- **Nothing to install (default).** When `MOSAIC_TEST_POSTGRES_DSN` is unset,
-  the tests download and start an embedded PostgreSQL automatically for the
-  duration of the test run. The first run downloads a PostgreSQL binary (cached
-  under `~/.embedded-postgres-go`), so it needs network access once. If it
-  cannot start, the integration tests skip with a clear reason rather than
-  failing the suite.
-- **Use your own database.** Start one with `docker compose up -d` and point
-  the tests at it:
-
-  ```bash
-  export MOSAIC_TEST_POSTGRES_DSN="postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable"
-  go test ./...
-  ```
-
-  The DSN's user must be able to `CREATE`/`DROP DATABASE` — the migration tests
-  create throwaway databases and drop them on cleanup.
+> Run outside that container and the tests fall back to an *embedded*
+> PostgreSQL, which **refuses to run as root** and skips the storage tests with
+> a reason few people read. That soft failure is the whole reason the tests are
+> containerised — a green run that tested no storage code looks exactly like one
+> that did. If you need a database that *survives* a run (to look at real data),
+> `docker compose up -d` starts a persistent one — see `docker-compose.yml` —
+> but that is for inspection, not for the test suite.
 
 ## Repository Structure
 
@@ -116,11 +129,13 @@ See `CLAUDE.md` for the full tier model and the current state of the build.
 
 ## Contributing
 
-Every Go file carries an SPDX license header, applied by a tool rather than by hand. CI (`.github/workflows/verify.yml`) verifies it on every push and pull request, so a file without the header fails the check — the failure prints the one command to fix it. To have the header added automatically before each commit, enable the local hook once:
+Every Go file carries an SPDX license header, applied by a tool rather than by hand. CI (`.github/workflows/verify.yml`) verifies it on every push and pull request, so a file without the header fails the check. The test container's gate runs the same check first, so a missing header fails locally before it ever reaches CI; to add it to new files, run the tool in the container:
 
 ```bash
-git config core.hooksPath .githooks
+docker compose -f docker-compose.test.yml run --rm test go run ./tools/licenseheader
 ```
+
+The local pre-commit hook (`git config core.hooksPath .githooks`, once per clone) is the exception that still touches the host — it shells out to the same tool, so it needs a Go toolchain on `PATH`. Skip it if you have none and rely on the container's check instead.
 
 ## License
 

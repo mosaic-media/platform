@@ -117,6 +117,42 @@ if you're changing the SDK, then tag/push a new version and bump the require.
   executable: **if a capability needs a private Platform import, the contracts
   are not ready to publish.**
 
+## Everything runs in the container, nothing runs on the host
+
+**Do not run `go build`, `go test`, `go vet`, `go run`, or any Mosaic binary
+directly on this machine.** Every gate in this repository runs inside the test
+container:
+
+```bash
+docker compose -f docker-compose.test.yml run --rm test
+```
+
+That is the whole gate — license headers, gofmt, `go vet`, `go build`, `go
+test` — in the order `.github/workflows/verify.yml` runs them. Append `bash` to
+the same command for a shell in that environment when iterating on one package.
+
+**The reason is that this repository's two most important test dependencies
+fail soft.** Neither turns a run red when it is missing. Both let it pass while
+testing far less than it appears to:
+
+- **PostgreSQL.** `internal/modules/postgres/harness_test.go` skips every
+  contract test, with a reason, when no database is reachable. On a host with
+  none, `go test ./...` prints `ok` having exercised no storage code at all.
+  The fallback it tries first is an *embedded* PostgreSQL, which refuses to run
+  as root — so the naive containerised version skips too. The compose file
+  points `MOSAIC_TEST_POSTGRES_DSN` at a real service precisely to convert
+  those skips back into tests.
+- **ffprobe.** Playback probing shells out to it (ADR 0050). Absent, the
+  Platform relays unprobed — a behaviour change rather than an error, and a
+  release with undecodable audio then plays silently.
+
+This is the same distinction the push rule below turns on: **demonstrated, not
+asserted.** A skipped test is not a passed test, and the container is what makes
+that difference structural rather than something each session must remember.
+
+**To run the Platform itself, use the dev stack, not `go run`** — see "Running
+the Platform" below.
+
 ## Workflow
 
 - Develop and commit directly on `main`. This repository does not use feature branches for Platform implementation work.
@@ -125,9 +161,10 @@ if you're changing the SDK, then tag/push a new version and bump the require.
   used to be "never push without asking each time", which produced long queues of
   unpushed commits and made the remote a lagging, unreliable picture of the
   build. The bar is now evidence rather than permission: push once the change has
-  been *demonstrated* working — `go build`, `go vet`, `go test ./...`, gofmt and
-  the license-header check green, and where the change is user-visible, exercised
-  against the running stack.
+  been *demonstrated* working — the test container green
+  (`docker compose -f docker-compose.test.yml run --rm test`, which covers the
+  license-header check, gofmt, vet, build and the tests), and where the change is
+  user-visible, exercised against the running dev stack.
   - **Demonstrated, not asserted.** Tests that were skipped are not tests that
     passed, and "it should work" is not evidence. If the verification could not
     be run, commit locally and say so rather than pushing on optimism.
@@ -136,25 +173,37 @@ if you're changing the SDK, then tag/push a new version and bump the require.
     alone.
 - Build one slice at a time, in the order defined by the roadmap. Do not start a slice whose prerequisites have not landed.
 - Each slice must pass the standing test gates in the architecture page before the next dependent slice begins.
-- Run `go build ./...` and `go test ./...` before declaring any slice done.
-- **Every Go file carries an SPDX header** (`AGPL-3.0-only`, the Platform's license). New files get it from the tool, not by hand: `go run ./tools/licenseheader` adds it to any file missing it (pass file paths to limit it to those). **CI enforces it** — `.github/workflows/verify.yml` runs `go run ./tools/licenseheader -check` (plus gofmt/vet/build) on every push and PR, so a headerless file fails the check. A local pre-commit hook adds it for you before the commit — enable once per clone with `git config core.hooksPath .githooks`. Change the header text in one place — the `header` const in that tool.
+- Run the test container before declaring any slice done. Nothing is declared
+  done on the strength of a host-side build, which on this machine is not
+  available to be right or wrong about — there is no Go toolchain installed.
+- **Every Go file carries an SPDX header** (`AGPL-3.0-only`, the Platform's license). New files get it from the tool, not by hand, and the tool runs in the container like everything else: `docker compose -f docker-compose.test.yml run --rm test go run ./tools/licenseheader` adds it to any file missing it (pass file paths to limit it to those). **CI enforces it** — `.github/workflows/verify.yml` runs `go run ./tools/licenseheader -check` (plus gofmt/vet/build) on every push and PR, so a headerless file fails the check. A local pre-commit hook adds it for you before the commit — enable once per clone with `git config core.hooksPath .githooks`. Change the header text in one place — the `header` const in that tool.
 - Commit per passing slice — one commit (or focused set of commits) per slice, not one commit for the whole build sequence.
 - When ambiguity comes up, read the code first, then the three architecture documents. Do not substitute assumption for a decision. If neither answers it, say so — an honest gap is worth more than an invention that reads as settled.
 
 ## Running the Platform
 
-Set `MOSAIC_POSTGRES_DSN`, and (optionally)
-`MOSAIC_BOOTSTRAP_ADMIN_USERNAME` + `MOSAIC_BOOTSTRAP_ADMIN_PASSWORD`, then
-`go run ./cmd/mosaic-platform`. It migrates, seeds the admin, registers the
+**In the dev stack, not with `go run`.** It brings its own PostgreSQL, its own
+ffmpeg, and the Shell, already wired to each other:
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
+
+Add `-f docker-compose.local.yml` after the first `-f` file to build against the
+sibling working copies of `sdk`, `sdui` and the modules instead of their
+published versions — that overlay writes a `go.work` inside the container only,
+which is why switching between published and local changes no committed file.
+
+The stack sets `MOSAIC_POSTGRES_DSN` and the
+`MOSAIC_BOOTSTRAP_ADMIN_USERNAME` + `MOSAIC_BOOTSTRAP_ADMIN_PASSWORD` pair for
+you. The Platform then migrates, seeds the admin, registers the
 built-in modules, and serves the whole client API on `:8081` over h2c — the
 Connect `AuthService` that mints a session (ADR 0061) and the two-lane Connect
 `SessionService` that spends it (ADR 0041) — plus artwork at `:8081/artwork`,
 playback at `:8081/playback/`, and the Supervisor handoff on `:8080`. There is
 no GraphQL endpoint: ADR 0061 deleted it. The Stremio module is always
 registered; a user adds addons at runtime via the `configureModule` action
-(ADR 0021) — the `MOSAIC_STREMIO_ADDONS` env var is retired. A dev stack is in
-`docker-compose.dev.yml` (published deps) with `docker-compose.local.yml` as the
-sibling-checkout overlay.
+(ADR 0021) — the `MOSAIC_STREMIO_ADDONS` env var is retired.
 
 ## The roadmap and the decision records
 

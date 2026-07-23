@@ -1,14 +1,15 @@
-# Local PostgreSQL for Mosaic Platform development and integration tests.
+# A persistent local PostgreSQL for the Mosaic Platform.
 #
 # Start it with:   docker compose up -d
-# Then point the Platform and its tests at it:
-#   export MOSAIC_POSTGRES_DSN="postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable"
-#   export MOSAIC_TEST_POSTGRES_DSN="postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable"
 #
-# The integration tests do NOT require this: when MOSAIC_TEST_POSTGRES_DSN is
-# unset they download and run an embedded PostgreSQL automatically. Use this
-# compose file when you prefer a persistent local database or cannot download
-# the embedded binary.
+# **This is not how the tests are run.** They run in their own container, which
+# brings its own throwaway database and needs nothing from this file:
+#
+#   docker compose -f docker-compose.test.yml run --rm test
+#
+# What this file is for is a database that *survives* — one whose contents are
+# still there tomorrow, for looking at real data or keeping a dev instance's
+# state across restarts. The test stack deliberately does the opposite.
 
 services:
   postgres:
