@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	stremio "github.com/mosaic-media/module-stremio-addons"
 	tmdb "github.com/mosaic-media/module-tmdb"
 	"github.com/mosaic-media/platform/internal/modules/postgres"
 	"github.com/mosaic-media/platform/internal/platform/app"
@@ -22,20 +21,25 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// TestCrossProviderStreamEnrichmentAgainstPostgres is ADR 0073 end to end, with
-// both real modules and a real database.
+// TestCrossProviderStreamEnrichmentAgainstPostgres is ADR 0073 end to end: a real
+// metadata module (TMDB, core), a real database, and a stream source standing in
+// for an extension one.
 //
 // It is the case the two-tier module story has been pointing at: **a title
-// described by TMDB and played from Stremio.** Before this, importing a TMDB ref
-// produced a Work and a season/episode tree with no Parts — permanently
+// described by TMDB and played from a stream source.** Before this, importing a
+// TMDB ref produced a Work and a season/episode tree with no Parts — permanently
 // unplayable, while a stream source sat registered alongside able to resolve
 // that exact title and never asked, because `ImportContent` routed solely to
 // `ref.Provider`.
 //
-// Nothing in the assertion below can be satisfied by either module alone. TMDB
-// fills no stream role and attaches no Parts; Stremio never sees the import,
-// because the ref names `tmdb`. Parts on those episodes can only have come from
-// the Platform bridging the two.
+// The stream source is a fake, not the real Stremio module: the platform module
+// must not import an extension module (ADR 0079/0081), and the Platform bridge is
+// what is under test, not Stremio's addon parsing. The double answers *only* for
+// the IMDB identity the Platform must have carried across from the TMDB tree, so
+// the assertion stays real — Parts appear on those episodes only if the Platform
+// bridged TMDB's metadata to the stream source's resolution. TMDB fills no stream
+// role and attaches no Parts; the stream source never sees the import, because
+// the ref names `tmdb`.
 func TestCrossProviderStreamEnrichmentAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
 
@@ -53,13 +57,26 @@ func TestCrossProviderStreamEnrichmentAgainstPostgres(t *testing.T) {
 	metadata := fakeTMDBForEnrichment()
 	defer metadata.Close()
 
-	// The stream source, which knows nothing about TMDB and is never told.
-	addon := fakeStremioAddon()
-	defer addon.Close()
+	// The stream source. It answers only for the IMDB identity — the id the
+	// Platform must have read off the TMDB tree and carried across — so a Part
+	// appearing on an episode proves the bridge, not the double.
+	streamSource := &fakeStreamModule{
+		id: "stremio",
+		streamsFor: func(req v1.StreamRequest) []v1.StreamLink {
+			if req.Ref.ExternalScheme != "imdb" || req.Ref.ExternalID != "tt0903747" {
+				return nil
+			}
+			return []v1.StreamLink{{
+				Label:     "test-source",
+				Location:  v1.MediaLocation{Scheme: v1.RemoteLocation, Provider: "stremio", Ref: "magnet:?xt=urn:btih:deadbeef"},
+				SizeBytes: 1,
+			}}
+		},
+	}
 
 	registry := app.NewCapabilityRegistry()
 	registry.Register(tmdb.New(redirectTo(metadata)))
-	registry.Register(stremio.New(addon.Client()))
+	registry.Register(streamSource)
 	if err := registry.Verify(); err != nil {
 		t.Fatalf("registry invalid: %v", err)
 	}
@@ -95,19 +112,14 @@ func TestCrossProviderStreamEnrichmentAgainstPostgres(t *testing.T) {
 	}
 	caller := v1.CallerFromSession(string(session.ID))
 
-	// Both modules configured as a user would: TMDB needs a key, Stremio needs
-	// an addon. Neither knows about the other.
+	// TMDB is configured as a user would: it needs a key. The stream source needs
+	// no settings — the double reads none — so, as with a real source that needs
+	// no configuration, nothing is set for it.
 	if _, err := svc.ConfigureModule(c, app.ConfigureModuleCommand{
 		Caller: caller, ModuleID: tmdb.CapabilityID,
 		Settings: []byte(`{"apiKey":"0123456789abcdef0123456789abcdef"}`),
 	}); err != nil {
 		t.Fatalf("ConfigureModule(tmdb): %v", err)
-	}
-	if _, err := svc.ConfigureModule(c, app.ConfigureModuleCommand{
-		Caller: caller, ModuleID: stremio.CapabilityID,
-		Settings: []byte(`{"addons":["` + addon.URL + `"],"disableDefaultAddons":true}`),
-	}); err != nil {
-		t.Fatalf("ConfigureModule(stremio): %v", err)
 	}
 
 	// Import a *TMDB* ref. Stremio is not named anywhere in this command.
