@@ -66,8 +66,8 @@ github.com/mosaic-media/module-tmdb v0.6.0 h1:nHVK1qw5sXe41ZsI04QwUQsqUUXSqibOtk
 github.com/mosaic-media/module-tmdb v0.6.0/go.mod h1:DFSJLmJ3hhaAvBnEzUbivNAEoxl7KI/5tyfyIXIjnCY=
 github.com/mosaic-media/sdk v0.21.0 h1:UTEYF4D2CGvCrW6cimH5IZpRIY9/sNjvZCSjmIgXKiw=
 github.com/mosaic-media/sdk v0.21.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
-github.com/mosaic-media/sdk/host v0.2.0 h1:kP+jScxLpceqkho7bgrXbREbwAI26/k6gzlfaffAun0=
-github.com/mosaic-media/sdk/host v0.2.0/go.mod h1:xh+T2RcvR069YOAFhwmN4ht1f+S8OiXKYAZwuv00Zq0=
+github.com/mosaic-media/sdk/host v0.3.0 h1:TQcKa80tQszoSDjDkxbIsayvqqf03S4JXzt7lspnx1s=
+github.com/mosaic-media/sdk/host v0.3.0/go.mod h1:xh+T2RcvR069YOAFhwmN4ht1f+S8OiXKYAZwuv00Zq0=
 github.com/oklog/run v1.1.0 h1:GEenZ1cK0+q0+wsJew9qUg/DyD8k3JzYsZAi5gYi2mA=
 github.com/oklog/run v1.1.0/go.mod h1:sVPdnTZT1zYwAJeCMu2Th4T21pA3FPOQRfWjQlk7DVU=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

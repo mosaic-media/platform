@@ -17,7 +17,15 @@
 //	modulesign digest      <binary>                     # prints sha256:<hex>
 //	modulesign sign        -key <path> <manifest.json>  # writes <manifest.json>.sig
 //	modulesign sign-index  -key <path> <index.json>     # writes <index.json>.sig
-//	modulesign build-index -url <template> -out <index.json> <manifest.json>...
+//	modulesign build-index    -url <template> -out <index.json> <manifest.json>...
+//	modulesign build-manifest -identity <id.json> -sdk-major <n> -out <manifest.json> <os/arch=binary>...
+//
+// build-manifest assembles a module's distribution manifest from the identity
+// the module printed about itself (`mymodule --mosaic-manifest`) plus the SDK
+// major and the built binaries, computing each binary's digest. It is the
+// producer step a module's release runs: the module owns its id/version/name/
+// roles, the build owns the SDK major and the bytes, and this joins them into
+// the manifest.json a repository catalogues.
 //
 // build-index assembles a repository index from module manifests, computing each
 // binary's download URL from a template with {id} {version} {os} {arch}
@@ -38,6 +46,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/mosaic-media/platform/internal/adapters/extension"
@@ -64,13 +73,15 @@ func main() {
 		})
 	case "build-index":
 		buildIndex(os.Args[2:])
+	case "build-manifest":
+		buildManifest(os.Args[2:])
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: modulesign genkey -out <path> | digest <binary> | sign -key <path> <manifest.json> | sign-index -key <path> <index.json> | build-index -url <template> -out <index.json> <manifest.json>...")
+	fmt.Fprintln(os.Stderr, "usage: modulesign genkey -out <path> | digest <binary> | sign -key <path> <manifest.json> | sign-index -key <path> <index.json> | build-index -url <template> -out <index.json> <manifest.json>... | build-manifest -identity <json> -sdk-major <n> -out <manifest.json> <os/arch=binary>...")
 	os.Exit(2)
 }
 
@@ -187,6 +198,93 @@ func buildIndex(args []string) {
 		fail("writing index: %v", err)
 	}
 	fmt.Printf("wrote %s with %d module(s); sign it with: modulesign sign-index -key <key> %s\n", out, len(idx.Modules), out)
+}
+
+// buildManifest joins a module's self-declared identity with the SDK major and
+// the built binaries into a distribution manifest.json. It is the one place the
+// three sources of a manifest meet — the module (identity), the toolchain (SDK
+// major) and the build (binaries and their digests) — so none of them is
+// hand-copied into a workflow to drift.
+func buildManifest(args []string) {
+	identityPath := flagValue(args, "-identity")
+	out := flagValue(args, "-out")
+	sdkMajorStr := flagValue(args, "-sdk-major")
+	version := flagValue(args, "-version") // optional override of the identity's version
+	if identityPath == "" || out == "" || sdkMajorStr == "" {
+		fail("build-manifest needs -identity <json>, -sdk-major <n>, -out <path>, then os/arch=binary pairs")
+	}
+	sdkMajor, err := strconv.Atoi(sdkMajorStr)
+	if err != nil {
+		fail("-sdk-major must be a number: %v", err)
+	}
+
+	// The identity the module printed about itself.
+	idData, err := os.ReadFile(identityPath) //nolint:gosec // the operator names their own file.
+	if err != nil {
+		fail("reading identity: %v", err)
+	}
+	var identity struct {
+		ID       string   `json:"id"`
+		Version  string   `json:"version"`
+		Name     string   `json:"name"`
+		Provides []string `json:"provides"`
+	}
+	if err := json.Unmarshal(idData, &identity); err != nil {
+		fail("identity is not the JSON a module prints with --mosaic-manifest: %v", err)
+	}
+	if version != "" {
+		identity.Version = version
+	}
+
+	// One binary per os/arch=path pair, digested with the same function the
+	// Platform verifies against.
+	type binaryRef struct {
+		OS     string `json:"os"`
+		Arch   string `json:"arch"`
+		Digest string `json:"digest"`
+	}
+	var binaries []binaryRef
+	for _, pair := range positionals(args) {
+		platform, path, ok := strings.Cut(pair, "=")
+		if !ok {
+			fail("binary must be os/arch=path, got %q", pair)
+		}
+		goos, goarch, ok := strings.Cut(platform, "/")
+		if !ok {
+			fail("platform must be os/arch, got %q", platform)
+		}
+		digest, err := extension.FileDigest(path)
+		if err != nil {
+			fail("%v", err)
+		}
+		binaries = append(binaries, binaryRef{OS: goos, Arch: goarch, Digest: digest})
+	}
+	if len(binaries) == 0 {
+		fail("build-manifest needs at least one os/arch=binary pair")
+	}
+
+	manifest := map[string]any{
+		"schema":    extension.ManifestSchema,
+		"id":        identity.ID,
+		"version":   identity.Version,
+		"name":      identity.Name,
+		"sdk_major": sdkMajor,
+		"provides":  identity.Provides,
+		"binaries":  binaries,
+	}
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		fail("marshalling manifest: %v", err)
+	}
+	// Validate before writing: a manifest the Platform cannot parse must fail at
+	// the publisher, not at a user's install.
+	if _, err := extension.ParseManifest(data); err != nil {
+		fail("built a manifest that does not parse: %v", err)
+	}
+	if err := os.WriteFile(out, data, 0o644); err != nil { //nolint:gosec // a manifest is public.
+		fail("writing manifest: %v", err)
+	}
+	fmt.Printf("wrote %s for %s@%s (%d binaries)\n", out, identity.ID, identity.Version, len(binaries))
 }
 
 // expand fills a URL template's {id} {version} {os} {arch} placeholders.

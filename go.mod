@@ -15,7 +15,7 @@ require github.com/mosaic-media/contracts v0.14.0
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/hashicorp/go-plugin v1.8.0
-	github.com/mosaic-media/sdk/host v0.2.0
+	github.com/mosaic-media/sdk/host v0.3.0
 	golang.org/x/net v0.57.0
 	google.golang.org/protobuf v1.36.11
 )
