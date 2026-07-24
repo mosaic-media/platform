@@ -24,3 +24,7 @@ go.work.sum
 
 # Release build output (workflow-produced, never committed)
 /dist/
+
+# Private signing keys — the private half must NEVER be committed (public repo).
+# The .pub public key does not match this pattern and is committed deliberately.
+*.key
