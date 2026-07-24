@@ -66,7 +66,10 @@ const (
 // screen that links onward and read back by stringParam in the screen it opens;
 // a shared constant keeps the write and the read spelling the same key.
 const (
-	paramModuleID   = "moduleId"
+	paramModuleID = "moduleId"
+	// paramSection names which section of the settings screen is open — the
+	// Platform's own sections, as paramModuleID names a module's.
+	paramSection    = "section"
 	paramCatalogID  = "catalogId"
 	paramNativeType = "nativeType"
 	paramRef        = "ref"

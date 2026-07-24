@@ -6,6 +6,8 @@ package screens
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -260,6 +262,30 @@ func findAll(n sdui.Node, typ string, acc *[]sdui.Node) {
 
 // prop reads a node's prop from the protobuf Struct (ADR 0044 — props is an open
 // Struct, decoded to a Go map for assertions).
+// findNavItem finds a settings nav row anywhere in the tree by its label. The
+// rows live in the frame's `nav` slot, which is why this walks slots too.
+func findNavItem(n sdui.Node, label string) (sdui.Node, bool) {
+	if n == nil {
+		return nil, false
+	}
+	if n.GetType() == "SettingsNavItem" && prop(n, "label") == label {
+		return n, true
+	}
+	for _, c := range n.GetChildren() {
+		if got, ok := findNavItem(c, label); ok {
+			return got, true
+		}
+	}
+	for _, list := range n.GetSlots() {
+		for _, c := range list.GetNodes() {
+			if got, ok := findNavItem(c, label); ok {
+				return got, true
+			}
+		}
+	}
+	return nil, false
+}
+
 // findButton finds a Button anywhere in the tree by its label.
 func findButton(n sdui.Node, label string) (sdui.Node, bool) {
 	if n == nil {
@@ -755,66 +781,171 @@ func TestDetailScreenRendersHeaderAndChildren(t *testing.T) {
 
 func TestSettingsScreenHostsModuleUI(t *testing.T) {
 	// The Platform hosts the module's contributed settings UINode verbatim (ADR
-	// 0038): the settings screen renders whatever the module returned, under a
-	// frame of the Platform's own.
+	// 0038): the settings screen renders whatever the module returned, in the
+	// panel of a frame of the Platform's own.
 	moduleUI := `{"type":"Screen","props":{"title":"AIOStreams"},"children":[{"type":"Section","props":{"title":"Instance"}}]}`
-	fake := &fakeQueries{settingsUI: []byte(moduleUI)}
+	fake := &fakeQueries{
+		settingsUI:      []byte(moduleUI),
+		settingsModules: []app.SettingsModule{{ModuleID: "aiostreams", Name: "AIOStreams"}},
+	}
 
 	node := render(t, &Service{content: fake}, "settings", map[string]any{"moduleId": "aiostreams"})
 	if fake.gotSettingsModuleID != "aiostreams" {
 		t.Fatalf("settings screen resolved module %q, want the requested one", fake.gotSettingsModuleID)
 	}
-	screen, ok := find(node, sdui.TypeScreen)
-	if !ok || prop(screen, "title") != "AIOStreams" {
-		t.Fatalf("settings did not host the module's Screen: %+v", node)
+	if node.GetType() != "SettingsFrame" {
+		t.Fatalf("root type = %q, want the Platform's SettingsFrame", node.GetType())
 	}
-	if _, ok := find(node, sdui.TypeSection); !ok {
+	// The module's own Screen container is replaced by the Platform's panel —
+	// its padding is a whole page's and would apply twice inside the frame — and
+	// its title becomes the panel heading. Everything the module put IN that
+	// Screen is hosted verbatim, as a child of the frame rather than the nav
+	// slot: the module fills the panel and cannot draw the chrome around it.
+	if prop(node, "heading") != "AIOStreams" {
+		t.Fatalf("panel heading = %v, want the module's screen title", prop(node, "heading"))
+	}
+	if _, ok := find(node, sdui.TypeScreen); ok {
+		t.Fatalf("the module's Screen container survived into the panel: %+v", node)
+	}
+	section, ok := find(node, sdui.TypeSection)
+	if !ok || prop(section, "title") != "Instance" {
 		t.Fatal("settings screen did not render the module's section")
 	}
-	// The way back out is the Platform's, not the module's: a module contributes
-	// a form and does not know it is being hosted (ADR 0038).
-	back, ok := findButton(node, "← Settings")
+	// The way back out is the Platform's, not the module's: the nav is on the
+	// screen the whole time, with the open module's row marked active.
+	row, ok := findNavItem(node, "AIOStreams")
 	if !ok {
-		t.Fatal("a hosted module screen must offer a way back to the settings index")
+		t.Fatal("the hosted module has no row in the Platform's settings nav")
 	}
-	if act := actionOf(back); act["kind"] != sdui.KindNavigate || act["screen"] != "settings" {
-		t.Fatalf("back action = %+v, want a Navigate to settings", act)
+	if prop(row, "active") != true {
+		t.Fatalf("open module's nav row active = %v, want true", prop(row, "active"))
 	}
 }
 
-// TestSettingsScreenIndexesEveryModuleWithAScreen is the client path a module's
+// TestSettingsNavReachesEveryModuleWithAScreen is the client path a module's
 // settings screen is owed. The host used to name one module by constant, so a
 // second module's screen existed and nothing could open it.
-func TestSettingsScreenIndexesEveryModuleWithAScreen(t *testing.T) {
-	fake := &fakeQueries{settingsModules: []app.SettingsModule{
-		{ModuleID: "aiostreams", Name: "AIOStreams"},
-		{ModuleID: "stremio", Name: "Stremio addon source"},
-		{ModuleID: "tmdb", Name: "TMDB"},
-	}}
+func TestSettingsNavReachesEveryModuleWithAScreen(t *testing.T) {
+	fake := &fakeQueries{
+		settingsUI: []byte(`{"type":"Screen","props":{"title":"AIOStreams"}}`),
+		settingsModules: []app.SettingsModule{
+			{ModuleID: "aiostreams", Name: "AIOStreams"},
+			{ModuleID: "stremio", Name: "Stremio addon source"},
+			{ModuleID: "tmdb", Name: "TMDB"},
+		},
+	}
 
 	node := render(t, &Service{content: fake}, "settings", nil)
-	if fake.gotSettingsModuleID != "" {
-		t.Fatalf("the index invoked module %q; listing must not render anybody's screen", fake.gotSettingsModuleID)
-	}
 	for _, m := range fake.settingsModules {
-		btn, ok := findButton(node, m.Name)
+		row, ok := findNavItem(node, m.Name)
 		if !ok {
-			t.Fatalf("settings index has no way into %q", m.ModuleID)
+			t.Fatalf("settings nav has no way into %q", m.ModuleID)
 		}
-		act := actionOf(btn)
+		act := actionOf(row)
 		if act["kind"] != sdui.KindNavigate || mapAt(act, "params")["moduleId"] != m.ModuleID {
-			t.Fatalf("%q entry action = %+v, want a Navigate carrying its moduleId", m.ModuleID, act)
+			t.Fatalf("%q nav row action = %+v, want a Navigate carrying its moduleId", m.ModuleID, act)
 		}
+	}
+	// Opened with no params — as it is from the app nav — the panel lands on the
+	// first section that has one rather than on an empty frame.
+	if fake.gotSettingsModuleID != "aiostreams" {
+		t.Fatalf("no-param settings rendered module %q, want the first nav section", fake.gotSettingsModuleID)
 	}
 }
 
-// TestSettingsIndexWithNoModulesSaysSo covers a legitimate composition: a build
-// with no settings-UI module at all must say that rather than render a heading
-// with nothing under it.
-func TestSettingsIndexWithNoModulesSaysSo(t *testing.T) {
-	node := render(t, &Service{content: &fakeQueries{}}, "settings", nil)
+// TestSettingsWithNoSectionsSaysSo covers a legitimate composition: a build with
+// no settings-UI module, read by a caller with no install-level permission, has
+// nothing to configure and must say so rather than render an empty frame.
+func TestSettingsWithNoSectionsSaysSo(t *testing.T) {
+	fake := &fakeQueries{}
+	node := render(t, &Service{content: fake}, "settings", nil)
 	if _, ok := find(node, sdui.TypeEmptyState); !ok {
-		t.Fatal("an index over no modules must render an empty state")
+		t.Fatal("a settings screen over no sections must render an empty state")
+	}
+	if fake.gotSettingsModuleID != "" {
+		t.Fatalf("rendering no sections invoked module %q", fake.gotSettingsModuleID)
+	}
+}
+
+// TestSettingsSaysWhetherASectionWasAskedFor is what makes one payload serve a
+// phone and a desktop. The frame renders as a list you drill into on a phone and
+// as two panes on a desktop, and the difference it needs is not "is there a
+// panel" — a no-param render resolves a default section so a desktop is not left
+// with an empty pane. It is "did the caller ask for this section".
+func TestSettingsSaysWhetherASectionWasAskedFor(t *testing.T) {
+	newFake := func() *fakeQueries {
+		return &fakeQueries{
+			settingsUI:      []byte(`{"type":"Screen","props":{"title":"AIOStreams"}}`),
+			settingsModules: []app.SettingsModule{{ModuleID: "aiostreams", Name: "AIOStreams"}},
+		}
+	}
+
+	// Opened from the app nav: a default section renders, but nobody asked for it.
+	defaulted := render(t, &Service{content: newFake()}, "settings", nil)
+	if prop(defaulted, "selected") != false {
+		t.Fatalf("selected = %v on a no-param render, want false — a phone must land on the list", prop(defaulted, "selected"))
+	}
+
+	// Tapped from the nav.
+	asked := render(t, &Service{content: newFake()}, "settings", map[string]any{"moduleId": "aiostreams"})
+	if prop(asked, "selected") != true {
+		t.Fatalf("selected = %v after navigating to a module, want true", prop(asked, "selected"))
+	}
+
+	// Its own screen, always reached by asking for it.
+	ext := render(t, &Service{content: newFake()}, "extensions", nil)
+	if prop(ext, "selected") != true {
+		t.Fatalf("selected = %v on the extensions screen, want true", prop(ext, "selected"))
+	}
+}
+
+// TestSettingsNavIsGatedPerCaller pins ADR 0058's visibility rule onto the nav: a
+// caller without the grant is not shown the affordance at all, rather than shown
+// one that fails when they use it.
+func TestSettingsNavIsGatedPerCaller(t *testing.T) {
+	withPermission := render(t, &Service{content: &fakeQueries{canReadTelemetry: true}}, "settings", nil)
+	if _, ok := findNavItem(withPermission, "Extensions"); !ok {
+		t.Fatal("a caller holding module.read must be offered the Extensions section")
+	}
+	if _, ok := find(withPermission, "Toggle"); !ok {
+		t.Fatal("a caller holding telemetry.read must be offered the expert-mode switch")
+	}
+
+	without := render(t, &Service{content: &fakeQueries{}}, "settings", nil)
+	if _, ok := findNavItem(without, "Extensions"); ok {
+		t.Fatal("Extensions is drawn for a caller who cannot read the module catalogue")
+	}
+	if _, ok := find(without, "Toggle"); ok {
+		t.Fatal("the expert-mode switch is drawn for a caller who cannot read telemetry")
+	}
+}
+
+// TestExtensionsScreenKeepsTheSettingsNav is the ADR 0081 screen inside the ADR
+// 0038 frame: it stays its own screen (the catalogue is a network read), and
+// opening it does not cost the nav that leads back to everything else.
+func TestExtensionsScreenKeepsTheSettingsNav(t *testing.T) {
+	fake := &fakeQueries{
+		canReadTelemetry: true,
+		settingsModules:  []app.SettingsModule{{ModuleID: "aiostreams", Name: "AIOStreams"}},
+	}
+	node := render(t, &Service{content: fake}, "extensions", nil)
+
+	if node.GetType() != "SettingsFrame" {
+		t.Fatalf("root type = %q, want the extensions surface inside the settings frame", node.GetType())
+	}
+	row, ok := findNavItem(node, "Extensions")
+	if !ok {
+		t.Fatal("the extensions screen dropped the settings nav")
+	}
+	if prop(row, "active") != true {
+		t.Fatalf("Extensions nav row active = %v, want true on its own screen", prop(row, "active"))
+	}
+	if _, ok := findNavItem(node, "AIOStreams"); !ok {
+		t.Fatal("the extensions screen must keep the way back to the other sections")
+	}
+	// Listing the catalogue must not drag every module's settings UI in with it.
+	if fake.gotSettingsModuleID != "" {
+		t.Fatalf("the extensions screen rendered module %q's settings UI", fake.gotSettingsModuleID)
 	}
 }
 
@@ -841,17 +972,195 @@ func TestExtensionsScreenInstallAndUninstall(t *testing.T) {
 		t.Fatalf("Uninstall action = %+v, want an Invoke of uninstallExtension carrying stremio", act)
 	}
 
-	// aiostreams is available and not installed → Install; stremio is installed, so
-	// it is not offered for install again (only aiostreams has an Install button).
-	in, ok := findButton(node, "Install")
+	// aiostreams is available and not installed → offered; stremio is installed,
+	// so it is not offered for install again. Each is a card, and the card's
+	// control NAVIGATES: installing runs somebody else's binary, so it happens on
+	// the far side of a screen that says what the thing does (see below).
+	var cards []sdui.Node
+	findAll(node, "ExtensionCard", &cards)
+	if len(cards) != 2 {
+		t.Fatalf("cards = %d, want one for the installed module and one for the offered one", len(cards))
+	}
+	in, ok := findButton(node, "Install…")
 	if !ok {
 		t.Fatal("an available, not-installed extension has no Install control")
 	}
 	act = actionOf(in)
-	if act["kind"] != sdui.KindInvoke || act["mutation"] != "installExtension" ||
-		mapAt(act, "input")["moduleId"] != "aiostreams" || mapAt(act, "input")["repository"] != "mosaic-official" {
-		t.Fatalf("Install action = %+v, want an Invoke of installExtension carrying aiostreams from mosaic-official", act)
+	if act["kind"] != sdui.KindOpenOverlay || act["surface"] != sdui.SurfaceModal {
+		t.Fatalf("Install control = %+v, want an overlay over the catalogue", act)
 	}
+	// No RENDERED control installs: the only install action in the surface is
+	// inside the confirmation the overlay carries. That is the whole point of it.
+	if walkFindInvoke(node, "installExtension") {
+		t.Fatal("the catalogue list emits installExtension directly; it must confirm first")
+	}
+}
+
+// TestExtensionCardsDescribeWhatTheModuleCanDo — a card that names a module and
+// nothing else asks a user to decide about a word. The capabilities come from
+// the module's signed manifest, phrased in the Platform's vocabulary, so what is
+// shown is what the module can actually do rather than what it says about itself.
+func TestExtensionCardsDescribeWhatTheModuleCanDo(t *testing.T) {
+	fake := &fakeQueries{
+		availableExtensions: []app.ExtensionCatalogueEntry{{
+			Repository: "mosaic-official", ModuleID: "aiostreams", Name: "AIOStreams", Version: "v0.3.0",
+			Provides: []string{"stream", "subtitles", "settings_ui"},
+		}},
+	}
+	node := render(t, &Service{content: fake}, "extensions", nil)
+
+	card, ok := find(node, "ExtensionCard")
+	if !ok {
+		t.Fatal("no card for the offered extension")
+	}
+	// Two chips, not three: settings_ui is plumbing — every configurable module
+	// declares it, and it says nothing about what this one is FOR.
+	caps, _ := prop(card, "capabilities").([]any)
+	if len(caps) != 2 {
+		t.Fatalf("capability chips = %d, want one per declared role except settings_ui", len(caps))
+	}
+	summary, _ := prop(card, "summary").(string)
+	for _, want := range []string{"streams", "subtitles"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("summary %q does not mention %q", summary, want)
+		}
+	}
+	if strings.Contains(summary, "settings screen") {
+		t.Fatalf("summary %q offers a settings screen as a reason to install something", summary)
+	}
+	if origin, _ := prop(card, "origin").(string); !strings.Contains(origin, "v0.3.0") || !strings.Contains(origin, "mosaic-official") {
+		t.Fatalf("card origin = %q, want the version and the repository it comes from", origin)
+	}
+}
+
+// TestExtensionCardPrefersTheModulesOwnWords — the capabilities say what a
+// module can DO and the Platform derives them; only the author can say what it
+// IS. So a description from the signed manifest wins, and a module that
+// publishes none is still described rather than left blank.
+func TestExtensionCardPrefersTheModulesOwnWords(t *testing.T) {
+	fake := &fakeQueries{availableExtensions: []app.ExtensionCatalogueEntry{
+		{
+			Repository: "mosaic-official", ModuleID: "aiostreams", Name: "AIOStreams", Version: "v0.3.0",
+			Provides:    []string{"stream", "subtitles"},
+			Description: "An independent aggregator that searches many sources at once.",
+		},
+		{
+			Repository: "mosaic-official", ModuleID: "quiet", Name: "Quiet module", Version: "v1",
+			Provides: []string{"artwork"},
+		},
+	}}
+	node := render(t, &Service{content: fake}, "extensions", nil)
+
+	var cards []sdui.Node
+	findAll(node, "ExtensionCard", &cards)
+	byName := map[string]sdui.Node{}
+	for _, c := range cards {
+		byName[prop(c, "name").(string)] = c
+	}
+
+	if got, _ := prop(byName["AIOStreams"], "summary").(string); got != "An independent aggregator that searches many sources at once." {
+		t.Fatalf("card summary = %q, want the module's own sentence", got)
+	}
+	// No description: the capabilities still have to say something useful.
+	got, _ := prop(byName["Quiet module"], "summary").(string)
+	if !strings.Contains(got, "artwork") {
+		t.Fatalf("undescribed module's summary = %q, want its capabilities", got)
+	}
+}
+
+// TestInstallConfirmationCarriesTheInstall is where consent lives: the overlay
+// the card opens names the capabilities and the provenance, and it is the only
+// place the install action exists.
+//
+// An overlay rather than a screen because the decision is about the catalogue
+// you are looking at — a screen would take it away and need a route back.
+func TestInstallConfirmationCarriesTheInstall(t *testing.T) {
+	fake := &fakeQueries{
+		availableExtensions: []app.ExtensionCatalogueEntry{{
+			Repository: "mosaic-official", ModuleID: "aiostreams", Name: "AIOStreams", Version: "v0.3.0",
+			Provides: []string{"stream", "subtitles", "settings_ui"},
+		}},
+	}
+	node := render(t, &Service{content: fake}, "extensions", nil)
+
+	btn, ok := findButton(node, "Install…")
+	if !ok {
+		t.Fatalf("no Install control on the card: %s", nodeText(node))
+	}
+	act := actionOf(btn)
+	if act["kind"] != sdui.KindOpenOverlay {
+		t.Fatalf("Install action = %+v, want an overlay", act)
+	}
+	overlay, _ := act["node"].(map[string]any)
+	if overlay == nil {
+		t.Fatal("the overlay action carries no node — nothing would be presented")
+	}
+	text := fmt.Sprint(overlay)
+	for _, want := range []string{"Streams", "Finds playable sources", "Subtitles", "mosaic-official", "v0.3.0"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("the confirmation does not state %q: %s", want, text)
+		}
+	}
+	// settings_ui is plumbing and is not a capability a user weighs.
+	if strings.Contains(text, "Adds its own section to Settings") {
+		t.Fatalf("the confirmation lists the settings-screen role: %s", text)
+	}
+	if !mapHasInvoke(overlay, "installExtension", "aiostreams") {
+		t.Fatalf("the confirmation carries no install for aiostreams: %s", text)
+	}
+	if !strings.Contains(text, "closeOverlay") {
+		t.Fatalf("a confirmation with no way out is not a confirmation: %s", text)
+	}
+}
+
+// mapHasInvoke reports whether a decoded node tree carries an Invoke of the
+// mutation against the module id — the action rides inside the overlay's node,
+// which is a decoded map rather than a UINode, so this walks maps.
+func mapHasInvoke(v any, mutation, moduleID string) bool {
+	switch x := v.(type) {
+	case map[string]any:
+		if x["kind"] == sdui.KindInvoke && x["mutation"] == mutation {
+			if in, ok := x["input"].(map[string]any); ok && in["moduleId"] == moduleID {
+				return true
+			}
+		}
+		for _, val := range x {
+			if mapHasInvoke(val, mutation, moduleID) {
+				return true
+			}
+		}
+	case []any:
+		for _, val := range x {
+			if mapHasInvoke(val, mutation, moduleID) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// walkFindInvoke reports whether any node in the tree carries an Invoke of the
+// named mutation.
+func walkFindInvoke(n sdui.Node, mutation string) bool {
+	if n == nil {
+		return false
+	}
+	if act := actionOf(n); act["kind"] == sdui.KindInvoke && act["mutation"] == mutation {
+		return true
+	}
+	for _, c := range n.GetChildren() {
+		if walkFindInvoke(c, mutation) {
+			return true
+		}
+	}
+	for _, list := range n.GetSlots() {
+		for _, c := range list.GetNodes() {
+			if walkFindInvoke(c, mutation) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // TestExtensionsScreenSurvivesAnUnreachableRepository pins the resilience rule: a

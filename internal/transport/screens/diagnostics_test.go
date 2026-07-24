@@ -30,35 +30,59 @@ func TestExpertModeAffordanceIsHiddenWithoutTheGrant(t *testing.T) {
 	}
 }
 
+// TestExpertModeAffordanceAppearsWithTheGrant — the control is a switch at the
+// foot of the settings nav, not a section of it: expert mode decides how much of
+// the nav exists, so it is a level control rather than somewhere to go.
 func TestExpertModeAffordanceAppearsWithTheGrant(t *testing.T) {
 	fake := &fakeQueries{settingsUI: minimalSettingsUI(), canReadTelemetry: true}
 	svc := &Service{content: fake}
 
 	node := render(t, svc, "settings", nil)
-	rendered := nodeText(node)
-	for _, want := range []string{"Expert mode", "Turn on expert mode"} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("expected %q in the settings screen: %s", want, rendered)
-		}
+	toggle, ok := find(node, "Toggle")
+	if !ok || prop(toggle, "label") != "Expert mode" {
+		t.Fatalf("no expert-mode switch at the foot of the nav: %s", nodeText(node))
 	}
-	// Off by default, so the links it governs are not offered yet.
-	if strings.Contains(rendered, screenLogs) {
+	// It lives in the frame's footer slot, which is the nav's foot — not among
+	// the sections, and not in the panel.
+	if len(slotNodes(node, "footer")) == 0 {
+		t.Fatalf("the expert-mode switch is not in the nav's footer: %s", nodeText(node))
+	}
+	if prop(toggle, "on") != false {
+		t.Fatalf("switch state = %v, want off by default", prop(toggle, "on"))
+	}
+	// The switch carries the value it moves TO: the Switch primitive emits the
+	// action it was given, so a flip that carried the current value would be a
+	// control that never changes anything.
+	act, _ := prop(toggle, "action").(map[string]any)
+	if act["kind"] != sdui.KindInvoke || mapAt(act, "input")["value"] != true {
+		t.Fatalf("switch action = %+v, want an Invoke turning expert mode on", act)
+	}
+	// Off, so the screens it governs are not offered yet.
+	if rendered := nodeText(node); strings.Contains(rendered, screenLogs) {
 		t.Fatalf("diagnostics links should wait until expert mode is on: %s", rendered)
 	}
 }
 
 // TestExpertModeLinksAppearOnlyWhenItIsOn separates the two questions the
-// section answers: the permission decided the toggle is visible, the preference
+// control answers: the permission decided the switch is visible, the preference
 // decides whether the surface it governs is offered.
 func TestExpertModeLinksAppearOnlyWhenItIsOn(t *testing.T) {
 	fake := &fakeQueries{settingsUI: minimalSettingsUI(), canReadTelemetry: true, expertModeOn: true}
 	svc := &Service{content: fake}
 
-	rendered := nodeText(render(t, svc, "settings", nil))
-	for _, want := range []string{"Turn off expert mode", "Logs", "Traces"} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("expected %q once expert mode is on: %s", want, rendered)
+	node := render(t, svc, "settings", nil)
+	for _, want := range []string{"Logs", "Traces"} {
+		if _, ok := findNavItem(node, want); !ok {
+			t.Fatalf("expected a %q nav row once expert mode is on: %s", want, nodeText(node))
 		}
+	}
+	toggle, ok := find(node, "Toggle")
+	if !ok || prop(toggle, "on") != true {
+		t.Fatalf("switch should read as on: %s", nodeText(node))
+	}
+	act, _ := prop(toggle, "action").(map[string]any)
+	if mapAt(act, "input")["value"] != false {
+		t.Fatalf("switch action = %+v, want an Invoke turning expert mode off", act)
 	}
 }
 
@@ -69,8 +93,13 @@ func TestExpertModeToggleIsHiddenWithoutTheGrantEvenIfEnabled(t *testing.T) {
 	fake := &fakeQueries{settingsUI: minimalSettingsUI(), canReadTelemetry: false, expertModeOn: true}
 	svc := &Service{content: fake}
 
-	if rendered := nodeText(render(t, svc, "settings", nil)); strings.Contains(rendered, "Expert mode") {
+	node := render(t, svc, "settings", nil)
+	if rendered := nodeText(node); strings.Contains(rendered, "Expert mode") {
 		t.Fatalf("a stored preference must not reveal the affordance without the grant: %s", rendered)
+	}
+	// Nor may the stored preference reveal what the switch governs.
+	if _, ok := findNavItem(node, "Logs"); ok {
+		t.Fatal("a stored preference revealed the diagnostics rows without the grant")
 	}
 }
 
