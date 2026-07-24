@@ -46,6 +46,10 @@ func (f *fakeExtensionManager) InstalledExtensions(context.Context) ([]domain.In
 	return f.set, nil
 }
 
+func (f *fakeExtensionManager) Available(context.Context) ([]app.ExtensionCatalogueEntry, error) {
+	return nil, nil
+}
+
 // extAdminFixture builds a Service with the given manager and an authenticated
 // administrator session (extension.manage is an administrator action).
 func extAdminFixture(t *testing.T, ext app.ExtensionManager) (*app.Service, v1.Caller) {

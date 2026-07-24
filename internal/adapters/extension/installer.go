@@ -158,6 +158,36 @@ func (i *Installer) installFor(ctx context.Context, repoName, moduleID, goos, go
 	}, nil
 }
 
+// Catalogue lists the modules a repository offers — its signed index — for a
+// browse-and-install surface (ADR 0081). It fetches the index and its detached
+// signature, verifies the index against the repository's key, and returns the
+// inline manifests. It downloads no binary: browsing is a read, and the digest
+// checks belong to install.
+func (i *Installer) Catalogue(ctx context.Context, repoName string) ([]Manifest, error) {
+	repo, ok := i.registry.Lookup(repoName)
+	if !ok {
+		return nil, contracts.NewError(contracts.NotFound,
+			fmt.Sprintf("extension: no repository named %q is configured", repoName))
+	}
+	indexData, err := i.fetch.Fetch(ctx, repo.URL+"/index.json")
+	if err != nil {
+		return nil, contracts.WrapError(contracts.Unavailable, "extension: fetching index", err)
+	}
+	indexSig, err := i.fetch.Fetch(ctx, repo.URL+"/index.json.sig")
+	if err != nil {
+		return nil, contracts.WrapError(contracts.Unavailable, "extension: fetching index signature", err)
+	}
+	idx, err := repo.verifyIndex(indexData, indexSig)
+	if err != nil {
+		return nil, err
+	}
+	manifests := make([]Manifest, 0, len(idx.Modules))
+	for _, m := range idx.Modules {
+		manifests = append(manifests, m.Manifest)
+	}
+	return manifests, nil
+}
+
 // Adopt brings up an already-installed module at boot (ADR 0081). It prefers the
 // on-disk cache: if the verified binary and its manifest are present, it
 // re-verifies the binary against that manifest's digest — the same check the

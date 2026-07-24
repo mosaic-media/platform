@@ -37,6 +37,26 @@ type ExtensionManager interface {
 	Uninstall(ctx context.Context, moduleID string) error
 	// InstalledExtensions is the durable installed set, for the settings surface.
 	InstalledExtensions(ctx context.Context) ([]domain.InstalledExtension, error)
+	// Available lists what the trusted repository offers — its signed index — so a
+	// user can browse and install. It reaches the repository over the network.
+	Available(ctx context.Context) ([]ExtensionCatalogueEntry, error)
+}
+
+// ExtensionCatalogueEntry is one module a trusted repository offers (ADR 0081),
+// projected for a browse-and-install surface: the repository to install it from,
+// its module id, a human name, the catalogued version, and the roles it fills so
+// a user can see what installing it adds.
+type ExtensionCatalogueEntry struct {
+	Repository string
+	ModuleID   string
+	Name       string
+	Version    string
+	Provides   []string
+}
+
+// ListAvailableExtensionsQuery reads the trusted repository's catalogue.
+type ListAvailableExtensionsQuery struct {
+	Caller v1.Caller
 }
 
 // InstallExtensionCommand installs one module from one trusted repository.
@@ -124,6 +144,23 @@ func (s *Service) UninstallExtension(ctx context.Context, cmd UninstallExtension
 		return contracts.NewError(contracts.Unavailable, "extension management is not available in this Platform")
 	}
 	return s.extensions.Uninstall(ctx, cmd.ModuleID)
+}
+
+// ListAvailableExtensions returns what the trusted repository offers, for a
+// browse-and-install surface. It authorises the same read as the installed list —
+// the repository catalogue is administrator information — and reaches the network
+// through the injected manager.
+func (s *Service) ListAvailableExtensions(ctx context.Context, q ListAvailableExtensionsQuery) ([]ExtensionCatalogueEntry, error) {
+	if q.Caller.Session == "" {
+		return nil, contracts.NewError(contracts.InvalidArgument, "caller is required")
+	}
+	if _, err := s.enter(ctx, q.Caller, ActionModuleRead, policy.Resource{Type: "extension"}); err != nil {
+		return nil, err
+	}
+	if s.extensions == nil {
+		return nil, nil
+	}
+	return s.extensions.Available(ctx)
 }
 
 // ListInstalledExtensions returns the durable installed set for a settings

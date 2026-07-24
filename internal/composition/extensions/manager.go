@@ -103,6 +103,32 @@ func (m *Manager) InstalledExtensions(ctx context.Context) ([]domain.InstalledEx
 	return m.store.List(ctx)
 }
 
+// Available lists what the official repository offers, for a browse-and-install
+// surface (ADR 0081). It reaches the repository over the network — the caller is
+// a user opening the extensions surface — and returns the catalogue projected to
+// what that surface shows.
+func (m *Manager) Available(ctx context.Context) ([]app.ExtensionCatalogueEntry, error) {
+	manifests, err := m.installer.Catalogue(ctx, extension.OfficialRepositoryName)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]app.ExtensionCatalogueEntry, 0, len(manifests))
+	for _, man := range manifests {
+		provides := make([]string, len(man.Provides))
+		for i, r := range man.Provides {
+			provides[i] = string(r)
+		}
+		out = append(out, app.ExtensionCatalogueEntry{
+			Repository: extension.OfficialRepositoryName,
+			ModuleID:   man.ID,
+			Name:       man.Name,
+			Version:    man.Version,
+			Provides:   provides,
+		})
+	}
+	return out, nil
+}
+
 // AdoptInstalled brings up every installed extension at boot (ADR 0081). Each is
 // re-verified against its cached manifest and spawned; a failure is a degraded
 // capability — logged and skipped, never fatal, because extensions fill no

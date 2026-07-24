@@ -231,6 +231,9 @@ func boundaryCases() []boundaryCase {
 		{"ListInstalledExtensions", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListInstalledExtensions(ctx, app.ListInstalledExtensionsQuery{Caller: caller(sid)}))
 		}},
+		{"ListAvailableExtensions", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListAvailableExtensions(ctx, app.ListAvailableExtensionsQuery{Caller: caller(sid)}))
+		}},
 		{"ResolvePlayback", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ResolvePlayback(ctx, app.ResolvePlaybackQuery{
 				Caller: caller(sid), PartID: "part-1",

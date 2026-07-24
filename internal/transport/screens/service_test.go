@@ -43,6 +43,12 @@ type fakeQueries struct {
 	// settings index offers a way into.
 	settingsModules []app.SettingsModule
 
+	// installedExtensions and availableExtensions back the extensions screen;
+	// availableErr lets a test drive the repository-unreachable path.
+	installedExtensions []app.InstalledExtension
+	availableExtensions []app.ExtensionCatalogueEntry
+	availableErr        error
+
 	// inProgress is what ListInProgress reports — the continue-watching rail's
 	// input. playbackStates is what ListPlaybackStates reports for the watched
 	// marks; the fake returns the whole map and lets the caller pick the ids.
@@ -189,6 +195,18 @@ func (f *fakeQueries) ListSettingsModules(context.Context, app.ListSettingsModul
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return app.ListSettingsModulesResult{Modules: f.settingsModules}, nil
+}
+
+func (f *fakeQueries) ListInstalledExtensions(context.Context, app.ListInstalledExtensionsQuery) ([]app.InstalledExtension, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.installedExtensions, nil
+}
+
+func (f *fakeQueries) ListAvailableExtensions(context.Context, app.ListAvailableExtensionsQuery) ([]app.ExtensionCatalogueEntry, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.availableExtensions, f.availableErr
 }
 
 func render(t *testing.T, svc *Service, name string, params map[string]any) sdui.Node {
@@ -797,6 +815,60 @@ func TestSettingsIndexWithNoModulesSaysSo(t *testing.T) {
 	node := render(t, &Service{content: &fakeQueries{}}, "settings", nil)
 	if _, ok := find(node, sdui.TypeEmptyState); !ok {
 		t.Fatal("an index over no modules must render an empty state")
+	}
+}
+
+// TestExtensionsScreenInstallAndUninstall is the browse-and-install surface
+// (ADR 0081): an installed extension offers Uninstall, an available one that is
+// not installed offers Install, and an available one that IS installed is not
+// offered for install again.
+func TestExtensionsScreenInstallAndUninstall(t *testing.T) {
+	fake := &fakeQueries{
+		installedExtensions: []app.InstalledExtension{{ModuleID: "stremio", Version: "v0.24.0"}},
+		availableExtensions: []app.ExtensionCatalogueEntry{
+			{Repository: "mosaic-official", ModuleID: "stremio", Name: "Stremio addon source", Version: "v0.24.0"},
+			{Repository: "mosaic-official", ModuleID: "aiostreams", Name: "AIOStreams", Version: "v0.3.0"},
+		},
+	}
+	node := render(t, &Service{content: fake}, "extensions", nil)
+
+	un, ok := findButton(node, "Uninstall")
+	if !ok {
+		t.Fatal("installed extension has no Uninstall control")
+	}
+	act := actionOf(un)
+	if act["kind"] != sdui.KindInvoke || act["mutation"] != "uninstallExtension" || mapAt(act, "input")["moduleId"] != "stremio" {
+		t.Fatalf("Uninstall action = %+v, want an Invoke of uninstallExtension carrying stremio", act)
+	}
+
+	// aiostreams is available and not installed → Install; stremio is installed, so
+	// it is not offered for install again (only aiostreams has an Install button).
+	in, ok := findButton(node, "Install")
+	if !ok {
+		t.Fatal("an available, not-installed extension has no Install control")
+	}
+	act = actionOf(in)
+	if act["kind"] != sdui.KindInvoke || act["mutation"] != "installExtension" ||
+		mapAt(act, "input")["moduleId"] != "aiostreams" || mapAt(act, "input")["repository"] != "mosaic-official" {
+		t.Fatalf("Install action = %+v, want an Invoke of installExtension carrying aiostreams from mosaic-official", act)
+	}
+}
+
+// TestExtensionsScreenSurvivesAnUnreachableRepository pins the resilience rule: a
+// repository that cannot be reached must not fail the whole screen, so a user can
+// still uninstall when the repo is down.
+func TestExtensionsScreenSurvivesAnUnreachableRepository(t *testing.T) {
+	fake := &fakeQueries{
+		installedExtensions: []app.InstalledExtension{{ModuleID: "stremio", Version: "v0.24.0"}},
+		availableErr:        contracts.NewError(contracts.Unavailable, "repository down"),
+	}
+	node := render(t, &Service{content: fake}, "extensions", nil)
+
+	if _, ok := findButton(node, "Uninstall"); !ok {
+		t.Fatal("Uninstall must remain available when the repository is unreachable")
+	}
+	if _, ok := find(node, sdui.TypeEmptyState); !ok {
+		t.Fatal("an unreachable repository should render an empty state for the available list")
 	}
 }
 

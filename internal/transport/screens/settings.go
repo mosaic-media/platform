@@ -77,6 +77,15 @@ func (s *Service) settingsIndexScreen(ctx context.Context, caller v1.Caller) (sd
 
 	body := []ui.El{modulesSection(res.Modules)}
 
+	// A way into the extensions surface, shown only to a caller who can read the
+	// catalogue (the same permission the screen itself authorises). Like expert
+	// mode below, the visibility is the hint and the screen is the gate.
+	if s.content.CallerCan(ctx, caller, app.ActionModuleRead, "extension") {
+		body = append(body, ui.Section("Extensions",
+			ui.Subtitle("Install and remove optional modules from the trusted repository."),
+			ui.Button("Manage extensions", "secondary", ui.OnTap(ui.Navigate(screenExtensions, nil)))))
+	}
+
 	// The expert-mode section, shown only to a caller who could actually use what
 	// it reveals.
 	//
@@ -115,6 +124,81 @@ func modulesSection(modules []app.SettingsModule) *ui.Element {
 			ui.OnTap(ui.Navigate(screenSettings, map[string]any{paramModuleID: m.ModuleID}))))
 	}
 	return ui.Section("Modules", ui.Stack("vertical", 8, rows...))
+}
+
+// extensionsScreen is the browse-and-install surface for extension modules
+// (ADR 0081): what a user has installed, with a way to remove each, and what the
+// trusted repository offers, with a way to install each. It is its own screen
+// because listing what is available reaches the repository over the network, so
+// it happens when a user opens this rather than on every settings render.
+func (s *Service) extensionsScreen(ctx context.Context, caller v1.Caller) (sdui.Node, error) {
+	installed, err := s.content.ListInstalledExtensions(ctx, app.ListInstalledExtensionsQuery{Caller: caller})
+	if err != nil {
+		return nil, err
+	}
+	installedByID := make(map[string]bool, len(installed))
+	for _, e := range installed {
+		installedByID[e.ModuleID] = true
+	}
+
+	body := []ui.El{backToSettingsIndex(), installedExtensionsSection(installed)}
+
+	// Available is a network read. If the repository is unreachable, show what is
+	// installed and say the catalogue could not be loaded rather than failing the
+	// whole screen — a user must still be able to uninstall when the repo is down.
+	available, availErr := s.content.ListAvailableExtensions(ctx, app.ListAvailableExtensionsQuery{Caller: caller})
+	if availErr != nil {
+		body = append(body, ui.Section("Available",
+			ui.EmptyState(emptyIconCollections, "The extension repository could not be reached")))
+	} else {
+		body = append(body, availableExtensionsSection(available, installedByID))
+	}
+
+	return ui.Screen(ui.Title("Extensions"), ui.Group(body...)).Build(), nil
+}
+
+// installedExtensionsSection lists each installed extension with a control to
+// remove it. The empty state is the ordinary one for a fresh install (ADR 0081:
+// nothing is installed by default).
+func installedExtensionsSection(installed []app.InstalledExtension) *ui.Element {
+	if len(installed) == 0 {
+		return ui.Section("Installed",
+			ui.EmptyState(emptyIconCollections, "No extensions installed"))
+	}
+	rows := make([]ui.El, 0, len(installed))
+	for _, e := range installed {
+		rows = append(rows, ui.Stack("horizontal", 8,
+			ui.Subtitle(e.ModuleID+" · "+e.Version),
+			ui.Button("Uninstall", "ghost", ui.OnTap(ui.Invoke(uninstallExtensionAction, map[string]any{
+				paramModuleID: e.ModuleID,
+			}))),
+		))
+	}
+	return ui.Section("Installed", ui.Stack("vertical", 8, rows...))
+}
+
+// availableExtensionsSection lists what the repository offers that is not already
+// installed, each with a control to install it. One already installed is not
+// repeated here — it is in the section above with its Uninstall control.
+func availableExtensionsSection(available []app.ExtensionCatalogueEntry, installed map[string]bool) *ui.Element {
+	rows := make([]ui.El, 0, len(available))
+	for _, e := range available {
+		if installed[e.ModuleID] {
+			continue
+		}
+		rows = append(rows, ui.Stack("horizontal", 8,
+			ui.Subtitle(e.Name+" · "+e.Version),
+			ui.Button("Install", "secondary", ui.OnTap(ui.Invoke(installExtensionAction, map[string]any{
+				"repository":  e.Repository,
+				paramModuleID: e.ModuleID,
+			}))),
+		))
+	}
+	if len(rows) == 0 {
+		return ui.Section("Available",
+			ui.EmptyState(emptyIconCollections, "Everything the repository offers is installed"))
+	}
+	return ui.Section("Available", ui.Stack("vertical", 8, rows...))
 }
 
 // backToSettingsIndex is the way out of a module's screen. It is the Platform's

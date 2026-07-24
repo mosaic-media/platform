@@ -48,8 +48,18 @@ const (
 	screenCatalog     = "catalog"
 	screenDetail      = "detail"
 	screenSettings    = "settings"
+	// screenExtensions is the browse-and-install surface for extension modules
+	// (ADR 0081). It is its own screen rather than a settings section because
+	// listing what is available reaches the trusted repository over the network,
+	// which should happen when a user opens it, not on every settings render.
+	screenExtensions = "extensions"
 	// setPreferenceMutation is the Invoke action the expert-mode toggle emits.
 	setPreferenceMutation = "setPreference"
+	// installExtensionAction and uninstallExtensionAction are the Invoke actions
+	// the extensions screen emits (ADR 0081). They match the dispatch cases in the
+	// session transport.
+	installExtensionAction   = "installExtension"
+	uninstallExtensionAction = "uninstallExtension"
 )
 
 // Screen param keys. Each is written into a Navigate action's params by the
@@ -103,6 +113,13 @@ type contentQueries interface {
 	// host has to name one module by constant, which leaves every module that
 	// contributes a screen after the first with no way in.
 	ListSettingsModules(context.Context, app.ListSettingsModulesQuery) (app.ListSettingsModulesResult, error)
+	// ListInstalledExtensions and ListAvailableExtensions back the extensions
+	// screen (ADR 0081): the durable installed set, and what the trusted
+	// repository offers to install. Available reaches the repository over the
+	// network, which is why the screen that reads it is opened on demand rather
+	// than folded into every settings render.
+	ListInstalledExtensions(context.Context, app.ListInstalledExtensionsQuery) ([]app.InstalledExtension, error)
+	ListAvailableExtensions(context.Context, app.ListAvailableExtensionsQuery) ([]app.ExtensionCatalogueEntry, error)
 	// FirstPlayablePart backs the detail screen's Play affordance: a Work has no
 	// bytes of its own, so the emit-side has to look one level down for an item
 	// that does before it can offer Play at all (ADR 0036 — an affordance with
@@ -181,6 +198,8 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.detailScreen(ctx, caller, params)
 	case screenSettings:
 		return s.settingsScreen(ctx, caller, params)
+	case screenExtensions:
+		return s.extensionsScreen(ctx, caller)
 	case screenLogs:
 		return s.logsScreen(ctx, caller, params)
 	case screenTraces:
