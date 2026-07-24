@@ -86,7 +86,7 @@ func (r *CapabilityRegistry) RequireRoles(required ...v1.Role) error {
 	for _, role := range required {
 		filled := false
 		for _, id := range r.sortedIDs() {
-			if roleImplemented(r.byID[id], role) && declares(r.byID[id], role) {
+			if fills(r.byID[id], role) {
 				filled = true
 				break
 			}
@@ -109,6 +109,30 @@ func declares(c v1.Capability, role v1.Role) bool {
 		}
 	}
 	return false
+}
+
+// fills reports whether c both declares role and backs it with the matching
+// provider interface. **Every resolution below goes through this rather than
+// through a bare type assertion**, and that is load-bearing rather than tidy.
+//
+// In process the two tests agree, because a compiled-in module that implements
+// an interface also declares the role — so a bare assertion was correct by
+// accident for as long as every capability was a local struct.
+//
+// It stops being correct the moment one is not. An out-of-process module is
+// reached through a proxy that implements *every* provider interface
+// unconditionally (ADR 0064: the registry must not be able to tell a proxy from
+// a local struct, and Go type assertions cannot be made conditional at runtime).
+// Against that proxy `c.(v1.StreamProvider)` always succeeds, so a
+// metadata-only extension module would be enumerated by StreamProviders and
+// asked for streams it cannot resolve — and, worse, RequireRoles would be
+// satisfied by a module that fills nothing at all.
+//
+// The manifest is the honest answer, and the handshake is what makes it
+// trustworthy: it refuses a module whose manifest declares a role it does not
+// serve, so a declaration cannot be a lie by the time anything reads it here.
+func fills(c v1.Capability, role v1.Role) bool {
+	return declares(c, role) && roleImplemented(c, role)
 }
 
 // roleImplemented reports whether c backs role with the matching provider
@@ -157,6 +181,9 @@ type SearchProviderEntry struct {
 func (r *CapabilityRegistry) SearchProviders() []SearchProviderEntry {
 	var out []SearchProviderEntry
 	for _, id := range r.sortedIDs() {
+		if !fills(r.byID[id], v1.RoleSearch) {
+			continue
+		}
 		if p, ok := r.byID[id].(v1.SearchProvider); ok {
 			out = append(out, SearchProviderEntry{ModuleID: id, Provider: p})
 		}
@@ -181,6 +208,9 @@ type StreamProviderEntry struct {
 func (r *CapabilityRegistry) StreamProviders() []StreamProviderEntry {
 	var out []StreamProviderEntry
 	for _, id := range r.sortedIDs() {
+		if !fills(r.byID[id], v1.RoleStream) {
+			continue
+		}
 		if p, ok := r.byID[id].(v1.StreamProvider); ok {
 			out = append(out, StreamProviderEntry{ModuleID: id, Provider: p})
 		}
@@ -206,6 +236,9 @@ type ArtworkProviderEntry struct {
 func (r *CapabilityRegistry) ArtworkProviders() []ArtworkProviderEntry {
 	var out []ArtworkProviderEntry
 	for _, id := range r.sortedIDs() {
+		if !fills(r.byID[id], v1.RoleArtwork) {
+			continue
+		}
 		if p, ok := r.byID[id].(v1.ArtworkProvider); ok {
 			out = append(out, ArtworkProviderEntry{ModuleID: id, Provider: p})
 		}
@@ -224,6 +257,9 @@ type CatalogProviderEntry struct {
 func (r *CapabilityRegistry) CatalogProviders() []CatalogProviderEntry {
 	var out []CatalogProviderEntry
 	for _, id := range r.sortedIDs() {
+		if !fills(r.byID[id], v1.RoleCatalog) {
+			continue
+		}
 		if p, ok := r.byID[id].(v1.CatalogProvider); ok {
 			out = append(out, CatalogProviderEntry{ModuleID: id, Provider: p})
 		}
@@ -238,6 +274,9 @@ func (r *CapabilityRegistry) CatalogProvider(id string) (v1.CatalogProvider, boo
 	if !ok {
 		return nil, false
 	}
+	if !fills(c, v1.RoleCatalog) {
+		return nil, false
+	}
 	p, ok := c.(v1.CatalogProvider)
 	return p, ok
 }
@@ -247,6 +286,9 @@ func (r *CapabilityRegistry) CatalogProvider(id string) (v1.CatalogProvider, boo
 func (r *CapabilityRegistry) MetadataProvider(id string) (v1.MetadataProvider, bool) {
 	c, ok := r.byID[id]
 	if !ok {
+		return nil, false
+	}
+	if !fills(c, v1.RoleMetadata) {
 		return nil, false
 	}
 	p, ok := c.(v1.MetadataProvider)
@@ -261,6 +303,9 @@ func (r *CapabilityRegistry) SubtitlesProvider(id string) (v1.SubtitlesProvider,
 	if !ok {
 		return nil, false
 	}
+	if !fills(c, v1.RoleSubtitles) {
+		return nil, false
+	}
 	p, ok := c.(v1.SubtitlesProvider)
 	return p, ok
 }
@@ -271,6 +316,9 @@ func (r *CapabilityRegistry) SubtitlesProvider(id string) (v1.SubtitlesProvider,
 func (r *CapabilityRegistry) SettingsUIProvider(id string) (v1.SettingsUIProvider, bool) {
 	c, ok := r.byID[id]
 	if !ok {
+		return nil, false
+	}
+	if !fills(c, v1.RoleSettingsUI) {
 		return nil, false
 	}
 	p, ok := c.(v1.SettingsUIProvider)
@@ -295,6 +343,9 @@ type PlaybackProviderEntry struct {
 func (r *CapabilityRegistry) PlaybackProviders() []PlaybackProviderEntry {
 	var out []PlaybackProviderEntry
 	for _, id := range r.sortedIDs() {
+		if !fills(r.byID[id], v1.RolePlayback) {
+			continue
+		}
 		if p, ok := r.byID[id].(v1.PlaybackProvider); ok {
 			out = append(out, PlaybackProviderEntry{ModuleID: id, Provider: p})
 		}
@@ -307,6 +358,9 @@ func (r *CapabilityRegistry) PlaybackProviders() []PlaybackProviderEntry {
 func (r *CapabilityRegistry) PlaybackProvider(id string) (v1.PlaybackProvider, bool) {
 	c, ok := r.byID[id]
 	if !ok {
+		return nil, false
+	}
+	if !fills(c, v1.RolePlayback) {
 		return nil, false
 	}
 	p, ok := c.(v1.PlaybackProvider)
