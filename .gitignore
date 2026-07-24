@@ -28,3 +28,10 @@ go.work.sum
 # Private signing keys — the private half must NEVER be committed (public repo).
 # The .pub public key does not match this pattern and is committed deliberately.
 *.key
+
+# macOS junk
+.DS_Store
+
+# Key-generation artifacts in the repo root; the authoritative public key is
+# embedded at internal/adapters/extension/mosaic-official.pub.
+*.key.pub
