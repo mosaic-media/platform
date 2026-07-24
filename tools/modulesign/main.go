@@ -225,6 +225,11 @@ func buildManifest(args []string) {
 		Version  string   `json:"version"`
 		Name     string   `json:"name"`
 		Provides []string `json:"provides"`
+		// The module's own sentence about what it is. Passed straight through:
+		// this tool assembles a manifest, it does not author one, and a field it
+		// silently dropped would leave the module describing itself everywhere
+		// except in the artefact anybody reads.
+		Description string `json:"description,omitempty"`
 	}
 	if err := json.Unmarshal(idData, &identity); err != nil {
 		fail("identity is not the JSON a module prints with --mosaic-manifest: %v", err)
@@ -280,6 +285,9 @@ func buildManifest(args []string) {
 		"sdk_major": sdkMajor,
 		"provides":  identity.Provides,
 		"binaries":  binaries,
+	}
+	if identity.Description != "" {
+		manifest["description"] = identity.Description
 	}
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
