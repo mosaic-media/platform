@@ -12,7 +12,7 @@
 #   Mosaic/
 #     platform/            <- this repository
 #     sdk/  sdui/
-#     module-stremio-addons/  module-remote-playback/
+#     module-stremio-addons/  module-aiostreams/  module-remote-playback/
 #     module-tmdb/  module-cinemeta/
 #     web/
 #
@@ -33,6 +33,7 @@ services:
       - ../sdk:/src/sdk
       - ../sdui:/src/sdui
       - ../module-stremio-addons:/src/module-stremio-addons
+      - ../module-aiostreams:/src/module-aiostreams
       - ../module-remote-playback:/src/module-remote-playback
       - ../module-tmdb:/src/module-tmdb
       - ../module-cinemeta:/src/module-cinemeta
@@ -49,7 +50,7 @@ services:
       sh -c "mkdir -p /work &&
              rm -f /work/go.work &&
              go work init &&
-             go work use /src/platform /src/sdk /src/sdui /src/module-stremio-addons /src/module-remote-playback /src/module-tmdb /src/module-cinemeta &&
+             go work use /src/platform /src/sdk /src/sdui /src/module-stremio-addons /src/module-aiostreams /src/module-remote-playback /src/module-tmdb /src/module-cinemeta &&
              cd /src/platform &&
              exec go run ./cmd/mosaic-platform"
 

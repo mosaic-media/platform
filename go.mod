@@ -25,6 +25,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
+	github.com/mosaic-media/module-aiostreams v0.1.0
 	github.com/mosaic-media/module-cinemeta v0.1.0
 	github.com/mosaic-media/module-fanart-tv v0.1.1
 	github.com/mosaic-media/module-remote-playback v0.2.0

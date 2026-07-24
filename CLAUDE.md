@@ -4,7 +4,7 @@
 
 **The code in this repository is authoritative.** It is ~37,500 lines of Go and it decides what Mosaic is. The [`architecture`](https://github.com/mosaic-media/architecture) repository *describes* it and records the decisions behind it. If the two disagree, the documentation is wrong — fix it there, in the same session, rather than working around it.
 
-**Seven repositories, all siblings on disk** (`../platform`, `../architecture`, `../sdk`, `../sdui`, `../web`, `../module-stremio-addons`, `../module-remote-playback`):
+**Ten repositories, all siblings on disk** (`../platform`, `../architecture`, `../sdk`, `../sdui`, `../web`, `../module-stremio-addons`, `../module-aiostreams`, `../module-remote-playback`, `../module-tmdb`, `../module-cinemeta`):
 
 - **`platform`** (this repo) — the Platform: domain, contracts, application services, the PostgreSQL module, transports, the composition root.
 - **`architecture`** — the docs and ADRs, including the roadmap this repository's work is measured against. Push doc updates here whenever code and docs diverge.
@@ -12,9 +12,11 @@
 - **`sdui`** — the **published SDUI and session contracts** the Platform, Modules and clients share. **Protobuf** (`proto/**/*.proto`) generated into Go and TypeScript (ADR 0044), plus a Go producer binding and the `ui` authoring layer, the standard definition library as data, and DTCG tokens. Apache-2.0, like the SDK (ADR 0025). Do not confuse its form with the SDK's: that one is hand-written Go and this one is generated.
 - **`web`** — the **frontend workspace** (ADR 0042): the `shell` (the Server-Driven-UI client), `sdui-react` (the published React runtime, `@mosaic-media/sdui-react`) and `storybook`, as three packages in one repository. The three former repositories are archived. AGPL-3.0-only. Not a Module and not in the binary.
 - **`module-stremio-addons`** — the first optional module, in its own repo exactly as a third party's would be: a Go client of the Stremio addon protocol importing only the SDK, MIT-licensed. It fills the source-side provider roles (ADR 0027, 0037).
+- **`module-aiostreams`** — a **dedicated** stream provider for one named upstream (ADR 0076), beside the addon host above. It fills `stream`, `subtitles` and `settings_ui` and deliberately no read role, so it can never put a title into the library; it is reached only through the enrichment fan-out (ADR 0073). MIT-licensed.
 - **`module-remote-playback`** — the first **consumer** module (ADR 0045): it resolves a Part into a playable location and never serves bytes. MIT-licensed.
+- **`module-tmdb`**, **`module-cinemeta`** — the two **core** metadata modules (ADR 0062's guarantee clause, ADR 0072). MIT-licensed.
 
-Both modules are required as tagged dependencies, no `replace`. Commit and push each separately.
+Every module is required as a tagged dependency, no `replace`. Commit and push each separately.
 
 Required reading, and it is short:
 

@@ -21,6 +21,8 @@ github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo
 github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
+github.com/mosaic-media/module-aiostreams v0.1.0 h1:oHVStWMALcs9vbANRKoMXK60mE+pnopxIhgw9dXQRQU=
+github.com/mosaic-media/module-aiostreams v0.1.0/go.mod h1:w7/ipMdyHbNIezJXtaNsrGfpo+RBcS6ui/nlMbxNN0I=
 github.com/mosaic-media/module-cinemeta v0.1.0 h1:iHsW/I1mEUk67ZbY8gOClTHYRPgYllOd22EoFy7EMz4=
 github.com/mosaic-media/module-cinemeta v0.1.0/go.mod h1:PqRNf+2fqIgWgreeaxkS9o/Lx51dbQOVPPvA97GeXS4=
 github.com/mosaic-media/module-fanart-tv v0.1.1 h1:xIlX5XR4DgJb7t8EiNze2tTAUSC7qXYSPGw1AtjTGyE=

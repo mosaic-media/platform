@@ -206,6 +206,12 @@ func boundaryCases() []boundaryCase {
 				Caller: caller(sid), ModuleID: "stremio",
 			}))
 		}},
+		// The settings index authorises the same read as opening one of the
+		// screens it lists: which modules are installed is not public just because
+		// the list itself invokes nothing.
+		{"ListSettingsModules", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListSettingsModules(ctx, app.ListSettingsModulesQuery{Caller: caller(sid)}))
+		}},
 		{"ResolvePlayback", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ResolvePlayback(ctx, app.ResolvePlaybackQuery{
 				Caller: caller(sid), PartID: "part-1",

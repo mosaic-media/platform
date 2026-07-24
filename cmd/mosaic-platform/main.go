@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	aiostreams "github.com/mosaic-media/module-aiostreams"
 	cinemeta "github.com/mosaic-media/module-cinemeta"
 	fanarttv "github.com/mosaic-media/module-fanart-tv"
 	remoteplayback "github.com/mosaic-media/module-remote-playback"
@@ -136,15 +137,15 @@ func superuserPermissions() []domain.Permission {
 // Pipeline's generated imports (ADR 0007). Modules land here as they are added;
 // the Stremio addon-source module was the first.
 //
-// Three of the five are *core* modules under ADR 0062's guarantee clause —
+// Three of the six are *core* modules under ADR 0062's guarantee clause —
 // Cinemeta and TMDB back the metadata/search class ADR 0035 requires, remote
 // playback backs the consumer class without which the library is inert — and
-// two, Stremio and fanart.tv, are extension modules. Nothing here distinguishes
-// them, and that is the design: the tier is a delivery and coupling decision, not
-// a contract decision, so all five implement the same SDK interfaces and register
-// identically. The distinction becomes visible when the Supervisor selects which
-// core modules a Generation wires in (ADR 0063); until then this function is the
-// selection.
+// three, Stremio, AIOStreams and fanart.tv, are extension modules. Nothing here
+// distinguishes them, and that is the design: the tier is a delivery and
+// coupling decision, not a contract decision, so all six implement the same SDK
+// interfaces and register identically. The distinction becomes visible when the
+// Supervisor selects which core modules a Generation wires in (ADR 0063); until
+// then this function is the selection.
 //
 // fanart.tv is the first module here that fills neither a source role nor a
 // consumer role (ADR 0075) — it enriches content another module already
@@ -178,6 +179,23 @@ func registerCapabilities(reg *app.CapabilityRegistry, httpClient *http.Client) 
 	// SSRF protection entirely for the one caller that fetches URLs a user
 	// supplied.
 	reg.Register(stremio.New(httpClient))
+	// The AIOStreams module — a stream source for one named upstream, beside the
+	// open-ended addon list above. It is the answer to a question that module
+	// cannot answer: a Stremio addon is community-made and unreviewed, and Mosaic
+	// has no access-control story that makes an arbitrary addon list safe to
+	// recommend, so an install that only wants streams should not have to adopt
+	// that whole surface. AIOStreams is itself an aggregator, so the breadth
+	// survives and the trust decision becomes one instance URL.
+	//
+	// It registers before Stremio in id order, which the stream-enrichment fan-out
+	// reads as precedence: it is asked first and stops the search when it answers
+	// (ADR 0073). That is the intended order and it is alphabetical accident, the
+	// same seam as the cinemeta/tmdb ordering above.
+	//
+	// Handed the Platform's client for the same reason Stremio is: the instance
+	// URL is text a user typed, and only that client routes through netguard's
+	// dial guard.
+	reg.Register(aiostreams.New(httpClient))
 	// The remote playback module — the first *consumer* capability (ADR 0045).
 	// Registering it is what stops the library being inert: the Stremio module
 	// above snapshots a stream location at import, and this is what can turn

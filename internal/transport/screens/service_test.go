@@ -39,6 +39,9 @@ type fakeQueries struct {
 	previewInLibrary bool
 	previewNodeID    v1.NodeID
 	settingsUI       []byte
+	// settingsModules is what ListSettingsModules reports — the modules the
+	// settings index offers a way into.
+	settingsModules []app.SettingsModule
 
 	// inProgress is what ListInProgress reports — the continue-watching rail's
 	// input. playbackStates is what ListPlaybackStates reports for the watched
@@ -180,6 +183,12 @@ func (f *fakeQueries) ModuleSettingsUI(_ context.Context, q app.ModuleSettingsUI
 	f.gotSettingsModuleID = q.ModuleID
 	f.mu.Unlock()
 	return app.ModuleSettingsUIResult{ModuleID: q.ModuleID, UI: f.settingsUI}, nil
+}
+
+func (f *fakeQueries) ListSettingsModules(context.Context, app.ListSettingsModulesQuery) (app.ListSettingsModulesResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return app.ListSettingsModulesResult{Modules: f.settingsModules}, nil
 }
 
 func render(t *testing.T, svc *Service, name string, params map[string]any) sdui.Node {
@@ -728,19 +737,66 @@ func TestDetailScreenRendersHeaderAndChildren(t *testing.T) {
 
 func TestSettingsScreenHostsModuleUI(t *testing.T) {
 	// The Platform hosts the module's contributed settings UINode verbatim (ADR
-	// 0038): the settings screen renders whatever the module returned.
-	moduleUI := `{"type":"Screen","props":{"title":"Stremio addons"},"children":[{"type":"Section","props":{"title":"Add an addon"}}]}`
+	// 0038): the settings screen renders whatever the module returned, under a
+	// frame of the Platform's own.
+	moduleUI := `{"type":"Screen","props":{"title":"AIOStreams"},"children":[{"type":"Section","props":{"title":"Instance"}}]}`
 	fake := &fakeQueries{settingsUI: []byte(moduleUI)}
 
-	node := render(t, &Service{content: fake}, "settings", nil)
-	if fake.gotSettingsModuleID != "stremio" {
-		t.Fatalf("settings screen resolved module %q, want the stremio default", fake.gotSettingsModuleID)
+	node := render(t, &Service{content: fake}, "settings", map[string]any{"moduleId": "aiostreams"})
+	if fake.gotSettingsModuleID != "aiostreams" {
+		t.Fatalf("settings screen resolved module %q, want the requested one", fake.gotSettingsModuleID)
 	}
-	if node.Type != sdui.TypeScreen || prop(node, "title") != "Stremio addons" {
-		t.Fatalf("settings root = %+v, want the module's Screen", node.Props)
+	screen, ok := find(node, sdui.TypeScreen)
+	if !ok || prop(screen, "title") != "AIOStreams" {
+		t.Fatalf("settings did not host the module's Screen: %+v", node)
 	}
 	if _, ok := find(node, sdui.TypeSection); !ok {
 		t.Fatal("settings screen did not render the module's section")
+	}
+	// The way back out is the Platform's, not the module's: a module contributes
+	// a form and does not know it is being hosted (ADR 0038).
+	back, ok := findButton(node, "← Settings")
+	if !ok {
+		t.Fatal("a hosted module screen must offer a way back to the settings index")
+	}
+	if act := actionOf(back); act["kind"] != sdui.KindNavigate || act["screen"] != "settings" {
+		t.Fatalf("back action = %+v, want a Navigate to settings", act)
+	}
+}
+
+// TestSettingsScreenIndexesEveryModuleWithAScreen is the client path a module's
+// settings screen is owed. The host used to name one module by constant, so a
+// second module's screen existed and nothing could open it.
+func TestSettingsScreenIndexesEveryModuleWithAScreen(t *testing.T) {
+	fake := &fakeQueries{settingsModules: []app.SettingsModule{
+		{ModuleID: "aiostreams", Name: "AIOStreams"},
+		{ModuleID: "stremio", Name: "Stremio addon source"},
+		{ModuleID: "tmdb", Name: "TMDB"},
+	}}
+
+	node := render(t, &Service{content: fake}, "settings", nil)
+	if fake.gotSettingsModuleID != "" {
+		t.Fatalf("the index invoked module %q; listing must not render anybody's screen", fake.gotSettingsModuleID)
+	}
+	for _, m := range fake.settingsModules {
+		btn, ok := findButton(node, m.Name)
+		if !ok {
+			t.Fatalf("settings index has no way into %q", m.ModuleID)
+		}
+		act := actionOf(btn)
+		if act["kind"] != sdui.KindNavigate || mapAt(act, "params")["moduleId"] != m.ModuleID {
+			t.Fatalf("%q entry action = %+v, want a Navigate carrying its moduleId", m.ModuleID, act)
+		}
+	}
+}
+
+// TestSettingsIndexWithNoModulesSaysSo covers a legitimate composition: a build
+// with no settings-UI module at all must say that rather than render a heading
+// with nothing under it.
+func TestSettingsIndexWithNoModulesSaysSo(t *testing.T) {
+	node := render(t, &Service{content: &fakeQueries{}}, "settings", nil)
+	if _, ok := find(node, sdui.TypeEmptyState); !ok {
+		t.Fatal("an index over no modules must render an empty state")
 	}
 }
 

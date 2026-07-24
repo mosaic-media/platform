@@ -313,6 +313,52 @@ func (r *CapabilityRegistry) PlaybackProvider(id string) (v1.PlaybackProvider, b
 	return p, ok
 }
 
+// SettingsUIProviderEntry names a module that contributes a settings screen. It
+// carries the manifest's Name as well as its id because this is the one
+// enumeration whose result is *rendered*: an index listing "aiostreams" and
+// "stremio" makes a reader work out which is which, and the module already
+// declares a human label.
+type SettingsUIProviderEntry struct {
+	ModuleID string
+	Name     string
+}
+
+// SettingsUIProviders returns every registered capability that fills
+// RoleSettingsUI (ADR 0038), in stable module-id order.
+//
+// It is what turns a module's settings screen from something the Platform can
+// render into something a user can reach. The settings host used to name one
+// module by constant, so every module that contributed a screen after the first
+// had one nobody could open — `module-tmdb` shipped a whole credential form in
+// that state, which is the "capability with no client path" case: it worked, and
+// it was owed.
+//
+// It reads Manifest() per call rather than caching a label at registration. The
+// registry is populated once at composition and read at invocation, so the cost
+// is a map walk and a few struct copies on a settings render, and the
+// alternative is a second source of truth for a module's name.
+func (r *CapabilityRegistry) SettingsUIProviders() []SettingsUIProviderEntry {
+	var out []SettingsUIProviderEntry
+	for _, id := range r.sortedIDs() {
+		c := r.byID[id]
+		if _, ok := c.(v1.SettingsUIProvider); !ok {
+			continue
+		}
+		// Declared as well as implemented: a module that fills a role it did not
+		// declare is not resolvable by role, so listing it would offer a screen
+		// the host then refuses to open.
+		if !declares(c, v1.RoleSettingsUI) {
+			continue
+		}
+		name := c.Manifest().Name
+		if name == "" {
+			name = id
+		}
+		out = append(out, SettingsUIProviderEntry{ModuleID: id, Name: name})
+	}
+	return out
+}
+
 // sortedIDs returns the registered ids in lexical order, the stable order every
 // enumeration uses.
 func (r *CapabilityRegistry) sortedIDs() []string {

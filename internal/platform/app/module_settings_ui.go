@@ -67,6 +67,49 @@ func (s *Service) ModuleSettingsUI(ctx context.Context, query ModuleSettingsUIQu
 	return ModuleSettingsUIResult{ModuleID: query.ModuleID, UI: resp.UI}, nil
 }
 
+// SettingsModule is one module that contributes a settings screen, for the
+// settings index.
+type SettingsModule struct {
+	ModuleID string
+	Name     string
+}
+
+// ListSettingsModulesQuery asks which modules have a settings screen to open.
+type ListSettingsModulesQuery struct {
+	Caller v1.Caller
+}
+
+// ListSettingsModulesResult carries them in stable module-id order.
+type ListSettingsModulesResult struct {
+	Modules []SettingsModule
+}
+
+// ListSettingsModules enumerates the modules that fill RoleSettingsUI (ADR
+// 0038), so the settings host can offer an index rather than naming one module
+// by constant.
+//
+// It authorises the same read as opening one of those screens — a caller who may
+// not read a module's settings must not learn which modules are installed from
+// the index either. Nothing here invokes a module: the list is the registry's,
+// and a module is only asked to render when a user opens it.
+func (s *Service) ListSettingsModules(ctx context.Context, query ListSettingsModulesQuery) (ListSettingsModulesResult, error) {
+	if query.Caller.Session == "" {
+		return ListSettingsModulesResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
+	}
+	if _, err := s.enter(ctx, query.Caller, ActionModuleRead, policy.Resource{Type: "module"}); err != nil {
+		return ListSettingsModulesResult{}, err
+	}
+	if s.capabilities == nil {
+		return ListSettingsModulesResult{}, nil
+	}
+	entries := s.capabilities.SettingsUIProviders()
+	modules := make([]SettingsModule, 0, len(entries))
+	for _, e := range entries {
+		modules = append(modules, SettingsModule{ModuleID: e.ModuleID, Name: e.Name})
+	}
+	return ListSettingsModulesResult{Modules: modules}, nil
+}
+
 // capabilitySettingsUIProvider resolves a settings-UI provider by module id,
 // tolerating a Service built without a registry.
 func (s *Service) capabilitySettingsUIProvider(id string) (v1.SettingsUIProvider, bool) {

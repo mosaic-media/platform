@@ -76,10 +76,6 @@ const (
 	emptyIconSearch      = "search"
 )
 
-// defaultSettingsModule is the module the settings screen hosts when no moduleId
-// is given — Stremio, the only module that provides a settings UI today.
-const defaultSettingsModule = "stremio"
-
 // importContentMutation is the Platform mutation a detail's Add-to-library action
 // invokes to materialise a virtual ref (ADR 0028).
 const importContentMutation = "importContent"
@@ -103,6 +99,10 @@ type contentQueries interface {
 	GetContentNode(context.Context, v1.GetContentNodeQuery) (v1.GetContentNodeResult, error)
 	PreviewContent(context.Context, app.PreviewContentQuery) (app.PreviewContentResult, error)
 	ModuleSettingsUI(context.Context, app.ModuleSettingsUIQuery) (app.ModuleSettingsUIResult, error)
+	// ListSettingsModules backs the settings index (ADR 0038). Without it the
+	// host has to name one module by constant, which leaves every module that
+	// contributes a screen after the first with no way in.
+	ListSettingsModules(context.Context, app.ListSettingsModulesQuery) (app.ListSettingsModulesResult, error)
 	// FirstPlayablePart backs the detail screen's Play affordance: a Work has no
 	// bytes of its own, so the emit-side has to look one level down for an item
 	// that does before it can offer Play at all (ADR 0036 — an affordance with
