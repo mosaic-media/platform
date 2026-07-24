@@ -119,11 +119,12 @@ func (m *Manager) Available(ctx context.Context) ([]app.ExtensionCatalogueEntry,
 			provides[i] = string(r)
 		}
 		out = append(out, app.ExtensionCatalogueEntry{
-			Repository: extension.OfficialRepositoryName,
-			ModuleID:   man.ID,
-			Name:       man.Name,
-			Version:    man.Version,
-			Provides:   provides,
+			Repository:  extension.OfficialRepositoryName,
+			ModuleID:    man.ID,
+			Name:        man.Name,
+			Version:     man.Version,
+			Provides:    provides,
+			Description: man.Description,
 		})
 	}
 	return out, nil

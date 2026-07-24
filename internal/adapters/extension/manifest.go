@@ -50,6 +50,12 @@ type Manifest struct {
 	// selection or a capability-gated affordance can reason about the module
 	// before it runs.
 	Provides []v1.Role `json:"provides"`
+	// Description is the module's own sentence about what it is, carried from
+	// its SDK manifest through `--mosaic-manifest` into the release artefact and
+	// signed with the rest of it. The Platform shows it and never writes it: the
+	// roles above say what a module can do, and only its author can say what it
+	// is for.
+	Description string `json:"description,omitempty"`
 	// Binaries is one entry per platform the module ships for, each carrying the
 	// digest of that platform's binary. The Platform verifies the binary it is
 	// about to run against the entry for its own platform.

@@ -52,6 +52,10 @@ type ExtensionCatalogueEntry struct {
 	Name       string
 	Version    string
 	Provides   []string
+	// Description is the module's own sentence about what it is, from its signed
+	// manifest. Empty for a module that publishes none — the capabilities still
+	// say what it can do, which is what the Platform can vouch for anyway.
+	Description string
 }
 
 // ListAvailableExtensionsQuery reads the trusted repository's catalogue.
