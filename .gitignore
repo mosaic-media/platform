@@ -21,3 +21,6 @@ logs/
 # overlay writes one outside the bind mount for exactly this reason.
 go.work
 go.work.sum
+
+# Release build output (workflow-produced, never committed)
+/dist/

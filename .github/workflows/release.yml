@@ -1,0 +1,149 @@
+name: release
+
+# Builds and publishes the Platform binary for every supported target on a
+# version tag (ADR 0063, ADR 0080). Installation is downloading this binary —
+# in a container or on bare metal, Linux, macOS or Windows — so this is the one
+# thing every deployment topology consumes.
+#
+# What is here: the gate that makes a release pre-proven, a cross-compile matrix
+# producing one binary per target with a checksum, a GitHub release carrying
+# them, and a thin container image built from the same linux binaries rather
+# than a second build.
+#
+# What is deliberately not here yet: **signing** (ADR 0065 — the release binary
+# and the checksums should be signed by Mosaic's key before the Supervisor
+# verifies them, and that waits on real key custody), and the **Supervisor**
+# that downloads and activates a release, which does not exist. A user can
+# download and run the binary directly meanwhile.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The one target the container image is built for first; the matrix builds all.
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  # A release must be pre-proven (ADR 0063). This runs the whole container gate —
+  # license headers, gofmt, vet, build and the tests against a real PostgreSQL —
+  # the same command a contributor runs, so a tag cannot publish something that
+  # only passed the lighter push gate.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full container gate
+        run: docker compose -f docker-compose.test.yml run --rm test
+
+  build:
+    needs: gate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # CGO off, so a target cross-compiles from this one runner rather than
+      # needing a C toolchain per platform — the property ADR 0065 and ADR 0080
+      # depend on for the arm64-NAS install to stay a loop and not a build farm.
+      # The TMDB read access token is linked in here and nowhere else (ADR 0072):
+      # only the workflow that links cmd/mosaic-platform can apply it, and it is
+      # optional — an unset secret links an empty token and Cinemeta remains the
+      # zero-configuration floor. A `-X` to a symbol that no longer resolves is
+      # silently ignored, which is why module-tmdb's own gate guards the path.
+      - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          TMDB_RAC: ${{ secrets.TMDB_RAC }}
+        run: |
+          name="mosaic-platform-${GOOS}-${GOARCH}"
+          [ "$GOOS" = "windows" ] && name="${name}.exe"
+          go build \
+            -trimpath \
+            -ldflags "-s -w -X github.com/mosaic-media/module-tmdb.defaultReadAccessToken=${TMDB_RAC}" \
+            -o "dist/${name}" ./cmd/mosaic-platform
+          ( cd dist && sha256sum "${name}" > "${name}.sha256" )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mosaic-platform-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # One checksums file over every binary, so a downloader can verify the one
+      # they took without collecting per-file .sha256 sidecars.
+      - name: Assemble checksums
+        run: |
+          cd dist
+          cat ./*.sha256 > SHA256SUMS
+          echo "--- release assets ---"; ls -la
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME}"
+          gh release create "$version" --title "$version" --generate-notes --verify-tag \
+            dist/mosaic-platform-* dist/SHA256SUMS
+
+  container:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # A thin image built FROM the binaries this workflow already produced, for
+      # both Linux architectures — a packaging artefact, not a second build, so a
+      # container deployment and a native one run identical bytes (ADR 0080). The
+      # image bundles ffmpeg because the Platform shells out to ffprobe at
+      # runtime (ADR 0050); a bare-metal user installs it themselves, and this is
+      # the difference the image papers over.
+      - name: Build and push the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:latest
