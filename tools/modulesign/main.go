@@ -255,9 +255,16 @@ func buildManifest(args []string) {
 		if err != nil {
 			fail("%v", err)
 		}
+		// {ext} is ".exe" on Windows and empty elsewhere, so one template covers a
+		// matrix that includes Windows without the release having to special-case
+		// the asset name — the same suffix Go's build gives the binary.
+		ext := ""
+		if goos == "windows" {
+			ext = ".exe"
+		}
 		url := strings.NewReplacer(
 			"{id}", identity.ID, "{version}", identity.Version,
-			"{os}", goos, "{arch}", goarch,
+			"{os}", goos, "{arch}", goarch, "{ext}", ext,
 		).Replace(urlTemplate)
 		binaries = append(binaries, binaryRef{OS: goos, Arch: goarch, Digest: digest, URL: url})
 	}

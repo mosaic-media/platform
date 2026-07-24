@@ -86,3 +86,55 @@ func TestBuildManifestFromAModuleThenLaunch(t *testing.T) {
 		t.Errorf("digest mismatch between build-manifest and the Platform: %q vs %q", m.Binaries[0].Digest, got)
 	}
 }
+
+// The Windows binary is named with a .exe suffix and so is its release asset, so
+// the URL template's {ext} must expand to ".exe" on windows and to nothing
+// elsewhere. Without this, a matrix that includes windows/amd64 (which the
+// Platform runs, so an extension module ships for it) would catalogue a URL that
+// 404s. The os/arch labels are the tool's own — the file digested here need not
+// be a real Windows binary for the naming rule to be what's under test.
+func TestBuildManifestExpandsWindowsExt(t *testing.T) {
+	dir := t.TempDir()
+	probe := buildProbe(t)
+	tool := buildModulesign(t, dir)
+
+	identity := filepath.Join(dir, "identity.json")
+	out, err := exec.Command(probe, "--mosaic-manifest").Output()
+	if err != nil {
+		t.Fatalf("running probe --mosaic-manifest: %v", err)
+	}
+	if err := os.WriteFile(identity, out, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	manifestPath := filepath.Join(dir, "manifest.json")
+	run(t, tool, "build-manifest",
+		"-identity", identity,
+		"-sdk-major", "0",
+		"-version", "v0.1.0",
+		"-url", "https://github.invalid/module-extprobe/releases/download/{version}/extprobe-{os}-{arch}{ext}",
+		"-out", manifestPath,
+		"windows/amd64="+probe,
+		"linux/amd64="+probe,
+	)
+
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := extension.ParseManifest(data)
+	if err != nil {
+		t.Fatalf("the built manifest does not parse: %v", err)
+	}
+
+	urls := map[string]string{}
+	for _, b := range m.Binaries {
+		urls[b.OS] = b.URL
+	}
+	if want := "https://github.invalid/module-extprobe/releases/download/v0.1.0/extprobe-windows-amd64.exe"; urls["windows"] != want {
+		t.Errorf("windows URL: got %q, want %q", urls["windows"], want)
+	}
+	if want := "https://github.invalid/module-extprobe/releases/download/v0.1.0/extprobe-linux-amd64"; urls["linux"] != want {
+		t.Errorf("linux URL kept a bare name: got %q, want %q", urls["linux"], want)
+	}
+}
