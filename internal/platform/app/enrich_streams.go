@@ -64,7 +64,7 @@ func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1
 	// work's *shared* external ids rather than a native one, because it did not
 	// source this content and holds no id of its own for it. Sorted so a run is
 	// reproducible rather than depending on map order.
-	identities := sharedIdentities(work)
+	identities := sharedIdentitiesOf(work)
 	if len(identities) == 0 {
 		// Nothing neutral to offer. A source keyed only to itself is unenrichable
 		// by design rather than by oversight (ADR 0073).
@@ -103,8 +103,8 @@ func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1
 				ref := v1.ContentRef{
 					Provider:       provider.ModuleID,
 					MediaType:      work.MediaType,
-					ExternalScheme: identity.scheme,
-					ExternalID:     identity.value,
+					ExternalScheme: identity.Scheme,
+					ExternalID:     identity.ID,
 				}
 
 				mctx, span := moduleSpan(ctx, provider.ModuleID, "streams")
@@ -117,7 +117,7 @@ func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1
 				if err != nil {
 					telemetry.From(ctx).Warn("stream provider failed during enrichment",
 						telemetry.String("module", provider.ModuleID),
-						telemetry.String("scheme", identity.scheme),
+						telemetry.String("scheme", identity.Scheme),
 						telemetry.Err(err))
 					continue
 				}
@@ -177,16 +177,18 @@ func editionLabelOf(stream v1.StreamLink) string {
 	return stream.Label
 }
 
-// externalIdentity is one scheme/value pair from a work's external-id document.
-type externalIdentity struct{ scheme, value string }
-
-// sharedIdentities reads the work's external ids into a stable, ordered list.
+// sharedIdentitiesOf reads the work's external ids into a stable, ordered list.
 //
 // Every scheme is offered rather than the Platform choosing between them:
 // which identities a source speaks is the source's business, and preferring one
 // here would be a policy invented in the kernel. Declining an unrecognised
 // scheme is cheap on the module side — it is a comparison, not a request.
-func sharedIdentities(work v1.Node) []externalIdentity {
+//
+// The value is the SDK's own v1.ExternalIdentity rather than a private struct,
+// because ADR 0075's artwork request carries the whole set across the module
+// boundary and there is no reason for the Platform to hold a second shape for
+// the same pair.
+func sharedIdentitiesOf(work v1.Node) []v1.ExternalIdentity {
 	if len(work.ExternalIDs) == 0 {
 		return nil
 	}
@@ -194,13 +196,13 @@ func sharedIdentities(work v1.Node) []externalIdentity {
 	if err := json.Unmarshal(work.ExternalIDs, &document); err != nil {
 		return nil
 	}
-	out := make([]externalIdentity, 0, len(document))
+	out := make([]v1.ExternalIdentity, 0, len(document))
 	for scheme, value := range document {
 		if scheme != "" && value != "" {
-			out = append(out, externalIdentity{scheme: scheme, value: value})
+			out = append(out, v1.ExternalIdentity{Scheme: scheme, ID: value})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].scheme < out[j].scheme })
+	sort.Slice(out, func(i, j int) bool { return out[i].Scheme < out[j].Scheme })
 	return out
 }
 

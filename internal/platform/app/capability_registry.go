@@ -131,6 +131,9 @@ func roleImplemented(c v1.Capability, role v1.Role) bool {
 	case v1.RoleSubtitles:
 		_, ok := c.(v1.SubtitlesProvider)
 		return ok
+	case v1.RoleArtwork:
+		_, ok := c.(v1.ArtworkProvider)
+		return ok
 	case v1.RolePlayback:
 		_, ok := c.(v1.PlaybackProvider)
 		return ok
@@ -180,6 +183,31 @@ func (r *CapabilityRegistry) StreamProviders() []StreamProviderEntry {
 	for _, id := range r.sortedIDs() {
 		if p, ok := r.byID[id].(v1.StreamProvider); ok {
 			out = append(out, StreamProviderEntry{ModuleID: id, Provider: p})
+		}
+	}
+	return out
+}
+
+// ArtworkProviderEntry pairs an artwork-capable module's id with its provider.
+type ArtworkProviderEntry struct {
+	ModuleID string
+	Provider v1.ArtworkProvider
+}
+
+// ArtworkProviders returns every registered capability that fills RoleArtwork,
+// in stable module-id order.
+//
+// Like StreamProviders it is a fan-out enumeration (ADR 0075): artwork is
+// resolved for content the provider did not source, so the module that supplied
+// the metadata has no special claim. Unlike stream enrichment, the caller keeps
+// asking after the first provider answers — artwork candidates from several
+// sources union into one set rather than competing, so there is no first-wins
+// rule and no cross-provider dedup problem to leave open.
+func (r *CapabilityRegistry) ArtworkProviders() []ArtworkProviderEntry {
+	var out []ArtworkProviderEntry
+	for _, id := range r.sortedIDs() {
+		if p, ok := r.byID[id].(v1.ArtworkProvider); ok {
+			out = append(out, ArtworkProviderEntry{ModuleID: id, Provider: p})
 		}
 	}
 	return out

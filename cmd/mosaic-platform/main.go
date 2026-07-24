@@ -20,6 +20,7 @@ import (
 
 	"connectrpc.com/connect"
 	cinemeta "github.com/mosaic-media/module-cinemeta"
+	fanarttv "github.com/mosaic-media/module-fanart-tv"
 	remoteplayback "github.com/mosaic-media/module-remote-playback"
 	stremio "github.com/mosaic-media/module-stremio-addons"
 	tmdb "github.com/mosaic-media/module-tmdb"
@@ -135,15 +136,21 @@ func superuserPermissions() []domain.Permission {
 // Pipeline's generated imports (ADR 0007). Modules land here as they are added;
 // the Stremio addon-source module was the first.
 //
-// Three of the four are *core* modules under ADR 0062's guarantee clause —
+// Three of the five are *core* modules under ADR 0062's guarantee clause —
 // Cinemeta and TMDB back the metadata/search class ADR 0035 requires, remote
 // playback backs the consumer class without which the library is inert — and
-// one, Stremio, is an extension module. Nothing here distinguishes them, and
-// that is the design: the tier is a delivery and coupling decision, not a
-// contract decision, so all four implement the same SDK interfaces and register
+// two, Stremio and fanart.tv, are extension modules. Nothing here distinguishes
+// them, and that is the design: the tier is a delivery and coupling decision, not
+// a contract decision, so all five implement the same SDK interfaces and register
 // identically. The distinction becomes visible when the Supervisor selects which
 // core modules a Generation wires in (ADR 0063); until then this function is the
 // selection.
+//
+// fanart.tv is the first module here that fills neither a source role nor a
+// consumer role (ADR 0075) — it enriches content another module already
+// identified, reached only through the artwork enrichment pass rather than
+// through any ContentRef, so its registration looks identical to the others
+// while its invocation path does not.
 func registerCapabilities(reg *app.CapabilityRegistry, httpClient *http.Client) {
 	// The Cinemeta metadata module — the zero-configuration floor under the
 	// required metadata/search class (ADR 0072). It is what makes a fresh install
@@ -176,6 +183,15 @@ func registerCapabilities(reg *app.CapabilityRegistry, httpClient *http.Client) 
 	// above snapshots a stream location at import, and this is what can turn
 	// that location back into playable bytes.
 	reg.Register(remoteplayback.New())
+	// The fanart.tv artwork module — the first module reached only through
+	// enrichment rather than through any ContentRef (ADR 0075). It fills
+	// RoleArtwork alone: it illustrates content another module identified and
+	// must never declare RoleMetadata, RoleSearch or RoleCatalog, which its own
+	// boundary test asserts. Registering it costs nothing when it is
+	// unconfigured or unaddressable for a title — the artwork enrichment pass is
+	// best-effort, and a deployment with no artwork provider sees exactly what it
+	// saw before this module existed.
+	reg.Register(fanarttv.New(httpClient))
 }
 
 func main() {

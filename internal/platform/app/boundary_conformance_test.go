@@ -108,6 +108,12 @@ func boundaryCases() []boundaryCase {
 				Location: v1.MediaLocation{Scheme: v1.LocalLocation, Ref: "/media/a.mkv"},
 			}))
 		}},
+		{"SetContentArtwork", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.SetContentArtwork(ctx, v1.SetContentArtworkCommand{
+				Caller: caller(sid), NodeID: "node-1",
+				Artwork: v1.Artwork{Poster: "https://cdn/p.jpg"},
+			}))
+		}},
 		{"RelateContent", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.RelateContent(ctx, v1.RelateContentCommand{
 				Caller: caller(sid), FromNodeID: "node-1", ToNodeID: "node-2",

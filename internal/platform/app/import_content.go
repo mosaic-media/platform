@@ -105,6 +105,12 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 	// whether or not anything could be found to play.
 	if result.WorkID != "" {
 		s.enrichStreams(ctx, cmd.Caller, result.WorkID, &result)
+
+		// 6c. fill in what it looks like (ADR 0075). Same shape and same reasons
+		// as the stream pass: a dedicated artwork source fills no metadata role
+		// and is never named by a ref, so without this it would sit registered
+		// and never be asked about the title it has the best art for.
+		s.enrichArtwork(ctx, cmd.Caller, result.WorkID)
 	}
 
 	// 7. record that an import ran, for audit. The capability's own writes each
