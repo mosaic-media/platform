@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	sessionv1 "github.com/mosaic-media/contracts/gen/mosaic/session/v1"
 	"github.com/mosaic-media/platform/internal/platform/app"
-	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
 )
 
 // TestCapabilityClassIsOrderIndependent is the property the resolution cache

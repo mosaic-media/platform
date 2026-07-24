@@ -18,12 +18,12 @@ import (
 
 	"connectrpc.com/connect"
 
+	authv1 "github.com/mosaic-media/contracts/gen/mosaic/auth/v1"
+	"github.com/mosaic-media/contracts/gen/mosaic/auth/v1/authv1connect"
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/transport/rpc"
-	authv1 "github.com/mosaic-media/sdui/gen/mosaic/auth/v1"
-	"github.com/mosaic-media/sdui/gen/mosaic/auth/v1/authv1connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

@@ -23,7 +23,7 @@ package screens
 import (
 	"context"
 
-	sdui "github.com/mosaic-media/sdui/sdui"
+	sdui "github.com/mosaic-media/contracts/sdui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"

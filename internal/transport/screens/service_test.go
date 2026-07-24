@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"testing"
 
-	sdui "github.com/mosaic-media/sdui/sdui"
+	sdui "github.com/mosaic-media/contracts/sdui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"

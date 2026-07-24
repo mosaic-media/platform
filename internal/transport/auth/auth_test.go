@@ -12,9 +12,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	authv1 "github.com/mosaic-media/contracts/gen/mosaic/auth/v1"
 	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/transport/auth"
-	authv1 "github.com/mosaic-media/sdui/gen/mosaic/auth/v1"
 )
 
 var testNow = time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)

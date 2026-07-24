@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	sdui "github.com/mosaic-media/sdui/sdui"
-	"github.com/mosaic-media/sdui/ui"
+	sdui "github.com/mosaic-media/contracts/sdui"
+	"github.com/mosaic-media/contracts/ui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"

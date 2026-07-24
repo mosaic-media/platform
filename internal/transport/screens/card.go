@@ -5,7 +5,7 @@
 package screens
 
 import (
-	"github.com/mosaic-media/sdui/ui"
+	"github.com/mosaic-media/contracts/ui"
 
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )

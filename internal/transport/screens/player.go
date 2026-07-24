@@ -5,8 +5,8 @@
 package screens
 
 import (
-	"github.com/mosaic-media/sdui/sdui"
-	"github.com/mosaic-media/sdui/ui"
+	"github.com/mosaic-media/contracts/sdui"
+	"github.com/mosaic-media/contracts/ui"
 )
 
 // PlayerParams is everything the server decides about a playback surface

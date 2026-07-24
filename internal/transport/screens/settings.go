@@ -9,9 +9,9 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	sduiv1 "github.com/mosaic-media/sdui/gen/mosaic/sdui/v1"
-	sdui "github.com/mosaic-media/sdui/sdui"
-	"github.com/mosaic-media/sdui/ui"
+	sduiv1 "github.com/mosaic-media/contracts/gen/mosaic/sdui/v1"
+	sdui "github.com/mosaic-media/contracts/sdui"
+	"github.com/mosaic-media/contracts/ui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"

@@ -15,6 +15,10 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	authv1 "github.com/mosaic-media/contracts/gen/mosaic/auth/v1"
+	"github.com/mosaic-media/contracts/gen/mosaic/auth/v1/authv1connect"
+	sessionv1 "github.com/mosaic-media/contracts/gen/mosaic/session/v1"
+	"github.com/mosaic-media/contracts/gen/mosaic/session/v1/sessionv1connect"
 	"github.com/mosaic-media/platform/internal/adapters/crypto"
 	"github.com/mosaic-media/platform/internal/modules/postgres"
 	"github.com/mosaic-media/platform/internal/platform/app"
@@ -23,10 +27,6 @@ import (
 	authtransport "github.com/mosaic-media/platform/internal/transport/auth"
 	"github.com/mosaic-media/platform/internal/transport/session"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
-	authv1 "github.com/mosaic-media/sdui/gen/mosaic/auth/v1"
-	"github.com/mosaic-media/sdui/gen/mosaic/auth/v1/authv1connect"
-	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
-	"github.com/mosaic-media/sdui/gen/mosaic/session/v1/sessionv1connect"
 )
 
 // TestConnectHTTPSignsInAndRendersAScreen is the "make it runnable" proof end to

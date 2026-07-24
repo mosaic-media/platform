@@ -8,13 +8,13 @@ import (
 	"context"
 	"encoding/json"
 
+	sessionv1 "github.com/mosaic-media/contracts/gen/mosaic/session/v1"
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	"github.com/mosaic-media/platform/internal/transport/playback"
 	"github.com/mosaic-media/platform/internal/transport/screens"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
-	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
 )
 
 // dispatch routes an Invoke action to the application command service that backs

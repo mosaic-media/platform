@@ -24,9 +24,9 @@ import (
 	"sync"
 	"time"
 
+	sessionv1 "github.com/mosaic-media/contracts/gen/mosaic/session/v1"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
-	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
 )
 
 // historyLimit caps the per-session outbound buffer. Every pushed ServerMessage

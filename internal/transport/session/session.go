@@ -14,15 +14,15 @@ import (
 
 	"connectrpc.com/connect"
 
+	sessionv1 "github.com/mosaic-media/contracts/gen/mosaic/session/v1"
+	"github.com/mosaic-media/contracts/gen/mosaic/session/v1/sessionv1connect"
+	sdui "github.com/mosaic-media/contracts/sdui"
+	"github.com/mosaic-media/contracts/ui"
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	"github.com/mosaic-media/platform/internal/transport/playback"
 	"github.com/mosaic-media/platform/internal/transport/screens"
-	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
-	"github.com/mosaic-media/sdui/gen/mosaic/session/v1/sessionv1connect"
-	sdui "github.com/mosaic-media/sdui/sdui"
-	"github.com/mosaic-media/sdui/ui"
 )
 
 // inputDebounce is the server-side coalescing window for search-as-you-type

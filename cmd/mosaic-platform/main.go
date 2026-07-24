@@ -28,6 +28,8 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/mosaic-media/contracts/gen/mosaic/auth/v1/authv1connect"
+	"github.com/mosaic-media/contracts/gen/mosaic/session/v1/sessionv1connect"
 	"github.com/mosaic-media/platform/internal/adapters/crypto"
 	"github.com/mosaic-media/platform/internal/composition/bootstrap"
 	"github.com/mosaic-media/platform/internal/composition/builtin"
@@ -47,8 +49,6 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/playback"
 	"github.com/mosaic-media/platform/internal/transport/rpc"
 	"github.com/mosaic-media/platform/internal/transport/session"
-	"github.com/mosaic-media/sdui/gen/mosaic/auth/v1/authv1connect"
-	"github.com/mosaic-media/sdui/gen/mosaic/session/v1/sessionv1connect"
 
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )

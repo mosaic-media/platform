@@ -5,8 +5,8 @@
 package screens
 
 import (
-	sdui "github.com/mosaic-media/sdui/sdui"
-	"github.com/mosaic-media/sdui/ui"
+	sdui "github.com/mosaic-media/contracts/sdui"
+	"github.com/mosaic-media/contracts/ui"
 )
 
 // shellScreen is the server-emitted application frame (ADR 0031): the nav rail

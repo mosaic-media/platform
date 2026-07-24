@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	sessionv1 "github.com/mosaic-media/contracts/gen/mosaic/session/v1"
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/transport/playback"
-	sessionv1 "github.com/mosaic-media/sdui/gen/mosaic/session/v1"
 )
 
 // The client capability profile, and the class it reduces to (ADR 0047, 0049).
