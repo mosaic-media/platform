@@ -275,6 +275,8 @@ func (fakeTx) ModuleSettings() contracts.ModuleSettingsStore { return nil }
 func (fakeTx) UserPreferences() contracts.UserPreferenceStore { return nil }
 func (fakeTx) PlaybackStates() contracts.PlaybackStateStore   { return nil }
 
+func (fakeTx) InstalledExtensions() contracts.InstalledExtensionStore { return nil }
+
 type fakeUnitOfWork struct{ db *fakeDB }
 
 func (u fakeUnitOfWork) WithinTx(ctx context.Context, fn func(ctx context.Context, tx contracts.Tx) error) error {

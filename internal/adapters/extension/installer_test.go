@@ -157,6 +157,84 @@ func TestInstallRejectsAnIndexFromTheWrongKey(t *testing.T) {
 	}
 }
 
+// Boot re-adoption reads the on-disk cache and does NOT touch the network: after
+// an install, a fresh installer over the same directory — whose fetcher fails if
+// it is called at all — adopts the module and launches it. This is the
+// durable-across-restart property (ADR 0081): a restart reconstructs the running
+// set from what a previous install left on disk, so it neither depends on the
+// repository being reachable nor silently upgrades to whatever an index now
+// lists.
+func TestAdoptReUsesTheOnDiskCacheWithoutTheNetwork(t *testing.T) {
+	_, fetch, reg := newFakeRepo(t, nil)
+	dir := t.TempDir()
+
+	installed, err := extension.NewInstaller(reg, fetch, dir).
+		Install(context.Background(), "mosaic-official", "extprobe")
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	// The fetcher here fails the test if reached, so a passing Adopt is proof it
+	// used the cache rather than the repository.
+	sealed := extension.NewInstaller(reg, &explodingFetcher{t: t}, dir)
+	adopted, err := sealed.Adopt(context.Background(), "mosaic-official", "extprobe")
+	if err != nil {
+		t.Fatalf("adopt from cache: %v", err)
+	}
+	if adopted.ModuleID != "extprobe" || adopted.Version != installed.Version {
+		t.Errorf("adopted the wrong thing: got %+v, want id extprobe version %s", adopted, installed.Version)
+	}
+	if adopted.Config.BinaryPath != installed.Config.BinaryPath {
+		t.Errorf("adopt should reuse the installed binary: got %q, want %q",
+			adopted.Config.BinaryPath, installed.Config.BinaryPath)
+	}
+
+	// The adopted Config launches — the cached binary, re-verified against the
+	// cached manifest, is a runnable module.
+	m, err := extension.Launch(adopted.Config)
+	if err != nil {
+		t.Fatalf("launch adopted: %v", err)
+	}
+	t.Cleanup(m.Close)
+	if m.Capability.Manifest().ID != "extprobe" {
+		t.Errorf("running id: got %q", m.Capability.Manifest().ID)
+	}
+}
+
+// When the on-disk cache is gone — a wiped install directory — Adopt falls back
+// to a full install from the repository. A missing cache is the trigger for a
+// re-fetch, not an error.
+func TestAdoptReinstallsWhenTheCacheIsGone(t *testing.T) {
+	_, fetch, reg := newFakeRepo(t, nil)
+	dir := t.TempDir()
+	inst := extension.NewInstaller(reg, fetch, dir)
+
+	if _, err := inst.Install(context.Background(), "mosaic-official", "extprobe"); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	adopted, err := inst.Adopt(context.Background(), "mosaic-official", "extprobe")
+	if err != nil {
+		t.Fatalf("adopt after a cache wipe should reinstall: %v", err)
+	}
+	if adopted.ModuleID != "extprobe" {
+		t.Errorf("re-installed the wrong thing: %+v", adopted)
+	}
+}
+
+// explodingFetcher fails the test if the network is reached. It is how the
+// on-disk-cache path proves it stayed off the network.
+type explodingFetcher struct{ t *testing.T }
+
+func (e *explodingFetcher) Fetch(context.Context, string) ([]byte, error) {
+	e.t.Helper()
+	e.t.Error("Adopt reached the network but should have used the on-disk cache")
+	return nil, contracts.NewError(contracts.Unavailable, "fetcher must not be called")
+}
+
 // The index is authentic but the binary served is not the one it vouches for — a
 // tampered mirror. The digest check catches it, and the bad binary is not left
 // on disk.

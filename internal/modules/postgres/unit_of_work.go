@@ -115,3 +115,9 @@ func (t *tx) PlaybackStates() contracts.PlaybackStateStore {
 func (t *tx) ModuleSettings() contracts.ModuleSettingsStore {
 	return &moduleSettingsStore{q: t.q}
 }
+
+// InstalledExtensions joins the set (ADR 0081) so an install or uninstall and
+// its outbox event share the one transaction.
+func (t *tx) InstalledExtensions() contracts.InstalledExtensionStore {
+	return &installedExtensionStore{q: t.q}
+}

@@ -89,6 +89,9 @@ type ContractSet struct {
 	ModuleSettings contracts.ModuleSettingsStore
 	// UserPreferences is the direct read handle for a user's own settings.
 	UserPreferences contracts.UserPreferenceStore
+	// InstalledExtensions is the direct read handle for the durable set of
+	// installed extension modules (ADR 0081), read at boot to re-adopt them.
+	InstalledExtensions contracts.InstalledExtensionStore
 	// PlaybackResolutions caches where a release's bytes are, per capability
 	// class (ADR 0049). Direct rather than transaction-scoped: it is written
 	// after playback has already started, so it must not be inside anything's
@@ -158,6 +161,7 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		ModuleSettings:  NewModuleSettingsStore(pool),
 		UserPreferences: NewUserPreferenceStore(pool),
 
+		InstalledExtensions: NewInstalledExtensionStore(pool),
 		PlaybackResolutions: NewPlaybackResolutionStore(pool),
 		PlaybackStates:      NewPlaybackStateStore(pool),
 

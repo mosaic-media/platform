@@ -730,6 +730,11 @@ func (tx *fakeTx) PlaybackStates() contracts.PlaybackStateStore {
 	return &fakePlaybackStateStore{db: tx.db, trace: tx.trace}
 }
 
+// InstalledExtensions is nil here: no application service reads the installed set
+// yet (boot re-adoption reads it directly through the pool, not a Tx), so no test
+// through this fake exercises it. It exists to satisfy contracts.Tx.
+func (tx *fakeTx) InstalledExtensions() contracts.InstalledExtensionStore { return nil }
+
 // fakeUserPreferenceStore implements contracts.UserPreferenceStore over
 // fakeDB, keyed the same way the real table is: one entry per (user, key).
 type fakeUserPreferenceStore struct {

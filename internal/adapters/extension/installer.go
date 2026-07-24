@@ -6,6 +6,7 @@ package extension
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -136,12 +137,99 @@ func (i *Installer) installFor(ctx context.Context, repoName, moduleID, goos, go
 		return Installed{}, err
 	}
 
+	// Persist the authenticated manifest beside the binary. This is what lets a
+	// later boot re-adopt the *pinned* version from disk (ADR 0081): the on-disk
+	// binary is re-verified against this manifest's digest before every spawn,
+	// which confirms the exact bytes without re-fetching an index that may by
+	// then list a newer version. Its trust here is local-disk trust — the
+	// signature authenticated it at download; the install directory is the
+	// Platform's own (ADR 0065: the signature protects the download, not the
+	// host).
+	if err := writeManifest(moduleDir, entry.Manifest); err != nil {
+		_ = os.Remove(binaryPath)
+		return Installed{}, err
+	}
+
 	return Installed{
 		ModuleID:   entry.Manifest.ID,
 		Version:    entry.Manifest.Version,
 		Repository: repo.Name,
 		Config:     cfg,
 	}, nil
+}
+
+// Adopt brings up an already-installed module at boot (ADR 0081). It prefers the
+// on-disk cache: if the verified binary and its manifest are present, it
+// re-verifies the binary against that manifest's digest — the same check the
+// install ran, re-run in the process that grants authority every time it spawns
+// — and returns a launch-ready Config without touching the network. The pinned
+// version is whatever was installed, not whatever an index now lists, so a
+// registry that has since moved on does not silently upgrade an install.
+//
+// Only when the cache is gone — a wiped install directory, a manual delete —
+// does it fall back to a full [Install] from the repository, re-fetching and
+// re-verifying against the trusted key. repoName is where that re-fetch goes; on
+// the on-disk path it is recorded as provenance and nothing is fetched from it.
+func (i *Installer) Adopt(ctx context.Context, repoName, moduleID string) (Installed, error) {
+	return i.adoptFor(ctx, repoName, moduleID, runtime.GOOS, runtime.GOARCH)
+}
+
+func (i *Installer) adoptFor(ctx context.Context, repoName, moduleID, goos, goarch string) (Installed, error) {
+	moduleDir := filepath.Join(i.dir, safeName(moduleID))
+	binaryPath := filepath.Join(moduleDir, "module")
+	manifestPath := filepath.Join(moduleDir, manifestFilename)
+
+	manifestData, err := os.ReadFile(manifestPath) //nolint:gosec // the Platform's own install location.
+	if err != nil {
+		// No cached manifest — re-install from the repository. A missing cache is
+		// the expected trigger for a re-fetch, not an error to surface.
+		if os.IsNotExist(err) {
+			return i.installFor(ctx, repoName, moduleID, goos, goarch)
+		}
+		return Installed{}, contracts.WrapError(contracts.Unavailable, "extension: reading cached manifest", err)
+	}
+	manifest, err := ParseManifest(manifestData)
+	if err != nil {
+		return Installed{}, err
+	}
+	if manifest.ID != moduleID {
+		// The cache is for a different module than the record names — treat it as
+		// absent and re-install rather than run the wrong binary.
+		return i.installFor(ctx, repoName, moduleID, goos, goarch)
+	}
+	if _, err := os.Stat(binaryPath); err != nil {
+		if os.IsNotExist(err) {
+			return i.installFor(ctx, repoName, moduleID, goos, goarch)
+		}
+		return Installed{}, contracts.WrapError(contracts.Unavailable, "extension: stat cached binary", err)
+	}
+
+	cfg, err := checkManifestAgainstBinary(manifest, binaryPath, goos, goarch)
+	if err != nil {
+		return Installed{}, err
+	}
+	return Installed{
+		ModuleID:   manifest.ID,
+		Version:    manifest.Version,
+		Repository: repoName,
+		Config:     cfg,
+	}, nil
+}
+
+// manifestFilename is the cached manifest beside a module's binary.
+const manifestFilename = "manifest.json"
+
+// writeManifest stores the authenticated manifest beside the binary for later
+// re-adoption.
+func writeManifest(moduleDir string, m Manifest) error {
+	data, err := json.Marshal(m)
+	if err != nil {
+		return contracts.WrapError(contracts.Internal, "extension: marshalling manifest to cache", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, manifestFilename), data, 0o644); err != nil { //nolint:gosec // a manifest, not a secret.
+		return contracts.WrapError(contracts.Internal, "extension: caching manifest", err)
+	}
+	return nil
 }
 
 // resolveURL joins a possibly-relative binary URL to the repository base. An

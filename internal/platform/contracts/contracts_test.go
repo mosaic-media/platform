@@ -43,6 +43,8 @@ func (mockTx) ModuleSettings() contracts.ModuleSettingsStore  { return nil }
 func (mockTx) UserPreferences() contracts.UserPreferenceStore { return nil }
 func (mockTx) PlaybackStates() contracts.PlaybackStateStore   { return nil }
 
+func (mockTx) InstalledExtensions() contracts.InstalledExtensionStore { return nil }
+
 type mockUserStore struct{}
 
 func (mockUserStore) Create(ctx context.Context, user domain.User) (domain.User, error) {

@@ -100,6 +100,17 @@ const logLevelEnv = "MOSAIC_LOG_LEVEL"
 // the DSN and log level take.
 const moduleSelectionEnv = "MOSAIC_MODULES"
 
+// extensionsDirEnv names the directory the Platform stores installed extension
+// modules under (ADR 0081): their verified binaries and cached manifests, read
+// back at boot to re-adopt what a user installed. It must be a persistent,
+// writable location for installs to survive a restart; the default is relative
+// to the working directory, which a container deployment overrides with a
+// mounted volume. Like the DSN, it is an infrastructure path read from the
+// environment rather than a versioned config field.
+const extensionsDirEnv = "MOSAIC_EXTENSIONS_DIR"
+
+const defaultExtensionsDir = "mosaic-extensions"
+
 // serviceName and serviceVersion identify this process on every record it
 // emits. Mosaic is one host running more than one process — this one, the
 // Supervisor when it exists — so which process spoke is a required dimension
@@ -572,6 +583,82 @@ func run() error {
 		PlaybackResolutions: set.PlaybackResolutions,
 		PlaybackStates:      set.PlaybackStates,
 	})
+
+	// Re-adopt the extension modules a user has installed (ADR 0081). The
+	// installed set is durable Platform state and default-empty: a fresh install
+	// composes only its core modules and reaches this loop with nothing to do.
+	// Each installed record is brought up the way an install brings one up — the
+	// verified binary re-checked against its cached manifest and spawned — so a
+	// restart reconstructs exactly the set the user last installed, without an
+	// operator action and without re-consent.
+	//
+	// It runs after the Service is built because a module's callbacks re-enter the
+	// Service as the invoking user (ADR 0017): the spawned module is handed svc as
+	// its ContentService. The Supervised capability it produces registers into the
+	// same registry a compiled-in module does, and nothing above the registry can
+	// tell the difference. Registration is safe here without a lock because it
+	// happens before the serve loop; runtime install/uninstall while serving is a
+	// later slice that makes the registry concurrent.
+	//
+	// An extension that fails to adopt is a degraded capability — logged and
+	// skipped, never a boot failure. Extensions fill no required role class (that
+	// is core's guarantee, ADR 0035/0072), so one being absent is the ordinary
+	// degraded state, not the inert Platform RequireComposedRoleClasses refuses.
+	extensionsDir := os.Getenv(extensionsDirEnv)
+	if extensionsDir == "" {
+		extensionsDir = defaultExtensionsDir
+	}
+	installer, err := extension.NewOfficialInstaller(extensionsDir)
+	if err != nil {
+		return fmt.Errorf("extension installer: %w", err)
+	}
+	adoptCtx, adoptCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer adoptCancel()
+	installedExtensions, err := set.InstalledExtensions.List(adoptCtx)
+	if err != nil {
+		return fmt.Errorf("reading installed extensions: %w", err)
+	}
+	var adoptedModules []*extension.Supervised
+	for _, rec := range installedExtensions {
+		// Attribution is the Platform's, fixed here per module: the long-lived
+		// telemetry surface the module observes through (ADR 0059), and the egress
+		// proxy's per-host attribution both key on this id.
+		mtel := app.NewModuleTelemetry(root.For("module."+rec.ModuleID), rec.ModuleID)
+		adopted, adoptErr := installer.Adopt(adoptCtx, rec.Repository, rec.ModuleID)
+		if adoptErr != nil {
+			boot.Error("installed extension could not be adopted; capability degraded",
+				telemetry.String("module", rec.ModuleID),
+				telemetry.String("repository", rec.Repository),
+				telemetry.Err(adoptErr))
+			continue
+		}
+		adopted.Config.Content = svc
+		adopted.Config.Telemetry = mtel
+		sup, superviseErr := extension.Supervise(adopted.Config, extension.DefaultRestartPolicy(), mtel)
+		if superviseErr != nil {
+			boot.Error("installed extension could not be launched; capability degraded",
+				telemetry.String("module", rec.ModuleID),
+				telemetry.Err(superviseErr))
+			continue
+		}
+		capRegistry.Register(sup)
+		adoptedModules = append(adoptedModules, sup)
+		m := sup.Manifest()
+		boot.Info("adopted extension module",
+			telemetry.String("module", m.ID),
+			telemetry.String("version", m.Version),
+			telemetry.String("repository", rec.Repository),
+			telemetry.String("provides", fmt.Sprint(m.Provides)))
+	}
+	// Stop the adopted module processes when the Platform stops, so a module
+	// process never outlives the Platform that spawned it. Registered after a
+	// successful adoption; the empty default registers nothing.
+	defer func() {
+		for _, sup := range adoptedModules {
+			sup.Close()
+		}
+	}()
+
 	// The artwork proxy (ADR 0030) re-serves remote poster/backdrop images from
 	// the Platform's origin, so a client gets same-origin (CORS-clean) artwork.
 	// Its signing key is process-scoped: emitted screens are re-fetched, so a

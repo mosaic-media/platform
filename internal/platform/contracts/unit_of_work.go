@@ -56,4 +56,10 @@ type Tx interface {
 	// ModuleSettings did: a preference change emits an outbox event, and the
 	// two must commit together or neither.
 	UserPreferences() UserPreferenceStore
+
+	// InstalledExtensions persists the durable set of extension modules a user
+	// has installed (ADR 0081). It joins the set so an install or uninstall and
+	// its outbox event commit in one transaction, like every other write; the
+	// Platform reads it at boot to re-adopt what the user last installed.
+	InstalledExtensions() InstalledExtensionStore
 }

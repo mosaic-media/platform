@@ -37,11 +37,32 @@ type moduleTelemetry struct {
 	// emitted is shared with every span this telemetry produces, so one quota
 	// covers the whole invocation rather than one per object.
 	emitted *atomic.Int64
+	// unbounded lifts the per-invocation record quota. It is set only for the
+	// long-lived telemetry an out-of-process module holds for its whole life
+	// (see NewModuleTelemetry): a per-invocation cap does not map onto a process
+	// that outlives any one call.
+	unbounded bool
 }
 
-// newModuleTelemetry builds the SDK-facing telemetry for one module invocation.
+// newModuleTelemetry builds the SDK-facing telemetry for one in-process module
+// invocation, record-quota-bounded so a chatty module degrades only its own
+// call.
 func newModuleTelemetry(lg *telemetry.Logger, moduleID string) *moduleTelemetry {
 	return &moduleTelemetry{logger: lg, moduleID: moduleID, emitted: &atomic.Int64{}}
+}
+
+// NewModuleTelemetry builds the long-lived v1.Telemetry an out-of-process module
+// observes through for its whole life (ADR 0059), attributed to moduleID and
+// forwarding to the Platform logger with the Platform's redaction applied. The
+// composition root hands it to the extension host when it adopts a module.
+//
+// It is deliberately not record-quota-bounded: the per-invocation cap the
+// in-process path uses does not map onto a long-lived process, and how a
+// long-lived out-of-process module's telemetry should be bounded — a rate limit,
+// a sampling policy — is ADR 0077's open question, named here rather than
+// answered with a guessed cap.
+func NewModuleTelemetry(lg *telemetry.Logger, moduleID string) v1.Telemetry {
+	return &moduleTelemetry{logger: lg, moduleID: moduleID, emitted: &atomic.Int64{}, unbounded: true}
 }
 
 func (m *moduleTelemetry) Debug(message string, fields ...v1.Field) {
@@ -83,6 +104,9 @@ func (m *moduleTelemetry) emit(level telemetry.Level, message string, fields []v
 // — at the boundary — because a module in a tight loop would otherwise turn
 // the quota warning into the flood it exists to prevent.
 func (m *moduleTelemetry) claim() bool {
+	if m.unbounded {
+		return true
+	}
 	n := m.emitted.Add(1)
 	if n < moduleRecordQuota {
 		return true
