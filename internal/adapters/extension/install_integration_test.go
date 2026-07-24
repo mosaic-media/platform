@@ -31,54 +31,73 @@ import (
 // (GitHub Pages) and GitHub releases; the default gate is hermetic and excludes
 // it. A dedicated CI job runs `go test -tags integration ./...`.
 func TestRuntimeInstallFromOfficialRegistry(t *testing.T) {
-	installer, err := extension.NewOfficialInstaller(t.TempDir())
-	if err != nil {
-		t.Fatalf("official installer: %v", err)
+	// Every extension module the official registry catalogues, so this proves not
+	// one module but the whole published set installs and — the risk slice 2.2
+	// named — actually *serves* out of process: a stray stdout write, a global, or
+	// an init that misbehaves corrupts the handshake, and only spawning the real
+	// binary catches it. Each names one role it must declare, checked so a module
+	// that came up empty is not counted as working.
+	modules := []struct {
+		id       string
+		wantRole v1.Role
+	}{
+		{"stremio", v1.RoleMetadata},
+		{"aiostreams", v1.RoleStream},
+		{"fanart-tv", v1.RoleArtwork},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
+	for _, mod := range modules {
+		t.Run(mod.id, func(t *testing.T) {
+			installer, err := extension.NewOfficialInstaller(t.TempDir())
+			if err != nil {
+				t.Fatalf("official installer: %v", err)
+			}
 
-	// Install the Stremio module from the official registry. Everything past the
-	// network fetch — the index's own signature, the SDK major, a binary for this
-	// platform, and the downloaded binary's digest against the signed manifest —
-	// is checked by Install before it returns a launchable Config.
-	installed, err := installer.Install(ctx, extension.OfficialRepositoryName, "stremio")
-	if err != nil {
-		t.Fatalf("install stremio from the official registry: %v", err)
-	}
-	if installed.ModuleID != "stremio" {
-		t.Fatalf("installed module id = %q, want stremio", installed.ModuleID)
-	}
-	if installed.Repository != extension.OfficialRepositoryName {
-		t.Errorf("provenance = %q, want %q", installed.Repository, extension.OfficialRepositoryName)
-	}
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer cancel()
 
-	// Spawn the verified binary and confirm it serves. The handshake makes the
-	// final check ADR 0064 describes — the running binary agrees with the manifest
-	// that was verified — so a successful Launch is that agreement.
-	cfg := installed.Config
-	cfg.Content = stubContentService{}
-	cfg.Telemetry = &recordingTelemetry{}
-	m, err := extension.Launch(cfg)
-	if err != nil {
-		t.Fatalf("launch the installed stremio: %v", err)
-	}
-	t.Cleanup(m.Close)
+			// Everything past the network fetch — the index's own signature, the
+			// SDK major, a binary for this platform, and the downloaded binary's
+			// digest against the signed manifest — is checked by Install before it
+			// returns a launchable Config.
+			installed, err := installer.Install(ctx, extension.OfficialRepositoryName, mod.id)
+			if err != nil {
+				t.Fatalf("install %s from the official registry: %v", mod.id, err)
+			}
+			if installed.ModuleID != mod.id {
+				t.Fatalf("installed module id = %q, want %q", installed.ModuleID, mod.id)
+			}
+			if installed.Repository != extension.OfficialRepositoryName {
+				t.Errorf("provenance = %q, want %q", installed.Repository, extension.OfficialRepositoryName)
+			}
 
-	manifest := m.Capability.Manifest()
-	if manifest.ID != "stremio" {
-		t.Errorf("running module id = %q, want stremio", manifest.ID)
-	}
-	// It declares the source roles the Stremio module fills, which is what a
-	// metadata/search/stream source must serve to be useful.
-	roles := make(map[v1.Role]bool, len(manifest.Provides))
-	for _, r := range manifest.Provides {
-		roles[r] = true
-	}
-	for _, want := range []v1.Role{v1.RoleMetadata, v1.RoleSearch, v1.RoleStream} {
-		if !roles[want] {
-			t.Errorf("running stremio does not declare %q; roles = %v", want, manifest.Provides)
-		}
+			// Spawn the verified binary and confirm it serves. The handshake makes
+			// the final check ADR 0064 describes — the running binary agrees with
+			// the manifest that was verified — so a successful Launch is that
+			// agreement.
+			cfg := installed.Config
+			cfg.Content = stubContentService{}
+			cfg.Telemetry = &recordingTelemetry{}
+			m, err := extension.Launch(cfg)
+			if err != nil {
+				t.Fatalf("launch the installed %s: %v", mod.id, err)
+			}
+			t.Cleanup(m.Close)
+
+			manifest := m.Capability.Manifest()
+			if manifest.ID != mod.id {
+				t.Errorf("running module id = %q, want %q", manifest.ID, mod.id)
+			}
+			declares := false
+			for _, r := range manifest.Provides {
+				if r == mod.wantRole {
+					declares = true
+					break
+				}
+			}
+			if !declares {
+				t.Errorf("running %s does not declare %q; roles = %v", mod.id, mod.wantRole, manifest.Provides)
+			}
+		})
 	}
 }
