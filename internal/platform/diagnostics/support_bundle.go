@@ -27,6 +27,21 @@ type SupportBundle struct {
 	ProgramID      string                   `json:"program_id"`
 	ProgramVersion string                   `json:"program_version"`
 	Components     []domain.ComponentHealth `json:"components"`
+	// ModuleEgress records this deployment's layer-3 egress-containment posture
+	// (ADR 0064, ADR 0080): whether the OS denies an extension module direct
+	// network egress, and the honest sentence behind it. It is a structural fact
+	// of the deployment, not personal data, so it is never redacted — and it is
+	// here because "is module egress enforced?" is exactly a question a support
+	// bundle exists to answer without the answer being claimed uniformly.
+	ModuleEgress ModuleEgressPosture `json:"module_egress"`
+}
+
+// ModuleEgressPosture is the support bundle's plain projection of the extension
+// package's EgressContainment, carried without importing that package so the
+// diagnostics layer stays low-level.
+type ModuleEgressPosture struct {
+	Enforced bool   `json:"enforced"`
+	Detail   string `json:"detail"`
 }
 
 // BuildSupportBundle assembles an anonymised SupportBundle from a health
@@ -37,7 +52,7 @@ type SupportBundle struct {
 // Component identifiers, lifecycle, health state, last successful check,
 // last failure category and dependency health are structural facts, not
 // free text, so they are never redacted.
-func BuildSupportBundle(programID, programVersion string, components []domain.ComponentHealth, generatedAt time.Time) SupportBundle {
+func BuildSupportBundle(programID, programVersion string, components []domain.ComponentHealth, egress ModuleEgressPosture, generatedAt time.Time) SupportBundle {
 	anonymised := make([]domain.ComponentHealth, len(components))
 	for i, c := range components {
 		if c.RedactionClass != domain.RedactionNone {
@@ -50,6 +65,7 @@ func BuildSupportBundle(programID, programVersion string, components []domain.Co
 		ProgramID:      programID,
 		ProgramVersion: programVersion,
 		Components:     anonymised,
+		ModuleEgress:   egress,
 	}
 }
 

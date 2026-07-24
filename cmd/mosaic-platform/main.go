@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	goruntime "runtime"
 	"syscall"
 	"time"
 
@@ -517,6 +518,18 @@ func run() error {
 			telemetry.String("url", repo.URL),
 			telemetry.Bool("official", repo.Official))
 	}
+
+	// The layer-3 egress-containment posture (ADR 0064, ADR 0080). The Platform
+	// cannot enforce OS-level egress denial from inside its own non-root process,
+	// so it reports which posture this deployment is in rather than claim the
+	// guarantee uniformly: enforced only where the OS can deny a module direct
+	// egress and the deployment attests it did. Logged at boot so the claim is
+	// visible and honest, and carried in the diagnostic support bundle.
+	egressContainment := extension.DetermineEgressContainment(goruntime.GOOS, os.Getenv(extension.EgressEnforcementEnv))
+	boot.Info("module egress containment",
+		telemetry.String("posture", egressContainment.Summary()),
+		telemetry.Bool("enforced", egressContainment.Enforced),
+		telemetry.String("detail", egressContainment.Detail))
 
 	// The extension Manager owns the whole runtime lifecycle of extension modules
 	// (ADR 0081): adopt the installed set at boot, install and uninstall while

@@ -41,7 +41,7 @@ func TestBuildSupportBundleRedactsAnythingNotExplicitlyNone(t *testing.T) {
 		},
 	}
 
-	bundle := diagnostics.BuildSupportBundle("mosaic-platform", "v1", components, testNow)
+	bundle := diagnostics.BuildSupportBundle("mosaic-platform", "v1", components, diagnostics.ModuleEgressPosture{Enforced: true, Detail: "test"}, testNow)
 
 	data, err := json.Marshal(bundle)
 	if err != nil {
@@ -78,7 +78,7 @@ func TestWriteSupportBundlePersistsAnonymisedJSON(t *testing.T) {
 	components := []domain.ComponentHealth{
 		{Component: "postgres", Health: domain.HealthHealthy, RedactionClass: domain.RedactionNone},
 	}
-	bundle := diagnostics.BuildSupportBundle("mosaic-platform", "v1", components, testNow)
+	bundle := diagnostics.BuildSupportBundle("mosaic-platform", "v1", components, diagnostics.ModuleEgressPosture{Enforced: true, Detail: "test"}, testNow)
 
 	path := filepath.Join(t.TempDir(), "bundles", "bundle.json")
 	if err := diagnostics.WriteSupportBundle(path, bundle); err != nil {

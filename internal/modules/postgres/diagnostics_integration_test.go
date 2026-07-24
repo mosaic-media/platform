@@ -93,7 +93,7 @@ func TestDiagnosticsRegistryReportsRealStateAcrossPostgresWorkerAndBus(t *testin
 
 	// The full snapshot must survive becoming a redacted support bundle and
 	// a structured log entry without losing component identification.
-	bundle := diagnostics.BuildSupportBundle("mosaic-platform", "v1", registry.Snapshot(c), cs.Clock.Now())
+	bundle := diagnostics.BuildSupportBundle("mosaic-platform", "v1", registry.Snapshot(c), diagnostics.ModuleEgressPosture{Enforced: false, Detail: "test"}, cs.Clock.Now())
 	bundlePath := filepath.Join(t.TempDir(), "bundle.json")
 	if err := diagnostics.WriteSupportBundle(bundlePath, bundle); err != nil {
 		t.Fatalf("WriteSupportBundle: %v", err)
