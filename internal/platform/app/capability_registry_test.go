@@ -139,3 +139,95 @@ func TestRequireRolesPassesWhenTheRolesAreDeclared(t *testing.T) {
 		t.Fatalf("RequireRoles: %v", err)
 	}
 }
+
+// Unregister makes a module unresolvable across every seam — the runtime
+// uninstall path (ADR 0081): after it, nothing routes to a process being torn
+// down. A bare Lookup, a role resolution, and the enumerations all stop finding
+// it, and RequireRoles goes back to failing for the role it filled.
+func TestUnregisterMakesACapabilityUnresolvable(t *testing.T) {
+	reg := app.NewCapabilityRegistry()
+	reg.Register(&everythingCapability{manifest: v1.Manifest{
+		ID:       "stremio",
+		Provides: []v1.Role{v1.RoleMetadata, v1.RoleSearch},
+	}})
+
+	if _, ok := reg.Lookup("stremio"); !ok {
+		t.Fatal("precondition: the module should be registered")
+	}
+	if err := reg.RequireRoles(v1.RoleSearch); err != nil {
+		t.Fatalf("precondition: search should be filled: %v", err)
+	}
+
+	reg.Unregister("stremio")
+
+	if _, ok := reg.Lookup("stremio"); ok {
+		t.Error("Lookup still finds an unregistered module")
+	}
+	if _, ok := reg.MetadataProvider("stremio"); ok {
+		t.Error("MetadataProvider still resolves an unregistered module")
+	}
+	if got := reg.SearchProviders(); len(got) != 0 {
+		t.Errorf("SearchProviders still enumerates an unregistered module: %+v", got)
+	}
+	if got := reg.Manifests(); len(got) != 0 {
+		t.Errorf("Manifests still lists an unregistered module: %+v", got)
+	}
+	// The role it filled is unfilled again — the composition check would refuse a
+	// Mosaic that had only this module and then uninstalled it.
+	if err := reg.RequireRoles(v1.RoleSearch); err == nil {
+		t.Error("RequireRoles is still satisfied after the only search module was unregistered")
+	}
+
+	// Unregistering an absent id is a no-op, not a panic — a retried uninstall.
+	reg.Unregister("stremio")
+	reg.Unregister("never-existed")
+}
+
+// The registry is read while it is being mutated — an install or uninstall
+// happens while requests resolve capabilities. Register, Unregister and the read
+// paths run concurrently here; under -race this is what proves the RWMutex
+// actually guards the map rather than the single-threaded boot path having hidden
+// the absence of one.
+func TestConcurrentRegisterUnregisterAndRead(t *testing.T) {
+	reg := app.NewCapabilityRegistry()
+	// A stable core module always present, so readers always have something to
+	// find and the concurrent churn is only over the extension.
+	reg.Register(&everythingCapability{manifest: v1.Manifest{
+		ID: "core", Provides: []v1.Role{v1.RoleMetadata},
+	}})
+
+	ext := &everythingCapability{manifest: v1.Manifest{
+		ID: "ext", Provides: []v1.Role{v1.RoleSearch, v1.RoleStream},
+	}}
+
+	const workers = 8
+	const iterations = 500
+	done := make(chan struct{})
+	for w := 0; w < workers; w++ {
+		go func(w int) {
+			defer func() { done <- struct{}{} }()
+			for i := 0; i < iterations; i++ {
+				switch (w + i) % 5 {
+				case 0:
+					reg.Register(ext)
+				case 1:
+					reg.Unregister("ext")
+				case 2:
+					reg.SearchProviders()
+				case 3:
+					_, _ = reg.Lookup("core")
+				case 4:
+					_ = reg.Manifests()
+				}
+			}
+		}(w)
+	}
+	for w := 0; w < workers; w++ {
+		<-done
+	}
+
+	// The core module is untouched by the churn and must still be there.
+	if _, ok := reg.Lookup("core"); !ok {
+		t.Fatal("the stable core module went missing during concurrent churn")
+	}
+}

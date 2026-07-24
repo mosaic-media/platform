@@ -7,20 +7,27 @@ package app
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// CapabilityRegistry holds the optional-module capabilities the composition
-// root registered, keyed by manifest id. The Platform routes an ImportContent
-// command to one of them by id. It is populated once, at composition, and read
-// at invocation — there is no runtime registration path (ADR 0007: modules are
-// selected before the build, not discovered at runtime).
+// CapabilityRegistry holds the optional-module capabilities the Platform can
+// route to, keyed by manifest id. The Platform routes an ImportContent command
+// to one of them by id.
+//
+// Core modules are registered once, at composition. Extension modules are
+// registered and unregistered *while the Platform serves* — a user installs or
+// uninstalls one at runtime (ADR 0081) — so the map is guarded by a RWMutex: a
+// resolution during serving takes the read lock, an install or uninstall the
+// write lock. It was a bare map until extensions became runtime-managed, which
+// was correct only while every registration happened before the first request.
 //
 // It lives in the app package rather than under composition/ so the Service
 // can hold it without an import cycle: it depends only on the published SDK,
 // exactly as a module does.
 type CapabilityRegistry struct {
+	mu   sync.RWMutex
 	byID map[string]v1.Capability
 }
 
@@ -29,16 +36,30 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 	return &CapabilityRegistry{byID: make(map[string]v1.Capability)}
 }
 
-// Register adds a capability under its manifest id. Registration order is the
-// composition root's, and a repeated id replaces the earlier registration —
-// the composition root controls both, so this stays a plain assignment rather
-// than an error path.
+// Register adds a capability under its manifest id, replacing any earlier one
+// under the same id — a reinstall swaps the running proxy for a fresh one. Safe
+// to call while the Platform serves: a runtime install registers here.
 func (r *CapabilityRegistry) Register(c v1.Capability) {
-	r.byID[c.Manifest().ID] = c
+	id := c.Manifest().ID
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byID[id] = c
+}
+
+// Unregister removes the capability under id, if any. It is how a runtime
+// uninstall (ADR 0081) makes a module unresolvable: after it returns, no lookup
+// or role enumeration finds the module, so nothing routes to a process that is
+// being torn down. Removing an id that is not present is a no-op.
+func (r *CapabilityRegistry) Unregister(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.byID, id)
 }
 
 // Lookup returns the capability registered under id, and whether one was.
 func (r *CapabilityRegistry) Lookup(id string) (v1.Capability, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	c, ok := r.byID[id]
 	return c, ok
 }
@@ -46,6 +67,8 @@ func (r *CapabilityRegistry) Lookup(id string) (v1.Capability, bool) {
 // Manifests returns the manifest of every registered capability, so the
 // composition root can report what it wired.
 func (r *CapabilityRegistry) Manifests() []v1.Manifest {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	manifests := make([]v1.Manifest, 0, len(r.byID))
 	for _, c := range r.byID {
 		manifests = append(manifests, c.Manifest())
@@ -58,6 +81,8 @@ func (r *CapabilityRegistry) Manifests() []v1.Manifest {
 // interface is a composition error, caught here at boot rather than as a nil
 // provider at invocation. The composition root calls this after registering.
 func (r *CapabilityRegistry) Verify() error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for _, id := range r.sortedIDs() {
 		c := r.byID[id]
 		for _, role := range c.Manifest().Provides {
@@ -83,6 +108,8 @@ func (r *CapabilityRegistry) Verify() error {
 // nothing else does; a test that builds a registry with one stream-only
 // capability is not thereby broken.
 func (r *CapabilityRegistry) RequireRoles(required ...v1.Role) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for _, role := range required {
 		filled := false
 		for _, id := range r.sortedIDs() {
@@ -179,6 +206,8 @@ type SearchProviderEntry struct {
 // SearchProviders returns every registered capability that fills RoleSearch, in
 // stable module-id order so a fan-out's results do not depend on map iteration.
 func (r *CapabilityRegistry) SearchProviders() []SearchProviderEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var out []SearchProviderEntry
 	for _, id := range r.sortedIDs() {
 		if !fills(r.byID[id], v1.RoleSearch) {
@@ -206,6 +235,8 @@ type StreamProviderEntry struct {
 // metadata, because the two are different jobs and a metadata module fills no
 // stream role at all.
 func (r *CapabilityRegistry) StreamProviders() []StreamProviderEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var out []StreamProviderEntry
 	for _, id := range r.sortedIDs() {
 		if !fills(r.byID[id], v1.RoleStream) {
@@ -234,6 +265,8 @@ type ArtworkProviderEntry struct {
 // sources union into one set rather than competing, so there is no first-wins
 // rule and no cross-provider dedup problem to leave open.
 func (r *CapabilityRegistry) ArtworkProviders() []ArtworkProviderEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var out []ArtworkProviderEntry
 	for _, id := range r.sortedIDs() {
 		if !fills(r.byID[id], v1.RoleArtwork) {
@@ -255,6 +288,8 @@ type CatalogProviderEntry struct {
 // CatalogProviders returns every registered capability that fills RoleCatalog,
 // in stable module-id order.
 func (r *CapabilityRegistry) CatalogProviders() []CatalogProviderEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var out []CatalogProviderEntry
 	for _, id := range r.sortedIDs() {
 		if !fills(r.byID[id], v1.RoleCatalog) {
@@ -270,6 +305,8 @@ func (r *CapabilityRegistry) CatalogProviders() []CatalogProviderEntry {
 // CatalogProvider returns the catalog provider registered under id, if that
 // capability fills RoleCatalog.
 func (r *CapabilityRegistry) CatalogProvider(id string) (v1.CatalogProvider, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	c, ok := r.byID[id]
 	if !ok {
 		return nil, false
@@ -284,6 +321,8 @@ func (r *CapabilityRegistry) CatalogProvider(id string) (v1.CatalogProvider, boo
 // MetadataProvider returns the metadata provider registered under id, if that
 // capability fills RoleMetadata.
 func (r *CapabilityRegistry) MetadataProvider(id string) (v1.MetadataProvider, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	c, ok := r.byID[id]
 	if !ok {
 		return nil, false
@@ -299,6 +338,8 @@ func (r *CapabilityRegistry) MetadataProvider(id string) (v1.MetadataProvider, b
 // capability fills RoleSubtitles (ADR 0037). The consumer is a future player; the
 // resolver exists so that consumer has a seam to reach it, like the others.
 func (r *CapabilityRegistry) SubtitlesProvider(id string) (v1.SubtitlesProvider, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	c, ok := r.byID[id]
 	if !ok {
 		return nil, false
@@ -314,6 +355,8 @@ func (r *CapabilityRegistry) SubtitlesProvider(id string) (v1.SubtitlesProvider,
 // that capability fills RoleSettingsUI (ADR 0038) — how the module-settings host
 // resolves a module's contributed settings screen.
 func (r *CapabilityRegistry) SettingsUIProvider(id string) (v1.SettingsUIProvider, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	c, ok := r.byID[id]
 	if !ok {
 		return nil, false
@@ -341,6 +384,8 @@ type PlaybackProviderEntry struct {
 // resolution wants one provider, and ADR 0036's affordance gate wants to know
 // whether *any* consumer is installed.
 func (r *CapabilityRegistry) PlaybackProviders() []PlaybackProviderEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var out []PlaybackProviderEntry
 	for _, id := range r.sortedIDs() {
 		if !fills(r.byID[id], v1.RolePlayback) {
@@ -356,6 +401,8 @@ func (r *CapabilityRegistry) PlaybackProviders() []PlaybackProviderEntry {
 // PlaybackProvider returns the playback provider registered under id, if that
 // capability fills RolePlayback.
 func (r *CapabilityRegistry) PlaybackProvider(id string) (v1.PlaybackProvider, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	c, ok := r.byID[id]
 	if !ok {
 		return nil, false
@@ -392,6 +439,8 @@ type SettingsUIProviderEntry struct {
 // is a map walk and a few struct copies on a settings render, and the
 // alternative is a second source of truth for a module's name.
 func (r *CapabilityRegistry) SettingsUIProviders() []SettingsUIProviderEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var out []SettingsUIProviderEntry
 	for _, id := range r.sortedIDs() {
 		c := r.byID[id]
