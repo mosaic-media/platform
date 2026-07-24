@@ -14,7 +14,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	remoteplayback "github.com/mosaic-media/module-remote-playback"
-	stremio "github.com/mosaic-media/module-stremio-addons"
 	"github.com/mosaic-media/platform/internal/modules/postgres"
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/domain"
@@ -26,11 +25,13 @@ import (
 // TestPlaybackResolutionAgainstPostgres is the consumer half of the extension
 // story end to end, and the point at which the library stops being inert.
 //
-// A source module imports a series and snapshots a stream location onto each
-// episode; the Platform then reads that Part back out of a real database and
-// hands it to a *different*, separately-compiled module — the first consumer —
-// which resolves it to something playable. Two modules, neither importing the
-// Platform, meeting only through the registry and the published SDK.
+// A source imports a series and snapshots a stream location onto each episode;
+// the Platform then reads that Part back out of a real database and hands it to a
+// *different*, separately-compiled module — the first consumer, remote playback —
+// which resolves it to something playable. The consumer is the real core module;
+// the source is a fake, because the platform module must not import an extension
+// module (ADR 0079/0081) and what is under test is the Platform's read-back and
+// consumer hand-off, not the source's addon parsing.
 func TestPlaybackResolutionAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
 
@@ -43,13 +44,18 @@ func TestPlaybackResolutionAgainstPostgres(t *testing.T) {
 	var mod postgres.Module
 	cs := mod.Bind(pool)
 
-	addon := fakeStremioAddon()
-	defer addon.Close()
+	const streamURL = "https://cdn.example/tt0903747-s01e01.mp4"
 
-	// Both modules registered exactly as the composition root does them: a
-	// source and a consumer, side by side in one registry.
+	// A source and the real consumer, side by side in one registry as the
+	// composition root registers them.
 	registry := app.NewCapabilityRegistry()
-	registry.Register(stremio.New(addon.Client()))
+	registry.Register(&fakeImportModule{
+		id: "stremio",
+		episodes: []fakeImportEpisode{
+			{title: "Pilot", partRef: streamURL},
+			{title: "Cat's in the Bag...", partRef: "https://cdn.example/tt0903747-s01e02.mp4"},
+		},
+	})
 	registry.Register(remoteplayback.New())
 	if err := registry.Verify(); err != nil {
 		t.Fatalf("registry.Verify: %v", err)
@@ -65,17 +71,10 @@ func TestPlaybackResolutionAgainstPostgres(t *testing.T) {
 
 	caller := seedPlaybackUser(t, c, cs, pool)
 
-	if _, err := svc.ConfigureModule(c, app.ConfigureModuleCommand{
-		Caller: caller, ModuleID: stremio.CapabilityID,
-		Settings: []byte(`{"addons":["` + addon.URL + `"],"disableDefaultAddons":true}`),
-	}); err != nil {
-		t.Fatalf("ConfigureModule: %v", err)
-	}
-
 	imported, err := svc.ImportContent(c, app.ImportContentCommand{
 		Caller: caller,
 		Ref: v1.ContentRef{
-			Provider: stremio.CapabilityID, NativeID: "tt0903747", NativeType: "series",
+			Provider: "stremio", NativeID: "tt0903747", NativeType: "series",
 			MediaType: v1.MediaTVSeries, ExternalScheme: "imdb", ExternalID: "tt0903747",
 		},
 	})
@@ -121,7 +120,7 @@ func TestPlaybackResolutionAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
-	if strings.Contains(ticket, addon.URL) {
+	if strings.Contains(ticket, "cdn.example") {
 		t.Error("the minted ticket leaked the upstream URL")
 	}
 }
@@ -141,9 +140,9 @@ func TestPlaybackResolutionWithNoConsumerInstalled(t *testing.T) {
 	var mod postgres.Module
 	cs := mod.Bind(pool)
 
-	// A source module only — no consumer.
+	// A source only — no consumer.
 	registry := app.NewCapabilityRegistry()
-	registry.Register(stremio.New(nil))
+	registry.Register(&fakeImportModule{id: "stremio"})
 
 	svc := app.NewService(app.Deps{
 		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,

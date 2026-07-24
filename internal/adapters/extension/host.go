@@ -299,11 +299,16 @@ func checkManifest(declared, running v1.Manifest) error {
 		return contracts.NewError(contracts.Conflict, fmt.Sprintf(
 			"extension: manifest declares id %q but the binary reports %q", declared.ID, running.ID))
 	}
-	if declared.Version != "" && declared.Version != running.Version {
-		return contracts.NewError(contracts.Conflict, fmt.Sprintf(
-			"extension: manifest declares version %q but the binary reports %q",
-			declared.Version, running.Version))
-	}
+	// Version is deliberately not compared. The manifest's version is the release
+	// tag the publisher stamped (`build-manifest -version` overrides the build's
+	// own, so the catalogue reads `v0.24.0`), whereas the binary self-reports its
+	// build-graph version (`0.24.0+dirty`, `(devel)`), which is formatted
+	// differently and carries a VCS-dirty marker a clean tag never will. They name
+	// the same release by two conventions, so equality is the wrong test. Identity
+	// is the id and roles below; that the running bytes ARE the ones the manifest
+	// vouched for is the digest check at install, which no self-reported string can
+	// add to. A live install caught this: a correctly published module was refused
+	// only because its self-reported version was spelled differently from its tag.
 
 	// Every role the manifest file declared must be one the binary also
 	// declares. The reverse is allowed: a binary reporting *fewer* roles than

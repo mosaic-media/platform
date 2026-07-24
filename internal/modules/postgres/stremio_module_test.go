@@ -6,13 +6,10 @@ package postgres_test
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	stremio "github.com/mosaic-media/module-stremio-addons"
 	"github.com/mosaic-media/platform/internal/modules/postgres"
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/domain"
@@ -20,17 +17,23 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// TestStremioModuleAgainstPostgres is the module slice end to end: the Platform
-// invokes a registered, separately-compiled module through the ImportContent
-// command, and the module — importing only the SDK — sources a series from a
-// Stremio addon and lands its tree, source binding and RemoteLocation stream
-// Parts in a real database, acting as its invoking user (ADR 0007, 0008, 0017).
+// TestImportSourceModuleAgainstPostgres is the composition-and-invocation path
+// end to end: the Platform invokes a registered capability through the
+// ImportContent command, and the capability — handed the Service and the caller
+// — lands a work, its source binding, a season/episode tree and RemoteLocation
+// stream Parts in a real database, every write re-authorising as the invoking
+// user (ADR 0007, 0008, 0017).
 //
-// Unlike TestReferenceCapabilityAgainstPostgres, which calls the capability
-// directly, this drives the composition-and-invocation path: registry ->
-// ImportContent -> capability -> ContentService. That path is what this slice
-// builds.
-func TestStremioModuleAgainstPostgres(t *testing.T) {
+// The capability is a fake import source, not the real Stremio module: the
+// platform module must not import an extension module (ADR 0079/0081). What is
+// under test is the Platform's path — registry -> ImportContent -> capability ->
+// ContentService — and the writes it makes on the module's behalf, not Stremio's
+// addon parsing, which is the module's own test. That the *real* module works
+// over this path is proven by the runtime-install integration surface.
+//
+// Unlike TestReferenceCapabilityAgainstPostgres, which calls a capability
+// directly, this drives it through the registry and the ImportContent command.
+func TestImportSourceModuleAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
 
 	pool := freshDatabase(t)
@@ -42,15 +45,20 @@ func TestStremioModuleAgainstPostgres(t *testing.T) {
 	var mod postgres.Module
 	cs := mod.Bind(pool)
 
-	// A hermetic Stremio addon serving a series with one season of two episodes
-	// and a direct-play stream for each.
-	addon := fakeStremioAddon()
-	defer addon.Close()
+	// A source that materialises a series with one season of two episodes, each
+	// with a remote stream Part.
+	source := &fakeImportModule{
+		id: "stremio",
+		episodes: []fakeImportEpisode{
+			{title: "Pilot", partRef: "http://cdn.example/tt0903747:1:1"},
+			{title: "Cat's in the Bag...", partRef: "http://cdn.example/tt0903747:1:2"},
+		},
+	}
 
-	// Register the module exactly as the composition root does, then build the
-	// Service over that registry.
+	// Register the capability exactly as the composition root registers a module,
+	// then build the Service over that registry.
 	registry := app.NewCapabilityRegistry()
-	registry.Register(stremio.New(addon.Client()))
+	registry.Register(source)
 
 	svc := app.NewService(app.Deps{
 		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
@@ -87,20 +95,10 @@ func TestStremioModuleAgainstPostgres(t *testing.T) {
 
 	caller := v1.CallerFromSession(string(session.ID))
 
-	// The user configures the module with the addon to source from — the gap-1
-	// path: addons are user-managed settings (ADR 0021), not composed-in. The
-	// bundled default (Cinemeta) is opted out so this stays hermetic against the
-	// fake addon (ADR 0037) rather than importing the real series over the network.
-	if _, err := svc.ConfigureModule(c, app.ConfigureModuleCommand{
-		Caller: caller, ModuleID: stremio.CapabilityID,
-		Settings: []byte(`{"addons":["` + addon.URL + `"],"disableDefaultAddons":true}`),
-	}); err != nil {
-		t.Fatalf("ConfigureModule: %v", err)
-	}
-
-	// Invoke the module through the Platform's generic import command.
+	// Invoke the capability through the Platform's generic import command. The
+	// fake source reads no settings, so nothing is configured for it.
 	result, err := svc.ImportContent(c, app.ImportContentCommand{
-		Caller: caller, Ref: v1.ContentRef{Provider: stremio.CapabilityID, NativeID: "tt0903747", NativeType: "series", MediaType: v1.MediaTVSeries, ExternalScheme: "imdb", ExternalID: "tt0903747"},
+		Caller: caller, Ref: v1.ContentRef{Provider: "stremio", NativeID: "tt0903747", NativeType: "series", MediaType: v1.MediaTVSeries, ExternalScheme: "imdb", ExternalID: "tt0903747"},
 	})
 	if err != nil {
 		t.Fatalf("ImportContent: %v", err)
@@ -172,7 +170,7 @@ func TestStremioModuleAgainstPostgres(t *testing.T) {
 
 	// Re-invoking is idempotent: the source is already resolved.
 	again, err := svc.ImportContent(c, app.ImportContentCommand{
-		Caller: caller, Ref: v1.ContentRef{Provider: stremio.CapabilityID, NativeID: "tt0903747", NativeType: "series", MediaType: v1.MediaTVSeries, ExternalScheme: "imdb", ExternalID: "tt0903747"},
+		Caller: caller, Ref: v1.ContentRef{Provider: "stremio", NativeID: "tt0903747", NativeType: "series", MediaType: v1.MediaTVSeries, ExternalScheme: "imdb", ExternalID: "tt0903747"},
 	})
 	if err != nil {
 		t.Fatalf("second ImportContent: %v", err)
@@ -180,24 +178,4 @@ func TestStremioModuleAgainstPostgres(t *testing.T) {
 	if !again.AlreadyKnown || again.WorkID != result.WorkID {
 		t.Fatalf("second import should find the existing work, got %+v", again)
 	}
-}
-
-// fakeStremioAddon serves a canned manifest, series meta and streams over HTTP.
-func fakeStremioAddon() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case path == "/manifest.json":
-			_, _ = w.Write([]byte(`{"id":"org.fake","name":"Fake","version":"1.0.0","resources":["meta","stream"],"types":["movie","series"]}`))
-		case strings.HasPrefix(path, "/meta/series/"):
-			_, _ = w.Write([]byte(`{"meta":{"id":"tt0903747","type":"series","name":"Breaking Bad","videos":[
-				{"id":"tt0903747:1:1","title":"Pilot","season":1,"episode":1},
-				{"id":"tt0903747:1:2","title":"Cat's in the Bag...","season":1,"episode":2}]}}`))
-		case strings.HasPrefix(path, "/stream/"):
-			_, _ = w.Write([]byte(`{"streams":[{"name":"Fake 1080p","url":"http://cdn.example/` + strings.TrimSuffix(path[len("/stream/"):], ".json") + `"}]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
 }

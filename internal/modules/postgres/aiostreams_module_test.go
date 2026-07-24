@@ -6,14 +6,11 @@ package postgres_test
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	aiostreams "github.com/mosaic-media/module-aiostreams"
-	stremio "github.com/mosaic-media/module-stremio-addons"
 	tmdb "github.com/mosaic-media/module-tmdb"
 	"github.com/mosaic-media/platform/internal/modules/postgres"
 	"github.com/mosaic-media/platform/internal/platform/app"
@@ -22,21 +19,37 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// TestAIOStreamsEnrichesATMDBTitleAgainstPostgres is the AIOStreams module doing
-// the only job it has, with the real module, the real enrichment pass and a real
-// database.
+// episodeStreamFor returns a stream-source behaviour that answers for the IMDB
+// identity by composing a Stremio-style episode id from the shared id and the
+// season and episode the Platform passes on the request. It is what lets a fake
+// stand in for a real stream source while still proving the Platform handed it
+// the coordinates (ADR 0073) rather than the fake inventing them.
+func episodeStreamFor(provider string) func(v1.StreamRequest) []v1.StreamLink {
+	return func(req v1.StreamRequest) []v1.StreamLink {
+		if req.Ref.ExternalScheme != "imdb" {
+			return nil
+		}
+		return []v1.StreamLink{{
+			Location: v1.MediaLocation{
+				Scheme:   v1.RemoteLocation,
+				Provider: provider,
+				Ref:      fmt.Sprintf("http://cdn.example/%s:%d:%d", req.Ref.ExternalID, req.Season, req.Episode),
+			},
+		}}
+	}
+}
+
+// TestStreamProviderPrecedenceAgainstPostgres checks the precedence claim in
+// `registerCapabilities` — that of two stream sources able to answer, the one
+// whose module id sorts first is asked first and wins (ADR 0073) — with the real
+// enrichment pass and a real database.
 //
-// It is worth its own test rather than a variation of the Stremio one because
-// the module's shape is different in a way that could silently not work: it
-// fills *no* read role, so nothing can route an import to it and it is only ever
-// reached through ADR 0073's enrichment fan-out. If that fan-out did not run, or
-// ran without offering the IMDB identity, this module would look installed and
-// contribute nothing — with no error anywhere.
-//
-// A second module is registered alongside it deliberately: the precedence claim
-// in `registerCapabilities` — that AIOStreams is asked first because module ids
-// sort that way — is otherwise a comment nothing checks.
-func TestAIOStreamsEnrichesATMDBTitleAgainstPostgres(t *testing.T) {
+// Both sources are fakes: the platform module must not import an extension module
+// (ADR 0079/0081), and what is under test is the Platform's fan-out order, not a
+// source's addon parsing. Two sources are registered deliberately — the ordering
+// rule is otherwise a comment nothing checks — and both can answer for the shared
+// IMDB identity, so which one's Part lands is decided by id order alone.
+func TestStreamProviderPrecedenceAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
 
 	pool := freshDatabase(t)
@@ -49,23 +62,16 @@ func TestAIOStreamsEnrichesATMDBTitleAgainstPostgres(t *testing.T) {
 	cs := mod.Bind(pool)
 
 	// The metadata source: a series with one season of two episodes, carrying the
-	// IMDB id that is the only identity these modules share.
+	// IMDB id that is the only identity these sources share.
 	metadata := fakeTMDBForEnrichment()
 	defer metadata.Close()
 
-	instance := fakeAIOStreamsInstance()
-	defer instance.Close()
-
-	// The Stremio module, configured and working, so the ordering assertion is
-	// about precedence rather than about one source being the only one able to
-	// answer.
-	addon := fakeStremioAddon()
-	defer addon.Close()
-
+	// Two stream sources that both answer. "aiostreams" sorts before "stremio",
+	// so the precedence rule must pick it.
 	registry := app.NewCapabilityRegistry()
 	registry.Register(tmdb.New(redirectTo(metadata)))
-	registry.Register(aiostreams.New(instance.Client()))
-	registry.Register(stremio.New(addon.Client()))
+	registry.Register(&fakeStreamModule{id: "aiostreams", streamsFor: episodeStreamFor("aiostreams")})
+	registry.Register(&fakeStreamModule{id: "stremio", streamsFor: episodeStreamFor("stremio")})
 	if err := registry.Verify(); err != nil {
 		t.Fatalf("registry invalid: %v", err)
 	}
@@ -107,20 +113,7 @@ func TestAIOStreamsEnrichesATMDBTitleAgainstPostgres(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("ConfigureModule(tmdb): %v", err)
 	}
-	// The instance URL as a user pastes it: the manifest URL, profile segments
-	// and all. Normalisation happens inside the module.
-	if _, err := svc.ConfigureModule(c, app.ConfigureModuleCommand{
-		Caller: caller, ModuleID: aiostreams.CapabilityID,
-		Settings: []byte(`{"instanceUrl":"` + instance.URL + `/stremio/profile-1/secret/manifest.json"}`),
-	}); err != nil {
-		t.Fatalf("ConfigureModule(aiostreams): %v", err)
-	}
-	if _, err := svc.ConfigureModule(c, app.ConfigureModuleCommand{
-		Caller: caller, ModuleID: stremio.CapabilityID,
-		Settings: []byte(`{"addons":["` + addon.URL + `"]}`),
-	}); err != nil {
-		t.Fatalf("ConfigureModule(stremio): %v", err)
-	}
+	// The stream sources read no settings, so nothing is configured for them.
 
 	// Import a *TMDB* ref. No stream source is named anywhere in this command.
 	result, err := svc.ImportContent(c, app.ImportContentCommand{
@@ -134,7 +127,7 @@ func TestAIOStreamsEnrichesATMDBTitleAgainstPostgres(t *testing.T) {
 		t.Fatalf("ImportContent: %v", err)
 	}
 	if result.Parts == 0 {
-		t.Fatal("no parts attached: the AIOStreams module was registered and never contributed")
+		t.Fatal("no parts attached: a registered stream source never contributed")
 	}
 
 	work, err := svc.GetContentNode(c, v1.GetContentNodeQuery{Caller: caller, NodeID: result.WorkID, WithChildren: true})
@@ -165,12 +158,13 @@ func TestAIOStreamsEnrichesATMDBTitleAgainstPostgres(t *testing.T) {
 			t.Errorf("episode %q part scheme = %q, want remote", episode.Title, part.Location.Scheme)
 		}
 		// The precedence claim, checked rather than asserted in a comment: both
-		// stream sources can answer, and module-id order decides.
-		if part.Location.Provider != aiostreams.CapabilityID {
-			t.Errorf("episode %q resolved through %q, want %q — module-id order is the precedence rule",
-				episode.Title, part.Location.Provider, aiostreams.CapabilityID)
+		// stream sources can answer, and module-id order decides — "aiostreams"
+		// sorts before "stremio".
+		if part.Location.Provider != "aiostreams" {
+			t.Errorf("episode %q resolved through %q, want aiostreams — module-id order is the precedence rule",
+				episode.Title, part.Location.Provider)
 		}
-		// The Platform never built a Stremio-style episode id. The module composed
+		// The Platform never built a Stremio-style episode id. The source composed
 		// it from the shared IMDB id plus the season and episode numbers the
 		// Platform read off the tree — which is the whole point of the coordinates
 		// on StreamRequest.
@@ -181,14 +175,14 @@ func TestAIOStreamsEnrichesATMDBTitleAgainstPostgres(t *testing.T) {
 	}
 }
 
-// TestAIOStreamsDeclinesWhenItsInstanceIsUnconfigured is the state a fresh
-// install is in, all the way through the Platform: the default instance is up
-// and has no profile, so it serves nothing.
+// TestStreamSourceDeclinesButImportSucceeds is the state a fresh install is in,
+// all the way through the Platform: a stream source is registered but has nothing
+// to offer, so it declines.
 //
 // The assertion is that the import *succeeds* — a stream source with nothing to
 // offer must not lose a user the title they just added. It is the same rule as a
 // metadata-only deployment, arriving by a different route.
-func TestAIOStreamsDeclinesWhenItsInstanceIsUnconfigured(t *testing.T) {
+func TestStreamSourceDeclinesButImportSucceeds(t *testing.T) {
 	requirePostgres(t)
 
 	pool := freshDatabase(t)
@@ -202,12 +196,15 @@ func TestAIOStreamsDeclinesWhenItsInstanceIsUnconfigured(t *testing.T) {
 
 	metadata := fakeTMDBForEnrichment()
 	defer metadata.Close()
-	instance := fakeAIOStreamsInstance()
-	defer instance.Close()
 
+	// A stream source that declines everything — an instance with no profile
+	// behind it, modelled as a source that answers nothing.
 	registry := app.NewCapabilityRegistry()
 	registry.Register(tmdb.New(redirectTo(metadata)))
-	registry.Register(aiostreams.New(instance.Client()))
+	registry.Register(&fakeStreamModule{
+		id:         "aiostreams",
+		streamsFor: func(v1.StreamRequest) []v1.StreamLink { return nil },
+	})
 	if err := registry.Verify(); err != nil {
 		t.Fatalf("registry invalid: %v", err)
 	}
@@ -249,14 +246,7 @@ func TestAIOStreamsDeclinesWhenItsInstanceIsUnconfigured(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("ConfigureModule(tmdb): %v", err)
 	}
-	// Pointed at the instance root, which is what the public default is: up, and
-	// with no profile behind it.
-	if _, err := svc.ConfigureModule(c, app.ConfigureModuleCommand{
-		Caller: caller, ModuleID: aiostreams.CapabilityID,
-		Settings: []byte(`{"instanceUrl":"` + instance.URL + `/stremio"}`),
-	}); err != nil {
-		t.Fatalf("ConfigureModule(aiostreams): %v", err)
-	}
+	// The declining stream source reads no settings.
 
 	result, err := svc.ImportContent(c, app.ImportContentCommand{
 		Caller: caller,
@@ -272,35 +262,6 @@ func TestAIOStreamsDeclinesWhenItsInstanceIsUnconfigured(t *testing.T) {
 		t.Fatalf("tree = %d items, want the 2 the metadata module built", result.Items)
 	}
 	if result.Parts != 0 {
-		t.Fatalf("attached %d parts from an instance that declares no stream resource", result.Parts)
+		t.Fatalf("attached %d parts from a source that declares nothing", result.Parts)
 	}
-}
-
-// fakeAIOStreamsInstance serves both states of a real instance: a configured
-// profile under a two-segment path, and the bare instance root that declares
-// `configurationRequired` and nothing else.
-func fakeAIOStreamsInstance() *httptest.Server {
-	const profile = "/stremio/profile-1/secret"
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case path == profile+"/manifest.json":
-			_, _ = w.Write([]byte(`{"id":"com.aiostreams.viren070","name":"AIOStreams","version":"2.31.1",
-				"types":["movie","series"],
-				"resources":[{"name":"stream","types":["movie","series"],"idPrefixes":["tt"]}],
-				"behaviorHints":{"configurable":true}}`))
-		case path == "/stremio/manifest.json":
-			_, _ = w.Write([]byte(`{"id":"com.aiostreams.viren070","name":"AIOStreams","version":"2.31.1",
-				"catalogs":[],"resources":[],"types":[],
-				"behaviorHints":{"configurable":true,"configurationRequired":true}}`))
-		case strings.HasPrefix(path, profile+"/stream/"):
-			id := strings.TrimSuffix(path[len(profile+"/stream/"):], ".json")
-			_, _ = w.Write([]byte(`{"streams":[{"name":"[RD+] AIOStreams 1080p",
-				"title":"Breaking Bad 1080p WEB-DL x264 EAC3\n💾 3.1 GB 👤 24",
-				"url":"http://cdn.example/` + id + `"}]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
 }
