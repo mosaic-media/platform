@@ -59,7 +59,8 @@ type Manifest struct {
 // ManifestSchema is the only schema this Platform build understands.
 const ManifestSchema = "mosaic.module.manifest/v1"
 
-// BinaryRef is one platform's binary and its digest.
+// BinaryRef is one platform's binary: where to fetch it, and the digest it must
+// hash to.
 type BinaryRef struct {
 	OS   string `json:"os"`
 	Arch string `json:"arch"`
@@ -67,6 +68,14 @@ type BinaryRef struct {
 	// The prefix names the algorithm so a future one can be introduced without
 	// ambiguity about what an old digest meant.
 	Digest string `json:"digest"`
+	// URL is where the binary is downloaded from. It lives in the manifest — the
+	// module's own release — rather than being computed by the registry from a
+	// template, because the module knows where it hosts its bytes and the
+	// registry does not: a module's repository name need not match its id
+	// (module-stremio-addons publishes the module whose id is "stremio"), so a
+	// template keyed on the id would build the wrong URL. The module puts the
+	// right one here once, at release.
+	URL string `json:"url"`
 }
 
 // ParseManifest reads and validates a manifest's structure — not its signature

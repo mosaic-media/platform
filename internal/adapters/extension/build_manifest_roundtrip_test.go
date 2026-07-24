@@ -36,11 +36,14 @@ func TestBuildManifestFromAModuleThenLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 2. The tool joins identity + SDK major + the binary into a manifest.
+	// 2. The tool joins identity + SDK major + the binary into a manifest, with
+	// each binary's download URL filled from the template the module's release
+	// supplies (it knows its own repo and asset names).
 	manifestPath := filepath.Join(dir, "manifest.json")
 	run(t, tool, "build-manifest",
 		"-identity", identity,
 		"-sdk-major", "0",
+		"-url", "https://github.invalid/module-extprobe/releases/download/{version}/extprobe-{os}-{arch}",
 		"-out", manifestPath,
 		runtime.GOOS+"/"+runtime.GOARCH+"="+probe,
 	)
@@ -66,6 +69,11 @@ func TestBuildManifestFromAModuleThenLaunch(t *testing.T) {
 	}
 	if len(m.Binaries) != 1 || m.Binaries[0].OS != runtime.GOOS {
 		t.Errorf("binaries: got %+v", m.Binaries)
+	}
+	// The URL template was filled with this module's own placeholders.
+	wantURL := "https://github.invalid/module-extprobe/releases/download/v0.1.0/extprobe-" + runtime.GOOS + "-" + runtime.GOARCH
+	if m.Binaries[0].URL != wantURL {
+		t.Errorf("binary URL: got %q, want %q", m.Binaries[0].URL, wantURL)
 	}
 
 	// The digest the tool computed is the digest the Platform computes — the

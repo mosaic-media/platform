@@ -62,11 +62,10 @@ func newFakeRepo(t *testing.T, mutate func(files map[string][]byte, priv ed25519
 				"sdk_major": 0,
 				"provides":  []string{string(v1.RoleSearch)},
 				"binaries": []map[string]string{
-					{"os": runtime.GOOS, "arch": runtime.GOARCH, "digest": digest},
+					// The URL lives on the binary, in the manifest — the module's
+					// own declaration of where it hosts its bytes.
+					{"os": runtime.GOOS, "arch": runtime.GOARCH, "digest": digest, "url": binURL},
 				},
-			},
-			"binary_urls": map[string]string{
-				runtime.GOOS + "/" + runtime.GOARCH: binURL,
 			},
 		}},
 	}

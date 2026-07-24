@@ -153,14 +153,14 @@ func signFile(args []string, kind string, validate func([]byte) error) {
 }
 
 // buildIndex assembles a repository index from module manifests. Each manifest
-// already carries its binaries and their digests (computed with `digest`); this
-// adds the download URL for each, from a template, and emits the index a
-// repository serves.
+// already carries its binaries, their digests and their download URLs — the
+// module owns all three — so this only wraps them into the catalogue the
+// repository signs. It does not compute URLs: a module's repository name need
+// not match its id, so only the module knows where its bytes live.
 func buildIndex(args []string) {
-	template := flagValue(args, "-url")
 	out := flagValue(args, "-out")
-	if template == "" || out == "" {
-		fail("build-index needs -url <template> and -out <path>, then manifest paths")
+	if out == "" {
+		fail("build-index needs -out <path>, then manifest paths")
 	}
 	manifests := positionals(args)
 	if len(manifests) == 0 {
@@ -177,16 +177,12 @@ func buildIndex(args []string) {
 		if err != nil {
 			fail("%s: %v", path, err)
 		}
-		urls := make(map[string]string, len(m.Binaries))
-		for _, b := range m.Binaries {
-			urls[b.OS+"/"+b.Arch] = expand(template, m, b)
-		}
-		idx.Modules = append(idx.Modules, extension.IndexModule{Manifest: m, BinaryURLs: urls})
+		idx.Modules = append(idx.Modules, extension.IndexModule{Manifest: m})
 	}
 
 	// Validate the round trip before writing: what is written must be what the
-	// Platform parses, so a template that produced nonsense fails here rather
-	// than at a user's install.
+	// Platform parses, so a broken entry fails here rather than at a user's
+	// install.
 	data, err := json.MarshalIndent(idx, "", "  ")
 	if err != nil {
 		fail("marshalling index: %v", err)
@@ -209,9 +205,10 @@ func buildManifest(args []string) {
 	identityPath := flagValue(args, "-identity")
 	out := flagValue(args, "-out")
 	sdkMajorStr := flagValue(args, "-sdk-major")
+	urlTemplate := flagValue(args, "-url") // where this module hosts its binaries
 	version := flagValue(args, "-version") // optional override of the identity's version
-	if identityPath == "" || out == "" || sdkMajorStr == "" {
-		fail("build-manifest needs -identity <json>, -sdk-major <n>, -out <path>, then os/arch=binary pairs")
+	if identityPath == "" || out == "" || sdkMajorStr == "" || urlTemplate == "" {
+		fail("build-manifest needs -identity <json>, -sdk-major <n>, -url <template>, -out <path>, then os/arch=binary pairs")
 	}
 	sdkMajor, err := strconv.Atoi(sdkMajorStr)
 	if err != nil {
@@ -237,11 +234,12 @@ func buildManifest(args []string) {
 	}
 
 	// One binary per os/arch=path pair, digested with the same function the
-	// Platform verifies against.
+	// Platform verifies against, and its download URL filled from the template.
 	type binaryRef struct {
 		OS     string `json:"os"`
 		Arch   string `json:"arch"`
 		Digest string `json:"digest"`
+		URL    string `json:"url"`
 	}
 	var binaries []binaryRef
 	for _, pair := range positionals(args) {
@@ -257,7 +255,11 @@ func buildManifest(args []string) {
 		if err != nil {
 			fail("%v", err)
 		}
-		binaries = append(binaries, binaryRef{OS: goos, Arch: goarch, Digest: digest})
+		url := strings.NewReplacer(
+			"{id}", identity.ID, "{version}", identity.Version,
+			"{os}", goos, "{arch}", goarch,
+		).Replace(urlTemplate)
+		binaries = append(binaries, binaryRef{OS: goos, Arch: goarch, Digest: digest, URL: url})
 	}
 	if len(binaries) == 0 {
 		fail("build-manifest needs at least one os/arch=binary pair")
@@ -285,17 +287,6 @@ func buildManifest(args []string) {
 		fail("writing manifest: %v", err)
 	}
 	fmt.Printf("wrote %s for %s@%s (%d binaries)\n", out, identity.ID, identity.Version, len(binaries))
-}
-
-// expand fills a URL template's {id} {version} {os} {arch} placeholders.
-func expand(template string, m extension.Manifest, b extension.BinaryRef) string {
-	r := strings.NewReplacer(
-		"{id}", m.ID,
-		"{version}", m.Version,
-		"{os}", b.OS,
-		"{arch}", b.Arch,
-	)
-	return r.Replace(template)
 }
 
 // positionals returns the arguments that are not flags or flag values.

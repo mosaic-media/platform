@@ -96,16 +96,20 @@ func (i *Installer) installFor(ctx context.Context, repoName, moduleID, goos, go
 			fmt.Sprintf("extension: repository %q offers no module %q", repoName, moduleID))
 	}
 
-	url, ok := entry.BinaryURLs[goos+"/"+goarch]
+	ref, ok := entry.Manifest.binaryFor(goos, goarch)
 	if !ok {
 		return Installed{}, contracts.NewError(contracts.Unavailable,
 			fmt.Sprintf("extension: module %q offers no binary for %s/%s", moduleID, goos, goarch))
+	}
+	if ref.URL == "" {
+		return Installed{}, contracts.NewError(contracts.Unavailable,
+			fmt.Sprintf("extension: module %q names no download URL for %s/%s", moduleID, goos, goarch))
 	}
 
 	// Download the binary and store it. The store happens before the digest
 	// check so the check runs against the bytes that actually landed on disk,
 	// not against a copy in memory that a later write could diverge from.
-	binaryData, err := i.fetch.Fetch(ctx, resolveURL(repo.URL, url))
+	binaryData, err := i.fetch.Fetch(ctx, resolveURL(repo.URL, ref.URL))
 	if err != nil {
 		return Installed{}, contracts.WrapError(contracts.Unavailable, "extension: fetching binary", err)
 	}

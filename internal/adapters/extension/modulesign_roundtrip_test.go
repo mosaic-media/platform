@@ -104,25 +104,27 @@ func TestBuildIndexProducesAnInstallableRepository(t *testing.T) {
 		t.Fatalf("reading public key: %v", err)
 	}
 
-	// A publisher's manifest, digest computed by the tool.
+	// A publisher's manifest, digest and URL computed by the tool. The URL
+	// points at a GitHub-releases-style download location the module chose — the
+	// module owns its URLs, so they live in the manifest, not a registry
+	// template.
 	digest := strings.TrimSpace(run(t, tool, "digest", probe))
+	binURL := "https://github.invalid/registry/releases/download/extprobe-v1.0.0/extprobe-" + runtime.GOOS + "-" + runtime.GOARCH
 	manifest := map[string]any{
 		"schema": extension.ManifestSchema, "id": "extprobe", "version": "v1.0.0",
 		"name": "Extension Probe", "sdk_major": 0,
 		"provides": []string{string(v1.RoleSearch)},
 		"binaries": []map[string]string{
-			{"os": runtime.GOOS, "arch": runtime.GOARCH, "digest": digest},
+			{"os": runtime.GOOS, "arch": runtime.GOARCH, "digest": digest, "url": binURL},
 		},
 	}
 	manifestPath := filepath.Join(dir, "extprobe.json")
 	writeJSONFile(t, manifestPath, manifest)
 
-	// Build the index, with binary URLs pointed at a (fake) GitHub-releases-style
-	// download URL, then sign it.
+	// Build the index from the manifest (which already carries the URLs), then
+	// sign it.
 	indexPath := filepath.Join(dir, "index.json")
-	run(t, tool, "build-index",
-		"-url", "https://github.invalid/registry/releases/download/{id}-{version}/{id}-{os}-{arch}",
-		"-out", indexPath, manifestPath)
+	run(t, tool, "build-index", "-out", indexPath, manifestPath)
 	run(t, tool, "sign-index", "-key", keyPath, indexPath)
 
 	// Serve the built index and the binary at the URL the index names, and
@@ -140,7 +142,6 @@ func TestBuildIndexProducesAnInstallableRepository(t *testing.T) {
 		t.Fatalf("reading binary: %v", err)
 	}
 	const base = "https://github.invalid/registry"
-	binURL := "https://github.invalid/registry/releases/download/extprobe-v1.0.0/extprobe-" + runtime.GOOS + "-" + runtime.GOARCH
 	fetch := &fakeRepo{files: map[string][]byte{
 		base + "/index.json":     indexBytes,
 		base + "/index.json.sig": sigBytes,

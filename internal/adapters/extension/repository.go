@@ -103,14 +103,12 @@ type Index struct {
 // IndexSchema is the only index schema this build understands.
 const IndexSchema = "mosaic.module.index/v1"
 
-// IndexModule is one module the repository offers.
+// IndexModule is one module the repository offers: its manifest, inline. The
+// manifest carries everything needed to install — the binaries' download URLs
+// and their digests — so an index entry is the manifest and nothing beside it.
+// The manifest's digests are what a downloaded binary is checked against.
 type IndexModule struct {
-	// Manifest is the module's full declaration, inline. Its digests are what a
-	// downloaded binary is checked against.
 	Manifest Manifest `json:"manifest"`
-	// BinaryURLs maps "os/arch" to the URL the binary is fetched from, relative
-	// to the repository URL or absolute. One entry per platform the module ships.
-	BinaryURLs map[string]string `json:"binary_urls"`
 }
 
 // ParseIndex validates an index's structure — not its signature, which is a
