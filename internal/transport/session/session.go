@@ -336,6 +336,10 @@ func invokeToast(action string) string {
 		return "Added to library"
 	case "configureModule":
 		return "Settings saved"
+	case "installExtension":
+		return "Extension installed"
+	case "uninstallExtension":
+		return "Extension removed"
 	case "setWatched":
 		return "Updated"
 	default:

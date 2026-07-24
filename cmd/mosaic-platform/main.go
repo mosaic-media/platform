@@ -561,6 +561,31 @@ func run() error {
 			telemetry.Bool("official", repo.Official))
 	}
 
+	// The extension Manager owns the whole runtime lifecycle of extension modules
+	// (ADR 0081): adopt the installed set at boot, install and uninstall while
+	// serving on a user's authorized request, stop every process on shutdown. It
+	// is built before the Service because the Service drives it — install and
+	// uninstall are authorized Service methods that delegate here — while the
+	// Service is what an adopted module calls back into (ADR 0017). That mutual
+	// need is a construction cycle, broken by handing the Service to the Manager
+	// after both exist (SetContent), before anything is adopted or installed.
+	extensionsDir := os.Getenv(extensionsDirEnv)
+	if extensionsDir == "" {
+		extensionsDir = defaultExtensionsDir
+	}
+	installer, err := extension.NewOfficialInstaller(extensionsDir)
+	if err != nil {
+		return fmt.Errorf("extension installer: %w", err)
+	}
+	extManager := extensions.NewManager(extensions.Deps{
+		Installer: installer,
+		Registry:  capRegistry,
+		Store:     set.InstalledExtensions,
+		Clock:     set.Clock,
+		Policy:    extension.DefaultRestartPolicy(),
+		Root:      root,
+	})
+
 	svc := app.NewService(app.Deps{
 		UnitOfWork:       set.UnitOfWork,
 		Sessions:         set.Sessions,
@@ -577,6 +602,7 @@ func run() error {
 		Events:           bus,
 		PasswordVerifier: crypto.NewPasswordHasher(),
 		Capabilities:     capRegistry,
+		Extensions:       extManager,
 		ModuleSettings:   set.ModuleSettings,
 		UserPreferences:  set.UserPreferences,
 		TelemetryQueries: set.TelemetryQueries,
@@ -585,44 +611,15 @@ func run() error {
 		PlaybackStates:      set.PlaybackStates,
 	})
 
-	// Re-adopt the extension modules a user has installed (ADR 0081). The
-	// installed set is durable Platform state and default-empty: a fresh install
-	// composes only its core modules and reaches this loop with nothing to do.
-	// Each installed record is brought up the way an install brings one up — the
-	// verified binary re-checked against its cached manifest and spawned — so a
-	// restart reconstructs exactly the set the user last installed, without an
-	// operator action and without re-consent.
-	//
-	// It runs after the Service is built because a module's callbacks re-enter the
-	// Service as the invoking user (ADR 0017): the spawned module is handed svc as
-	// its ContentService. The Supervised capability it produces registers into the
-	// same registry a compiled-in module does, and nothing above the registry can
-	// tell the difference.
-	//
-	// The Manager owns the whole runtime lifecycle — adopt at boot, install and
-	// uninstall while serving, stop on shutdown — so this composition root wires
-	// it and calls it rather than inlining the loop. An extension that fails to
-	// adopt is a degraded capability, logged and skipped by the Manager, never a
-	// boot failure: extensions fill no required role class (that is core's
-	// guarantee, ADR 0035/0072), so one being absent is the ordinary degraded
-	// state, not the inert Platform RequireComposedRoleClasses refuses.
-	extensionsDir := os.Getenv(extensionsDirEnv)
-	if extensionsDir == "" {
-		extensionsDir = defaultExtensionsDir
-	}
-	installer, err := extension.NewOfficialInstaller(extensionsDir)
-	if err != nil {
-		return fmt.Errorf("extension installer: %w", err)
-	}
-	extManager := extensions.NewManager(extensions.Deps{
-		Installer: installer,
-		Registry:  capRegistry,
-		Store:     set.InstalledExtensions,
-		Content:   svc,
-		Clock:     set.Clock,
-		Policy:    extension.DefaultRestartPolicy(),
-		Root:      root,
-	})
+	// Close the construction cycle, then re-adopt the installed set. A spawned
+	// module registers into the same registry a compiled-in one does, and nothing
+	// above the registry can tell the difference. An extension that fails to adopt
+	// is a degraded capability the Manager logs and skips, never a boot failure:
+	// extensions fill no required role class (that is core's guarantee,
+	// ADR 0035/0072), so one being absent is the ordinary degraded state, not the
+	// inert Platform RequireComposedRoleClasses refuses. Default-empty: a fresh
+	// install has adopted nothing.
+	extManager.SetContent(svc)
 	// Stop adopted module processes when the Platform stops, so a module process
 	// never outlives the Platform that spawned it.
 	defer extManager.Close()

@@ -53,6 +53,23 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		}
 		_, err = h.svc.ConfigureModule(ctx, app.ConfigureModuleCommand{Caller: caller, ModuleID: moduleID, Settings: settings})
 		return nil, err
+	case "installExtension":
+		repository, moduleID, err := extensionRefFromInput(input)
+		if err != nil {
+			return nil, err
+		}
+		_, err = h.svc.InstallExtension(ctx, app.InstallExtensionCommand{
+			Caller: caller, Repository: repository, ModuleID: moduleID,
+		})
+		return nil, err
+	case "uninstallExtension":
+		moduleID, err := extensionModuleIDFromInput(input)
+		if err != nil {
+			return nil, err
+		}
+		return nil, h.svc.UninstallExtension(ctx, app.UninstallExtensionCommand{
+			Caller: caller, ModuleID: moduleID,
+		})
 	case "setPreference":
 		key, value, err := preferenceFromInput(input)
 		if err != nil {
@@ -352,6 +369,39 @@ func configureFromInput(input []byte) (string, []byte, error) {
 		settings = env.Settings
 	}
 	return env.ModuleID, settings, nil
+}
+
+// extensionEnvelope is the install/uninstall action input (ADR 0081): which
+// repository a module comes from and its module id. Uninstall reads only the
+// module id.
+type extensionEnvelope struct {
+	Repository string `json:"repository"`
+	ModuleID   string `json:"moduleId"`
+}
+
+// extensionRefFromInput decodes an installExtension envelope. The Service
+// validates that both fields are present, so an empty one becomes an
+// InvalidArgument there rather than being second-guessed here.
+func extensionRefFromInput(input []byte) (string, string, error) {
+	var env extensionEnvelope
+	if len(input) > 0 {
+		if err := json.Unmarshal(input, &env); err != nil {
+			return "", "", contracts.NewError(contracts.InvalidArgument, "install extension: input is not valid JSON")
+		}
+	}
+	return env.Repository, env.ModuleID, nil
+}
+
+// extensionModuleIDFromInput decodes an uninstallExtension envelope down to the
+// module id it names.
+func extensionModuleIDFromInput(input []byte) (string, error) {
+	var env extensionEnvelope
+	if len(input) > 0 {
+		if err := json.Unmarshal(input, &env); err != nil {
+			return "", contracts.NewError(contracts.InvalidArgument, "uninstall extension: input is not valid JSON")
+		}
+	}
+	return env.ModuleID, nil
 }
 
 // browserPreference is what a desktop browser can play, in the shape selection

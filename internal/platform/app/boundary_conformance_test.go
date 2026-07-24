@@ -212,6 +212,25 @@ func boundaryCases() []boundaryCase {
 		{"ListSettingsModules", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListSettingsModules(ctx, app.ListSettingsModulesQuery{Caller: caller(sid)}))
 		}},
+		// Installing and uninstalling an extension changes which third-party code
+		// runs with the Platform's authority (ADR 0081), so both refuse an unknown
+		// session and an ungranted caller like any other administrator action. The
+		// rejection lands at the boundary, before the injected manager is reached —
+		// the Service in this suite has none, which is exactly why the rejection
+		// must come first.
+		{"InstallExtension", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.InstallExtension(ctx, app.InstallExtensionCommand{
+				Caller: caller(sid), Repository: "mosaic-official", ModuleID: "stremio",
+			}))
+		}},
+		{"UninstallExtension", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return s.UninstallExtension(ctx, app.UninstallExtensionCommand{
+				Caller: caller(sid), ModuleID: "stremio",
+			})
+		}},
+		{"ListInstalledExtensions", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListInstalledExtensions(ctx, app.ListInstalledExtensionsQuery{Caller: caller(sid)}))
+		}},
 		{"ResolvePlayback", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ResolvePlayback(ctx, app.ResolvePlaybackQuery{
 				Caller: caller(sid), PartID: "part-1",

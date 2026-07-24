@@ -84,6 +84,25 @@ func NewManager(d Deps) *Manager {
 	}
 }
 
+// SetContent supplies the ContentService adopted modules call back into. It
+// exists to break a construction cycle: the Service needs the Manager (to drive
+// install and uninstall), and the Manager needs the Service (as the callback
+// target), so one side is wired after both exist. The composition root calls
+// this once, after building the Service and before adopting or installing
+// anything — every spawn reads it, and no spawn happens before then.
+func (m *Manager) SetContent(content v1.ContentService) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.content = content
+}
+
+// InstalledExtensions is the durable installed set, read from the store — the
+// runtime-independent view a settings surface reads, distinct from the live
+// process list Installed() reports.
+func (m *Manager) InstalledExtensions(ctx context.Context) ([]domain.InstalledExtension, error) {
+	return m.store.List(ctx)
+}
+
 // AdoptInstalled brings up every installed extension at boot (ADR 0081). Each is
 // re-verified against its cached manifest and spawned; a failure is a degraded
 // capability — logged and skipped, never fatal, because extensions fill no

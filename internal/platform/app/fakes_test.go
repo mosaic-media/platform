@@ -882,7 +882,23 @@ func newTestService(db *fakeDB, tr *trace, now time.Time) *app.Service {
 // for the ImportContent path. Most tests register nothing and use the wrapper
 // above.
 func newTestServiceWithCapabilities(db *fakeDB, tr *trace, now time.Time, caps *app.CapabilityRegistry) *app.Service {
-	return app.NewService(app.Deps{
+	d := baseTestDeps(db, tr, now)
+	d.Capabilities = caps
+	return app.NewService(d)
+}
+
+// newTestServiceWithExtensions is newTestService with an injected extension
+// manager, for the install/uninstall path.
+func newTestServiceWithExtensions(db *fakeDB, tr *trace, now time.Time, ext app.ExtensionManager) *app.Service {
+	d := baseTestDeps(db, tr, now)
+	d.Extensions = ext
+	return app.NewService(d)
+}
+
+// baseTestDeps is the common fake wiring both variants share, so a new
+// dependency is added in one place rather than copied per helper.
+func baseTestDeps(db *fakeDB, tr *trace, now time.Time) app.Deps {
+	return app.Deps{
 		UnitOfWork:       &fakeUnitOfWork{db: db, trace: tr},
 		Sessions:         &fakeSessionStore{db: db, trace: tr},
 		Users:            &fakeUserStore{db: db, trace: tr},
@@ -897,12 +913,11 @@ func newTestServiceWithCapabilities(db *fakeDB, tr *trace, now time.Time, caps *
 		Policy:           policy.NewEngine(fakePermissionStore{db: db, trace: tr}),
 		Events:           &fakeEventPublisher{trace: tr},
 		PasswordVerifier: fakePasswordVerifier{},
-		Capabilities:     caps,
 		ModuleSettings:   &fakeModuleSettingsStore{db: db, trace: tr},
 		UserPreferences:  &fakeUserPreferenceStore{db: db, trace: tr},
 		PlaybackStates:   &fakePlaybackStateStore{db: db, trace: tr},
 		TelemetryQueries: fakeTelemetryQueryStore{},
-	})
+	}
 }
 
 // fakeNodeStore implements contracts.NodeStore over fakeDB. The reads the

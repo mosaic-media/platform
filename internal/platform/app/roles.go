@@ -69,7 +69,7 @@ func administratorActions() []policy.Action {
 		ActionRoleCreate, ActionRoleGrant,
 		ActionConfigDraft, ActionConfigValidate, ActionConfigActivate, ActionConfigRead,
 		ActionContentCreate, ActionContentRelate, ActionContentBind, ActionContentImport,
-		ActionModuleConfigure, ActionModuleRead,
+		ActionModuleConfigure, ActionModuleRead, ActionExtensionManage,
 	)
 }
 

@@ -44,6 +44,7 @@ type Service struct {
 	events           contracts.EventPublisher
 	passwordVerifier domain.PasswordVerifier
 	capabilities     *CapabilityRegistry
+	extensions       ExtensionManager
 	sessionManager   *sessions.Manager
 	configManager    *config.Manager
 }
@@ -85,7 +86,12 @@ type Deps struct {
 	Events           contracts.EventPublisher
 	PasswordVerifier domain.PasswordVerifier
 	Capabilities     *CapabilityRegistry
-	ModuleSettings   contracts.ModuleSettingsStore
+	// Extensions is the runtime extension-module lifecycle (ADR 0081), injected
+	// by the composition root. Optional: a Service built without one refuses
+	// install and uninstall with Unavailable and reports no installed set, which
+	// is the right behaviour for a test service or a build with extensions off.
+	Extensions     ExtensionManager
+	ModuleSettings contracts.ModuleSettingsStore
 	// UserPreferences is the direct read handle for a user's own settings.
 	// Writes go through the UnitOfWork like every other mutation.
 	UserPreferences contracts.UserPreferenceStore
@@ -119,6 +125,7 @@ func NewService(d Deps) *Service {
 		events:           d.Events,
 		passwordVerifier: d.PasswordVerifier,
 		capabilities:     d.Capabilities,
+		extensions:       d.Extensions,
 		sessionManager:   sessions.NewManager(d.Clock, d.IDs),
 		configManager:    config.NewManager(d.Clock, d.IDs, config.PlatformSchema()),
 	}
