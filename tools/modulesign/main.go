@@ -13,10 +13,19 @@
 // publisher and only surfaces as "signature does not verify" on the far side,
 // which is why the tool owns it rather than a README.
 //
-//	modulesign genkey     -out <path>                  # writes <path> and <path>.pub
-//	modulesign digest     <binary>                     # prints sha256:<hex>
-//	modulesign sign       -key <path> <manifest.json>  # writes <manifest.json>.sig
-//	modulesign sign-index -key <path> <index.json>     # writes <index.json>.sig
+//	modulesign genkey      -out <path>                  # writes <path> and <path>.pub
+//	modulesign digest      <binary>                     # prints sha256:<hex>
+//	modulesign sign        -key <path> <manifest.json>  # writes <manifest.json>.sig
+//	modulesign sign-index  -key <path> <index.json>     # writes <index.json>.sig
+//	modulesign build-index -url <template> -out <index.json> <manifest.json>...
+//
+// build-index assembles a repository index from module manifests, computing each
+// binary's download URL from a template with {id} {version} {os} {arch}
+// placeholders — so a repository hosted on GitHub points its binaries at release
+// download URLs and its index at Pages, with no bespoke script to get the format
+// wrong. The output is signed with sign-index. The repository model is
+// hosting-agnostic (ADR 0065); GitHub is one HTTPS host, and an untrusted one —
+// the signature and digests are what protect a download, not the host.
 //
 // The private key is raw ed25519 seed bytes; the public key is the raw public
 // key. Neither is armoured — a module publisher's key custody is their concern,
@@ -26,8 +35,10 @@ package main
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/mosaic-media/platform/internal/adapters/extension"
 )
@@ -51,13 +62,15 @@ func main() {
 			_, err := extension.ParseIndex(data)
 			return err
 		})
+	case "build-index":
+		buildIndex(os.Args[2:])
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: modulesign genkey -out <path> | digest <binary> | sign -key <path> <manifest.json> | sign-index -key <path> <index.json>")
+	fmt.Fprintln(os.Stderr, "usage: modulesign genkey -out <path> | digest <binary> | sign -key <path> <manifest.json> | sign-index -key <path> <index.json> | build-index -url <template> -out <index.json> <manifest.json>...")
 	os.Exit(2)
 }
 
@@ -126,6 +139,78 @@ func signFile(args []string, kind string, validate func([]byte) error) {
 		fail("writing signature: %v", err)
 	}
 	fmt.Printf("wrote %s\n", out)
+}
+
+// buildIndex assembles a repository index from module manifests. Each manifest
+// already carries its binaries and their digests (computed with `digest`); this
+// adds the download URL for each, from a template, and emits the index a
+// repository serves.
+func buildIndex(args []string) {
+	template := flagValue(args, "-url")
+	out := flagValue(args, "-out")
+	if template == "" || out == "" {
+		fail("build-index needs -url <template> and -out <path>, then manifest paths")
+	}
+	manifests := positionals(args)
+	if len(manifests) == 0 {
+		fail("build-index needs at least one manifest path")
+	}
+
+	idx := extension.Index{Schema: extension.IndexSchema}
+	for _, path := range manifests {
+		data, err := os.ReadFile(path) //nolint:gosec // the operator names their own manifests.
+		if err != nil {
+			fail("reading %s: %v", path, err)
+		}
+		m, err := extension.ParseManifest(data)
+		if err != nil {
+			fail("%s: %v", path, err)
+		}
+		urls := make(map[string]string, len(m.Binaries))
+		for _, b := range m.Binaries {
+			urls[b.OS+"/"+b.Arch] = expand(template, m, b)
+		}
+		idx.Modules = append(idx.Modules, extension.IndexModule{Manifest: m, BinaryURLs: urls})
+	}
+
+	// Validate the round trip before writing: what is written must be what the
+	// Platform parses, so a template that produced nonsense fails here rather
+	// than at a user's install.
+	data, err := json.MarshalIndent(idx, "", "  ")
+	if err != nil {
+		fail("marshalling index: %v", err)
+	}
+	if _, err := extension.ParseIndex(data); err != nil {
+		fail("built an index that does not parse: %v", err)
+	}
+	if err := os.WriteFile(out, data, 0o644); err != nil { //nolint:gosec // an index is public.
+		fail("writing index: %v", err)
+	}
+	fmt.Printf("wrote %s with %d module(s); sign it with: modulesign sign-index -key <key> %s\n", out, len(idx.Modules), out)
+}
+
+// expand fills a URL template's {id} {version} {os} {arch} placeholders.
+func expand(template string, m extension.Manifest, b extension.BinaryRef) string {
+	r := strings.NewReplacer(
+		"{id}", m.ID,
+		"{version}", m.Version,
+		"{os}", b.OS,
+		"{arch}", b.Arch,
+	)
+	return r.Replace(template)
+}
+
+// positionals returns the arguments that are not flags or flag values.
+func positionals(args []string) []string {
+	var out []string
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "-") {
+			i++ // skip the flag's value
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out
 }
 
 // flagValue returns the argument following name, or "".

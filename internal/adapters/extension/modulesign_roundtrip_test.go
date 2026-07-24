@@ -5,6 +5,7 @@
 package extension_test
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"os"
@@ -84,6 +85,90 @@ func TestModulesignOutputVerifies(t *testing.T) {
 	}
 	if v.Config.DeclaredManifest.ID != "extprobe" {
 		t.Errorf("declared id: got %q", v.Config.DeclaredManifest.ID)
+	}
+}
+
+// The producer story end to end: the tool builds a repository index from a
+// manifest, signs it, and the Platform installs from it. This is what "host a
+// repository — on GitHub or anywhere" reduces to: signed static files the
+// Platform verifies, the host untrusted throughout.
+func TestBuildIndexProducesAnInstallableRepository(t *testing.T) {
+	dir := t.TempDir()
+	tool := buildModulesign(t, dir)
+	probe := buildProbe(t)
+
+	keyPath := filepath.Join(dir, "key")
+	run(t, tool, "genkey", "-out", keyPath)
+	pub, err := os.ReadFile(keyPath + ".pub")
+	if err != nil {
+		t.Fatalf("reading public key: %v", err)
+	}
+
+	// A publisher's manifest, digest computed by the tool.
+	digest := strings.TrimSpace(run(t, tool, "digest", probe))
+	manifest := map[string]any{
+		"schema": extension.ManifestSchema, "id": "extprobe", "version": "v1.0.0",
+		"name": "Extension Probe", "sdk_major": 0,
+		"provides": []string{string(v1.RoleSearch)},
+		"binaries": []map[string]string{
+			{"os": runtime.GOOS, "arch": runtime.GOARCH, "digest": digest},
+		},
+	}
+	manifestPath := filepath.Join(dir, "extprobe.json")
+	writeJSONFile(t, manifestPath, manifest)
+
+	// Build the index, with binary URLs pointed at a (fake) GitHub-releases-style
+	// download URL, then sign it.
+	indexPath := filepath.Join(dir, "index.json")
+	run(t, tool, "build-index",
+		"-url", "https://github.invalid/registry/releases/download/{id}-{version}/{id}-{os}-{arch}",
+		"-out", indexPath, manifestPath)
+	run(t, tool, "sign-index", "-key", keyPath, indexPath)
+
+	// Serve the built index and the binary at the URL the index names, and
+	// install from it.
+	indexBytes, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatalf("reading index: %v", err)
+	}
+	sigBytes, err := os.ReadFile(indexPath + ".sig")
+	if err != nil {
+		t.Fatalf("reading index sig: %v", err)
+	}
+	binaryBytes, err := os.ReadFile(probe)
+	if err != nil {
+		t.Fatalf("reading binary: %v", err)
+	}
+	const base = "https://github.invalid/registry"
+	binURL := "https://github.invalid/registry/releases/download/extprobe-v1.0.0/extprobe-" + runtime.GOOS + "-" + runtime.GOARCH
+	fetch := &fakeRepo{files: map[string][]byte{
+		base + "/index.json":     indexBytes,
+		base + "/index.json.sig": sigBytes,
+		binURL:                   binaryBytes,
+	}}
+
+	reg := extension.NewRegistry()
+	if err := reg.Add(extension.Repository{Name: "mosaic-official", URL: base, Key: ed25519.PublicKey(pub), Official: true}); err != nil {
+		t.Fatalf("adding repo: %v", err)
+	}
+	inst := extension.NewInstaller(reg, fetch, t.TempDir())
+	got, err := inst.Install(context.Background(), "mosaic-official", "extprobe")
+	if err != nil {
+		t.Fatalf("installing from the built repository: %v", err)
+	}
+	if got.Version != "v1.0.0" {
+		t.Errorf("installed version: got %q", got.Version)
+	}
+}
+
+func writeJSONFile(t *testing.T, path string, v any) {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshalling: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
 	}
 }
 
