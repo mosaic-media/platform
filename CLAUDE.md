@@ -16,7 +16,15 @@
 - **`module-remote-playback`** — the first **consumer** module (ADR 0045): it resolves a Part into a playable location and never serves bytes. MIT-licensed.
 - **`module-tmdb`**, **`module-cinemeta`** — the two **core** metadata modules (ADR 0062's guarantee clause, ADR 0072). MIT-licensed.
 
-Every module is required as a tagged dependency, no `replace`. Commit and push each separately.
+Each module is its own repository, committed and pushed separately. **Only the
+core modules are `go.mod` dependencies of the Platform** (`module-tmdb`,
+`module-cinemeta`, `module-remote-playback`), required at a tagged version with
+no `replace` and compiled into the binary. **Extension modules are not Platform
+dependencies at all** (ADR 0081): `module-stremio-addons`, `module-aiostreams`
+and `module-fanart-tv` are installed at runtime and adopted by the extension
+Manager, so they appear in neither `go.mod` nor the composition root, and the
+platform test suite must not import them either (a fake stands in — see
+`internal/modules/postgres/fake_capability_test.go`).
 
 Required reading, and it is short:
 
@@ -203,9 +211,12 @@ built-in modules, and serves the whole client API on `:8081` over h2c — the
 Connect `AuthService` that mints a session (ADR 0061) and the two-lane Connect
 `SessionService` that spends it (ADR 0041) — plus artwork at `:8081/artwork`,
 playback at `:8081/playback/`, and the Supervisor handoff on `:8080`. There is
-no GraphQL endpoint: ADR 0061 deleted it. The Stremio module is always
-registered; a user adds addons at runtime via the `configureModule` action
-(ADR 0021) — the `MOSAIC_STREMIO_ADDONS` env var is retired.
+no GraphQL endpoint: ADR 0061 deleted it. A fresh stack registers only the
+**core** modules; Stremio and the other extension modules are **not** composed
+in (ADR 0081) — a user installs one at runtime through the `installExtension`
+action, and the Platform adopts it across restarts. Once installed, its addons
+are configured through the `configureModule` action (ADR 0021), the same as
+before; the `MOSAIC_STREMIO_ADDONS` env var is retired.
 
 ## The roadmap and the decision records
 

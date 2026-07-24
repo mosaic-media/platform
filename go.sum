@@ -52,16 +52,10 @@ github.com/mattn/go-isatty v0.0.17 h1:BTarxUcIeDqL27Mc+vyvdWYSL28zpIhv3RoTdsLMPn
 github.com/mattn/go-isatty v0.0.17/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
 github.com/mosaic-media/contracts v0.14.0 h1:z+3T4ZP84zOYrcozsMF4lrbuSsGVRU+u3gd77lcbNSs=
 github.com/mosaic-media/contracts v0.14.0/go.mod h1:PTcqIYfXR9ATnb2ihAWD2sfg4+Tjihne7yIDfJwXUJ0=
-github.com/mosaic-media/module-aiostreams v0.2.0 h1:Oe9NP8nxjjIWi7K4HX0hNIjKK4isNpniG+xPd5XvLq0=
-github.com/mosaic-media/module-aiostreams v0.2.0/go.mod h1:VGiolwJGitPx9UTAPaK0NhNzGksnM07ceQHDboJk1QM=
 github.com/mosaic-media/module-cinemeta v0.1.0 h1:iHsW/I1mEUk67ZbY8gOClTHYRPgYllOd22EoFy7EMz4=
 github.com/mosaic-media/module-cinemeta v0.1.0/go.mod h1:PqRNf+2fqIgWgreeaxkS9o/Lx51dbQOVPPvA97GeXS4=
-github.com/mosaic-media/module-fanart-tv v0.2.0 h1:yMq6gvxj0FrhJKND/Erl3XAvZB8W+lqeizlRpr9rKcw=
-github.com/mosaic-media/module-fanart-tv v0.2.0/go.mod h1:Cig4BnjAssUo321GpN/kOvqBOCdAA/o7uN8upxvkkq4=
 github.com/mosaic-media/module-remote-playback v0.2.0 h1:mzOorq9lxzeVrLsr9qhZHxcMhidyH13qyb4MzgbE0wY=
 github.com/mosaic-media/module-remote-playback v0.2.0/go.mod h1:juh4cwllwHbQedTEVaP9szvWgCXXQ9F2e48huEk6Cc4=
-github.com/mosaic-media/module-stremio-addons v0.23.0 h1:jgZnmoKE3oHzD4FgT61gcWTf7V+Fw5JsDU+ox4IKNjY=
-github.com/mosaic-media/module-stremio-addons v0.23.0/go.mod h1:9bczhyqhjehRLQi0RFcMRQ0JGuckbynh3jx/rbtXuB8=
 github.com/mosaic-media/module-tmdb v0.6.0 h1:nHVK1qw5sXe41ZsI04QwUQsqUUXSqibOtkhSbzpE+6Q=
 github.com/mosaic-media/module-tmdb v0.6.0/go.mod h1:DFSJLmJ3hhaAvBnEzUbivNAEoxl7KI/5tyfyIXIjnCY=
 github.com/mosaic-media/sdk v0.21.0 h1:UTEYF4D2CGvCrW6cimH5IZpRIY9/sNjvZCSjmIgXKiw=

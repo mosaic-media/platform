@@ -12,9 +12,14 @@
 #   Mosaic/
 #     platform/            <- this repository
 #     sdk/  contracts/
-#     module-stremio-addons/  module-aiostreams/  module-remote-playback/
-#     module-tmdb/  module-cinemeta/
+#     module-remote-playback/  module-tmdb/  module-cinemeta/   <- the core modules
 #     web/
+#
+# Only the *core* modules are overlaid: they are compiled into the Platform
+# binary, so a local edit to one reaches the build through the workspace.
+# Extension modules (Stremio, AIOStreams, fanart.tv) are **not** here — they are
+# not platform dependencies (ADR 0081); they are installed at runtime, so a local
+# change to one is exercised through the install path, not this workspace.
 #
 # **Go side: a workspace, not a `replace`.** `go.work` overrides the module
 # cache for whatever it lists, and it lives only inside the container — so
@@ -39,8 +44,6 @@ services:
     volumes:
       - ../sdk:/src/sdk
       - ../contracts:/src/contracts
-      - ../module-stremio-addons:/src/module-stremio-addons
-      - ../module-aiostreams:/src/module-aiostreams
       - ../module-remote-playback:/src/module-remote-playback
       - ../module-tmdb:/src/module-tmdb
       - ../module-cinemeta:/src/module-cinemeta
@@ -57,7 +60,7 @@ services:
       sh -c "mkdir -p /work &&
              rm -f /work/go.work &&
              go work init &&
-             go work use /src/platform /src/sdk /src/contracts /src/module-stremio-addons /src/module-aiostreams /src/module-remote-playback /src/module-tmdb /src/module-cinemeta &&
+             go work use /src/platform /src/sdk /src/contracts /src/module-remote-playback /src/module-tmdb /src/module-cinemeta &&
              cd /src/platform &&
              exec go run ./cmd/mosaic-platform"
 

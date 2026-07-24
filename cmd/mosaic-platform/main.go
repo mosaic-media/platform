@@ -19,11 +19,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	aiostreams "github.com/mosaic-media/module-aiostreams"
 	cinemeta "github.com/mosaic-media/module-cinemeta"
-	fanarttv "github.com/mosaic-media/module-fanart-tv"
 	remoteplayback "github.com/mosaic-media/module-remote-playback"
-	stremio "github.com/mosaic-media/module-stremio-addons"
 	tmdb "github.com/mosaic-media/module-tmdb"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -153,33 +150,28 @@ func superuserPermissions() []domain.Permission {
 	return perms
 }
 
-// registerCapabilities wires the module capabilities compiled into this binary
-// into the registry the Platform resolves through. It is the one place that
-// names concrete modules — the composition-root equivalent of the Build
-// Pipeline's generated imports (ADR 0007). Modules land here as they are added;
-// the Stremio addon-source module was the first.
+// registerCapabilities wires the *core* module capabilities compiled into this
+// binary into the registry the Platform resolves through. It is the one place
+// that names concrete core modules — the composition-root equivalent of the
+// Build Pipeline's generated imports (ADR 0007).
 //
-// Three of the six are *core* modules under ADR 0062's guarantee clause —
-// Cinemeta and TMDB back the metadata/search class ADR 0035 requires, remote
-// playback backs the consumer class without which the library is inert — and
-// three, Stremio, AIOStreams and fanart.tv, are extension modules. Nothing here
-// distinguishes them by tier, and that is the design: the tier is a delivery and
-// coupling decision, not a contract decision, so all six implement the same SDK
-// interfaces and register identically.
+// All three are core modules under ADR 0062's guarantee clause: Cinemeta and
+// TMDB back the metadata/search class ADR 0035 requires, and remote playback
+// backs the consumer class without which the library is inert. **Extension
+// modules are no longer here** — Stremio, AIOStreams and fanart.tv used to be
+// registered beside the core three, but under ADR 0081 an extension is not
+// composed into the binary at all: it is installed at runtime by a user and
+// adopted by the extension Manager, which registers its proxy into this same
+// registry indistinguishably from a compiled-in module. So a fresh install
+// carries only the core three, and everything else is chosen, not shipped.
 //
-// What *does* distinguish them now is selection (ADR 0063). A module the
-// selection does not name is never constructed — its New is not called, no
-// resource it holds is opened, and the registry never sees it. The default is
-// every module, so an unconfigured deployment is unchanged; a selection is how
-// an admin drops one. The Supervisor will drive this by activating a Generation
-// with a different selection; until it exists the selection is read from the
-// environment, the same bridge the DSN and log level take.
-//
-// fanart.tv is the first module here that fills neither a source role nor a
-// consumer role (ADR 0075) — it enriches content another module already
-// identified, reached only through the artwork enrichment pass rather than
-// through any ContentRef, so its registration looks identical to the others
-// while its invocation path does not.
+// Selection (ADR 0063) applies to these core modules. A module the selection
+// does not name is never constructed — its New is not called, no resource it
+// holds is opened, and the registry never sees it. The default is every core
+// module, so an unconfigured deployment gets the metadata floor; a selection is
+// how an admin drops one. The Supervisor will drive this by activating a
+// Generation with a different selection; until it exists the selection is read
+// from the environment, the same bridge the DSN and log level take.
 func registerCapabilities(reg *app.CapabilityRegistry, sel app.Selection, httpClient *http.Client, boot *telemetry.Logger) {
 	for _, d := range moduleDescriptors(httpClient) {
 		if !sel.Selected(d.id) {
@@ -199,8 +191,10 @@ type moduleDescriptor struct {
 }
 
 // moduleDescriptors is the list the selection is applied to — the one place that
-// names concrete modules, the composition-root equivalent of the Build
-// Pipeline's generated imports (ADR 0007).
+// names the concrete *core* modules compiled into this binary, the
+// composition-root equivalent of the Build Pipeline's generated imports (ADR
+// 0007). Extension modules are not here: they are installed at runtime and
+// adopted by the extension Manager (ADR 0081), not composed in.
 func moduleDescriptors(httpClient *http.Client) []moduleDescriptor {
 	return []moduleDescriptor{
 		// The Cinemeta metadata module — the zero-configuration floor under the
@@ -220,48 +214,11 @@ func moduleDescriptors(httpClient *http.Client) []moduleDescriptor {
 		// settings screen (ADR 0038), and every role reports that plainly until
 		// one exists; Cinemeta is what keeps the class satisfied in the meantime.
 		{tmdb.CapabilityID, func() v1.Capability { return tmdb.New(httpClient) }},
-		// The Stremio addon-source module. The addons it sources from are
-		// user-managed settings (ADR 0021), set at runtime through configureModule
-		// rather than baked in at composition, so the module is available even
-		// before any addon is configured.
-		//
-		// Handed the Platform's client rather than nil (ADR 0055, seam 9): it
-		// spans every outbound call and, more importantly, routes through
-		// netguard's dial guard. A module builds its own client when given nil,
-		// which bypassed the SSRF protection entirely for the one caller that
-		// fetches URLs a user supplied.
-		{stremio.CapabilityID, func() v1.Capability { return stremio.New(httpClient) }},
-		// The AIOStreams module — a stream source for one named upstream, beside
-		// the open-ended addon list above. It is the answer to a question that
-		// module cannot answer: a Stremio addon is community-made and unreviewed,
-		// and Mosaic has no access-control story that makes an arbitrary addon
-		// list safe to recommend, so an install that only wants streams should not
-		// have to adopt that whole surface. AIOStreams is itself an aggregator, so
-		// the breadth survives and the trust decision becomes one instance URL.
-		//
-		// It sorts before Stremio in id order, which the stream-enrichment fan-out
-		// reads as precedence: it is asked first and stops the search when it
-		// answers (ADR 0073). That is the intended order and it is alphabetical
-		// accident, the same seam as the cinemeta/tmdb ordering above.
-		//
-		// Handed the Platform's client for the same reason Stremio is: the
-		// instance URL is text a user typed, and only that client routes through
-		// netguard's dial guard.
-		{aiostreams.CapabilityID, func() v1.Capability { return aiostreams.New(httpClient) }},
 		// The remote playback module — the first *consumer* capability (ADR 0045).
-		// Registering it is what stops the library being inert: the Stremio module
-		// above snapshots a stream location at import, and this is what can turn
-		// that location back into playable bytes.
+		// Registering it is what lets a snapshotted stream location be turned back
+		// into playable bytes; it is core because a library that cannot play what
+		// it holds is inert.
 		{remoteplayback.CapabilityID, func() v1.Capability { return remoteplayback.New() }},
-		// The fanart.tv artwork module — the first module reached only through
-		// enrichment rather than through any ContentRef (ADR 0075). It fills
-		// RoleArtwork alone: it illustrates content another module identified and
-		// must never declare RoleMetadata, RoleSearch or RoleCatalog, which its
-		// own boundary test asserts. Registering it costs nothing when it is
-		// unconfigured or unaddressable for a title — the artwork enrichment pass
-		// is best-effort, and a deployment with no artwork provider sees exactly
-		// what it saw before this module existed.
-		{fanarttv.CapabilityID, func() v1.Capability { return fanarttv.New(httpClient) }},
 	}
 }
 
