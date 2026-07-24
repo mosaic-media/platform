@@ -13,9 +13,10 @@
 // publisher and only surfaces as "signature does not verify" on the far side,
 // which is why the tool owns it rather than a README.
 //
-//	modulesign genkey  -out <path>                  # writes <path> and <path>.pub
-//	modulesign digest  <binary>                     # prints sha256:<hex>
-//	modulesign sign    -key <path> <manifest.json>  # writes <manifest.json>.sig
+//	modulesign genkey     -out <path>                  # writes <path> and <path>.pub
+//	modulesign digest     <binary>                     # prints sha256:<hex>
+//	modulesign sign       -key <path> <manifest.json>  # writes <manifest.json>.sig
+//	modulesign sign-index -key <path> <index.json>     # writes <index.json>.sig
 //
 // The private key is raw ed25519 seed bytes; the public key is the raw public
 // key. Neither is armoured — a module publisher's key custody is their concern,
@@ -41,14 +42,22 @@ func main() {
 	case "digest":
 		digest(os.Args[2:])
 	case "sign":
-		sign(os.Args[2:])
+		signFile(os.Args[2:], "manifest", func(data []byte) error {
+			_, err := extension.ParseManifest(data)
+			return err
+		})
+	case "sign-index":
+		signFile(os.Args[2:], "index", func(data []byte) error {
+			_, err := extension.ParseIndex(data)
+			return err
+		})
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: modulesign genkey -out <path> | digest <binary> | sign -key <path> <manifest.json>")
+	fmt.Fprintln(os.Stderr, "usage: modulesign genkey -out <path> | digest <binary> | sign -key <path> <manifest.json> | sign-index -key <path> <index.json>")
 	os.Exit(2)
 }
 
@@ -83,11 +92,15 @@ func digest(args []string) {
 	fmt.Println(d)
 }
 
-func sign(args []string) {
+// signFile signs any document after validating it parses as the kind named, so
+// the same signing path serves manifests and indexes and neither can be signed
+// as garbage — a valid signature over an unparseable file fails far away with no
+// clue why.
+func signFile(args []string, kind string, validate func([]byte) error) {
 	key := flagValue(args, "-key")
-	manifest := lastNonFlag(args)
-	if key == "" || manifest == "" {
-		fail("sign needs -key <path> and a manifest path")
+	path := lastNonFlag(args)
+	if key == "" || path == "" {
+		fail("sign needs -key <path> and a %s path", kind)
 	}
 
 	seed, err := os.ReadFile(key) //nolint:gosec // the operator names their own key file.
@@ -99,19 +112,16 @@ func sign(args []string) {
 	}
 	priv := ed25519.NewKeyFromSeed(seed)
 
-	data, err := os.ReadFile(manifest) //nolint:gosec // the operator names their own manifest.
+	data, err := os.ReadFile(path) //nolint:gosec // the operator names their own file.
 	if err != nil {
-		fail("reading manifest: %v", err)
+		fail("reading %s: %v", kind, err)
 	}
-	// Sign the exact bytes, and refuse to sign a manifest that would not parse:
-	// signing garbage produces a valid signature over garbage, which fails far
-	// away with no clue why.
-	if _, err := extension.ParseManifest(data); err != nil {
-		fail("refusing to sign an invalid manifest: %v", err)
+	if err := validate(data); err != nil {
+		fail("refusing to sign an invalid %s: %v", kind, err)
 	}
 
 	sig := ed25519.Sign(priv, data)
-	out := manifest + ".sig"
+	out := path + ".sig"
 	if err := os.WriteFile(out, sig, 0o644); err != nil { //nolint:gosec // a signature is public.
 		fail("writing signature: %v", err)
 	}

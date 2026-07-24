@@ -74,40 +74,50 @@ func verifyFor(manifest, signature []byte, binaryPath string, keyring *Keyring, 
 		return Verified{}, contracts.WrapError(contracts.InvalidArgument, "extension: manifest", err)
 	}
 
-	// 3. SDK major, refused without executing anything.
+	// 3-5. The manifest is authentic; check it against the binary. This step is
+	// shared with the repository-index install path (installer.go), where the
+	// index's own signature authenticates the manifest instead of a detached
+	// one — so authentication and the binary check are separate functions.
+	cfg, err := checkManifestAgainstBinary(m, binaryPath, goos, goarch)
+	if err != nil {
+		return Verified{}, err
+	}
+	return Verified{Config: cfg, SignedBy: signer}, nil
+}
+
+// checkManifestAgainstBinary runs the checks that do not depend on how the
+// manifest was authenticated: the SDK major, a binary for this platform, and the
+// digest. It is called once the manifest is known to be authentic — by a
+// detached signature ([Verify]) or by a signed repository index ([Installer]).
+func checkManifestAgainstBinary(m Manifest, binaryPath, goos, goarch string) (Config, error) {
+	// SDK major, refused without executing anything.
 	if m.SDKMajor != host.SDKMajor {
-		return Verified{}, contracts.NewError(contracts.InvalidArgument, fmt.Sprintf(
+		return Config{}, contracts.NewError(contracts.InvalidArgument, fmt.Sprintf(
 			"extension: module %q was built against SDK major %d, this Platform speaks %d",
 			m.ID, m.SDKMajor, host.SDKMajor))
 	}
 
-	// 4. A binary for this platform.
+	// A binary for this platform.
 	ref, ok := m.binaryFor(goos, goarch)
 	if !ok {
-		return Verified{}, contracts.NewError(contracts.Unavailable, fmt.Sprintf(
+		return Config{}, contracts.NewError(contracts.Unavailable, fmt.Sprintf(
 			"extension: module %q ships no binary for %s/%s", m.ID, goos, goarch))
 	}
 
-	// 5. Digest of the actual bytes against what the authentic manifest declares.
+	// Digest of the actual bytes against what the authentic manifest declares.
 	got, err := FileDigest(binaryPath)
 	if err != nil {
-		return Verified{}, contracts.WrapError(contracts.Unavailable, "extension: digesting binary", err)
+		return Config{}, contracts.WrapError(contracts.Unavailable, "extension: digesting binary", err)
 	}
 	// Constant-time compare: a digest check is a security decision, and a
 	// timing-variable string compare leaks how much of a forged digest matched.
 	if subtle.ConstantTimeCompare([]byte(got), []byte(ref.Digest)) != 1 {
-		return Verified{}, contracts.NewError(contracts.PermissionDenied, fmt.Sprintf(
+		return Config{}, contracts.NewError(contracts.PermissionDenied, fmt.Sprintf(
 			"extension: binary for %q does not match the signed digest (declared %s, got %s)",
 			m.ID, ref.Digest, got))
 	}
 
-	return Verified{
-		Config: Config{
-			BinaryPath:       binaryPath,
-			DeclaredManifest: m.toV1Manifest(),
-		},
-		SignedBy: signer,
-	}, nil
+	return Config{BinaryPath: binaryPath, DeclaredManifest: m.toV1Manifest()}, nil
 }
 
 // VerifyFiles is Verify reading the manifest, signature and binary from disk —
