@@ -1,0 +1,44 @@
+name: integration
+
+# The cross-module integration tests, behind the `integration` build tag. They
+# reach the live official registry (GitHub Pages) and GitHub releases to install a
+# real extension module at runtime and spawn it — the "a real module runs out of
+# process" proof. It lives here, not in the platform's own test suite, so the
+# platform module never imports an extension module (ADR 0079, ADR 0081): the test
+# installs one the way a user would rather than building one from an import.
+#
+# It runs on a schedule and on demand rather than on every push. It validates the
+# *published* pipeline — the registry index and a real module's release — which a
+# platform commit does not change, and it depends on external availability the
+# fast push gate (verify.yml) must not take on.
+
+on:
+  schedule:
+    # Daily. A pipeline break — a re-signed index, a yanked release, an SDK-major
+    # bump that strands a published module — surfaces within a day rather than at
+    # the next person's install.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The `integration` tag selects the tests that reach the live registry; the
+      # binary they install is for this runner's platform (linux/amd64), which the
+      # official release publishes.
+      - name: Runtime-install integration tests
+        run: go test -tags integration -count=1 ./internal/adapters/extension/...
