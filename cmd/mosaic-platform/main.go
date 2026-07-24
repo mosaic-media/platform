@@ -31,6 +31,7 @@ import (
 	"github.com/mosaic-media/contracts/gen/mosaic/auth/v1/authv1connect"
 	"github.com/mosaic-media/contracts/gen/mosaic/session/v1/sessionv1connect"
 	"github.com/mosaic-media/platform/internal/adapters/crypto"
+	"github.com/mosaic-media/platform/internal/adapters/extension"
 	"github.com/mosaic-media/platform/internal/composition/bootstrap"
 	"github.com/mosaic-media/platform/internal/composition/builtin"
 	"github.com/mosaic-media/platform/internal/modules/postgres"
@@ -527,6 +528,25 @@ func run() error {
 			telemetry.String("version", m.Version),
 			telemetry.String("name", m.Name),
 			telemetry.String("provides", fmt.Sprint(m.Provides)))
+	}
+
+	// Establish the default extension-module trust: the official repository,
+	// trusted by default with the key compiled into this binary (ADR 0065,
+	// ADR 0079). Building it here validates the embedded key at boot — a corrupt
+	// or empty key fails now rather than at a user's first install — and records
+	// which repository the deployment trusts. Nothing installs from it yet: the
+	// runtime install trigger is an admin action whose surface does not exist, so
+	// this is the trust anchor standing ready, not an install path in the serve
+	// loop.
+	extRegistry, err := extension.DefaultRegistry()
+	if err != nil {
+		return fmt.Errorf("default module repository trust: %w", err)
+	}
+	if repo, ok := extRegistry.Lookup(extension.OfficialRepositoryName); ok {
+		boot.Info("trusting extension repository",
+			telemetry.String("repository", repo.Name),
+			telemetry.String("url", repo.URL),
+			telemetry.Bool("official", repo.Official))
 	}
 
 	svc := app.NewService(app.Deps{
