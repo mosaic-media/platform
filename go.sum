@@ -60,8 +60,8 @@ github.com/mosaic-media/module-fanart-tv v0.2.0 h1:yMq6gvxj0FrhJKND/Erl3XAvZB8W+
 github.com/mosaic-media/module-fanart-tv v0.2.0/go.mod h1:Cig4BnjAssUo321GpN/kOvqBOCdAA/o7uN8upxvkkq4=
 github.com/mosaic-media/module-remote-playback v0.2.0 h1:mzOorq9lxzeVrLsr9qhZHxcMhidyH13qyb4MzgbE0wY=
 github.com/mosaic-media/module-remote-playback v0.2.0/go.mod h1:juh4cwllwHbQedTEVaP9szvWgCXXQ9F2e48huEk6Cc4=
-github.com/mosaic-media/module-stremio-addons v0.22.0 h1:53UvLpjJJjnbpcbpnv5BKM002NSywrQiah5wj49ABtE=
-github.com/mosaic-media/module-stremio-addons v0.22.0/go.mod h1:aE39dLArCDydOA+za58aPYiKjb5y1oj/8bjEBlAbc+Q=
+github.com/mosaic-media/module-stremio-addons v0.23.0 h1:jgZnmoKE3oHzD4FgT61gcWTf7V+Fw5JsDU+ox4IKNjY=
+github.com/mosaic-media/module-stremio-addons v0.23.0/go.mod h1:9bczhyqhjehRLQi0RFcMRQ0JGuckbynh3jx/rbtXuB8=
 github.com/mosaic-media/module-tmdb v0.6.0 h1:nHVK1qw5sXe41ZsI04QwUQsqUUXSqibOtkhSbzpE+6Q=
 github.com/mosaic-media/module-tmdb v0.6.0/go.mod h1:DFSJLmJ3hhaAvBnEzUbivNAEoxl7KI/5tyfyIXIjnCY=
 github.com/mosaic-media/sdk v0.21.0 h1:UTEYF4D2CGvCrW6cimH5IZpRIY9/sNjvZCSjmIgXKiw=
