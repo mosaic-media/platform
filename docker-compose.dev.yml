@@ -66,6 +66,20 @@ services:
       MOSAIC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
       MOSAIC_API_ADDR: ":8081"
       MOSAIC_HEALTH_ADDR: ":8080"
+      # The TMDB read token (ADR 0072), from ./.env or your shell — never a
+      # GitHub secret, which reaches only CI, not a local build. Empty is fine.
+      TMDB_RAC: "${TMDB_RAC:-}"
+    # Link the TMDB token into this dev build with -X, the same way the release
+    # binary is built, so a keyed TMDB works out of the box. Empty TMDB_RAC sets
+    # an empty string — TMDB then needs a key in Settings, with Cinemeta as the
+    # zero-config floor. Overrides Dockerfile.dev's plain `go run` CMD; the local
+    # overlay overrides this in turn and injects the same flag itself.
+    command:
+      - sh
+      - -c
+      - >-
+        if [ -n "$${TMDB_RAC}" ]; then echo "TMDB: linking a read token into this dev build"; else echo "TMDB: no bundled token (set TMDB_RAC in platform/.env, or add a key in Settings)"; fi;
+        exec go run -ldflags "-X github.com/mosaic-media/module-tmdb.defaultReadAccessToken=$${TMDB_RAC}" ./cmd/mosaic-platform
     volumes:
       - .:/src/platform
       # Caches live in volumes, not on the bind mount. Source comes from the

@@ -62,7 +62,7 @@ services:
              go work init &&
              go work use /src/platform /src/sdk /src/contracts /src/module-remote-playback /src/module-tmdb /src/module-cinemeta &&
              cd /src/platform &&
-             exec go run ./cmd/mosaic-platform"
+             exec go run -ldflags \"-X github.com/mosaic-media/module-tmdb.defaultReadAccessToken=$${TMDB_RAC}\" ./cmd/mosaic-platform"
 
   web:
     volumes:
