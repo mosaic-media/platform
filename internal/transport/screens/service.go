@@ -151,6 +151,14 @@ type contentQueries interface {
 	// that does before it can offer Play at all (ADR 0036 — an affordance with
 	// nothing behind it is the dead end this whole thread exists to remove).
 	FirstPlayablePart(context.Context, v1.Caller, v1.NodeID) (v1.Part, bool, error)
+	// GetCurrentUser answers "who am I" for the account panel. Every other user
+	// read takes the id of the user to read, which is useless to a screen that
+	// holds a session and wants to say "you".
+	GetCurrentUser(context.Context, app.GetCurrentUserQuery) (app.GetCurrentUserResult, error)
+	// ListUsers and GetRolesForUser back the People panel: the accounts on this
+	// server and what each of them is allowed to do.
+	ListUsers(context.Context, app.ListUsersQuery) (app.ListUsersResult, error)
+	GetRolesForUser(context.Context, app.GetRolesForUserQuery) (app.GetRolesForUserResult, error)
 	// ListNodeParts reads one item's releases. FirstPlayablePart answers the
 	// same question about a *work* and deliberately will not walk into a
 	// series' seasons to pick an episode; once the screen has picked one itself

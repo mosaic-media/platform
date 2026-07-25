@@ -313,6 +313,9 @@ func boundaryCases() []boundaryCase {
 		{"ListUsers", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListUsers(ctx, app.ListUsersQuery{CallerSessionID: sid}))
 		}},
+		{"GetCurrentUser", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.GetCurrentUser(ctx, app.GetCurrentUserQuery{Caller: v1.Caller{Session: string(sid)}}))
+		}},
 		{"GetUserByID", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetUserByID(ctx, app.GetUserByIDQuery{CallerSessionID: sid, UserID: "user-1"}))
 		}},

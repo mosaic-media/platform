@@ -25,7 +25,11 @@ import (
 // Module keys are namespaced because a module id is user-supplied vocabulary: a
 // module called "extensions" must not light up the Extensions nav item.
 const (
+	sectionAccount    = "account"
+	sectionPeople     = "people"
 	sectionExtensions = "extensions"
+	sectionTraces     = "traces"
+	sectionLogs       = "logs"
 	moduleSectionKey  = "module:"
 )
 
@@ -42,6 +46,11 @@ type settingsNavEntry struct {
 	// panel is false for a row that leaves the settings screen entirely. Such a
 	// row is never auto-selected — there is no panel body to render for it here.
 	panel bool
+	// indent nests this row under the one above it — an installed extension
+	// beneath the store it came from.
+	indent bool
+	// badge is the trailing note on a row ("2 updates"), empty for most.
+	badge string
 }
 
 // settingsNavGroup is one labelled run of nav rows ("Server", "Modules").
@@ -101,7 +110,13 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 	if strings.HasPrefix(active, moduleSectionKey) {
 		return s.moduleSettingsPanel(ctx, caller, nav, strings.TrimPrefix(active, moduleSectionKey))
 	}
-	return settingsFrame(nav, active, "", noSectionPanel(nav.groups)), nil
+	switch active {
+	case sectionAccount:
+		return s.accountPanel(ctx, caller, nav)
+	case sectionPeople:
+		return s.peoplePanel(ctx, caller, nav)
+	}
+	return settingsFrame(nav, active, "", "", noSectionPanel(nav.groups)), nil
 }
 
 // settingsNav builds the nav for this caller: the install-level sections they
@@ -115,53 +130,84 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 	nav := settingsNavModel{}
 	var groups []settingsNavGroup
 
-	// Server — the install itself. Extensions keeps its own screen (ADR 0081):
-	// listing what the repository offers is a network read, and it stays
-	// something a user opens rather than something every settings render does.
-	// It renders inside this same frame, so the nav persists across it.
-	if s.content.CallerCan(ctx, caller, app.ActionModuleRead, "extension") {
+	// Preferences — what is true of the person reading, not of the install.
+	// Account is always here: everyone signed in has a name, and a settings
+	// screen whose first section a viewer cannot open is a settings screen that
+	// opens on an error.
+	groups = append(groups, settingsNavGroup{label: "Preferences", entries: []settingsNavEntry{{
+		key:    sectionAccount,
+		label:  "Account",
+		icon:   "info",
+		action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionAccount}),
+		panel:  true,
+	}}})
+
+	// Server — the install and who reaches it. Only for a caller who may read
+	// the user list; for anyone else the group does not exist rather than
+	// existing and refusing.
+	if s.content.CallerCan(ctx, caller, app.ActionUserRead, "user") {
 		groups = append(groups, settingsNavGroup{label: "Server", entries: []settingsNavEntry{{
-			key:    sectionExtensions,
-			label:  "Extensions",
-			icon:   "grid",
-			action: ui.Navigate(screenExtensions, nil),
+			key:    sectionPeople,
+			label:  "People",
+			icon:   "home",
+			action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionPeople}),
+			panel:  true,
 		}}})
 	}
 
+	// Extensions — the store, then the installed ones nested beneath it, as the
+	// design draws them: one list that reads as a hierarchy rather than a store
+	// in one group and its results in another.
+	//
+	// The store row and the installed rows are gated separately, and must be:
+	// browsing what the repository offers is an install-level permission, while
+	// opening the settings of something already installed is not. Nesting the
+	// second under the first would take a module's settings away from every
+	// caller who may use that module and may not install another.
+	var entries []settingsNavEntry
+	if s.content.CallerCan(ctx, caller, app.ActionModuleRead, "extension") {
+		entries = append(entries, settingsNavEntry{
+			key:    sectionExtensions,
+			label:  "Extension store",
+			icon:   "grid",
+			action: ui.Navigate(screenExtensions, nil),
+		})
+	}
 	res, err := s.content.ListSettingsModules(ctx, app.ListSettingsModulesQuery{Caller: caller})
 	if err != nil {
 		return settingsNavModel{}, err
 	}
-	if len(res.Modules) > 0 {
-		entries := make([]settingsNavEntry, 0, len(res.Modules))
-		for _, m := range res.Modules {
-			entries = append(entries, settingsNavEntry{
-				key:    moduleSectionKey + m.ModuleID,
-				label:  m.Name,
-				icon:   "settings",
-				action: ui.Navigate(screenSettings, map[string]any{paramModuleID: m.ModuleID}),
-				panel:  true,
-			})
-		}
-		groups = append(groups, settingsNavGroup{label: "Modules", entries: entries})
+	for _, m := range res.Modules {
+		entries = append(entries, settingsNavEntry{
+			key:    moduleSectionKey + m.ModuleID,
+			label:  m.Name,
+			icon:   "settings",
+			action: ui.Navigate(screenSettings, map[string]any{paramModuleID: m.ModuleID}),
+			panel:  true,
+			// Indented only when there is a store row above to nest under.
+			indent: len(entries) > 0,
+		})
+	}
+	if len(entries) > 0 {
+		groups = append(groups, settingsNavGroup{label: "Extensions", entries: entries})
 	}
 
-	// The expert-mode level, and what it reveals: the diagnostics screens appear
-	// as their own group only while it is on (ADR 0058).
+	// The expert-mode level, and what it reveals: the diagnostics sections
+	// appear as their own group only while it is on (ADR 0058).
 	//
 	// The control is drawn only for a caller who could use what it reveals — a
 	// normal user does not see the switch at all, rather than seeing it and being
-	// denied the data behind it. It remains a hint and never a gate: the three
-	// screens each authorise telemetry.read for themselves, so navigating
-	// straight to one without the grant is refused regardless of what was drawn.
+	// denied the data behind it. It remains a hint and never a gate: each screen
+	// authorises telemetry.read for itself, so navigating straight to one without
+	// the grant is refused regardless of what was drawn.
 	nav.showExpertMode = s.content.CallerCan(ctx, caller, app.ActionTelemetryRead, "telemetry")
 	if nav.showExpertMode {
 		nav.expertModeOn = s.content.ExpertModeEnabled(ctx, caller)
 	}
 	if nav.showExpertMode && nav.expertModeOn {
 		groups = append(groups, settingsNavGroup{label: "Diagnostics", entries: []settingsNavEntry{
-			{key: "logs", label: "Logs", icon: "list", action: ui.Navigate(screenLogs, nil)},
-			{key: "traces", label: "Traces", icon: "info", action: ui.Navigate(screenTraces, nil)},
+			{key: sectionTraces, label: "Traces", icon: "info", action: ui.Navigate(screenTraces, nil)},
+			{key: sectionLogs, label: "Logs", icon: "list", action: ui.Navigate(screenLogs, nil)},
 		}})
 	}
 
@@ -209,7 +255,7 @@ func (s *Service) moduleSettingsPanel(ctx context.Context, caller v1.Caller, nav
 	if heading == "" {
 		heading = navLabel(nav.groups, active)
 	}
-	return settingsFrame(nav, active, heading, body...), nil
+	return settingsFrame(nav, active, heading, "", body...), nil
 }
 
 // modulePanel adapts a module's contributed tree to the panel it now fills, and
@@ -256,9 +302,10 @@ func navLabel(groups []settingsNavGroup, key string) string {
 // into a builder tree from this package. Appending children directly is the
 // honest way to combine the two, and doing it on every path keeps one frame
 // rather than two that must be kept looking alike.
-func settingsFrame(nav settingsNavModel, active, heading string, body ...sdui.Node) sdui.Node {
+func settingsFrame(nav settingsNavModel, active, heading, lead string, body ...sdui.Node) sdui.Node {
 	frame := ui.SettingsFrame("Settings",
 		ui.Heading(heading),
+		ui.When(lead != "", ui.Lead(lead)),
 		ui.Selected(nav.selected),
 		settingsNavSlot(nav.groups, active),
 		expertModeFooter(nav)).Build()
@@ -299,6 +346,8 @@ func settingsNavSlot(groups []settingsNavGroup, active string) ui.El {
 		for _, e := range g.entries {
 			rows = append(rows, ui.SettingsNavItem(e.label, e.icon,
 				ui.Active(e.key == active),
+				ui.When(e.indent, ui.Indent(true)),
+				ui.When(e.badge != "", ui.BadgeText(e.badge)),
 				ui.OnTap(e.action)))
 		}
 		els = append(els, ui.SettingsNavGroup(g.label, ui.Group(rows...)))
@@ -306,15 +355,13 @@ func settingsNavSlot(groups []settingsNavGroup, active string) ui.El {
 	return ui.Slot("nav", els...)
 }
 
-// noSectionPanel is the panel when nothing is open. Both of its states are
-// reachable and they are not the same thing: a build composed with no settings-UI
-// module and a caller with no install-level permission has nothing to configure
-// at all, while a caller whose only row leaves this screen has a nav to use.
+// noSectionPanel is the panel when the open section has no body of its own —
+// a row that navigates away, rendered before that navigation resolves.
+//
+// It no longer has a "nothing to configure at all" branch. Account is now
+// unconditional, so every caller has at least one section, and a settings screen
+// that told someone there was nothing here would be wrong about their own name.
 func noSectionPanel(groups []settingsNavGroup) sdui.Node {
-	if len(groups) == 0 {
-		return ui.Section("Settings",
-			ui.EmptyState(emptyIconCollections, "Nothing in this build contributes settings")).Build()
-	}
 	return ui.Section("Settings",
 		ui.EmptyState(emptyIconCollections, "Choose a section")).Build()
 }
@@ -365,7 +412,8 @@ func (s *Service) extensionsScreen(ctx context.Context, caller v1.Caller) (sdui.
 		body = append(body, availableExtensionsSection(available, installedByID).Build())
 	}
 
-	return settingsFrame(nav, sectionExtensions, "Extensions", body...), nil
+	return settingsFrame(nav, sectionExtensions, "Extension store",
+		"Extensions run in their own process and only get the permissions they ask for.", body...), nil
 }
 
 // installOverlay is the install confirmation for one offered extension: what it

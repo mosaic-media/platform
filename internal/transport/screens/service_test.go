@@ -33,6 +33,10 @@ type fakeQueries struct {
 	playablePart  v1.Part
 	partsByNode   map[v1.NodeID][]v1.Part
 
+	currentUser domain.User
+	users       []domain.User
+	rolesByUser map[domain.UserID][]domain.Role
+
 	results          []v1.SearchResult
 	catalogs         []app.ModuleCatalog
 	items            []v1.CatalogItem
@@ -80,6 +84,25 @@ type fakeQueries struct {
 	gotLogFilter        domain.TelemetryLogFilter
 	gotTraceFilter      domain.TelemetryTraceFilter
 	gotTraceID          string
+}
+
+// currentUser, users and rolesByUser back the Account and People panels.
+func (f *fakeQueries) GetCurrentUser(context.Context, app.GetCurrentUserQuery) (app.GetCurrentUserResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return app.GetCurrentUserResult{User: f.currentUser}, nil
+}
+
+func (f *fakeQueries) ListUsers(context.Context, app.ListUsersQuery) (app.ListUsersResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return app.ListUsersResult{Users: f.users}, nil
+}
+
+func (f *fakeQueries) GetRolesForUser(_ context.Context, q app.GetRolesForUserQuery) (app.GetRolesForUserResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return app.GetRolesForUserResult{Roles: f.rolesByUser[q.TargetUserID]}, nil
 }
 
 func (f *fakeQueries) ExpertModeEnabled(context.Context, v1.Caller) bool {
@@ -918,24 +941,39 @@ func TestSettingsNavReachesEveryModuleWithAScreen(t *testing.T) {
 			t.Fatalf("%q nav row action = %+v, want a Navigate carrying its moduleId", m.ModuleID, act)
 		}
 	}
-	// Opened with no params — as it is from the app nav — the panel lands on the
-	// first section that has one rather than on an empty frame.
-	if fake.gotSettingsModuleID != "aiostreams" {
-		t.Fatalf("no-param settings rendered module %q, want the first nav section", fake.gotSettingsModuleID)
+	// Opened with no params the panel lands on Account, which is the design's
+	// first section and the one every caller has. It does not invoke a module:
+	// asking a module to render is work, and a settings screen opened from the
+	// app nav must not do it on the way to somebody's own name.
+	if fake.gotSettingsModuleID != "" {
+		t.Fatalf("no-param settings invoked module %q, want Account and no module call", fake.gotSettingsModuleID)
 	}
 }
 
-// TestSettingsWithNoSectionsSaysSo covers a legitimate composition: a build with
-// no settings-UI module, read by a caller with no install-level permission, has
-// nothing to configure and must say so rather than render an empty frame.
-func TestSettingsWithNoSectionsSaysSo(t *testing.T) {
-	fake := &fakeQueries{}
+// TestSettingsAlwaysOffersAccount replaces a test that pinned the opposite. A
+// build with no settings-UI module, read by a caller with no install-level
+// permission, used to have nothing to configure and said so. It has Account now:
+// everyone signed in has a name, and the screen that shows it is not gated on
+// anything, so "nothing here" is no longer a state settings can be in.
+func TestSettingsAlwaysOffersAccount(t *testing.T) {
+	fake := &fakeQueries{currentUser: domain.User{
+		Username: "alex", DisplayName: "Alex Rivera", Email: "alex@home.local", Status: domain.UserActive,
+	}}
 	node := render(t, &Service{content: fake}, "settings", nil)
-	if _, ok := find(node, sdui.TypeEmptyState); !ok {
-		t.Fatal("a settings screen over no sections must render an empty state")
+	if _, ok := findNavItem(node, "Account"); !ok {
+		t.Fatal("every caller must be offered Account")
+	}
+	if prop(node, "heading") != "Account" {
+		t.Fatalf("heading = %v, want Account on a no-param render", prop(node, "heading"))
 	}
 	if fake.gotSettingsModuleID != "" {
-		t.Fatalf("rendering no sections invoked module %q", fake.gotSettingsModuleID)
+		t.Fatalf("rendering Account invoked module %q", fake.gotSettingsModuleID)
+	}
+	// The profile is stated, not offered for editing: nothing in the application
+	// layer updates a display name, so a field and a Save button would be a
+	// control over a mutation that does not exist.
+	if _, ok := find(node, "TextField"); ok {
+		t.Error("Account must not draw editable fields — there is no command behind them")
 	}
 }
 
@@ -976,15 +1014,15 @@ func TestSettingsSaysWhetherASectionWasAskedFor(t *testing.T) {
 // one that fails when they use it.
 func TestSettingsNavIsGatedPerCaller(t *testing.T) {
 	withPermission := render(t, &Service{content: &fakeQueries{canReadTelemetry: true}}, "settings", nil)
-	if _, ok := findNavItem(withPermission, "Extensions"); !ok {
-		t.Fatal("a caller holding module.read must be offered the Extensions section")
+	if _, ok := findNavItem(withPermission, "Extension store"); !ok {
+		t.Fatal("a caller holding module.read must be offered the Extension store section")
 	}
 	if _, ok := find(withPermission, "Toggle"); !ok {
 		t.Fatal("a caller holding telemetry.read must be offered the expert-mode switch")
 	}
 
 	without := render(t, &Service{content: &fakeQueries{}}, "settings", nil)
-	if _, ok := findNavItem(without, "Extensions"); ok {
+	if _, ok := findNavItem(without, "Extension store"); ok {
 		t.Fatal("Extensions is drawn for a caller who cannot read the module catalogue")
 	}
 	if _, ok := find(without, "Toggle"); ok {
@@ -1005,12 +1043,12 @@ func TestExtensionsScreenKeepsTheSettingsNav(t *testing.T) {
 	if node.GetType() != "SettingsFrame" {
 		t.Fatalf("root type = %q, want the extensions surface inside the settings frame", node.GetType())
 	}
-	row, ok := findNavItem(node, "Extensions")
+	row, ok := findNavItem(node, "Extension store")
 	if !ok {
 		t.Fatal("the extensions screen dropped the settings nav")
 	}
 	if prop(row, "active") != true {
-		t.Fatalf("Extensions nav row active = %v, want true on its own screen", prop(row, "active"))
+		t.Fatalf("Extension store nav row active = %v, want true on its own screen", prop(row, "active"))
 	}
 	if _, ok := findNavItem(node, "AIOStreams"); !ok {
 		t.Fatal("the extensions screen must keep the way back to the other sections")
