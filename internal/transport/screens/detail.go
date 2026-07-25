@@ -94,6 +94,11 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 	// is an affordance with nothing behind it (ADR 0036).
 	trailer, hasTrailer := trailerAction(m.Trailers)
 
+	// The Part behind the play button, when there is one. It is resolved below
+	// for the action; the panel describes it, so it is held here rather than
+	// fetched twice.
+	var playing *v1.Part
+
 	var actions ui.El
 	switch {
 	case !res.InLibrary:
@@ -110,6 +115,7 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 			return nil, err
 		}
 		if playable {
+			playing = &part
 			// Where this viewer got to, if anywhere (ADR 0046). The state is
 			// keyed on the *item* that has the bytes rather than on the work
 			// above it, because that is what a viewer resumes — an episode, not
@@ -188,7 +194,7 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 		// proxy for the play action's payload — and no way to render it.
 		ui.When(m.Poster != "", ui.Poster(s.art(m.Poster))),
 		actions,
-		ui.Aside(s.detailInfoPanel(m, ref)),
+		ui.Aside(s.detailInfoPanel(m, ref, playing)),
 	}
 	body := []ui.El{ui.Slot("bleed", ui.Component("DetailHero", heroEls...))}
 
@@ -238,7 +244,29 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 // detailInfoPanel builds the glass info aside that docks beside the hero panel:
 // a large rating, then label/value rows drawn from the metadata Mosaic actually
 // has (type, year, episodes/runtime, genres). It renders as an acrylic panel.
-func (s *Service) detailInfoPanel(m v1.ContentMetadata, ref v1.ContentRef) ui.El {
+func (s *Service) detailInfoPanel(m v1.ContentMetadata, ref v1.ContentRef, playing *v1.Part) ui.El {
+	// With a release behind the play button the panel describes *that* — which
+	// is the mockup's "This playback", and is the more useful answer: the codec,
+	// the resolution and the size are what decide whether this will play well
+	// here. The Part was already being resolved for the action and its probe
+	// data (ADR 0050) was going straight in the bin.
+	if playing != nil {
+		rows := make([]map[string]any, 0, 5)
+		row := func(label, value string) {
+			if value != "" {
+				rows = append(rows, map[string]any{"label": label, "value": value})
+			}
+		}
+		row("Quality", qualityLabel(*playing))
+		row("Video", strings.ToUpper(playing.VideoCodec))
+		row("Audio", strings.ToUpper(playing.AudioCodec))
+		row("Container", strings.ToUpper(playing.Container))
+		row("Size", sizeLabel(playing.SizeBytes))
+		if len(rows) > 0 {
+			return ui.Component("InfoPanel", ui.Heading("This playback"), ui.Prop("rows", rows))
+		}
+	}
+
 	els := []ui.El{ui.Heading("About this title")}
 	if m.Rating > 0 {
 		els = append(els, ui.Prop("rating", fmt.Sprintf("%.1f", m.Rating)), ui.Prop("ratingLabel", "Rating"))
@@ -528,4 +556,37 @@ func (s *Service) relatedRail(title string, items []v1.RelatedItem, self v1.Cont
 		return nil
 	}
 	return ui.Section(title, ui.Carousel(cards...))
+}
+
+// qualityLabel is a release's resolution and dynamic range as one phrase —
+// "2160p Dolby Vision", "1080p". Empty when the probe reported no dimensions,
+// which is the unprobed case (ADR 0050) rather than a 0×0 video.
+func qualityLabel(p v1.Part) string {
+	if p.Height <= 0 {
+		return ""
+	}
+	q := fmt.Sprintf("%dp", p.Height)
+	if p.HDRFormat != "" {
+		q += " " + p.HDRFormat
+	}
+	return q
+}
+
+// sizeLabel renders a byte count for a human. Binary units, one decimal, and
+// empty for zero — an unprobed release reports no size, and "0 B" would read as
+// an empty file rather than as an unanswered question.
+func sizeLabel(b int64) string {
+	if b <= 0 {
+		return ""
+	}
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for nn := b / unit; nn >= unit; nn /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
 }

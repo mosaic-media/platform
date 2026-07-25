@@ -1339,3 +1339,69 @@ func TestRichDetailSurfacesTheMetadataItWasDiscarding(t *testing.T) {
 		t.Fatalf("no similar rail; sections = %v", titles)
 	}
 }
+
+// With a release behind the play button the panel describes that release —
+// the mockups' "This playback". The probe data (ADR 0050) was already being
+// resolved for the play action and discarded.
+func TestDetailPanelDescribesTheReleaseBehindThePlayButton(t *testing.T) {
+	ref := v1.ContentRef{Provider: "tmdb", NativeID: "tt1", NativeType: "movie", MediaType: v1.MediaMovie}
+	fake := &fakeQueries{
+		previewInLibrary: true,
+		previewNodeID:    "n-1",
+		previewMeta:      v1.ContentMetadata{Title: "A Film", Rating: 8},
+		playablePart: v1.Part{
+			ID: "p-1", NodeID: "n-1", Height: 2160, HDRFormat: "Dolby Vision",
+			VideoCodec: "hevc", AudioCodec: "eac3", Container: "mkv", SizeBytes: 21474836480,
+		},
+	}
+	node := render(t, &Service{content: fake}, "detail", map[string]any{paramRef: refInput(ref)})
+
+	panel, ok := find(node, "InfoPanel")
+	if !ok {
+		t.Fatal("no InfoPanel")
+	}
+	if got, _ := prop(panel, "heading").(string); got != "This playback" {
+		t.Fatalf("heading = %q, want %q", got, "This playback")
+	}
+	rows, _ := prop(panel, "rows").([]any)
+	got := map[string]string{}
+	for _, r := range rows {
+		if m, ok := r.(map[string]any); ok {
+			l, _ := m["label"].(string)
+			v, _ := m["value"].(string)
+			got[l] = v
+		}
+	}
+	for label, want := range map[string]string{
+		"Quality": "2160p Dolby Vision", "Video": "HEVC", "Audio": "EAC3", "Size": "20.0 GiB",
+	} {
+		if got[label] != want {
+			t.Fatalf("row %q = %q, want %q (rows: %v)", label, got[label], want, got)
+		}
+	}
+}
+
+// An unprobed release reports no dimensions and no size (ADR 0050 relays
+// unprobed rather than failing). Those rows must be absent, not "0p" and "0 B".
+func TestDetailPanelOmitsUnprobedFacts(t *testing.T) {
+	ref := v1.ContentRef{Provider: "tmdb", NativeID: "tt2", NativeType: "movie", MediaType: v1.MediaMovie}
+	fake := &fakeQueries{
+		previewInLibrary: true,
+		previewNodeID:    "n-2",
+		previewMeta:      v1.ContentMetadata{Title: "Unprobed", Year: 2020},
+		playablePart:     v1.Part{ID: "p-2", NodeID: "n-2", Container: "mkv"},
+	}
+	node := render(t, &Service{content: fake}, "detail", map[string]any{paramRef: refInput(ref)})
+	panel, ok := find(node, "InfoPanel")
+	if !ok {
+		t.Fatal("no InfoPanel")
+	}
+	rows, _ := prop(panel, "rows").([]any)
+	for _, r := range rows {
+		m, _ := r.(map[string]any)
+		l, _ := m["label"].(string)
+		if l == "Quality" || l == "Size" {
+			t.Fatalf("unprobed release still reported %q = %v", l, m["value"])
+		}
+	}
+}
