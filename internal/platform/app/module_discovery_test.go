@@ -6,6 +6,7 @@ package app_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -244,5 +245,66 @@ func TestPreviewContentUnknownProviderIsNotFound(t *testing.T) {
 	})
 	if got := contracts.CategoryOf(err); got != contracts.NotFound {
 		t.Fatalf("category = %s, want NotFound", got)
+	}
+}
+
+// A fallback provider is the floor, not a peer: when an ordinary provider has
+// catalogs of its own the fallback's must not appear beside them, and when it
+// has none the fallback's must.
+//
+// The empty case is the one that matters and the one an error-keyed fallback
+// would have missed. TMDB with no API key does not fail — it answers emptily —
+// so "nothing to show" rather than "the call errored" is what has to trigger
+// the floor, and it is the state every unconfigured install is in.
+func TestFallbackProviderAnswersOnlyWhenThePreferredOneDidNot(t *testing.T) {
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name              string
+		preferredCatalogs []v1.Catalog
+		wantModules       []string
+	}{
+		{
+			name:              "the preferred provider answers, so the floor stays silent",
+			preferredCatalogs: []v1.Catalog{{ID: "trending", NativeType: "movie", Name: "Trending Films"}},
+			wantModules:       []string{"preferred"},
+		},
+		{
+			name:              "the preferred provider is unconfigured and empty, so the floor answers",
+			preferredCatalogs: nil,
+			wantModules:       []string{"floor"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			preferred := &fakeProviderCapability{id: "preferred", catalogs: tc.preferredCatalogs}
+			floor := &fakeProviderCapability{
+				id:       "floor",
+				catalogs: []v1.Catalog{{ID: "popular", NativeType: "movie", Name: "Popular Films"}},
+			}
+			// Registered floor-first, so a pass would not be an artefact of
+			// registration or id order — the tier is what decides.
+			registry := app.NewCapabilityRegistry()
+			registry.RegisterFallback(floor)
+			registry.Register(preferred)
+
+			now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+			db := newFakeDB()
+			svc := newTestServiceWithCapabilities(db, &trace{}, now, registry)
+			db.seedUser(domain.User{ID: "u-1", Username: "curator", Status: domain.UserActive, CreatedAt: now, UpdatedAt: now})
+			db.seedSession("s-1", "u-1", now)
+			db.seedRole("u-1", adminRole())
+
+			cats, err := svc.ListModuleCatalogs(ctx, app.ListModuleCatalogsQuery{Caller: v1.Caller{Session: "s-1"}})
+			if err != nil {
+				t.Fatalf("ListModuleCatalogs: %v", err)
+			}
+			got := make([]string, 0, len(cats.Catalogs))
+			for _, c := range cats.Catalogs {
+				got = append(got, c.ModuleID)
+			}
+			if !slices.Equal(got, tc.wantModules) {
+				t.Fatalf("catalogs came from %v, want %v", got, tc.wantModules)
+			}
+		})
 	}
 }

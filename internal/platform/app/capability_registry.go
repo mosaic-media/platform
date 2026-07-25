@@ -27,23 +27,60 @@ import (
 // can hold it without an import cycle: it depends only on the published SDK,
 // exactly as a module does.
 type CapabilityRegistry struct {
-	mu   sync.RWMutex
-	byID map[string]v1.Capability
+	mu sync.RWMutex
+	// fallback holds the ids registered as a floor rather than as a first
+	// choice. A read-role fan-out consults these only when the ordinary
+	// providers between them returned nothing.
+	byID     map[string]v1.Capability
+	fallback map[string]bool
 }
 
 // NewCapabilityRegistry returns an empty registry.
 func NewCapabilityRegistry() *CapabilityRegistry {
-	return &CapabilityRegistry{byID: make(map[string]v1.Capability)}
+	return &CapabilityRegistry{byID: make(map[string]v1.Capability), fallback: make(map[string]bool)}
 }
 
 // Register adds a capability under its manifest id, replacing any earlier one
 // under the same id — a reinstall swaps the running proxy for a fresh one. Safe
 // to call while the Platform serves: a runtime install registers here.
 func (r *CapabilityRegistry) Register(c v1.Capability) {
+	r.register(c, false)
+}
+
+// RegisterFallback adds a capability that fills its read roles only when no
+// ordinary provider could — the guarantee-clause floor rather than a peer.
+//
+// It exists because "one or more providers per role class" (ADR 0063) was being
+// read as "union them all", and for the *browse* roles that is wrong in a way
+// nothing reported: ADR 0072 registered Cinemeta and TMDB as complementary, the
+// catalog fan-out unioned both, and a home screen drew Cinemeta's Popular Films
+// beside TMDB's — the same titles twice, from two sources, ordered by module id
+// so the credential-free floor happened to win. Ranking them is not a
+// contradiction of ADR 0072's arity: both are still registered, both still fill
+// the class, and the guarantee still holds, because a deployment with no TMDB
+// key gets exactly what it got before.
+//
+// A fallback is *not* a module the Platform trusts less. It is a statement about
+// which source should be visible when both can answer, and it stays a
+// composition decision (ADR 0007) rather than a property a module asserts about
+// itself — a module claiming primacy over its peers is a claim no module is in a
+// position to make.
+func (r *CapabilityRegistry) RegisterFallback(c v1.Capability) {
+	r.register(c, true)
+}
+
+func (r *CapabilityRegistry) register(c v1.Capability, fallback bool) {
 	id := c.Manifest().ID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.byID[id] = c
+	// Re-registration re-states the tier: a reinstall must not silently inherit
+	// the previous registration's standing.
+	if fallback {
+		r.fallback[id] = true
+	} else {
+		delete(r.fallback, id)
+	}
 }
 
 // Unregister removes the capability under id, if any. It is how a runtime
@@ -54,6 +91,7 @@ func (r *CapabilityRegistry) Unregister(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.byID, id)
+	delete(r.fallback, id)
 }
 
 // Lookup returns the capability registered under id, and whether one was.
@@ -201,6 +239,9 @@ func roleImplemented(c v1.Capability, role v1.Role) bool {
 type SearchProviderEntry struct {
 	ModuleID string
 	Provider v1.SearchProvider
+	// Fallback marks a provider consulted only when the ordinary ones returned
+	// nothing. See CapabilityRegistry.RegisterFallback.
+	Fallback bool
 }
 
 // SearchProviders returns every registered capability that fills RoleSearch, in
@@ -214,7 +255,7 @@ func (r *CapabilityRegistry) SearchProviders() []SearchProviderEntry {
 			continue
 		}
 		if p, ok := r.byID[id].(v1.SearchProvider); ok {
-			out = append(out, SearchProviderEntry{ModuleID: id, Provider: p})
+			out = append(out, SearchProviderEntry{ModuleID: id, Provider: p, Fallback: r.fallback[id]})
 		}
 	}
 	return out
@@ -283,6 +324,9 @@ func (r *CapabilityRegistry) ArtworkProviders() []ArtworkProviderEntry {
 type CatalogProviderEntry struct {
 	ModuleID string
 	Provider v1.CatalogProvider
+	// Fallback marks a provider consulted only when the ordinary ones returned
+	// nothing. See CapabilityRegistry.RegisterFallback.
+	Fallback bool
 }
 
 // CatalogProviders returns every registered capability that fills RoleCatalog,
@@ -296,7 +340,7 @@ func (r *CapabilityRegistry) CatalogProviders() []CatalogProviderEntry {
 			continue
 		}
 		if p, ok := r.byID[id].(v1.CatalogProvider); ok {
-			out = append(out, CatalogProviderEntry{ModuleID: id, Provider: p})
+			out = append(out, CatalogProviderEntry{ModuleID: id, Provider: p, Fallback: r.fallback[id]})
 		}
 	}
 	return out

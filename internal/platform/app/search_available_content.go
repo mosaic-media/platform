@@ -53,11 +53,18 @@ func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableC
 		return SearchAvailableContentResult{}, nil
 	}
 
-	// Fan the query out to every provider concurrently; each is an independent
+	// Fan the query out to the providers concurrently; each is an independent
 	// remote round-trip. fanOut preserves provider order and the two error paths:
 	// a settings read that fails aborts the query, a provider that is down is
 	// skipped (nil, nil) so its plane empties without blanking the others.
-	results, err := fanOut(ctx, s.capabilities.SearchProviders(),
+	//
+	// The fallback tier answers only when nothing else found the title. The
+	// Platform still does no cross-provider dedup (ADR 0072 records this), so
+	// two general metadata sources answering one query is the same title twice —
+	// and unlike a catalog row, a duplicate search hit sends the two planes to
+	// different providers for the same film.
+	results, err := fanOutPreferred(ctx, s.capabilities.SearchProviders(),
+		func(e SearchProviderEntry) bool { return e.Fallback },
 		func(ctx context.Context, e SearchProviderEntry) ([]v1.SearchResult, error) {
 			settings, err := s.readModuleSettings(ctx, e.ModuleID)
 			if err != nil {

@@ -45,9 +45,13 @@ func (s *Service) ListModuleCatalogs(ctx context.Context, q ListModuleCatalogsQu
 		return ListModuleCatalogsResult{}, nil
 	}
 
-	// Fan out to every catalog provider concurrently, same shape as the search
-	// fan-out: settings-read failure aborts, a downed provider is skipped.
-	catalogs, err := fanOut(ctx, s.capabilities.CatalogProviders(),
+	// Fan out to the catalog providers concurrently, same shape as the search
+	// fan-out: settings-read failure aborts, a downed provider is skipped. The
+	// fallback tier is consulted only when the ordinary providers between them
+	// offered no catalog at all — a home screen should show one source's rows,
+	// not the same films twice under two names (see RegisterFallback).
+	catalogs, err := fanOutPreferred(ctx, s.capabilities.CatalogProviders(),
+		func(e CatalogProviderEntry) bool { return e.Fallback },
 		func(ctx context.Context, e CatalogProviderEntry) ([]ModuleCatalog, error) {
 			settings, err := s.readModuleSettings(ctx, e.ModuleID)
 			if err != nil {

@@ -179,6 +179,10 @@ func registerCapabilities(reg *app.CapabilityRegistry, sel app.Selection, httpCl
 			boot.Info("module not selected; not constructed", telemetry.String("module", d.id))
 			continue
 		}
+		if d.fallback {
+			reg.RegisterFallback(d.construct())
+			continue
+		}
 		reg.Register(d.construct())
 	}
 }
@@ -187,7 +191,12 @@ func registerCapabilities(reg *app.CapabilityRegistry, sel app.Selection, httpCl
 // The thunk is what makes "not selected, not constructed" real: an unselected
 // module's New is never called, so nothing it holds is opened.
 type moduleDescriptor struct {
-	id        string
+	id string
+	// fallback marks a module the browse roles reach only when no ordinary
+	// provider answered — the guarantee-clause floor rather than a peer. It is
+	// declared here because which source a user should see is a composition
+	// decision (ADR 0007), not something a module can assert about its peers.
+	fallback  bool
 	construct func() v1.Capability
 }
 
@@ -205,21 +214,25 @@ func moduleDescriptors(httpClient *http.Client) []moduleDescriptor {
 		// why the default selection includes everything — dropping it from the
 		// default would boot an inert Mosaic.
 		//
-		// It sorts before TMDB in id order, which the registry resolves in, and
-		// "cinemeta" ahead of "tmdb" is an accident rather than a policy — which
-		// provider wins for a given field is an open seam neither ordering
-		// answers.
-		{cinemeta.CapabilityID, func() v1.Capability { return cinemeta.New(httpClient) }},
+		// **It is registered as the fallback tier**, so the browse roles reach it
+		// only when no ordinary provider answered. Until now it merely sorted
+		// before TMDB in id order, which this file recorded as "an accident rather
+		// than a policy", and the accident was visible: a keyed deployment drew
+		// Cinemeta's catalog rows beside TMDB's, the same films twice. Being the
+		// floor is now stated rather than inferred from a string comparison, and
+		// an unkeyed install is unaffected — TMDB answers emptily, and everything
+		// falls through to exactly what it drew before.
+		{cinemeta.CapabilityID, true, func() v1.Capability { return cinemeta.New(httpClient) }},
 		// The TMDB metadata module — the richer provider of the same class, for a
 		// deployment willing to hold an API key. It needs one, set through its own
 		// settings screen (ADR 0038), and every role reports that plainly until
 		// one exists; Cinemeta is what keeps the class satisfied in the meantime.
-		{tmdb.CapabilityID, func() v1.Capability { return tmdb.New(httpClient) }},
+		{tmdb.CapabilityID, false, func() v1.Capability { return tmdb.New(httpClient) }},
 		// The remote playback module — the first *consumer* capability (ADR 0045).
 		// Registering it is what lets a snapshotted stream location be turned back
 		// into playable bytes; it is core because a library that cannot play what
 		// it holds is inert.
-		{remoteplayback.CapabilityID, func() v1.Capability { return remoteplayback.New() }},
+		{remoteplayback.CapabilityID, false, func() v1.Capability { return remoteplayback.New() }},
 	}
 }
 
