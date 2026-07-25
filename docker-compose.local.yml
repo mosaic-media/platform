@@ -21,7 +21,20 @@
 # not platform dependencies (ADR 0081); they are installed at runtime, so a local
 # change to one is exercised through the install path, not this workspace.
 #
-# **Go side: a workspace, not a `replace`.** `go.work` overrides the module
+# **The workspace also pins every required version of the SDK and the contract to
+# the local checkout, and needs to.** `use` substitutes a module's *source*; it
+# does not stop resolution needing to read the go.mod of whatever version another
+# workspace member requires. So the moment a local module here requires an SDK
+# version that has not been tagged yet — the normal state mid-change, since the
+# SDK and its consumers are separate repositories — the whole stack refuses to
+# start with "unknown revision", naming a module sitting right there on the disk.
+#
+# The replaces are generated from the sibling go.mod files rather than written
+# out, because a hardcoded version in this file would be wrong one commit later
+# and would fail in exactly the same confusing way. They are version-scoped
+# because Go rejects replacing a workspace module at all versions.
+#
+# **Go side: a workspace, not a `replace` in go.mod.** `go.work` overrides the module
 # cache for whatever it lists, and it lives only inside the container — so
 # switching between published and local changes no committed file. Editing
 # go.mod would do the same job and leave the repository in a state that only
@@ -61,6 +74,11 @@ services:
              rm -f /work/go.work &&
              go work init &&
              go work use /src/platform /src/sdk /src/contracts /src/module-remote-playback /src/module-tmdb /src/module-cinemeta &&
+             for mod in sdk contracts; do
+               for v in $$(sed -n \"s|^[[:space:]]*\\(require[[:space:]]*\\)\\?github.com/mosaic-media/$$mod[[:space:]]\\+\\(v[0-9][^[:space:]]*\\).*|\\2|p\" /src/platform/go.mod /src/module-*/go.mod | sort -u); do
+                 go work edit -replace github.com/mosaic-media/$$mod@$$v=/src/$$mod;
+               done;
+             done &&
              cd /src/platform &&
              exec go run -ldflags \"-X github.com/mosaic-media/module-tmdb.defaultReadAccessToken=$${TMDB_RAC}\" ./cmd/mosaic-platform"
 

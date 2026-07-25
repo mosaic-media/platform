@@ -314,6 +314,10 @@ func (h *Handler) pushContent(ctx context.Context, s *liveSession) {
 // pushRender renders a screen and replaces the content region with it, or an
 // error node if the render fails (ADR 0029's error surface, unchanged).
 func (h *Handler) pushRender(ctx context.Context, s *liveSession, screen string, params map[string]any) {
+	// What this client can decode, for the screens that describe a release
+	// rather than play one (ADR 0049). Set here because this is where the live
+	// session is in hand; every screen that does not want it ignores it.
+	ctx = screens.WithClientCodecs(ctx, s.clientProfile().codecs())
 	node, err := h.screens.Render(ctx, screen, s.caller, params)
 	if err != nil {
 		s.enqueue(regionMsg(ctx, s, contentRegion, sessionv1.RegionUpdate_REPLACE, errorNode(err.Error())))

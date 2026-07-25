@@ -47,6 +47,16 @@ type RecordPartProbeCommand struct {
 	Probe []byte
 }
 
+// PartProbe is the stored probe document on a Part, nil when it has none
+// (ADR 0050). It is the read half of what RecordPartProbe writes, exported
+// because the emit-side describes a release it is not about to play: a detail
+// screen states what a release *is* — codecs, tracks, languages — and those
+// answers are already sitting in the Part, decoded by nobody.
+//
+// Nil for a Part that has not been probed, which is the ordinary state before
+// something has been played once. A caller renders less rather than failing.
+func PartProbe(part v1.Part) []byte { return probeAttribute(part) }
+
 // RecordPartProbeResult carries the updated Part.
 type RecordPartProbeResult struct {
 	Part v1.Part

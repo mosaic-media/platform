@@ -118,6 +118,12 @@ const playPartAction = "playPart"
 // paramPartID is the key the play action carries its Part under.
 const paramPartID = "partId"
 
+// setWatchedAction marks an item watched or unwatched by explicit request
+// (ADR 0046). The dispatch case has existed since playback state landed; until
+// the detail screen's tick emitted it, the only way to finish something was to
+// watch it to the end.
+const setWatchedAction = "setWatched"
+
 // contentQueries is the slice of the application query surface the screen
 // builders read. Narrowing to an interface keeps the emit-side a projection of
 // the services (like any transport handler) and makes the builders testable without
@@ -145,6 +151,11 @@ type contentQueries interface {
 	// that does before it can offer Play at all (ADR 0036 — an affordance with
 	// nothing behind it is the dead end this whole thread exists to remove).
 	FirstPlayablePart(context.Context, v1.Caller, v1.NodeID) (v1.Part, bool, error)
+	// ListNodeParts reads one item's releases. FirstPlayablePart answers the
+	// same question about a *work* and deliberately will not walk into a
+	// series' seasons to pick an episode; once the screen has picked one itself
+	// this is how it asks what that episode actually holds.
+	ListNodeParts(context.Context, app.ListNodePartsQuery) (app.ListNodePartsResult, error)
 	// GetPlaybackState backs Resume (ADR 0046): a detail screen has to know
 	// whether this viewer already started this item before it can decide
 	// whether its primary action says Play or Resume.

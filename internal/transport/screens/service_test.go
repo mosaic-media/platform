@@ -31,6 +31,7 @@ import (
 type fakeQueries struct {
 	playbackState v1.PlaybackState
 	playablePart  v1.Part
+	partsByNode   map[v1.NodeID][]v1.Part
 
 	results          []v1.SearchResult
 	catalogs         []app.ModuleCatalog
@@ -142,6 +143,22 @@ func (f *fakeQueries) GetContentNode(_ context.Context, q v1.GetContentNodeQuery
 		return v1.GetContentNodeResult{Node: node, Children: kids}, nil
 	}
 	return v1.GetContentNodeResult{Node: f.node, Children: f.children}, nil
+}
+
+// partsByNode, when set for a node id, is what ListNodeParts reports for it —
+// how a test gives one episode of a season a release and leaves the rest bare.
+// Absent an entry it falls back to playablePart, so the many tests that only
+// care that *something* is playable need not enumerate nodes.
+func (f *fakeQueries) ListNodeParts(_ context.Context, q app.ListNodePartsQuery) (app.ListNodePartsResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if parts, ok := f.partsByNode[q.NodeID]; ok {
+		return app.ListNodePartsResult{Parts: parts}, nil
+	}
+	if f.playablePart.ID != "" && f.partsByNode == nil {
+		return app.ListNodePartsResult{Parts: []v1.Part{f.playablePart}}, nil
+	}
+	return app.ListNodePartsResult{}, nil
 }
 
 // playablePart, when set, is what FirstPlayablePart reports — the fake's way of
@@ -279,6 +296,30 @@ func findNavItem(n sdui.Node, label string) (sdui.Node, bool) {
 	for _, list := range n.GetSlots() {
 		for _, c := range list.GetNodes() {
 			if got, ok := findNavItem(c, label); ok {
+				return got, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// findIconButton finds an IconButton anywhere in the tree by its label, which on
+// an icon-only control is its accessible name rather than visible text.
+func findIconButton(n sdui.Node, label string) (sdui.Node, bool) {
+	if n == nil {
+		return nil, false
+	}
+	if n.GetType() == "IconButton" && prop(n, "label") == label {
+		return n, true
+	}
+	for _, c := range n.GetChildren() {
+		if got, ok := findIconButton(c, label); ok {
+			return got, true
+		}
+	}
+	for _, list := range n.GetSlots() {
+		for _, c := range list.GetNodes() {
+			if got, ok := findIconButton(c, label); ok {
 				return got, true
 			}
 		}
@@ -707,19 +748,23 @@ func TestInLibraryDetailShowsInLibraryMarker(t *testing.T) {
 	if !ok || prop(hero, "title") != "Already Here" {
 		t.Fatalf("hero = %+v, want the metadata title", hero.Props)
 	}
-	// An in-library item carries the marker, and no Add to library — adding
-	// what is already there is the affordance this screen must never offer.
+	// An in-library item offers no Add to library — adding what is already
+	// there is the affordance this screen must never offer.
 	if _, ok := findButton(node, "Add to library"); ok {
 		t.Error("an in-library item must not offer Add to library")
 	}
-	if _, ok := find(node, sdui.TypeBadge); !ok {
-		t.Error("an in-library item must carry the In library marker")
+	// There is no "In library" badge any more. The primary action says which
+	// plane this is — Resume or Play rather than Add — and a badge repeating it
+	// was a label for a state the control beside it already showed.
+	if _, ok := find(node, sdui.TypeBadge); ok {
+		t.Error("the In library badge is gone; the primary action carries the plane")
 	}
-	// It also offers Refresh sources: a candidate set goes stale as releases
+	// It still offers Refresh sources: a candidate set goes stale as releases
 	// appear and disappear, and re-importing is how a user asks for the current
-	// answer. Play is absent here because this fake has no playable part, which
-	// is the gating TestDetailPlayAffordanceIsGatedOnAPartExisting covers.
-	if _, ok := findButton(node, "Refresh sources"); !ok {
+	// answer. It is an icon control now rather than a labelled pill, so its
+	// label is the accessible name. Play is absent because this fake has no
+	// playable part, which TestDetailPlayAffordanceIsGatedOnAPartExisting covers.
+	if _, ok := findIconButton(node, "Refresh sources"); !ok {
 		t.Error("an in-library item must offer Refresh sources")
 	}
 	if _, ok := findButton(node, "Play"); ok {
@@ -1372,12 +1417,21 @@ func TestDetailPanelDescribesTheReleaseBehindThePlayButton(t *testing.T) {
 			got[l] = v
 		}
 	}
+	// The panel answers what a viewer is about to *get*, in the design's terms:
+	// the quality as it is written on a box and the audio as it is spoken about.
+	// The codec, the container and the byte count moved to the facts grid, which
+	// is where a question about the file rather than the viewing belongs.
 	for label, want := range map[string]string{
-		"Quality": "2160p Dolby Vision", "Video": "HEVC", "Audio": "EAC3", "Size": "20.0 GiB",
+		"Quality": "4K HDR", "Audio": "EAC3",
 	} {
 		if got[label] != want {
 			t.Fatalf("row %q = %q, want %q (rows: %v)", label, got[label], want, got)
 		}
+	}
+	// And it does not answer what it cannot. There is no device registry, so
+	// there is no "Playing on" row rather than one naming the server.
+	if _, present := got["Playing on"]; present {
+		t.Errorf("panel claims a playback device; Mosaic has no device registry (rows: %v)", got)
 	}
 }
 

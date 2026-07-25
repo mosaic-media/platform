@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -21,12 +22,13 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// detailScreen renders a rich content detail — a backdrop+logo hero, poster,
-// cast, genres and (for a series) a season selector over an episode list with
-// per-episode synopses (ADR 0034). It is ref-based and serves both planes: a
-// virtual item and an in-library one render from the same metadata, differing
-// only in the primary action. A nodeId-only navigation (no ref) falls back to
-// the structural library view, since metadata is fetched by ref.
+// detailScreen renders a rich content detail — a cinematic hero over an episode
+// browser, the cast, the technical facts of the release behind the play button,
+// and what to watch next (ADR 0034). It is ref-based and serves both planes: a
+// virtual item and an in-library one render from the same metadata, differing in
+// the primary action and in how much they can say about bytes they may not have.
+// A nodeId-only navigation (no ref) falls back to the structural library view,
+// since metadata is fetched by ref.
 func (s *Service) detailScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
 	if refMap, ok := params[paramRef].(map[string]any); ok {
 		return s.richDetail(ctx, caller, refFromParam(refMap), params)
@@ -38,12 +40,12 @@ func (s *Service) detailScreen(ctx context.Context, caller v1.Caller, params map
 	return s.libraryDetail(ctx, caller, nodeID)
 }
 
-// richDetail builds the full detail for a ref (ADR 0034). It reads the ref's
-// metadata (and library status) through PreviewContent, which resolves both
-// planes, then composes: a Hero (backdrop, clearlogo, meta pills, overview and
-// the primary action), the poster docked in the hero's aside, a cast rail, a
-// genre row, and for a series a SeasonSelector over the selected season's
-// episodes. Every image is routed through the artwork proxy (ADR 0030).
+// richDetail builds the full detail for a ref, in the order the design states
+// it: hero, episodes, cast, technical facts, related.
+//
+// Episodes come *before* cast deliberately. Someone opening a series they are
+// part-way through is looking for the next episode, and putting a rail of
+// headshots between them and it makes the common case scroll past the rare one.
 func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.ContentRef, params map[string]any) (sdui.Node, error) {
 	res, err := s.content.PreviewContent(ctx, app.PreviewContentQuery{Caller: caller, Ref: ref})
 	if err != nil {
@@ -55,8 +57,141 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 		title = ref.NativeID
 	}
 
-	// Meta pills: rating · year · then a runtime (film) or a "N Seasons · M
-	// Episodes" count (series).
+	// The selected season, its episodes and this viewer's progress through them
+	// — computed once, because the hero's resume label, the panel's "up next"
+	// and the episode rows are three readings of the same answer. It comes first
+	// because it decides *which* release the hero is about to play.
+	season := s.seasonView(ctx, caller, res, m.Episodes, params)
+
+	// The release behind the play button, and everything known about it. It is
+	// resolved once here and read by three surfaces — the meta pills, the
+	// playback panel and the facts grid — because it is one query and they all
+	// describe the same bytes.
+	var playing *v1.Part
+	var facts releaseFacts
+	if res.InLibrary {
+		part, playable, partErr := s.playTarget(ctx, caller, res, season)
+		if partErr != nil {
+			return nil, partErr
+		}
+		if playable {
+			playing = &part
+			facts = factsFor(part)
+		}
+	}
+
+	heroEls := []ui.El{
+		ui.Title(title),
+		ui.Backdrop(s.art(m.Backdrop)),
+		ui.When(m.Logo != "", ui.Logo(s.art(m.Logo))),
+		ui.When(m.Poster != "", ui.Poster(s.art(m.Poster))),
+		ui.When(m.Overview != "", ui.Overview(m.Overview)),
+	}
+	if k := kickerLabel(ref, m.Episodes); k != "" {
+		heroEls = append(heroEls, ui.Kicker(k))
+	}
+	if pills := metaPills(m, facts); len(pills) > 0 {
+		heroEls = append(heroEls, ui.Meta(pills...))
+	}
+	if c := creditsLine(m.Crew); c != "" {
+		heroEls = append(heroEls, ui.Credits(c))
+	}
+	heroEls = append(heroEls,
+		s.heroActions(ctx, caller, res, ref, m, title, playing, season),
+		ui.Aside(playbackPanel(m, ref, facts, playing, season)),
+	)
+
+	body := []ui.El{ui.Slot("bleed", ui.Component("DetailHero", heroEls...))}
+
+	if len(season.all) > 0 {
+		body = append(body, s.episodesSection(ref, m, season))
+	}
+
+	if len(m.Cast) > 0 {
+		chips := make([]ui.El, 0, len(m.Cast))
+		for _, p := range m.Cast {
+			chips = append(chips, ui.PersonChip(p.Name,
+				ui.When(p.Role != "", ui.Role(p.Role)),
+				// Through the artwork proxy like every other remote image
+				// (ADR 0030): a headshot on a third-party CDN would otherwise
+				// leak the viewer's IP and depend on that CDN's CORS.
+				ui.When(p.Photo != "", ui.Avatar(s.art(p.Photo)))))
+		}
+		// The rail's track is the chip's own width. Left at the browse default
+		// of 196 the 132px portraits sit in 196px columns, which reads as an
+		// erratic gap rather than as a rail.
+		body = append(body, ui.Section("Cast", ui.Carousel(ui.ItemWidth(132), ui.Group(chips...))))
+	}
+
+	if grid := s.factsGrid(ctx, caller, ref, facts); grid != nil {
+		body = append(body, grid)
+	}
+
+	// The franchise this work belongs to, then what a viewer of it tends to want
+	// next. The design draws one related rail; the franchise rail is kept beside
+	// it because it is a different question with real data behind it, and
+	// dropping it would delete a working capability for a layout reason.
+	//
+	// The franchise list includes the work being described — the SDK says so
+	// plainly — so it is filtered on the ref already held rather than trusting
+	// the source to have excluded it.
+	if m.Collection != nil {
+		if rail := s.relatedRail(ctx, caller, m.Collection.Name, m.Collection.Items, ref); rail != nil {
+			body = append(body, rail)
+		}
+	}
+	if rail := s.relatedRail(ctx, caller, "More like this", m.Similar, ref); rail != nil {
+		body = append(body, rail)
+	}
+
+	return ui.Screen(ui.Group(body...)).Build(), nil
+}
+
+// kickerLabel is the eyebrow above the title — "Series · 2 seasons", "Film".
+//
+// The season count lives here rather than in the meta pills because it is what
+// the thing *is*, not a fact about it: a pill row reads as a list of attributes
+// and "2 Seasons · 19 Episodes" sitting among a rating and a certificate reads
+// as one more attribute rather than as the shape of the work.
+func kickerLabel(ref v1.ContentRef, episodes []v1.EpisodePreview) string {
+	kind := mediaTypeWord(string(ref.MediaType))
+	if kind == "" {
+		return ""
+	}
+	seasons := make(map[int]struct{}, 4)
+	for _, e := range episodes {
+		seasons[e.Season] = struct{}{}
+	}
+	if n := len(seasons); n > 0 {
+		return fmt.Sprintf("%s · %d %s", kind, n, plural(n, "season"))
+	}
+	return kind
+}
+
+// mediaTypeWord names a media type the way the design writes it — "Series",
+// "Film" — rather than the source's own token.
+func mediaTypeWord(mediaType string) string {
+	switch strings.ToLower(strings.ReplaceAll(mediaType, "_", " ")) {
+	case "":
+		return ""
+	case "movie", "film":
+		return "Film"
+	case "tv series", "series", "tv", "show":
+		return "Series"
+	default:
+		return titleWords(mediaType)
+	}
+}
+
+// metaPills is the row under the title: what it scored, when it is from, what it
+// is about, who it is for, and — when Mosaic actually holds the bytes — what
+// they are.
+//
+// The rating carries no source name. `v1.ContentMetadata.Rating` is a bare
+// float with no scale or attribution on it, so "8.7 IMDb" as the design writes
+// it cannot be stated truthfully; the number is shown and the claim about where
+// it came from is not.
+func metaPills(m v1.ContentMetadata, facts releaseFacts) []string {
 	var pills []string
 	if m.Rating > 0 {
 		pills = append(pills, fmt.Sprintf("★ %.1f", m.Rating))
@@ -64,12 +199,7 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 	if y := yearLabel(m.Year); y != "" {
 		pills = append(pills, y)
 	}
-	if sc := seasonEpisodeLabel(m.Episodes); sc != "" {
-		pills = append(pills, sc)
-	} else if m.Runtime != "" {
-		pills = append(pills, m.Runtime)
-	}
-	// Genres ride the meta line as one pill, as the mockups draw them, rather
+	// Genres ride the meta line as one pill, as the design draws them, rather
 	// than as a second row of tags beneath it. They carry no action here — a
 	// GenreTag with nothing to navigate to was decoration occupying a whole row.
 	if len(m.Genres) > 0 {
@@ -81,216 +211,602 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 	if m.Certification != "" {
 		pills = append(pills, m.Certification)
 	}
+	// Only a film has one runtime; a series' episodes each have their own and
+	// they go on the rows.
+	if len(m.Episodes) == 0 && m.Runtime != "" {
+		pills = append(pills, m.Runtime)
+	}
+	if q := facts.qualityPill(); q != "" {
+		pills = append(pills, q)
+	}
+	if a := facts.audioPill(); a != "" {
+		pills = append(pills, a)
+	}
+	return pills
+}
 
-	// Primary action. A virtual item can only be added; an in-library one can be
-	// played, when something in its tree actually has bytes. Play is offered on
-	// the presence of a Part rather than on being in the library, so the button
-	// never appears with nothing behind it — the dead-end affordance ADR 0036
-	// exists to prevent.
+// creditsLine is the crew line under the actions — "Created by X · Directed by
+// Y". Empty when the source carries no crew, which is most addons.
+//
+// Names are grouped by job so a show with two creators reads as "Created by A
+// and B" rather than as the same phrase twice.
+func creditsLine(crew []v1.Person) string {
+	if len(crew) == 0 {
+		return ""
+	}
+	order := make([]string, 0, 2)
+	byJob := make(map[string][]string, 2)
+	for _, p := range crew {
+		if p.Name == "" || p.Role == "" {
+			continue
+		}
+		if _, seen := byJob[p.Role]; !seen {
+			order = append(order, p.Role)
+		}
+		byJob[p.Role] = append(byJob[p.Role], p.Name)
+	}
+	phrases := make([]string, 0, len(order))
+	for _, job := range order {
+		phrases = append(phrases, jobPhrase(job)+" "+joinNames(byJob[job]))
+	}
+	return strings.Join(phrases, " · ")
+}
+
+// jobPhrase turns a crew job into the way a credit is worded.
+func jobPhrase(job string) string {
+	switch strings.ToLower(job) {
+	case "creator":
+		return "Created by"
+	case "director":
+		return "Directed by"
+	case "writer", "screenplay":
+		return "Written by"
+	default:
+		return job + ":"
+	}
+}
+
+// joinNames lists names the way a person would say them.
+func joinNames(names []string) string {
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	case 2:
+		return names[0] + " and " + names[1]
+	default:
+		return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+	}
+}
+
+// heroActions builds the hero's control row: one primary play/add, then the
+// secondary affordances as pills.
+//
+// The design draws a download control beside them. There is none here: Mosaic
+// has no offline capability at all — no role in the SDK declares one and nothing
+// stores bytes for later — so the control is absent rather than drawn inert,
+// which is the dead-end affordance ADR 0036 exists to prevent.
+func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.PreviewContentResult,
+	ref v1.ContentRef, m v1.ContentMetadata, title string, playing *v1.Part, season seasonView) ui.El {
+
 	// The trailer is watchable in either plane and belongs to neither: it is not
 	// a Part, so it never goes through playPart — it opens on the site that
 	// hosts it. Offered only when a URL can actually be built, because a Trailer
-	// carries a site and a key rather than a link and a site nobody can address
+	// carries a site and a key rather than a link, and a site nobody can address
 	// is an affordance with nothing behind it (ADR 0036).
 	trailer, hasTrailer := trailerAction(m.Trailers)
 
-	// The Part behind the play button, when there is one. It is resolved below
-	// for the action; the panel describes it, so it is held here rather than
-	// fetched twice.
-	var playing *v1.Part
+	els := make([]ui.El, 0, 5)
 
-	var actions ui.El
-	switch {
-	case !res.InLibrary:
-		els := []ui.El{ui.Button("Add to library", "primary",
-			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)})))}
-		if hasTrailer {
-			els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
-		}
-		actions = ui.Actions(els...)
-	default:
-		els := []ui.El{}
-		part, playable, err := s.content.FirstPlayablePart(ctx, caller, res.NodeID)
-		if err != nil {
-			return nil, err
-		}
-		if playable {
-			playing = &part
-			// Where this viewer got to, if anywhere (ADR 0046). The state is
-			// keyed on the *item* that has the bytes rather than on the work
-			// above it, because that is what a viewer resumes — an episode, not
-			// a series.
-			state, stateErr := s.content.GetPlaybackState(ctx, v1.GetPlaybackStateQuery{
-				Caller: caller, NodeID: part.NodeID,
-			})
-			// Not fatal — a detail screen without a resume offset is still a
-			// detail screen — but not silent either. Swallowing this outright
-			// makes "Resume never appears" indistinguishable from "nothing has
-			// been watched", which is a difference only a log can carry.
-			if stateErr != nil {
-				telemetry.From(ctx).For("screens").Warn("reading playback state failed; offering Play instead of Resume",
-					telemetry.Identifier("node", string(part.NodeID)),
-					telemetry.Err(stateErr))
-			}
-			resumable := state.Found && state.State.ResumeAt() > 0
-
-			playInput := map[string]any{
-				paramPartID: string(part.ID),
-				"nodeId":    string(part.NodeID),
-				"title":     title,
-				"poster":    s.art(m.Poster),
-			}
-
-			label := "Play"
-			if resumable {
-				// Naming the time is the difference between an affordance a
-				// viewer trusts and one they test. "Resume" alone leaves them
-				// wondering whether it remembers the right place.
-				label = "Resume " + positionLabel(state.State.ResumeAt())
-			}
-			els = append(els, ui.Button(label, "primary", ui.OnTap(ui.Invoke(playPartAction, playInput))))
-
-			if resumable {
-				// Start over is offered rather than assumed, and it does not
-				// clear the position: someone who starts again and stops after
-				// five minutes should not have lost the hour they had before
-				// they will inevitably change their mind.
-				restart := map[string]any{}
-				for k, v := range playInput {
-					restart[k] = v
-				}
-				restart["restart"] = true
-				els = append(els, ui.Button("Start over", "secondary",
-					ui.OnTap(ui.Invoke(playPartAction, restart))))
-			}
-		}
-		// Re-importing an in-library item refreshes its candidate releases
-		// (additive — nothing is removed). It is offered explicitly rather than
-		// run on every view because an aggregator fan-out costs seconds and most
-		// views never lead to a play.
-		if hasTrailer {
-			els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
-		}
-		els = append(els, ui.Button("Refresh sources", "secondary",
+	if !res.InLibrary {
+		els = append(els, ui.Button("Add to library", "primary", ui.IconName("plus"),
 			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
-		els = append(els, ui.Badge("In library", ui.ToneSuccess))
-		actions = ui.Actions(els...)
-	}
-
-	// The paneled detail hero: a full-bleed backdrop (the light source) with the
-	// title/meta/genres/overview/action in a floating GLASS panel, and a glass
-	// info panel docked beside it (the aside) — so the acrylic material has large
-	// surfaces to light. Fills the Screen's full-bleed slot.
-	heroEls := []ui.El{
-		ui.Title(title),
-		ui.Backdrop(s.art(m.Backdrop)),
-		ui.When(ref.MediaType != "", ui.Prop("kicker",
-			strings.ToUpper(strings.ReplaceAll(string(ref.MediaType), "_", " ")))),
-		ui.When(len(pills) > 0, ui.Meta(pills...)),
-		ui.When(m.Logo != "", ui.Logo(s.art(m.Logo))),
-		ui.When(m.Overview != "", ui.Overview(m.Overview)),
-		// The poster docks ahead of the copy, as the mockups draw it. The screen
-		// has had one in hand all along — it was already routing it through the
-		// proxy for the play action's payload — and no way to render it.
-		ui.When(m.Poster != "", ui.Poster(s.art(m.Poster))),
-		actions,
-		ui.Aside(s.detailInfoPanel(m, ref, playing)),
-	}
-	body := []ui.El{ui.Slot("bleed", ui.Component("DetailHero", heroEls...))}
-
-	if len(m.Cast) > 0 {
-		chips := make([]ui.El, 0, len(m.Cast))
-		for _, p := range m.Cast {
-			chips = append(chips, ui.PersonChip(p.Name,
-				ui.When(p.Role != "", ui.Prop("role", p.Role)),
-				// Through the artwork proxy like every other remote image
-				// (ADR 0030): a headshot on a third-party CDN would otherwise
-				// leak the viewer's IP and depend on that CDN's CORS.
-				ui.When(p.Photo != "", ui.Prop("avatar", s.art(p.Photo)))))
+		if hasTrailer {
+			els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
 		}
-		body = append(body, ui.Section("Cast", ui.Carousel(chips...)))
+		return ui.Actions(els...)
 	}
 
-	if len(m.Episodes) > 0 {
-		// Watched marks come from the materialised tree, which only an in-library
-		// series has; a virtual one passes no node and shows no marks.
-		var seriesNode v1.NodeID
-		if res.InLibrary {
-			seriesNode = res.NodeID
+	if playing != nil {
+		// Where this viewer got to, if anywhere (ADR 0046). The state is keyed
+		// on the *item* that has the bytes rather than on the work above it,
+		// because that is what a viewer resumes — an episode, not a series.
+		state, stateErr := s.content.GetPlaybackState(ctx, v1.GetPlaybackStateQuery{
+			Caller: caller, NodeID: playing.NodeID,
+		})
+		// Not fatal — a detail screen without a resume offset is still a detail
+		// screen — but not silent either. Swallowing this outright makes "Resume
+		// never appears" indistinguishable from "nothing has been watched",
+		// which is a difference only a log can carry.
+		if stateErr != nil {
+			telemetry.From(ctx).For("screens").Warn("reading playback state failed; offering Play instead of Resume",
+				telemetry.Identifier("node", string(playing.NodeID)),
+				telemetry.Err(stateErr))
 		}
-		body = append(body, s.episodesSection(ctx, caller, ref, seriesNode, m.Episodes, params))
-	}
+		resumable := state.Found && state.State.ResumeAt() > 0
 
-	// The franchise this work belongs to, and then what a viewer of it tends to
-	// want next. Both were being fetched and thrown away: TMDB fills Similar and
-	// Collection on every detail read, and this screen rendered neither, so the
-	// work of resolving them was paid for and discarded on every view.
-	//
-	// The franchise list includes the work being described — the SDK says so
-	// plainly — so it is filtered on the ref already held rather than trusting
-	// the source to have excluded it.
-	if m.Collection != nil {
-		if rail := s.relatedRail(m.Collection.Name, m.Collection.Items, ref); rail != nil {
-			body = append(body, rail)
+		playInput := map[string]any{
+			paramPartID: string(playing.ID),
+			"nodeId":    string(playing.NodeID),
+			"title":     title,
+			"poster":    s.art(m.Poster),
+		}
+
+		// Naming *what* is being played rather than the clock reading, when the
+		// thing has a name. "Resume S2 E7" tells a viewer of a series the one
+		// thing they wanted to know; "Resume 47:12" makes them open the episode
+		// list to find out which one it is. On a first play the name matters
+		// more, not less: it is the screen saying which episode this button
+		// picked, rather than picking one quietly.
+		episode := season.episodeOf(playing.NodeID)
+		label := "Play"
+		switch {
+		case resumable && episode != "":
+			label = "Resume " + episode
+		case resumable:
+			label = "Resume " + positionLabel(state.State.ResumeAt())
+		case episode != "":
+			label = "Play " + episode
+		}
+		els = append(els, ui.Button(label, "primary", ui.IconName("play"),
+			ui.OnTap(ui.Invoke(playPartAction, playInput))))
+
+		if resumable {
+			// Start over is offered rather than assumed, and it does not clear
+			// the position: someone who starts again and stops after five
+			// minutes should not have lost the hour they had before they will
+			// inevitably change their mind.
+			restart := map[string]any{}
+			for k, v := range playInput {
+				restart[k] = v
+			}
+			restart["restart"] = true
+			els = append(els, ui.Button("Start over", "secondary", ui.OnTap(ui.Invoke(playPartAction, restart))))
 		}
 	}
-	if rail := s.relatedRail("More like this", m.Similar, ref); rail != nil {
-		body = append(body, rail)
+
+	if hasTrailer {
+		els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
 	}
 
-	return ui.Screen(ui.Group(body...)).Build(), nil
+	// The square pills. Watched is a real toggle over playback state (ADR 0046)
+	// — the dispatch case has existed since the state store landed and no screen
+	// had ever emitted it, so the only way to mark something watched was to
+	// watch it.
+	if playing != nil {
+		els = append(els, ui.IconButton("check", "Mark watched", "pill",
+			ui.OnTap(ui.Invoke(setWatchedAction, map[string]any{
+				"nodeId": string(playing.NodeID), "finished": true,
+			}))))
+	}
+	// Re-importing an in-library item refreshes its candidate releases
+	// (additive — nothing is removed). It is offered explicitly rather than run
+	// on every view because an aggregator fan-out costs seconds and most views
+	// never lead to a play.
+	els = append(els, ui.IconButton("plus", "Refresh sources", "pill",
+		ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
+
+	return ui.Actions(els...)
 }
 
-// detailInfoPanel builds the glass info aside that docks beside the hero panel:
-// a large rating, then label/value rows drawn from the metadata Mosaic actually
-// has (type, year, episodes/runtime, genres). It renders as an acrylic panel.
-func (s *Service) detailInfoPanel(m v1.ContentMetadata, ref v1.ContentRef, playing *v1.Part) ui.El {
-	// With a release behind the play button the panel describes *that* — which
-	// is the mockup's "This playback", and is the more useful answer: the codec,
-	// the resolution and the size are what decide whether this will play well
-	// here. The Part was already being resolved for the action and its probe
-	// data (ADR 0050) was going straight in the bin.
+// playbackPanel is the glass panel docked beside the hero: what a viewer is
+// about to get, and what comes after it.
+//
+// The design's panel opens with "Playing on — Living Room TV" and closes with a
+// "Change device" control. Neither is here: a Session carries a DeviceID with no
+// name on it, there is no device registry to name one from, and no capability
+// role in the SDK describes a playback *target*. Rows Mosaic cannot answer are
+// dropped rather than filled with the local machine.
+func playbackPanel(m v1.ContentMetadata, ref v1.ContentRef, facts releaseFacts, playing *v1.Part, season seasonView) ui.El {
 	if playing != nil {
-		rows := make([]map[string]any, 0, 5)
+		rows := make([]any, 0, 4)
 		row := func(label, value string) {
 			if value != "" {
 				rows = append(rows, map[string]any{"label": label, "value": value})
 			}
 		}
-		row("Quality", qualityLabel(*playing))
-		row("Video", strings.ToUpper(playing.VideoCodec))
-		row("Audio", strings.ToUpper(playing.AudioCodec))
-		row("Container", strings.ToUpper(playing.Container))
-		row("Size", sizeLabel(playing.SizeBytes))
+		row("Quality", facts.qualityPill())
+		row("Audio", facts.audioPill())
+		row("Subtitles", facts.subtitlesLabel())
+		if next := season.nextUp(); next != nil {
+			row("Up next", episodeCode(*next)+" · "+next.Title)
+		}
 		if len(rows) > 0 {
-			return ui.Component("InfoPanel", ui.Heading("This playback"), ui.Prop("rows", rows))
+			return ui.Component("InfoPanel", ui.Heading("This playback"), ui.Rows(rows))
 		}
 	}
 
+	// Nothing is playable, so the panel describes the title instead of a
+	// release. This is the virtual-item case and the common one on first view.
 	els := []ui.El{ui.Heading("About this title")}
 	if m.Rating > 0 {
-		els = append(els, ui.Prop("rating", fmt.Sprintf("%.1f", m.Rating)), ui.Prop("ratingLabel", "Rating"))
+		els = append(els, ui.Rating(fmt.Sprintf("%.1f", m.Rating)), ui.RatingLabel("Rating"))
 	}
-	rows := make([]map[string]any, 0, 4)
+	rows := make([]any, 0, 4)
 	row := func(label, value string) {
 		if value != "" {
 			rows = append(rows, map[string]any{"label": label, "value": value})
 		}
 	}
-	if mt := string(ref.MediaType); mt != "" {
-		row("Type", titleWords(mt))
+	if mt := mediaTypeWord(string(ref.MediaType)); mt != "" {
+		row("Type", mt)
 	}
 	row("Year", yearLabel(m.Year))
 	if len(m.Episodes) > 0 {
-		row("Episodes", fmt.Sprintf("%d", len(m.Episodes)))
+		row("Episodes", strconv.Itoa(len(m.Episodes)))
 	} else {
 		row("Runtime", m.Runtime)
 	}
 	if len(m.Genres) > 0 {
 		row("Genres", strings.Join(m.Genres, ", "))
 	}
-	els = append(els, ui.Prop("rows", rows))
+	els = append(els, ui.Rows(rows))
 	return ui.Component("InfoPanel", els...)
+}
+
+// factsGrid is the four-up row of technical cards under the cast.
+//
+// It is dropped entirely when nothing can be said — a virtual item has no bytes
+// to describe, and four empty cards are worse than none.
+func (s *Service) factsGrid(ctx context.Context, caller v1.Caller, ref v1.ContentRef, facts releaseFacts) ui.El {
+	cards := make([]ui.El, 0, 4)
+	add := func(c ui.El) {
+		if c != nil {
+			cards = append(cards, c)
+		}
+	}
+	if facts.part.ID != "" {
+		add(facts.videoCard())
+		add(facts.audioCard())
+		add(facts.deliveryCard(clientCodecs(ctx)))
+	}
+	add(metadataCard(ref, s.providerName(ctx, caller, ref.Provider)))
+	if len(cards) == 0 {
+		return nil
+	}
+	// Four columns at the design's 1320 content width, reflowing below it. The
+	// gap is the design's 16 rather than the browse grids' 24: these are one
+	// band of related facts, not a wall of independent cards.
+	grid := append([]ui.El{ui.MinColumnWidth(300), ui.Gap(4)}, cards...)
+	return ui.Section("", ui.Grid(grid...))
+}
+
+// providerName is a module's own name for itself, for attributing metadata to
+// something a person recognises rather than to a module id. Falls back to the id
+// when the module contributes no settings surface to be named by.
+func (s *Service) providerName(ctx context.Context, caller v1.Caller, moduleID string) string {
+	if moduleID == "" {
+		return ""
+	}
+	res, err := s.content.ListSettingsModules(ctx, app.ListSettingsModulesQuery{Caller: caller})
+	if err != nil {
+		return moduleID
+	}
+	for _, mod := range res.Modules {
+		if mod.ModuleID == moduleID && mod.Name != "" {
+			return mod.Name
+		}
+	}
+	return moduleID
+}
+
+// playTarget is the release the hero's primary action plays, and which episode
+// it belongs to.
+//
+// `FirstPlayablePart` deliberately does not walk past a work's direct children,
+// so it reports nothing playable for every series: a series' children are its
+// seasons, and picking an episode inside one is a choice the application layer
+// declined to make silently. That limit stands, and this is the screen making
+// the choice out loud instead — it resolves a *named* episode and the button
+// says which one, so nothing is defaulted behind the viewer's back.
+//
+// The order is the order a viewer would expect: the episode they are part-way
+// through, then the first they have not finished, then the season's first. A
+// film has no season view and falls through to the work, which is unchanged.
+func (s *Service) playTarget(ctx context.Context, caller v1.Caller,
+	res app.PreviewContentResult, season seasonView) (v1.Part, bool, error) {
+
+	if node, ok := season.playTargetNode(); ok {
+		// The episode itself is the item, so its releases are read directly
+		// rather than through FirstPlayablePart, which answers about a work by
+		// looking at its children and finds none under a leaf.
+		parts, err := s.content.ListNodeParts(ctx, app.ListNodePartsQuery{Caller: caller, NodeID: node})
+		if err != nil {
+			return v1.Part{}, false, err
+		}
+		if len(parts.Parts) > 0 {
+			return parts.Parts[0], true, nil
+		}
+	}
+	return s.content.FirstPlayablePart(ctx, caller, res.NodeID)
+}
+
+// playTargetNode is the episode node the hero would play: the one part-way
+// through, then the first unfinished, then the season's first.
+func (s seasonView) playTargetNode() (v1.NodeID, bool) {
+	if len(s.nodes) == 0 {
+		return "", false
+	}
+	byNumber := make(map[int]v1.NodeID, len(s.nodes))
+	for id, n := range s.nodes {
+		byNumber[n] = id
+	}
+	// Part-way through beats not-started: a half-watched episode is the one
+	// thing on this screen a viewer is unambiguously in the middle of.
+	for _, e := range s.episodes {
+		st, seen := s.states[e.Episode]
+		if seen && !st.Finished && st.Position > 0 {
+			if id, ok := byNumber[e.Episode]; ok {
+				return id, true
+			}
+		}
+	}
+	for _, e := range s.episodes {
+		if st, seen := s.states[e.Episode]; !seen || !st.Finished {
+			if id, ok := byNumber[e.Episode]; ok {
+				return id, true
+			}
+		}
+	}
+	if id, ok := byNumber[s.episodes[0].Episode]; ok && len(s.episodes) > 0 {
+		return id, true
+	}
+	return "", false
+}
+
+// seasonView is one season of a series as the screen needs it: which season is
+// shown, its episodes, and this viewer's progress through them.
+//
+// It exists because three surfaces asked the same question and would otherwise
+// have asked it three times — the hero's resume label needs to know which
+// episode a Part is, the panel's "up next" needs the first unwatched one, and
+// the rows need a progress bar each.
+type seasonView struct {
+	// all is every episode of the series, ungrouped, as the provider gave them.
+	all []v1.EpisodePreview
+	// order is the season numbers in the order they first appear.
+	order []int
+	// selected is the season on screen.
+	selected int
+	// episodes is the selected season's episodes, in order.
+	episodes []v1.EpisodePreview
+	// states is this viewer's playback state per episode number of the selected
+	// season, empty for a virtual series (no nodes, so nothing is keyed).
+	states map[int]v1.PlaybackState
+	// quality is the release quality per episode number, where the episode has a
+	// playable Part.
+	quality map[int]string
+	// nodes maps an episode's node id back to its number, so a Part can say
+	// which episode it belongs to.
+	nodes map[v1.NodeID]int
+}
+
+// episodeOf names the episode a node is, "S2 E7", or empty when the node is not
+// one of this season's episodes.
+func (s seasonView) episodeOf(node v1.NodeID) string {
+	n, ok := s.nodes[node]
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("S%d E%d", s.selected, n)
+}
+
+// nextUp is the first episode of the shown season that has been neither finished
+// nor started, which is what a viewer part-way through a season is about to
+// want. Nil when the season is finished or nothing has been started in it —
+// "up next" on a series nobody has begun is just "episode one", which the list
+// below already says.
+func (s seasonView) nextUp() *v1.EpisodePreview {
+	if len(s.states) == 0 {
+		return nil
+	}
+	for i, e := range s.episodes {
+		st, seen := s.states[e.Episode]
+		if !seen {
+			return &s.episodes[i]
+		}
+		if !st.Finished && st.Position == 0 {
+			return &s.episodes[i]
+		}
+	}
+	return nil
+}
+
+// seasonView resolves the season to show and reads this viewer's progress
+// through it. An error anywhere costs the progress, never the episodes.
+func (s *Service) seasonView(ctx context.Context, caller v1.Caller, res app.PreviewContentResult,
+	episodes []v1.EpisodePreview, params map[string]any) seasonView {
+
+	view := seasonView{all: episodes}
+	if len(episodes) == 0 {
+		return view
+	}
+
+	bySeason := make(map[int][]v1.EpisodePreview)
+	for _, e := range episodes {
+		if _, seen := bySeason[e.Season]; !seen {
+			view.order = append(view.order, e.Season)
+		}
+		bySeason[e.Season] = append(bySeason[e.Season], e)
+	}
+	// Default to the first real season, skipping a season 0 of specials when a
+	// numbered season exists; the season param overrides.
+	view.selected = view.order[0]
+	for _, n := range view.order {
+		if n >= 1 {
+			view.selected = n
+			break
+		}
+	}
+	if sv := stringParam(params, paramSeason); sv != "" {
+		if n, err := strconv.Atoi(sv); err == nil {
+			if _, ok := bySeason[n]; ok {
+				view.selected = n
+			}
+		}
+	}
+	view.episodes = bySeason[view.selected]
+
+	// Progress comes from the materialised tree, which only an in-library series
+	// has; a virtual one shows its episodes with no marks on them.
+	if !res.InLibrary || res.NodeID == "" {
+		return view
+	}
+	s.fillSeasonProgress(ctx, caller, res.NodeID, &view)
+	return view
+}
+
+// fillSeasonProgress bridges the provider's episode preview to the materialised
+// tree and reads this viewer's state over it.
+//
+// The episode list on screen is the provider's live preview (ADR 0034), which
+// carries season and episode numbers but no node ids; playback state is keyed by
+// node (ADR 0046). A series' children are its seasons and a season's children
+// its episodes, each carrying its number as NaturalOrder, so the tree maps
+// (season, episode) back to the node the position is stored under. It reads only
+// the selected season — one season walk and one batched state read — because
+// that is all the rows show.
+//
+// Every failure leaves the view as it was rather than returning an error: an
+// unmarked episode row is still a row, and a detail screen that cannot read
+// progress should lose its bars, not its episodes.
+func (s *Service) fillSeasonProgress(ctx context.Context, caller v1.Caller, seriesNode v1.NodeID, view *seasonView) {
+	seasons, err := s.content.GetContentNode(ctx, v1.GetContentNodeQuery{
+		Caller: caller, NodeID: seriesNode, WithChildren: true,
+	})
+	if err != nil {
+		telemetry.From(ctx).For("screens").Warn("reading season tree for episode progress failed",
+			telemetry.Identifier("series", string(seriesNode)), telemetry.Err(err))
+		return
+	}
+	var seasonNode v1.NodeID
+	for _, c := range seasons.Children {
+		if c.Kind == v1.NodeContainer && int(c.NaturalOrder) == view.selected {
+			seasonNode = c.ID
+			break
+		}
+	}
+	if seasonNode == "" {
+		return
+	}
+
+	eps, err := s.content.GetContentNode(ctx, v1.GetContentNodeQuery{
+		Caller: caller, NodeID: seasonNode, WithChildren: true,
+	})
+	if err != nil {
+		telemetry.From(ctx).For("screens").Warn("reading episode nodes for episode progress failed",
+			telemetry.Identifier("season", string(seasonNode)), telemetry.Err(err))
+		return
+	}
+	byNumber := make(map[int]v1.NodeID, len(eps.Children))
+	ids := make([]v1.NodeID, 0, len(eps.Children))
+	view.nodes = make(map[v1.NodeID]int, len(eps.Children))
+	for _, ep := range eps.Children {
+		if ep.ItemType != v1.ItemEpisode {
+			continue
+		}
+		byNumber[int(ep.NaturalOrder)] = ep.ID
+		view.nodes[ep.ID] = int(ep.NaturalOrder)
+		ids = append(ids, ep.ID)
+	}
+	if len(ids) == 0 {
+		return
+	}
+
+	states, err := s.content.ListPlaybackStates(ctx, v1.ListPlaybackStatesQuery{Caller: caller, NodeIDs: ids})
+	if err != nil {
+		telemetry.From(ctx).For("screens").Warn("reading playback states for episode progress failed",
+			telemetry.Err(err))
+		return
+	}
+	view.states = make(map[int]v1.PlaybackState, len(byNumber))
+	for num, id := range byNumber {
+		if st, ok := states.States[id]; ok {
+			view.states[num] = st
+		}
+	}
+
+	// What each episode's release actually is, for the quality pill on its row.
+	// One read per episode of the *shown* season only; a season nobody is
+	// looking at costs nothing.
+	view.quality = make(map[int]string, len(byNumber))
+	for num, id := range byNumber {
+		parts, partErr := s.content.ListNodeParts(ctx, app.ListNodePartsQuery{Caller: caller, NodeID: id})
+		if partErr != nil || len(parts.Parts) == 0 {
+			continue
+		}
+		if q := factsFor(parts.Parts[0]).qualityPill(); q != "" {
+			view.quality[num] = q
+		}
+	}
+}
+
+// episodesSection builds the series' episode browser: the season control and a
+// count beside the heading, over the selected season's rows.
+func (s *Service) episodesSection(ref v1.ContentRef, m v1.ContentMetadata, season seasonView) ui.El {
+	seasonEntries := make([]map[string]any, 0, len(season.order))
+	for _, n := range season.order {
+		seasonEntries = append(seasonEntries, map[string]any{
+			"id":     strconv.Itoa(n),
+			"label":  fmt.Sprintf("Season %d", n),
+			"action": ui.Navigate(screenDetail, map[string]any{paramRef: refInput(ref), paramSeason: strconv.Itoa(n)}),
+		})
+	}
+	selector := ui.Component("SeasonSelector",
+		ui.Prop("seasons", seasonEntries), ui.Prop("selected", strconv.Itoa(season.selected)))
+
+	rows := make([]ui.El, 0, len(season.episodes))
+	for _, e := range season.episodes {
+		els := []ui.El{
+			ui.Index(episodeCode(e)),
+			ui.When(e.Overview != "", ui.Overview(e.Overview)),
+			ui.When(e.Thumbnail != "", ui.Thumbnail(s.art(e.Thumbnail))),
+			ui.When(e.RuntimeMinutes > 0, ui.Runtime(fmt.Sprintf("%d min", e.RuntimeMinutes))),
+			ui.When(season.quality[e.Episode] != "", ui.Quality(season.quality[e.Episode])),
+		}
+		if st, ok := season.states[e.Episode]; ok {
+			if st.Finished {
+				els = append(els, ui.Watched(true), ui.Progress(1))
+			} else if p := watchedFraction(st); p > 0 {
+				els = append(els, ui.Progress(p))
+			}
+		}
+		rows = append(rows, ui.EpisodeRow(e.Title, els...))
+	}
+
+	// The count beside the heading, as the design writes it: how many episodes
+	// this season has and when the series is from.
+	subtitle := fmt.Sprintf("%d %s", len(season.episodes), plural(len(season.episodes), "episode"))
+	if y := yearLabel(m.Year); y != "" {
+		subtitle += " · " + y
+	}
+
+	// The season control rides the heading line, as the design draws it — beside
+	// the title and before the count — rather than as the first thing in the
+	// list. A control that scrolls away with the rows it filters is a control a
+	// viewer has to scroll back up to reach.
+	return ui.Section("Episodes", ui.Header(selector), ui.Subtitle(subtitle),
+		ui.Stack("vertical", 2, rows...))
+}
+
+// episodeCode is an episode's place in its series, "S2 E7".
+func episodeCode(e v1.EpisodePreview) string {
+	return fmt.Sprintf("S%d E%d", e.Season, e.Episode)
+}
+
+// watchedFraction is how far through an episode this viewer got, 0 when the
+// duration is unknown — a position with no duration is a number with no
+// denominator, and a bar drawn from one would be a guess.
+func watchedFraction(st v1.PlaybackState) float64 {
+	if st.Duration <= 0 || st.Position <= 0 {
+		return 0
+	}
+	f := st.Position.Seconds() / st.Duration.Seconds()
+	if f > 1 {
+		return 1
+	}
+	return f
 }
 
 // titleWords title-cases an underscored/spaced token ("tv_series" → "Tv Series")
@@ -303,163 +819,6 @@ func titleWords(s string) string {
 		}
 	}
 	return strings.Join(words, " ")
-}
-
-// seasonEpisodeLabel renders a series' "2 Seasons · 19 Episodes" summary from
-// its episode preview, counting distinct seasons and total episodes. It is empty
-// for a film (no episodes), letting the caller fall back to a runtime pill.
-func seasonEpisodeLabel(episodes []v1.EpisodePreview) string {
-	if len(episodes) == 0 {
-		return ""
-	}
-	seasons := make(map[int]struct{}, 4)
-	for _, e := range episodes {
-		seasons[e.Season] = struct{}{}
-	}
-	seasonWord, episodeWord := "Seasons", "Episodes"
-	if len(seasons) == 1 {
-		seasonWord = "Season"
-	}
-	if len(episodes) == 1 {
-		episodeWord = "Episode"
-	}
-	return fmt.Sprintf("%d %s · %d %s", len(seasons), seasonWord, len(episodes), episodeWord)
-}
-
-// episodesSection builds a series' episode browser: a SeasonSelector across the
-// seasons (each switching by re-navigating with a season param) over the
-// selected season's episodes as EpisodeRows carrying the synopsis and still
-// (ADR 0034). The selected season comes from the season param, defaulting to the
-// first.
-func (s *Service) episodesSection(ctx context.Context, caller v1.Caller, ref v1.ContentRef, seriesNode v1.NodeID, episodes []v1.EpisodePreview, params map[string]any) *ui.Element {
-	order := make([]int, 0)
-	bySeason := make(map[int][]v1.EpisodePreview)
-	for _, e := range episodes {
-		if _, seen := bySeason[e.Season]; !seen {
-			order = append(order, e.Season)
-		}
-		bySeason[e.Season] = append(bySeason[e.Season], e)
-	}
-	// Default to the first real season, skipping a season 0 of specials when a
-	// numbered season exists; the season param overrides.
-	selected := order[0]
-	for _, n := range order {
-		if n >= 1 {
-			selected = n
-			break
-		}
-	}
-	if sv := stringParam(params, paramSeason); sv != "" {
-		if n, err := strconv.Atoi(sv); err == nil {
-			if _, ok := bySeason[n]; ok {
-				selected = n
-			}
-		}
-	}
-
-	seasonEntries := make([]map[string]any, 0, len(order))
-	for _, n := range order {
-		seasonEntries = append(seasonEntries, map[string]any{
-			"id":     strconv.Itoa(n),
-			"label":  fmt.Sprintf("Season %d", n),
-			"action": ui.Navigate(screenDetail, map[string]any{paramRef: refInput(ref), paramSeason: strconv.Itoa(n)}),
-		})
-	}
-	selector := ui.Component("SeasonSelector",
-		ui.Prop("seasons", seasonEntries), ui.Prop("selected", strconv.Itoa(selected)))
-
-	// A finished mark per episode, for an in-library series (ADR 0046). Read once
-	// for the whole visible season rather than per row, and only when there is a
-	// materialised tree to read from.
-	var watched map[int]bool
-	if seriesNode != "" {
-		watched = s.watchedInSeason(ctx, caller, seriesNode, selected)
-	}
-
-	rows := make([]ui.El, 0, len(bySeason[selected]))
-	for _, e := range bySeason[selected] {
-		rows = append(rows, ui.EpisodeRow(e.Title,
-			ui.Prop("index", strconv.Itoa(e.Episode)),
-			ui.When(e.Overview != "", ui.Overview(e.Overview)),
-			ui.When(e.Thumbnail != "", ui.Prop("thumbnail", s.art(e.Thumbnail))),
-			// The row's facts column. A preview carries neither a runtime nor a
-			// quality — the two the mockups put here — but it does carry the air
-			// date, and nothing was using it, so the column rendered empty.
-			ui.When(e.Released != "", ui.Aired(e.Released)),
-			ui.When(watched[e.Episode], ui.Prop("watched", true)),
-		))
-	}
-	return ui.Section("Episodes", selector, ui.Stack("vertical", 3, rows...))
-}
-
-// watchedInSeason returns the finished episodes of one season of an in-library
-// series, keyed by episode number, for the watched checks on its rows.
-//
-// The episode list on screen is the provider's live preview (ADR 0034), which
-// carries season and episode numbers but no node ids; playback state is keyed by
-// node (ADR 0046). This bridges the two through the materialised tree: a series'
-// children are its seasons and a season's children its episodes, each carrying
-// its number as NaturalOrder, so the tree maps (season, episode) back to the
-// node the position is stored under. It reads only the selected season — one
-// season walk and one batched state read — because that is all the rows show.
-//
-// Every failure returns no marks rather than an error: an unmarked episode row
-// is still a row, and a detail screen that cannot read progress should lose its
-// ticks, not its episodes.
-func (s *Service) watchedInSeason(ctx context.Context, caller v1.Caller, seriesNode v1.NodeID, season int) map[int]bool {
-	seasons, err := s.content.GetContentNode(ctx, v1.GetContentNodeQuery{
-		Caller: caller, NodeID: seriesNode, WithChildren: true,
-	})
-	if err != nil {
-		telemetry.From(ctx).For("screens").Warn("reading season tree for watched marks failed",
-			telemetry.Identifier("series", string(seriesNode)), telemetry.Err(err))
-		return nil
-	}
-	var seasonNode v1.NodeID
-	for _, c := range seasons.Children {
-		if c.Kind == v1.NodeContainer && int(c.NaturalOrder) == season {
-			seasonNode = c.ID
-			break
-		}
-	}
-	if seasonNode == "" {
-		return nil
-	}
-
-	eps, err := s.content.GetContentNode(ctx, v1.GetContentNodeQuery{
-		Caller: caller, NodeID: seasonNode, WithChildren: true,
-	})
-	if err != nil {
-		telemetry.From(ctx).For("screens").Warn("reading episode nodes for watched marks failed",
-			telemetry.Identifier("season", string(seasonNode)), telemetry.Err(err))
-		return nil
-	}
-	byNumber := make(map[int]v1.NodeID, len(eps.Children))
-	ids := make([]v1.NodeID, 0, len(eps.Children))
-	for _, ep := range eps.Children {
-		if ep.ItemType != v1.ItemEpisode {
-			continue
-		}
-		byNumber[int(ep.NaturalOrder)] = ep.ID
-		ids = append(ids, ep.ID)
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-
-	states, err := s.content.ListPlaybackStates(ctx, v1.ListPlaybackStatesQuery{Caller: caller, NodeIDs: ids})
-	if err != nil {
-		telemetry.From(ctx).For("screens").Warn("reading playback states for watched marks failed",
-			telemetry.Err(err))
-		return nil
-	}
-	watched := make(map[int]bool, len(byNumber))
-	for num, id := range byNumber {
-		if st, ok := states.States[id]; ok && st.Finished {
-			watched[num] = true
-		}
-	}
-	return watched
 }
 
 // libraryDetail renders a materialised node: its header, and its direct children
@@ -544,7 +903,11 @@ func trailerURL(t v1.Trailer) string {
 //
 // Each card opens the ref-based detail, exactly as a catalog or search card
 // does: a related item is a virtual item (ADR 0028), and opening one is a read.
-func (s *Service) relatedRail(title string, items []v1.RelatedItem, self v1.ContentRef) ui.El {
+//
+// The heading carries a pinned link onward into a catalog of the same kind. It
+// is pinned rather than hover-revealed because a rail's heading is the only way
+// into a full catalog and no remote control has a pointer to reveal it with.
+func (s *Service) relatedRail(ctx context.Context, caller v1.Caller, title string, items []v1.RelatedItem, self v1.ContentRef) ui.El {
 	cards := make([]ui.El, 0, len(items))
 	for _, it := range items {
 		if it.Ref == self {
@@ -555,38 +918,58 @@ func (s *Service) relatedRail(title string, items []v1.RelatedItem, self v1.Cont
 	if len(cards) == 0 {
 		return nil
 	}
-	return ui.Section(title, ui.Carousel(cards...))
+	// 190 rather than the browse rails' 196: this rail sits in the detail's
+	// 1320 content column, not the home page's full bleed.
+	els := []ui.El{ui.Carousel(ui.ItemWidth(190), ui.Group(cards...))}
+	if label, action, ok := s.browseAction(ctx, caller, self); ok {
+		els = append(els, ui.ActionLabel(label), ui.PinAction(true), ui.OnTap(action))
+	}
+	return ui.Section(title, els...)
 }
 
-// qualityLabel is a release's resolution and dynamic range as one phrase —
-// "2160p Dolby Vision", "1080p". Empty when the probe reported no dimensions,
-// which is the unprobed case (ADR 0050) rather than a 0×0 video.
-func qualityLabel(p v1.Part) string {
-	if p.Height <= 0 {
-		return ""
+// browseAction is the "Browse series →" link a related rail's heading carries —
+// a catalog of the same native type as the title being described.
+//
+// It resolves a real catalog rather than linking to the collection index,
+// because "browse series" that opens a list of every catalog including the film
+// ones is not the promise the label makes. When no registered module offers a
+// catalog of this kind there is no link, which is the honest answer for an
+// install whose only source is a metadata provider.
+func (s *Service) browseAction(ctx context.Context, caller v1.Caller, ref v1.ContentRef) (string, ui.Action, bool) {
+	if ref.NativeType == "" {
+		return "", ui.Action{}, false
 	}
-	q := fmt.Sprintf("%dp", p.Height)
-	if p.HDRFormat != "" {
-		q += " " + p.HDRFormat
+	res, err := s.content.ListModuleCatalogs(ctx, app.ListModuleCatalogsQuery{Caller: caller})
+	if err != nil || len(res.Catalogs) == 0 {
+		return "", ui.Action{}, false
 	}
-	return q
-}
-
-// sizeLabel renders a byte count for a human. Binary units, one decimal, and
-// empty for zero — an unprobed release reports no size, and "0 B" would read as
-// an empty file rather than as an unanswered question.
-func sizeLabel(b int64) string {
-	if b <= 0 {
-		return ""
+	matches := make([]app.ModuleCatalog, 0, len(res.Catalogs))
+	for _, c := range res.Catalogs {
+		if strings.EqualFold(c.Catalog.NativeType, ref.NativeType) {
+			matches = append(matches, c)
+		}
 	}
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
+	if len(matches) == 0 {
+		return "", ui.Action{}, false
 	}
-	div, exp := int64(unit), 0
-	for nn := b / unit; nn >= unit; nn /= unit {
-		div *= unit
-		exp++
+	// Stable across renders: the module list is a map fan-out and its order is
+	// not guaranteed, so a link that picked "the first" would wander between
+	// catalogs on successive views of the same screen.
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].ModuleID != matches[j].ModuleID {
+			return matches[i].ModuleID < matches[j].ModuleID
+		}
+		return matches[i].Catalog.ID < matches[j].Catalog.ID
+	})
+	pick := matches[0]
+	label := "Browse " + strings.ToLower(mediaTypeWord(string(ref.MediaType)))
+	if label == "Browse " {
+		label = "Browse all"
 	}
-	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+	return label, ui.Navigate(screenCatalog, map[string]any{
+		paramModuleID:   pick.ModuleID,
+		paramCatalogID:  pick.Catalog.ID,
+		paramNativeType: pick.Catalog.NativeType,
+		paramTitle:      pick.Catalog.Name,
+	}), true
 }
