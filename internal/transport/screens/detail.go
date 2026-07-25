@@ -241,7 +241,7 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 // a large rating, then label/value rows drawn from the metadata Mosaic actually
 // has (type, year, episodes/runtime, genres). It renders as an acrylic panel.
 func (s *Service) detailInfoPanel(m v1.ContentMetadata, ref v1.ContentRef) ui.El {
-	els := []ui.El{}
+	els := []ui.El{ui.Heading("About this title")}
 	if m.Rating > 0 {
 		els = append(els, ui.Prop("rating", fmt.Sprintf("%.1f", m.Rating)), ui.Prop("ratingLabel", "Rating"))
 	}
