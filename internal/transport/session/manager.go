@@ -71,6 +71,10 @@ type liveSession struct {
 	// is parked in cond.Wait.
 	profileMu sync.Mutex
 	profile   clientProfile
+	// vocab is what the client declared it can *render*, guarded by the same
+	// lock and for the same reason: Attach writes it and every later push reads
+	// it. The two declarations arrive on the same call and are never read apart.
+	vocab clientVocabulary
 
 	// input-debounce state (ADR 0041's server-side coalescing, moved from the
 	// ordered read loop of ADR 0032 into session state).
@@ -359,6 +363,23 @@ func (s *liveSession) clientProfile() clientProfile {
 		return clientProfile{prefer: browserPreference(), class: legacyBrowserClass}
 	}
 	return s.profile
+}
+
+// setVocabulary records what the client declared it can render (ADR 0084).
+func (s *liveSession) setVocabulary(v clientVocabulary) {
+	s.profileMu.Lock()
+	s.vocab = v
+	s.profileMu.Unlock()
+}
+
+// vocabulary returns the declaration, or the zero value — which is undeclared,
+// and means "send everything", the behaviour every client had before the
+// declaration existed. A session can exist before any Attach, so undeclared is a
+// normal state rather than an error.
+func (s *liveSession) vocabulary() clientVocabulary {
+	s.profileMu.Lock()
+	defer s.profileMu.Unlock()
+	return s.vocab
 }
 
 // Manager is the session store. It finds-or-creates a liveSession per opaque

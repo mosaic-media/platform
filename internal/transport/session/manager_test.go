@@ -146,8 +146,8 @@ func TestServeFreshConnectRebuilds(t *testing.T) {
 	defer cancel()
 	c := newCollector()
 	onConnect := func() {
-		s.enqueue(shellMsg(ui.Component("").Build()))                            // seq 2
-		s.enqueue(regionMsg(contentRegion, sessionv1.RegionUpdate_REPLACE, nil)) // seq 3
+		s.enqueue(shellMsg(context.Background(), s, ui.Component("").Build()))                            // seq 2
+		s.enqueue(regionMsg(context.Background(), s, contentRegion, sessionv1.RegionUpdate_REPLACE, nil)) // seq 3
 	}
 	done := make(chan struct{})
 	go func() { _ = s.serve(ctx, 0, onConnect, c.send); close(done) }()

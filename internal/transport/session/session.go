@@ -173,6 +173,21 @@ func (h *Handler) Attach(ctx context.Context, req *connect.Request[sessionv1.Att
 			telemetry.Bool("hdr", cp.prefer.HDR),
 			telemetry.Int("max_height", cp.prefer.MaxHeight))
 	}
+	// What the client can *render*, recorded the same way and for the same
+	// reason. The one line it writes is the answer to a question nothing could
+	// previously ask: is this client behind the contract, and by what?
+	if vp := r.GetVocabulary(); vp != nil {
+		cv := vocabularyFrom(vp)
+		s.setVocabulary(cv)
+		missingPrims, missingActions := cv.missing()
+		telemetry.From(ctx).Info("client vocabulary declared",
+			telemetry.Identifier("session", s.ref),
+			telemetry.String("version", cv.version),
+			telemetry.Int("primitives", len(cv.primitives)),
+			telemetry.Int("actions", len(cv.actions)),
+			telemetry.String("missing_primitives", strings.Join(missingPrims, ",")),
+			telemetry.String("missing_actions", strings.Join(missingActions, ",")))
+	}
 	if r.GetScreen() != "" {
 		s.setCurrent(route{screen: r.GetScreen(), params: decodeParams(r.GetParams())})
 		h.pushContent(ctx, s)
@@ -265,7 +280,7 @@ func (h *Handler) Subscribe(ctx context.Context, req *connect.Request[sessionv1.
 		// The definition library must be registered before the shell or any
 		// screen that uses it renders, so it goes first on the stream (ADR 0024).
 		s.enqueue(tokensMsg())
-		s.enqueue(definitionsMsg())
+		s.enqueue(definitionsMsg(ctx, s))
 		h.pushShell(ctx, s)
 		h.pushContent(ctx, s)
 	}
@@ -276,10 +291,10 @@ func (h *Handler) Subscribe(ctx context.Context, req *connect.Request[sessionv1.
 func (h *Handler) pushShell(ctx context.Context, s *liveSession) {
 	node, err := h.screens.Render(ctx, "shell", s.caller, nil)
 	if err != nil {
-		s.enqueue(regionMsg(contentRegion, sessionv1.RegionUpdate_REPLACE, errorNode(err.Error())))
+		s.enqueue(regionMsg(ctx, s, contentRegion, sessionv1.RegionUpdate_REPLACE, errorNode(err.Error())))
 		return
 	}
-	s.enqueue(shellMsg(node))
+	s.enqueue(shellMsg(ctx, s, node))
 }
 
 // pushContent renders the current route into the content region.
@@ -293,10 +308,10 @@ func (h *Handler) pushContent(ctx context.Context, s *liveSession) {
 func (h *Handler) pushRender(ctx context.Context, s *liveSession, screen string, params map[string]any) {
 	node, err := h.screens.Render(ctx, screen, s.caller, params)
 	if err != nil {
-		s.enqueue(regionMsg(contentRegion, sessionv1.RegionUpdate_REPLACE, errorNode(err.Error())))
+		s.enqueue(regionMsg(ctx, s, contentRegion, sessionv1.RegionUpdate_REPLACE, errorNode(err.Error())))
 		return
 	}
-	s.enqueue(regionMsg(contentRegion, sessionv1.RegionUpdate_REPLACE, node))
+	s.enqueue(regionMsg(ctx, s, contentRegion, sessionv1.RegionUpdate_REPLACE, node))
 }
 
 // onInput records the latest search text and (re)arms the debounce timer, so a
@@ -329,12 +344,28 @@ func (h *Handler) onInput(s *liveSession, text string) {
 // --- ServerMessage constructors (encoding option (b), ADR 0044: the typed
 // mosaic.sdui.v1.UINode rides the envelope directly, no JSON step). ---
 
-func shellMsg(node sdui.Node) *sessionv1.ServerMessage {
+// Every node-bearing constructor takes the session and the ctx rather than just
+// the node, and that is the enforcement: a new push path cannot forget to
+// degrade, because it cannot construct the message without handing over the
+// session whose declaration decides what the client can draw. A pass that is
+// merely "remembered at each call site" is one that a later call site omits.
+
+func shellMsg(ctx context.Context, s *liveSession, node sdui.Node) *sessionv1.ServerMessage {
+	node = degradeFor(ctx, s, node, "shell")
 	return &sessionv1.ServerMessage{Body: &sessionv1.ServerMessage_Shell{Shell: &sessionv1.ShellUpdate{UiNode: node}}}
 }
 
-func regionMsg(region string, op sessionv1.RegionUpdate_Op, node sdui.Node) *sessionv1.ServerMessage {
+func regionMsg(ctx context.Context, s *liveSession, region string, op sessionv1.RegionUpdate_Op, node sdui.Node) *sessionv1.ServerMessage {
+	node = degradeFor(ctx, s, node, region)
 	return &sessionv1.ServerMessage{Body: &sessionv1.ServerMessage_Region{Region: &sessionv1.RegionUpdate{Region: region, Op: op, UiNode: node}}}
+}
+
+// degradeFor removes what this client declared it cannot render and reports what
+// went. For an undeclared client it is a no-op returning the same pointer.
+func degradeFor(ctx context.Context, s *liveSession, node sdui.Node, where string) sdui.Node {
+	out, d := degrade(node, s.vocabulary())
+	d.report(ctx, s.ref, where)
+	return out
 }
 
 func toastMsg(message, tone string) *sessionv1.ServerMessage {
@@ -345,8 +376,12 @@ func toastMsg(message, tone string) *sessionv1.ServerMessage {
 // Event whose JSON payload is an array of ComponentDefinition. It is pushed once
 // on connect, before the shell, so the client can register the components any
 // screen references.
-func definitionsMsg() *sessionv1.ServerMessage {
-	return &sessionv1.ServerMessage{Body: &sessionv1.ServerMessage_Event{Event: &sessionv1.Event{Type: definitionsEvent, Payload: definitionsLibrary}}}
+// It is filtered against the client's declared vocabulary on the way out: a
+// definition whose template needs a primitive this client did not declare is
+// served with its fallback instead, when it has one.
+func definitionsMsg(ctx context.Context, s *liveSession) *sessionv1.ServerMessage {
+	payload := definitionsFor(ctx, s.vocabulary(), definitionsLibrary, s.ref)
+	return &sessionv1.ServerMessage{Body: &sessionv1.ServerMessage_Event{Event: &sessionv1.Event{Type: definitionsEvent, Payload: payload}}}
 }
 
 // tokensMsg carries the design tokens (ADR 0040) as an Event whose JSON payload

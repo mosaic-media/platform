@@ -223,7 +223,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		// the response rather than being told up front.
 		MimeType: playbackMimeType(plan),
 	})
-	msgs := []*sessionv1.ServerMessage{regionMsg(playerRegion, sessionv1.RegionUpdate_REPLACE, node)}
+	msgs := []*sessionv1.ServerMessage{regionMsg(ctx, s, playerRegion, sessionv1.RegionUpdate_REPLACE, node)}
 
 	// What to offer after this one (ADR 0047), pushed as a second region update
 	// beside the player — the two-lane transport driving the region unprompted,
@@ -235,7 +235,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 			label = "Next: " + next.label
 		}
 		button := screens.NextEpisodeNode(label, next.partID, next.nodeID, next.title)
-		msgs = append(msgs, regionMsg(playerRegion, sessionv1.RegionUpdate_APPEND, button))
+		msgs = append(msgs, regionMsg(ctx, s, playerRegion, sessionv1.RegionUpdate_APPEND, button))
 	}
 	return msgs, nil
 }
