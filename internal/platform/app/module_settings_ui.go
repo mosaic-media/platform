@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/mosaic-media/contracts/sdui"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/policy"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
@@ -61,7 +62,7 @@ func (s *Service) ModuleSettingsUI(ctx context.Context, query ModuleSettingsUIQu
 	if err != nil {
 		return ModuleSettingsUIResult{}, contracts.WrapError(contracts.Unavailable, "module settings UI", err)
 	}
-	if err := validateUINode(resp.UI); err != nil {
+	if err := validateUINode(query.ModuleID, resp.UI); err != nil {
 		return ModuleSettingsUIResult{}, contracts.WrapError(contracts.Internal, "module settings UI is not a valid UINode", err)
 	}
 	return ModuleSettingsUIResult{ModuleID: query.ModuleID, UI: resp.UI}, nil
@@ -119,22 +120,77 @@ func (s *Service) capabilitySettingsUIProvider(id string) (v1.SettingsUIProvider
 	return s.capabilities.SettingsUIProvider(id)
 }
 
-// validateUINode confines a module-supplied settings screen to a well-formed
-// UINode tree before the Platform hosts it (ADR 0038): the bytes must be a JSON
-// object carrying a non-empty string "type". Full schema validation is a later
-// hardening; this catches a malformed or non-node payload at the boundary.
-func validateUINode(ui []byte) error {
+// validateUINode confines a module-supplied settings screen to a well-formed,
+// correctly namespaced UINode tree before the Platform hosts it (ADR 0038,
+// ADR 0085): the bytes must be a JSON object carrying a non-empty string "type",
+// and **every** node in the tree must name a type this module may emit.
+//
+// This is the one boundary a module's own UI crosses, so it is where the
+// namespace rule is enforced. It matters because the vocabulary is open and was
+// flat: a module returning a node called `PosterCard` — not *using* the core
+// component, but contributing a definition of that name — would replace the core
+// one in every client's registry, and two modules both contributing a `StatChip`
+// would silently overwrite each other. A map's last writer wins and nothing
+// errors.
+//
+// The whole tree rather than the root, because a hole two levels down is exactly
+// the kind that survives being looked at.
+func validateUINode(moduleID string, ui []byte) error {
 	if len(ui) == 0 {
 		return contracts.NewError(contracts.InvalidArgument, "empty settings UI")
 	}
-	var node struct {
-		Type string `json:"type"`
+	if err := sdui.ValidateModuleID(moduleID); err != nil {
+		return contracts.WrapError(contracts.InvalidArgument, "module id", err)
 	}
+	var node map[string]any
 	if err := json.Unmarshal(ui, &node); err != nil {
 		return err
 	}
-	if node.Type == "" {
+	if t, _ := node["type"].(string); t == "" {
 		return contracts.NewError(contracts.InvalidArgument, "settings UI root has no type")
 	}
+	return validateNodeTypes(moduleID, node)
+}
+
+// validateNodeTypes walks a decoded UINode tree checking every `type` against
+// the namespace rule. It walks children and slots explicitly rather than every
+// map it meets: props are an open bag, and a screen param that happens to be
+// called "type" is the module's data, not a node.
+func validateNodeTypes(moduleID string, node map[string]any) error {
+	t, _ := node["type"].(string)
+	if err := sdui.ValidateModuleType(moduleID, t); err != nil {
+		return contracts.WrapError(contracts.InvalidArgument, "settings UI", err)
+	}
+	for _, child := range nodeList(node["children"]) {
+		if err := validateNodeTypes(moduleID, child); err != nil {
+			return err
+		}
+	}
+	slots, _ := node["slots"].(map[string]any)
+	for _, v := range slots {
+		for _, child := range nodeList(v) {
+			if err := validateNodeTypes(moduleID, child); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
+}
+
+// nodeList reads a child list, tolerating the single-node form a slot may carry.
+func nodeList(v any) []map[string]any {
+	switch x := v.(type) {
+	case []any:
+		out := make([]map[string]any, 0, len(x))
+		for _, e := range x {
+			if m, ok := e.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+		return out
+	case map[string]any:
+		return []map[string]any{x}
+	default:
+		return nil
+	}
 }
