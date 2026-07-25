@@ -432,7 +432,7 @@ func tokensMsg() *sessionv1.ServerMessage {
 // action rather than to the caller: whoever sends reportProgress, it is still
 // not something to confirm.
 func silentAction(action string) bool {
-	return action == "reportProgress"
+	return action == "reportProgress" || action == "recordImpression"
 }
 
 // invokeToast is the confirmation shown when an action succeeds. It reflects the

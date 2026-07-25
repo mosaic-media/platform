@@ -86,6 +86,17 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		// no surface and no toast: a confirmation for something a player emits
 		// every few seconds would be noise over the film it is reporting on.
 		return nil, h.reportProgress(ctx, s, input)
+	case "recordImpression":
+		// What a screen reported having been *seen* (ADR 0090). It is silent for
+		// the same reason reportProgress is — a toast per card scrolled past is
+		// noise over the screen it is about — and it is the only consumer of the
+		// lifecycle triggers today.
+		//
+		// The Platform records it and stores nothing. Telemetry is where an
+		// impression belongs until there is a question worth keeping one to
+		// answer; a table filled first and queried never is a retention
+		// liability rather than an analytics capability.
+		return nil, h.recordImpression(ctx, s, input)
 	case "setWatched":
 		cmd, err := setWatchedFromInput(input)
 		if err != nil {
@@ -450,4 +461,42 @@ func preferenceFromInput(input []byte) (string, []byte, error) {
 		return "", nil, contracts.NewError(contracts.InvalidArgument, "setPreference needs a key")
 	}
 	return env.Key, env.Value, nil
+}
+
+// impressionEnvelope is what a screen's onAppear action carries. The fields are
+// the server's own — it wrote the action — so this is reading back what the
+// emit-side put there rather than trusting a client to describe itself.
+type impressionEnvelope struct {
+	// NodeID is the node's `id`, which the contract states is the analytics
+	// identity as well as the React key. An id that is a row index attributes
+	// nothing; one that names the thing attributes everything, and only the
+	// emit-side knows which it wrote.
+	NodeID string `json:"nodeId"`
+	Screen string `json:"screen"`
+	Kind   string `json:"kind"`
+}
+
+// recordImpression writes one "this was seen" record to telemetry.
+//
+// It deliberately does not authorise beyond the session the report arrived on:
+// an impression is a statement about the caller's own screen, and there is no
+// object it could name that they were not already looking at.
+func (h *Handler) recordImpression(ctx context.Context, s *liveSession, input []byte) error {
+	var env impressionEnvelope
+	if len(input) > 0 {
+		if err := json.Unmarshal(input, &env); err != nil {
+			return contracts.WrapError(contracts.InvalidArgument, "impression", err)
+		}
+	}
+	if env.NodeID == "" {
+		// A report that names nothing attributes nothing, and recording it would
+		// inflate a count while answering no question.
+		return contracts.NewError(contracts.InvalidArgument, "an impression must name the node it saw")
+	}
+	telemetry.From(ctx).Info("sdui impression",
+		telemetry.Identifier("session", s.ref),
+		telemetry.String("node", env.NodeID),
+		telemetry.String("screen", env.Screen),
+		telemetry.String("kind", env.Kind))
+	return nil
 }
