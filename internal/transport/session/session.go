@@ -224,6 +224,14 @@ func (h *Handler) Invoke(ctx context.Context, req *connect.Request[sessionv1.Inv
 	s := h.mgr.session(r.GetSession())
 	outcomes, err := h.dispatch(ctx, s, r.GetAction(), r.GetInput())
 	if err != nil {
+		// A rejection that names fields goes to the fields (ADR 0089). A toast
+		// saying "that username is taken" is a sentence floating next to the
+		// form rather than a mark on the box that is wrong, and on a form with
+		// four inputs it does not say which.
+		if msg, ok := fieldErrorsMsg(err); ok {
+			s.enqueue(msg)
+			return connect.NewResponse(&sessionv1.Ack{}), nil
+		}
 		s.enqueue(toastMsg(errorMessage(err), "danger"))
 		return connect.NewResponse(&sessionv1.Ack{}), nil
 	}
@@ -366,6 +374,26 @@ func degradeFor(ctx context.Context, s *liveSession, node sdui.Node, where strin
 	out, d := degrade(node, s.vocabulary())
 	d.report(ctx, s.ref, where)
 	return out
+}
+
+// fieldErrorsMsg turns a Platform error carrying per-field rejections into the
+// push that lands them on the fields, and reports whether there were any.
+//
+// The envelope is the same one the client's own validators fill, so a rejection
+// from either side renders identically — which is the whole reason it is
+// symmetric rather than a second, server-shaped error surface.
+func fieldErrorsMsg(err error) (*sessionv1.ServerMessage, bool) {
+	var perr *contracts.Error
+	if !errors.As(err, &perr) || len(perr.Fields) == 0 {
+		return nil, false
+	}
+	out := make([]*sessionv1.FieldError, 0, len(perr.Fields))
+	for _, f := range perr.Fields {
+		out = append(out, &sessionv1.FieldError{Field: f.Field, Message: f.Message})
+	}
+	return &sessionv1.ServerMessage{Body: &sessionv1.ServerMessage_FieldErrors{
+		FieldErrors: &sessionv1.FieldErrors{Errors: out, FormError: perr.Message},
+	}}, true
 }
 
 func toastMsg(message, tone string) *sessionv1.ServerMessage {
