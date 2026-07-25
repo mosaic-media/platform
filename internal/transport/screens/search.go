@@ -6,6 +6,7 @@ package screens
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	sdui "github.com/mosaic-media/contracts/sdui"
@@ -55,11 +56,33 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 			ui.EmptyState(emptyIconSearch, "No results for \""+text+"\""))).Build(), nil
 	}
 
-	cards := make([]ui.El, 0, len(res.Results))
+	// Group the results by media type, as the mockups section them: films, then
+	// series, then whatever else the providers returned. A flat grid of mixed
+	// kinds makes the viewer do the sorting, and the type is already on every
+	// ref — the screen was throwing away a distinction it had been handed.
+	//
+	// Insertion-ordered rather than alphabetical: the providers rank their own
+	// results, and the type of the best match is the one a viewer most likely
+	// wants at the top. A single-type result set renders as one section, which is
+	// the flat grid this replaced.
+	byType := map[v1.MediaType][]ui.El{}
+	var order []v1.MediaType
 	for _, r := range res.Results {
-		cards = append(cards, s.contentCard(r.Ref, r.Title, r.Year, r.Poster, r.InLibrary))
+		if _, seen := byType[r.Ref.MediaType]; !seen {
+			order = append(order, r.Ref.MediaType)
+		}
+		byType[r.Ref.MediaType] = append(byType[r.Ref.MediaType],
+			s.contentCard(r.Ref, r.Title, r.Year, r.Poster, r.InLibrary))
 	}
-	grid := []ui.El{ui.Group(cards...)}
+	sections := make([]ui.El, 0, len(order))
+	for _, mt := range order {
+		cards := byType[mt]
+		sections = append(sections, ui.Section(mediaTypeHeading(mt),
+			ui.Subtitle(strconv.Itoa(len(cards))),
+			ui.Grid(ui.Group(cards...))))
+	}
+
+	grid := []ui.El{ui.Group(sections...)}
 	if hasMore {
 		// `query` rather than `navigate`: a further page is not somewhere the
 		// back button should return to. A viewer who scrolled through five pages
@@ -70,7 +93,34 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 				paramText: text, paramPage: page + 1,
 			})))
 	}
-	return ui.Screen(ui.Title("Search"), ui.Group(field, ui.Grid(grid...))).Build(), nil
+	return ui.Screen(ui.Title("Search"), ui.Stack("vertical", 7, append([]ui.El{field}, grid...)...)).Build(), nil
+}
+
+// mediaTypeHeading is a media type as a section heading. The vocabulary is open
+// text canonicalised on write (ADR 0015), so an unknown type is title-cased and
+// shown rather than dropped: a module contributing a type the Platform has never
+// heard of should get a heading, not have its results disappear into a section
+// with no name.
+func mediaTypeHeading(mt v1.MediaType) string {
+	switch mt {
+	case v1.MediaMovie:
+		return "Films"
+	case v1.MediaTVSeries:
+		return "Series"
+	case v1.MediaAnimeSeries:
+		return "Anime"
+	case v1.MediaAlbum:
+		return "Music"
+	case v1.MediaIPTVChannel:
+		return "Live"
+	}
+	// Canonicalised types are snake_case (ADR 0015), so "manga_series" reads as
+	// "Manga series" rather than as an identifier.
+	name := strings.ReplaceAll(string(mt), "_", " ")
+	if name == "" {
+		return "Other"
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 // searchPageSize is how many results a page of search carries.
@@ -82,11 +132,24 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 const searchPageSize = 24
 
 // searchField is the search screen's own input — shown on mobile (where search
-// is a tab and the top bar has no field), hidden on desktop (data-kind). Its
-// stable id lets React keep it focused as the results below re-render.
+// is a tab and the top bar has no field), hidden on desktop, where the
+// always-present top-bar field already holds the query. Its stable id lets React
+// keep it focused as the results below re-render.
+//
+// It says that in the payload, through `hidden` + `responsive`, rather than
+// through the `kind` hook it used to carry. A `kind` needs a matching rule in
+// the client's stylesheet, which puts a client release in the path of a layout
+// decision — the thing `responsive` exists to avoid, and why `kind` is
+// deprecated in the contract.
 func (s *Service) searchField(text string) ui.El {
 	return ui.Component("Box",
-		ui.Prop("style", map[string]any{"kind": "screen-search", "pb": 3}),
+		ui.Prop("style", map[string]any{
+			"hidden": true, "pb": 3,
+			"responsive": map[string]any{
+				"below": 720,
+				"style": map[string]any{"hidden": false},
+			},
+		}),
 		ui.Component("SearchBar",
 			ui.ID("search-field"),
 			ui.Prop("placeholder", "Find movies, shows and more"),

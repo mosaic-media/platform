@@ -69,8 +69,13 @@ const (
 	paramModuleID = "moduleId"
 	// paramSection names which section of the settings screen is open — the
 	// Platform's own sections, as paramModuleID names a module's.
-	paramSection    = "section"
-	paramCatalogID  = "catalogId"
+	paramSection   = "section"
+	paramCatalogID = "catalogId"
+	// paramTitle carries a catalog's display name through the navigation that
+	// opens it. A catalog is addressed by id, and only the provider's list knows
+	// what it is called, so a screen that had to name one from its id alone could
+	// not.
+	paramTitle      = "title"
 	paramNativeType = "nativeType"
 	paramRef        = "ref"
 	paramNodeID     = "nodeId"

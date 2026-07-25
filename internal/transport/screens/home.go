@@ -7,6 +7,7 @@ package screens
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -32,11 +33,13 @@ const (
 	homeHeroSlides = 5
 )
 
-// homeScreen is the default landing surface: a hero over rows of the enabled
-// modules' catalogs (Cinemeta's Popular Movies/Series, etc. — ADR 0028's virtual
-// plane, browsed not materialised). Each row is a carousel of cards that open a
-// detail; the hero is the first catalog's first item, enriched with its backdrop
-// and logo. Browsing is a read, so nothing here writes.
+// homeScreen is the default landing surface: a full-viewport cinematic hero
+// over rows of the enabled modules' catalogs (ADR 0028's virtual plane, browsed
+// not materialised — TMDB's, on a keyed deployment, since ADR 0095 made the
+// browse roles ranked). Each row is a carousel of cards that open a detail and a
+// heading that opens the whole catalog; the hero rotates through the top item of
+// each of the first few catalogs, enriched with its backdrop and logo. Browsing
+// is a read, so nothing here writes.
 func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, error) {
 	cats, err := s.content.ListModuleCatalogs(ctx, app.ListModuleCatalogsQuery{Caller: caller})
 	if err != nil {
@@ -74,10 +77,11 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	}
 	wg.Wait()
 
-	// Assemble the page as a widget tree. The featured banner comes from the
-	// first non-empty catalog's first item (one further round-trip to enrich it),
-	// spanning the Screen's full-bleed slot with an "Up next" filmstrip of its
-	// neighbours docked on its floor; then a carousel row per non-empty catalog.
+	// Assemble the page as a widget tree. The featured banners come from the top
+	// item of each of the first few non-empty catalogs (one further round-trip
+	// each to enrich them), spanning the Screen's full-bleed slot with the next
+	// slide's card docked on the hero floor; then a carousel row per non-empty
+	// catalog.
 	rows := make([]ui.El, 0, len(catalogs)+1)
 	type heroPick struct {
 		item   v1.CatalogItem
@@ -106,7 +110,13 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 				upCards = append(upCards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
 			}
 			if len(upCards) > 0 {
-				upNext = ui.Section("Trending now", ui.Carousel(upCards...))
+				upNext = ui.Section("Trending now",
+					ui.ActionLabel("See all"),
+					ui.OnTap(ui.Navigate(screenCatalog, map[string]any{
+						paramModuleID: c.ModuleID, paramCatalogID: c.Catalog.ID, paramNativeType: c.Catalog.NativeType,
+						paramTitle: c.Catalog.Name,
+					})),
+					ui.Carousel(upCards...))
 			}
 		}
 		cards := make([]ui.El, 0, homeMaxRowItems)
@@ -116,7 +126,18 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 			}
 			cards = append(cards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
 		}
-		rows = append(rows, ui.Section(c.Catalog.Name, ui.Carousel(cards...)))
+		// Each row leads to its whole catalog. A rail is a window onto a
+		// collection, and without this the twentieth item is where the collection
+		// ends as far as anyone browsing can tell — the row's own screen already
+		// exists and pages properly (ADR 0028), it simply had nothing pointing at
+		// it from the surface every session lands on.
+		rows = append(rows, ui.Section(c.Catalog.Name,
+			ui.ActionLabel("See all"),
+			ui.OnTap(ui.Navigate(screenCatalog, map[string]any{
+				paramModuleID: c.ModuleID, paramCatalogID: c.Catalog.ID, paramNativeType: c.Catalog.NativeType,
+				paramTitle: c.Catalog.Name,
+			})),
+			ui.Carousel(cards...)))
 	}
 	if len(rows) == 0 {
 		return ui.Screen(ui.EmptyState(emptyIconCollections,
@@ -132,7 +153,15 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		hg.Add(1)
 		go func() {
 			defer hg.Done()
-			if h := s.heroFromItem(ctx, caller, p.item, p.kicker); h != nil {
+			// Each slide docks the one after it, so the carousel says what is
+			// coming rather than only what is here — and a viewer who wants it now
+			// can open it rather than waiting out the dwell. The last slide points
+			// back at the first, because the rotation does.
+			var next *v1.CatalogItem
+			if len(picks) > 1 {
+				next = &picks[(i+1)%len(picks)].item
+			}
+			if h := s.heroFromItem(ctx, caller, p.item, p.kicker, next); h != nil {
 				slides[i] = h
 			}
 		}()
@@ -196,7 +225,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 // landing surface rather than as a picture with a caption, and every affordance
 // on it leads somewhere the viewer can already go: the detail screen it
 // summarises.
-func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.CatalogItem, kicker string) *ui.Element {
+func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.CatalogItem, kicker string, next *v1.CatalogItem) *ui.Element {
 	prev, err := s.content.PreviewContent(ctx, app.PreviewContentQuery{Caller: caller, Ref: it.Ref})
 	if err != nil {
 		return nil
@@ -243,6 +272,20 @@ func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.Cata
 			ui.When(!it.InLibrary, ui.Button("Add to library", "secondary", ui.IconName("plus"),
 				ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(it.Ref)})))),
 		),
+	}
+	if next != nil {
+		// The card is given a width here rather than left to the slot. A hero's
+		// rail is a dock, not a column, and a card with no width fills whatever it
+		// is put in — which on this slide meant a poster the height of the
+		// viewport standing where the hero should be.
+		els = append(els, ui.Rail(
+			ui.Text(ui.Prop("text", "Up next"), ui.Prop("style", map[string]any{
+				"variant": "xs", "color": "text-faint",
+				"transform": "uppercase", "tracking": "wide",
+			})),
+			ui.Component("Box", ui.Prop("style", map[string]any{"width": 172}),
+				s.contentCard(next.Ref, next.Title, next.Year, next.Poster, next.InLibrary)),
+		))
 	}
 	return ui.Hero(title, els...)
 }
@@ -291,7 +334,13 @@ func (s *Service) continueWatchingSection(ctx context.Context, caller v1.Caller)
 	if len(out) == 0 {
 		return nil
 	}
-	return ui.Section("Continue watching", ui.Carousel(out...))
+	// The count beside the heading, as the mockups draw it. It is the number of
+	// cards actually rendered rather than the query's total: a card whose Work
+	// read failed dropped out above, and a heading claiming twelve over a rail of
+	// eleven is a small lie that is very easy to ship.
+	return ui.Section("Continue watching",
+		ui.Subtitle(strconv.Itoa(len(out))),
+		ui.Carousel(out...))
 }
 
 // continueCard renders one continue-watching item: the work's poster with a
