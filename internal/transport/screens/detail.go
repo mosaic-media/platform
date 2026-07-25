@@ -384,7 +384,7 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 	// (additive — nothing is removed). It is offered explicitly rather than run
 	// on every view because an aggregator fan-out costs seconds and most views
 	// never lead to a play.
-	els = append(els, ui.IconButton("plus", "Refresh sources", "pill",
+	els = append(els, ui.IconButton("refresh", "Refresh sources", "pill",
 		ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
 
 	return ui.Actions(els...)

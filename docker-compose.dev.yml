@@ -126,6 +126,14 @@ services:
       # against a stale contract version while a field was dropped on the wire
       # with no error at any layer.
       #
+      # The same is true of `@mosaic-media/sdui-react`, and the local overlay
+      # used to claim otherwise. It is a workspace package, but the Shell only
+      # *links* to the workspace copy while its dependency range still matches
+      # the workspace version: bump sdui-react and not `packages/shell`'s range
+      # and npm quietly installs the published one into the Shell's own
+      # node_modules, where it shadows the link. Nothing fails — the Shell keeps
+      # rendering, against the client from before the change. Bump both.
+      #
       # The mount is kept so the path resolves, but npm does not read it — a
       # local contracts edit does not reach the Shell without an npm link that
       # does not exist yet.
