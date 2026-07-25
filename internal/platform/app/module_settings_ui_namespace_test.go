@@ -21,7 +21,7 @@ func TestAModuleMayComposeItsSettingsFromCoreTypes(t *testing.T) {
 	  "props":{"title":"Stremio addons"},
 	  "children":[
 	    {"type":"Box","children":[{"type":"Text","props":{"text":"Installed"}}]},
-	    {"type":"SubmitField","props":{"placeholder":"Manifest URL"}}
+	    {"type":"TextInput","props":{"name":"manifestUrl","placeholder":"Manifest URL"}}
 	  ],
 	  "slots":{"aside":[{"type":"Badge","props":{"label":"3"}}]}
 	}`)

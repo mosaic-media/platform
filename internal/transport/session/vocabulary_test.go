@@ -180,7 +180,7 @@ func TestAnUninterpretableActionIsStrippedFromItsNode(t *testing.T) {
 // A sequence is all-or-nothing. Half a sequence is a change nobody asked for,
 // which is worse than none of it.
 func TestASequenceIsStrippedWhenAnyStepIsUninterpretable(t *testing.T) {
-	node := ui.Screen(ui.Pressable(ui.OnTap(ui.Sequence(ui.Back(), ui.Submit(ui.Invoke("createLocalUser", nil)))))).Build()
+	node := ui.Screen(ui.Pressable(ui.OnTap(ui.Sequence(ui.Back(), ui.Submit(ui.Invoke("createLocalUser", nil), ""))))).Build()
 	out, d := degrade(node, declaring(nil, []string{sdui.KindSubmit}))
 	if out.GetChildren()[0].GetProps().GetFields()["action"] != nil {
 		t.Error("a sequence containing an uninterpretable step was still sent")
