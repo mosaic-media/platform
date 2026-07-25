@@ -46,6 +46,26 @@ func yearLabel(year int) string {
 
 // stringParam reads a string screen param, tolerating an absent or non-string
 // value.
+// intParam reads a whole-number screen param.
+//
+// A param arrives as JSON, where every number is a float64, and a page that
+// came back as 1.0000000001 would page nothing. Anything that is not a number
+// is zero, which for a page index is the first page — the right failure for a
+// malformed cursor is the beginning, not an empty screen.
+func intParam(params map[string]any, key string) int {
+	if params == nil {
+		return 0
+	}
+	switch v := params[key].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	default:
+		return 0
+	}
+}
+
 func stringParam(params map[string]any, key string) string {
 	if params == nil {
 		return ""

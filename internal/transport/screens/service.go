@@ -76,6 +76,7 @@ const (
 	paramNodeID     = "nodeId"
 	paramSeason     = "season"
 	paramText       = "text"
+	paramPage       = "page"
 	paramLevel      = "level"
 	paramComponent  = "component"
 	paramTrace      = "trace"

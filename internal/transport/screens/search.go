@@ -30,9 +30,25 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 			ui.EmptyState(emptyIconSearch, "Find movies, shows and more"))).Build(), nil
 	}
 
-	res, err := s.content.SearchAvailableContent(ctx, app.SearchAvailableContentQuery{Caller: caller, Text: text})
+	// Ask for one more than the page needs. That extra result is the *only*
+	// honest evidence there is another page: a page that happens to be full says
+	// nothing, and a client inferring "more" from a full count asks for a page
+	// that does not exist. The extra is never rendered — it is a question, not a
+	// result.
+	page := intParam(params, paramPage)
+	if page < 0 {
+		page = 0
+	}
+	want := (page + 1) * searchPageSize
+	res, err := s.content.SearchAvailableContent(ctx, app.SearchAvailableContentQuery{
+		Caller: caller, Text: text, Limit: want + 1,
+	})
 	if err != nil {
 		return nil, err
+	}
+	hasMore := len(res.Results) > want
+	if hasMore {
+		res.Results = res.Results[:want]
 	}
 	if len(res.Results) == 0 {
 		return ui.Screen(ui.Title("Search"), ui.Group(field,
@@ -43,8 +59,27 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 	for _, r := range res.Results {
 		cards = append(cards, s.contentCard(r.Ref, r.Title, r.Year, r.Poster, r.InLibrary))
 	}
-	return ui.Screen(ui.Title("Search"), ui.Group(field, ui.Grid(cards...))).Build(), nil
+	grid := []ui.El{ui.Group(cards...)}
+	if hasMore {
+		// `query` rather than `navigate`: a further page is not somewhere the
+		// back button should return to. A viewer who scrolled through five pages
+		// should get one press back to where they came from, not five.
+		grid = append(grid,
+			ui.HasMore(true),
+			ui.LoadMore(ui.Query(screenSearch, map[string]any{
+				paramText: text, paramPage: page + 1,
+			})))
+	}
+	return ui.Screen(ui.Title("Search"), ui.Group(field, ui.Grid(grid...))).Build(), nil
 }
+
+// searchPageSize is how many results a page of search carries.
+//
+// It is the Platform's number rather than the client's, because the client
+// cannot know what an upstream costs: every result here is a row the providers
+// were fanned out for and the library was checked against, and the page size is
+// the only lever on that fan-out.
+const searchPageSize = 24
 
 // searchField is the search screen's own input — shown on mobile (where search
 // is a tab and the top bar has no field), hidden on desktop (data-kind). Its
