@@ -83,6 +83,11 @@ type ListCatalogItemsQuery struct {
 // in-library or not.
 type ListCatalogItemsResult struct {
 	Items []v1.CatalogItem
+	// HasMore is the provider's statement that another page exists (SDK
+	// v0.23.0). It is carried through rather than inferred: a full page is not
+	// evidence of another, and a provider that says nothing is saying this is
+	// the last one — which is what every provider said before the field existed.
+	HasMore bool
 }
 
 // ListCatalogItems lists a module catalog's entries as virtual candidates an
@@ -121,7 +126,7 @@ func (s *Service) ListCatalogItems(ctx context.Context, q ListCatalogItemsQuery)
 	for i := range items {
 		items[i].InLibrary, items[i].NodeID = s.resolveInLibrary(ctx, az, items[i].Ref)
 	}
-	return ListCatalogItemsResult{Items: items}, nil
+	return ListCatalogItemsResult{Items: items, HasMore: resp.HasMore}, nil
 }
 
 // capabilityCatalogProvider resolves a catalog provider by module id, tolerating

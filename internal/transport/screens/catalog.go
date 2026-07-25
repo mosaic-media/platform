@@ -47,12 +47,33 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 	if moduleID == "" || catalogID == "" {
 		return nil, contracts.NewError(contracts.InvalidArgument, "catalog screen needs moduleId and catalogId params")
 	}
-	res, err := s.content.ListCatalogItems(ctx, app.ListCatalogItemsQuery{
-		Caller: caller, ModuleID: moduleID, CatalogID: catalogID, NativeType: stringParam(params, paramNativeType),
-	})
-	if err != nil {
-		return nil, err
+	// One page per screen render, deepening as the viewer reaches the end. The
+	// provider says whether there is another; the Platform does not guess.
+	page := intParam(params, paramPage)
+	if page < 0 {
+		page = 0
 	}
+	nativeType := stringParam(params, paramNativeType)
+	var items []v1.CatalogItem
+	hasMore := false
+	for p := 0; p <= page; p++ {
+		res, err := s.content.ListCatalogItems(ctx, app.ListCatalogItemsQuery{
+			Caller: caller, ModuleID: moduleID, CatalogID: catalogID,
+			NativeType: nativeType, Skip: len(items),
+		})
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, res.Items...)
+		hasMore = res.HasMore
+		// A provider that returned nothing has nothing further, whatever it says
+		// — otherwise a wrong HasMore is an unbounded loop over an empty page.
+		if len(res.Items) == 0 || !res.HasMore {
+			hasMore = false
+			break
+		}
+	}
+	res := app.ListCatalogItemsResult{Items: items}
 	if len(res.Items) == 0 {
 		return ui.Screen(ui.Title("Collection"),
 			ui.EmptyState(emptyIconCollections, "This collection is empty")).Build(), nil
@@ -61,5 +82,12 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 	for _, it := range res.Items {
 		cards = append(cards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
 	}
-	return ui.Screen(ui.Title("Collection"), ui.Grid(cards...)).Build(), nil
+	grid := []ui.El{ui.Group(cards...)}
+	if hasMore {
+		grid = append(grid, ui.HasMore(true), ui.LoadMore(ui.Query(screenCatalog, map[string]any{
+			paramModuleID: moduleID, paramCatalogID: catalogID,
+			paramNativeType: nativeType, paramPage: page + 1,
+		})))
+	}
+	return ui.Screen(ui.Title("Collection"), ui.Grid(grid...)).Build(), nil
 }

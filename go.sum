@@ -58,8 +58,8 @@ github.com/mosaic-media/module-remote-playback v0.3.1 h1:CdhNEjuzXohNb6/s53vNP7J
 github.com/mosaic-media/module-remote-playback v0.3.1/go.mod h1:HLZSMlWqVDNU2pRFGDHAdBGfv8DJGwo4klUyIPR4wo4=
 github.com/mosaic-media/module-tmdb v0.7.0 h1:f8GEexVFTG50N19es72ft9et1yw8fJfJ7ME9Kmo/Lhg=
 github.com/mosaic-media/module-tmdb v0.7.0/go.mod h1:xjFt1reekuV+LaEwM4TJnUeBLSrNN9y3MZPCgi913xE=
-github.com/mosaic-media/sdk v0.22.0 h1:AbN6OE3j3QMQj8HXPPxwzXnUkTpJyBoAZm9zfRghwMY=
-github.com/mosaic-media/sdk v0.22.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
+github.com/mosaic-media/sdk v0.23.0 h1:q13FUIKK2yCZX5IbnkQ36uRxS79X5MKXqAR8MOpVHKk=
+github.com/mosaic-media/sdk v0.23.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
 github.com/mosaic-media/sdk/host v0.4.0 h1:5R8jZ3zlviXAbbyQdrRiTskehe0N9Fh0tJe6KSp1odA=
 github.com/mosaic-media/sdk/host v0.4.0/go.mod h1:0Uk0uLriF0155uHg5V35ccCTHVsZ7VmEIaHG5rVrMSo=
 github.com/oklog/run v1.1.0 h1:GEenZ1cK0+q0+wsJew9qUg/DyD8k3JzYsZAi5gYi2mA=

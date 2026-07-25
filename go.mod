@@ -42,7 +42,7 @@ require (
 	github.com/mosaic-media/module-cinemeta v0.2.1
 	github.com/mosaic-media/module-remote-playback v0.3.1
 	github.com/mosaic-media/module-tmdb v0.7.0
-	github.com/mosaic-media/sdk v0.22.0
+	github.com/mosaic-media/sdk v0.23.0
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0 // indirect
