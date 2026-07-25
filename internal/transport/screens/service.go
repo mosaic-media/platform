@@ -26,7 +26,6 @@ import (
 	sdui "github.com/mosaic-media/contracts/sdui"
 
 	"github.com/mosaic-media/platform/internal/platform/app"
-	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/policy"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
@@ -93,6 +92,11 @@ const (
 const (
 	emptyIconCollections = "collections"
 	emptyIconSearch      = "search"
+	// emptyIconNotFound illustrates a route that resolves to nothing. It is its
+	// own key rather than a reuse of the search icon: a wrong link and an empty
+	// search result are different situations, and a client is entitled to draw
+	// them differently.
+	emptyIconNotFound = "not-found"
 )
 
 // importContentMutation is the Platform mutation a detail's Add-to-library action
@@ -216,6 +220,10 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 	case screenTrace:
 		return s.traceScreen(ctx, caller, params)
 	default:
-		return nil, contracts.NewError(contracts.NotFound, "no screen named "+name)
+		// A route that names no screen is a 404, not a transport error. Returning
+		// NotFound here put the raw string "no screen named colletions" into the
+		// content region, which is a diagnosis where a user needs a way out — and
+		// a stale bookmark or a mistyped URL is an ordinary thing to do.
+		return notFoundScreen(), nil
 	}
 }

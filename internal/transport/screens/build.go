@@ -7,6 +7,9 @@ package screens
 import (
 	"strconv"
 
+	sdui "github.com/mosaic-media/contracts/sdui"
+	"github.com/mosaic-media/contracts/ui"
+
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -72,4 +75,38 @@ func stringParam(params map[string]any, key string) string {
 	}
 	s, _ := params[key].(string)
 	return s
+}
+
+// notFoundScreen is what a deep link that names no screen resolves to.
+//
+// It is a *screen*, not an error. Render used to return NotFound for an unknown
+// name, and the session transport turned that into a raw error node — so a stale
+// bookmark or a mistyped URL put "no screen named colletions" in the content
+// region, which is a stack trace wearing a sentence. A wrong route is an
+// ordinary thing for a user to do and it deserves a way out rather than a
+// diagnosis.
+//
+// The unauthenticated half of the same question is not answered here: a deep
+// link opened without a session never reaches this function, because there is no
+// session to render it into. That path belongs to sign-in.
+//
+// The message and the two ways out are composed beside the EmptyState rather
+// than inside it. The definition has a `message` prop and an `action` slot for
+// exactly this, but the published `ui.EmptyState` is a two-argument builder that
+// can reach neither — a prop with no helper, which is the gap the contract's own
+// rules warn about. The helper and the variadic are added in the contract; this
+// takes the plainer arrangement until that version is released.
+func notFoundScreen() sdui.Node {
+	return ui.Screen(
+		ui.Stack("vertical", 5,
+			ui.EmptyState(emptyIconNotFound, "This page isn’t in the library."),
+			ui.Banner("The link may have moved, or the item was removed from your server.", "neutral"),
+			ui.Stack("horizontal", 3,
+				ui.Button("Back to home", "primary", ui.IconName("home"),
+					ui.OnTap(ui.Navigate(screenHome, nil))),
+				ui.Button("Search the library", "secondary", ui.IconName("search"),
+					ui.OnTap(ui.Navigate(screenSearch, nil))),
+			),
+		),
+	).Build()
 }

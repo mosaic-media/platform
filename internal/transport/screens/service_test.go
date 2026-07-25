@@ -567,11 +567,32 @@ func TestSearchScreenNoResultsShowsEmptyState(t *testing.T) {
 	}
 }
 
-func TestUnknownScreenIsNotFound(t *testing.T) {
+// A route naming no screen renders the 404 rather than failing the render. It
+// used to return NotFound, which the session transport turned into a raw error
+// node — so a stale bookmark put "no screen named nope" in the content region.
+// A wrong route is an ordinary thing for a user to do, and it needs a way out
+// rather than a diagnosis.
+func TestUnknownScreenRendersTheNotFoundScreen(t *testing.T) {
 	svc := &Service{content: &fakeQueries{}}
-	_, err := svc.Render(context.Background(), "nope", v1.CallerFromSession("s-1"), nil)
-	if got := contracts.CategoryOf(err); got != contracts.NotFound {
-		t.Fatalf("category = %s, want NotFound", got)
+	node, err := svc.Render(context.Background(), "nope", v1.CallerFromSession("s-1"), nil)
+	if err != nil {
+		t.Fatalf("an unknown screen must render, not fail: %v", err)
+	}
+	if _, ok := find(node, sdui.TypeEmptyState); !ok {
+		t.Fatal("the 404 must render an EmptyState")
+	}
+	// Both ways out are present, and both are navigations the client can
+	// dispatch — a 404 whose buttons went nowhere would be the dead end this
+	// replaced, wearing better clothes.
+	var buttons []sdui.Node
+	findAll(node, sdui.TypeButton, &buttons)
+	if len(buttons) != 2 {
+		t.Fatalf("the 404 has %d buttons, want 2 (home and search)", len(buttons))
+	}
+	for _, b := range buttons {
+		if actionOf(b) == nil {
+			t.Fatalf("404 button %q has no action", prop(b, "label"))
+		}
 	}
 }
 
