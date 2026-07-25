@@ -18,15 +18,9 @@ const signInAction = "signIn"
 // AuthService.SignInRequest uses, because the client merges the scope straight
 // into that request and a second spelling would be a mapping nobody can see.
 const (
-	fieldUsername    = "username"
-	fieldPassword    = "password"
-	fieldDisplayName = "displayName"
-	fieldEmail       = "email"
+	fieldUsername = "username"
+	fieldPassword = "password"
 )
-
-// claimServerAction is the setup tree's counterpart to signIn (ADR 0098) — the
-// other thing a client with no session may ask a Platform to do.
-const claimServerAction = "claimServer"
 
 // SignInScreen is the tree a client renders before it has a session (ADR 0097).
 //
@@ -61,62 +55,6 @@ func (s *Service) SignInScreen(errMessage string) sdui.Node {
 					ui.Name(fieldUsername),
 					ui.Placeholder("you@example.com"),
 					ui.InputType("username")),
-				ui.TextField("Password",
-					ui.Name(fieldPassword),
-					ui.InputType("password")),
-			),
-		),
-	).Build()
-}
-
-// SetupScreen is the tree a client renders on a server nobody owns yet
-// (ADR 0098). It is served by the same endpoint as the sign-in tree, because a
-// doorway has two states and this is which one you are looking at.
-//
-// **It is one step, and the design draws six.** Owner creation is what can be
-// built; naming the server, choosing folders, connecting services and setting
-// playback defaults each need a capability that does not exist — there is no
-// server-name field, no filesystem scanner, no service connections, no jobs
-// runner, and nothing that reads a playback preference. The design's own rail
-// says the rest can be changed later in Settings, which is where the ones that
-// do exist already live.
-//
-// The rail therefore lists the step that exists rather than six of which four
-// would do nothing, which is the same rule the settings nav follows.
-func (s *Service) SetupScreen(errMessage string) sdui.Node {
-	return ui.Component("SetupFrame",
-		ui.Title("Create the owner account"),
-		ui.Lead("This account has full server control. Everyone else is added afterwards, from Settings."),
-		ui.Brand("Mosaic"),
-		ui.Kicker("First boot · 01"),
-		ui.Step("Step 1 of 1"),
-		ui.Footnote("Everything else can be set up later in Settings."),
-		ui.Slot("nav",
-			ui.SettingsNavItem("Administrator", "info",
-				ui.Active(true), ui.Summary("Your owner account")),
-		),
-		ui.FormSlot(
-			ui.Form(
-				ui.Vars([]any{
-					map[string]any{"name": fieldDisplayName, "type": "string"},
-					map[string]any{"name": fieldUsername, "type": "string"},
-					map[string]any{"name": fieldEmail, "type": "string"},
-					map[string]any{"name": fieldPassword, "type": "string"},
-				}),
-				ui.SubmitLabel("Continue"),
-				ui.SubmitAction(ui.Invoke(claimServerAction, nil)),
-				ui.When(errMessage != "", ui.Error(errMessage)),
-				ui.TextField("Display name",
-					ui.Name(fieldDisplayName),
-					ui.Placeholder("Alex Rivera"),
-					ui.Help("Optional — what other people see.")),
-				ui.TextField("Username",
-					ui.Name(fieldUsername),
-					ui.InputType("username")),
-				ui.TextField("Email",
-					ui.Name(fieldEmail),
-					ui.InputType("email"),
-					ui.Help("Optional, and unused for now — password recovery is not built.")),
 				ui.TextField("Password",
 					ui.Name(fieldPassword),
 					ui.InputType("password")),
