@@ -83,10 +83,6 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	// slide's card docked on the hero floor; then a carousel row per non-empty
 	// catalog.
 	rows := make([]ui.El, 0, len(catalogs)+1)
-	type heroPick struct {
-		item   v1.CatalogItem
-		kicker string
-	}
 	var picks []heroPick
 	var upNext ui.El
 	for i, c := range catalogs {
@@ -144,34 +140,45 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 			"Nothing to show yet — try adding an addon in Settings")).Build(), nil
 	}
 
-	// Enrich the featured picks into hero banners concurrently — each is a further
-	// metadata round-trip (backdrop/logo). Order is preserved; a pick whose
-	// enrichment fails drops out.
-	slides := make([]ui.El, len(picks))
+	// Enrich the featured picks concurrently — each is a further metadata
+	// round-trip for the backdrop, logo and synopsis a catalog card lacks. This
+	// happens in one pass, before any slide is built, because a slide needs its
+	// *neighbour's* artwork as well as its own: the up-next dock is a landscape
+	// tile, and a catalog item carries only a poster. Enriching first means that
+	// backdrop is one already being fetched for the neighbour's own slide, rather
+	// than a second round-trip for the same title.
+	metas := make([]*v1.ContentMetadata, len(picks))
 	var hg sync.WaitGroup
 	for i, p := range picks {
 		hg.Add(1)
 		go func() {
 			defer hg.Done()
-			// Each slide docks the one after it, so the carousel says what is
-			// coming rather than only what is here — and a viewer who wants it now
-			// can open it rather than waiting out the dwell. The last slide points
-			// back at the first, because the rotation does.
-			var next *v1.CatalogItem
-			if len(picks) > 1 {
-				next = &picks[(i+1)%len(picks)].item
+			prev, err := s.content.PreviewContent(ctx, app.PreviewContentQuery{Caller: caller, Ref: p.item.Ref})
+			if err != nil {
+				return
 			}
-			if h := s.heroFromItem(ctx, caller, p.item, p.kicker, next); h != nil {
-				slides[i] = h
-			}
+			metas[i] = &prev.Metadata
 		}()
 	}
 	hg.Wait()
-	heroSlides := make([]ui.El, 0, len(slides))
-	for _, h := range slides {
-		if h != nil {
-			heroSlides = append(heroSlides, h)
+
+	heroSlides := make([]ui.El, 0, len(picks))
+	for i, p := range picks {
+		if metas[i] == nil {
+			continue
 		}
+		// Each slide docks the one after it, so the carousel says what is coming
+		// rather than only what is here — and a viewer who wants it now can open
+		// it rather than waiting out the dwell. The last slide points back at the
+		// first, because the rotation does. A neighbour whose enrichment failed
+		// simply gets no dock.
+		var next *heroPick
+		var nextMeta *v1.ContentMetadata
+		if len(picks) > 1 {
+			j := (i + 1) % len(picks)
+			next, nextMeta = &picks[j], metas[j]
+		}
+		heroSlides = append(heroSlides, s.heroSlide(p, *metas[i], next, nextMeta))
 	}
 
 	// The home is a cinematic backdrop the content rides over. A Rotator auto-
@@ -214,31 +221,31 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	return ui.Screen(ui.Slot("bleed", bleed...)).Build(), nil
 }
 
-// heroFromItem builds the home's featured banner from a catalog item, enriching
-// it with the backdrop, logo and overview its lightweight card lacks (ADR 0034).
-// It is full-bleed and tagged with the catalog it leads (the `kicker`). A
-// metadata fetch that fails just yields no hero (nil) rather than failing the
-// home screen.
+// heroPick is a catalog item chosen to lead the home, with the catalog name it
+// leads under. Named at package scope because a slide is built from its own
+// pick and its neighbour's.
+type heroPick struct {
+	item   v1.CatalogItem
+	kicker string
+}
+
+// heroSlide builds one featured banner from an already-enriched pick — the
+// backdrop, logo and synopsis a catalog card lacks (ADR 0034) — tagged with the
+// catalog it leads, and docking the slide that follows it.
 //
-// The hero carries its own copy and controls — the kicker, the title treatment,
+// The hero carries its own copy and controls: the kicker, the title treatment,
 // the meta pills, the synopsis and a play/more-info pair. It reads as the
 // landing surface rather than as a picture with a caption, and every affordance
-// on it leads somewhere the viewer can already go: the detail screen it
-// summarises.
-func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.CatalogItem, kicker string, next *v1.CatalogItem) *ui.Element {
-	prev, err := s.content.PreviewContent(ctx, app.PreviewContentQuery{Caller: caller, Ref: it.Ref})
-	if err != nil {
-		return nil
-	}
-	m := prev.Metadata
+// on it leads somewhere the viewer can already go.
+func (s *Service) heroSlide(p heroPick, m v1.ContentMetadata, next *heroPick, nextMeta *v1.ContentMetadata) ui.El {
 	title := m.Title
 	if title == "" {
-		title = it.Title
+		title = p.item.Title
 	}
 
 	// The pills, in the order the eye reads them: how good, how old, how long,
-	// what kind. Each is omitted rather than shown empty — a hero wearing "★ 0.0"
-	// is worse than one wearing nothing.
+	// what kind. Each is omitted rather than shown empty — a hero wearing
+	// "★ 0.0" is worse than one wearing nothing.
 	pills := make([]string, 0, 4)
 	if m.Rating > 0 {
 		pills = append(pills, fmt.Sprintf("★ %.1f", m.Rating))
@@ -253,10 +260,10 @@ func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.Cata
 		pills = append(pills, strings.Join(m.Genres, " · "))
 	}
 
-	detail := ui.Navigate(screenDetail, map[string]any{paramRef: refInput(it.Ref)})
+	detail := ui.Navigate(screenDetail, map[string]any{paramRef: refInput(p.item.Ref)})
 	els := []ui.El{
 		ui.Prop("variant", "feature"),
-		ui.When(kicker != "", ui.Prop("kicker", kicker)),
+		ui.When(p.kicker != "", ui.Prop("kicker", p.kicker)),
 		ui.Backdrop(s.art(m.Backdrop)),
 		ui.When(m.Logo != "", ui.Logo(s.art(m.Logo))),
 		ui.When(len(pills) > 0, ui.Meta(pills...)),
@@ -269,25 +276,52 @@ func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.Cata
 		// the item is already in the library.
 		ui.Actions(
 			ui.Button("More info", "primary", ui.IconName("info"), ui.OnTap(detail)),
-			ui.When(!it.InLibrary, ui.Button("Add to library", "secondary", ui.IconName("plus"),
-				ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(it.Ref)})))),
+			ui.When(!p.item.InLibrary, ui.Button("Add to library", "secondary", ui.IconName("plus"),
+				ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(p.item.Ref)})))),
 		),
 	}
-	if next != nil {
-		// The card is given a width here rather than left to the slot. A hero's
-		// rail is a dock, not a column, and a card with no width fills whatever it
-		// is put in — which on this slide meant a poster the height of the
-		// viewport standing where the hero should be.
+	if next != nil && nextMeta != nil {
 		els = append(els, ui.Rail(
 			ui.Text(ui.Prop("text", "Up next"), ui.Prop("style", map[string]any{
 				"variant": "xs", "color": "text-faint",
 				"transform": "uppercase", "tracking": "wide",
 			})),
-			ui.Component("Box", ui.Prop("style", map[string]any{"width": 172}),
-				s.contentCard(next.Ref, next.Title, next.Year, next.Poster, next.InLibrary)),
+			s.upNextTile(*next, *nextMeta),
 		))
 	}
 	return ui.Hero(title, els...)
+}
+
+// upNextTile is the card docked on the hero floor: the slide that follows this
+// one, as a landscape tile of its backdrop with its title laid over the
+// artwork.
+//
+// It is a MediaTile rather than a PosterCard because the dock is a wide slot on
+// a wide surface — a 2:3 poster standing in it reads as a different screen's
+// component wedged into the hero, which is what it was. The backdrop is the
+// enrichment already fetched for that slide's own turn in the rotation, so the
+// dock costs no round-trip of its own; the poster stands in when a title has no
+// backdrop, since a tile of the wrong shape still beats an empty frame.
+//
+// The width is set here rather than in the definition. A hero's rail is a dock,
+// not a column, and a card with no width fills whatever it is put in.
+func (s *Service) upNextTile(p heroPick, m v1.ContentMetadata) ui.El {
+	title := m.Title
+	if title == "" {
+		title = p.item.Title
+	}
+	art := m.Backdrop
+	if art == "" {
+		art = p.item.Poster
+	}
+	tile := ui.MediaTile(title,
+		ui.Prop("mediaType", string(p.item.Ref.MediaType)),
+		ui.OverlayTitle(true),
+		ui.When(art != "", ui.Poster(s.art(art))),
+		ui.When(yearLabel(m.Year) != "", ui.Subtitle(yearLabel(m.Year))),
+		ui.OnTap(ui.Navigate(screenDetail, map[string]any{paramRef: refInput(p.item.Ref)})),
+	)
+	return ui.Component("Box", ui.Prop("style", map[string]any{"width": 236}), tile)
 }
 
 // continueWatchingSection renders the home's continue-watching rail from the
