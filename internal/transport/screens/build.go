@@ -89,19 +89,11 @@ func stringParam(params map[string]any, key string) string {
 // The unauthenticated half of the same question is not answered here: a deep
 // link opened without a session never reaches this function, because there is no
 // session to render it into. That path belongs to sign-in.
-//
-// The message and the two ways out are composed beside the EmptyState rather
-// than inside it. The definition has a `message` prop and an `action` slot for
-// exactly this, but the published `ui.EmptyState` is a two-argument builder that
-// can reach neither — a prop with no helper, which is the gap the contract's own
-// rules warn about. The helper and the variadic are added in the contract; this
-// takes the plainer arrangement until that version is released.
 func notFoundScreen() sdui.Node {
 	return ui.Screen(
-		ui.Stack("vertical", 5,
-			ui.EmptyState(emptyIconNotFound, "This page isn’t in the library."),
-			ui.Banner("The link may have moved, or the item was removed from your server.", "neutral"),
-			ui.Stack("horizontal", 3,
+		ui.EmptyState(emptyIconNotFound, "This page isn’t in the library.",
+			ui.Message("The link may have moved, or the item was removed from your server."),
+			ui.ActionSlot(
 				ui.Button("Back to home", "primary", ui.IconName("home"),
 					ui.OnTap(ui.Navigate(screenHome, nil))),
 				ui.Button("Search the library", "secondary", ui.IconName("search"),
