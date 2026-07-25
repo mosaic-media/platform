@@ -1254,3 +1254,88 @@ func TestDetailPlayAffordanceIsGatedOnAPartExisting(t *testing.T) {
 		t.Fatalf("Play carried partId %v, want %q", input["partId"], withPart.ID)
 	}
 }
+
+// TMDB fills Similar, Collection, Certification and Trailers on every detail
+// read, and the screen rendered none of them — so the cost of resolving them
+// was paid on every view and thrown away. These assert the screen spends what
+// it fetches.
+func TestRichDetailSurfacesTheMetadataItWasDiscarding(t *testing.T) {
+	ref := func(id string) v1.ContentRef {
+		return v1.ContentRef{Provider: "tmdb", NativeID: id, NativeType: "movie", MediaType: v1.MediaMovie}
+	}
+	self := ref("tt0133093")
+	fake := &fakeQueries{
+		previewInLibrary: false,
+		previewMeta: v1.ContentMetadata{
+			Title:         "The Matrix",
+			Certification: "15",
+			Trailers: []v1.Trailer{
+				{Name: "Fan cut", Site: "YouTube", Key: "fan123"},
+				{Name: "Official Trailer", Site: "YouTube", Key: "vKQi3bBA1y8", Official: true},
+			},
+			Collection: &v1.Collection{
+				Name: "The Matrix Collection",
+				// Includes the work being described, as the SDK says it does.
+				Items: []v1.RelatedItem{
+					{Ref: self, Title: "The Matrix"},
+					{Ref: ref("tt0234215"), Title: "The Matrix Reloaded"},
+				},
+			},
+			Similar: []v1.RelatedItem{{Ref: ref("tt0137523"), Title: "Fight Club"}},
+		},
+	}
+	node := render(t, &Service{content: fake}, "detail", map[string]any{paramRef: refInput(self)})
+
+	// The age rating rides the hero's meta line.
+	hero, ok := find(node, "DetailHero")
+	if !ok {
+		t.Fatal("no DetailHero")
+	}
+	meta, _ := prop(hero, "meta").([]any)
+	var found bool
+	for _, m := range meta {
+		if m == "15" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("meta = %v, want the certification among the pills", meta)
+	}
+
+	// The trailer opens the OFFICIAL video, not the first one in the list.
+	var buttons []sdui.Node
+	findAll(node, sdui.TypeButton, &buttons)
+	var trailerURL string
+	for _, b := range buttons {
+		if prop(b, "label") == "Trailer" {
+			if a := actionOf(b); a != nil {
+				trailerURL, _ = a["url"].(string)
+			}
+		}
+	}
+	if !strings.Contains(trailerURL, "vKQi3bBA1y8") {
+		t.Fatalf("trailer url = %q, want the official video", trailerURL)
+	}
+
+	// Both rails render, and the franchise one has dropped the film itself.
+	var sections []sdui.Node
+	findAll(node, sdui.TypeSection, &sections)
+	titles := map[string]sdui.Node{}
+	for _, sec := range sections {
+		if s, _ := prop(sec, "title").(string); s != "" {
+			titles[s] = sec
+		}
+	}
+	franchise, ok := titles["The Matrix Collection"]
+	if !ok {
+		t.Fatalf("no franchise rail; sections = %v", titles)
+	}
+	var cards []sdui.Node
+	findAll(franchise, sdui.TypePosterCard, &cards)
+	if len(cards) != 1 {
+		t.Fatalf("franchise rail has %d cards, want 1 — the work itself must be filtered out", len(cards))
+	}
+	if _, ok := titles["More like this"]; !ok {
+		t.Fatalf("no similar rail; sections = %v", titles)
+	}
+}

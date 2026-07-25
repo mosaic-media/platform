@@ -7,6 +7,7 @@ package screens
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -68,17 +69,34 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 	} else if m.Runtime != "" {
 		pills = append(pills, m.Runtime)
 	}
+	// The age rating as the source labels it for its region. Display-only text
+	// (the scales are national and not comparable), and an empty one must not be
+	// read as "suitable for everyone" — so it is omitted rather than defaulted.
+	if m.Certification != "" {
+		pills = append(pills, m.Certification)
+	}
 
 	// Primary action. A virtual item can only be added; an in-library one can be
 	// played, when something in its tree actually has bytes. Play is offered on
 	// the presence of a Part rather than on being in the library, so the button
 	// never appears with nothing behind it — the dead-end affordance ADR 0036
 	// exists to prevent.
+	// The trailer is watchable in either plane and belongs to neither: it is not
+	// a Part, so it never goes through playPart — it opens on the site that
+	// hosts it. Offered only when a URL can actually be built, because a Trailer
+	// carries a site and a key rather than a link and a site nobody can address
+	// is an affordance with nothing behind it (ADR 0036).
+	trailer, hasTrailer := trailerAction(m.Trailers)
+
 	var actions ui.El
 	switch {
 	case !res.InLibrary:
-		actions = ui.Actions(ui.Button("Add to library", "primary",
-			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
+		els := []ui.El{ui.Button("Add to library", "primary",
+			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)})))}
+		if hasTrailer {
+			els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
+		}
+		actions = ui.Actions(els...)
 	default:
 		els := []ui.El{}
 		part, playable, err := s.content.FirstPlayablePart(ctx, caller, res.NodeID)
@@ -138,6 +156,9 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 		// (additive — nothing is removed). It is offered explicitly rather than
 		// run on every view because an aggregator fan-out costs seconds and most
 		// views never lead to a play.
+		if hasTrailer {
+			els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
+		}
 		els = append(els, ui.Button("Refresh sources", "secondary",
 			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
 		els = append(els, ui.Badge("In library", ui.ToneSuccess))
@@ -156,6 +177,10 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 		ui.When(len(pills) > 0, ui.Meta(pills...)),
 		ui.When(m.Logo != "", ui.Logo(s.art(m.Logo))),
 		ui.When(m.Overview != "", ui.Overview(m.Overview)),
+		// The poster docks ahead of the copy, as the mockups draw it. The screen
+		// has had one in hand all along — it was already routing it through the
+		// proxy for the play action's payload — and no way to render it.
+		ui.When(m.Poster != "", ui.Poster(s.art(m.Poster))),
 		actions,
 		ui.Aside(s.detailInfoPanel(m, ref)),
 	}
@@ -190,6 +215,23 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 			seriesNode = res.NodeID
 		}
 		body = append(body, s.episodesSection(ctx, caller, ref, seriesNode, m.Episodes, params))
+	}
+
+	// The franchise this work belongs to, and then what a viewer of it tends to
+	// want next. Both were being fetched and thrown away: TMDB fills Similar and
+	// Collection on every detail read, and this screen rendered neither, so the
+	// work of resolving them was paid for and discarded on every view.
+	//
+	// The franchise list includes the work being described — the SDK says so
+	// plainly — so it is filtered on the ref already held rather than trusting
+	// the source to have excluded it.
+	if m.Collection != nil {
+		if rail := s.relatedRail(m.Collection.Name, m.Collection.Items, ref); rail != nil {
+			body = append(body, rail)
+		}
+	}
+	if rail := s.relatedRail("More like this", m.Similar, ref); rail != nil {
+		body = append(body, rail)
 	}
 
 	return ui.Screen(ui.Group(body...)).Build(), nil
@@ -426,4 +468,62 @@ func positionLabel(d time.Duration) string {
 		return fmt.Sprintf("%d:%02d:%02d", h, m, sec)
 	}
 	return fmt.Sprintf("%d:%02d", m, sec)
+}
+
+// trailerAction opens a title's trailer on the site that hosts it, preferring an
+// official video over a fan upload and the first of equals otherwise.
+//
+// A Trailer carries a site and a key rather than a URL, so the link has to be
+// built — and only for sites whose URL shape is known. An unrecognised site
+// yields no action at all rather than a guessed address: a button that opens a
+// 404 is worse than one that is not drawn.
+func trailerAction(trailers []v1.Trailer) (ui.Action, bool) {
+	pick := -1
+	for i, t := range trailers {
+		if trailerURL(t) == "" {
+			continue
+		}
+		if pick == -1 || (t.Official && !trailers[pick].Official) {
+			pick = i
+		}
+	}
+	if pick == -1 {
+		return ui.Action{}, false
+	}
+	return ui.OpenURL(trailerURL(trailers[pick])), true
+}
+
+// trailerURL is a trailer's watch page, empty when its site is one this does not
+// know how to address.
+func trailerURL(t v1.Trailer) string {
+	if t.Key == "" {
+		return ""
+	}
+	switch strings.ToLower(t.Site) {
+	case "youtube":
+		return "https://www.youtube.com/watch?v=" + url.QueryEscape(t.Key)
+	case "vimeo":
+		return "https://vimeo.com/" + url.PathEscape(t.Key)
+	default:
+		return ""
+	}
+}
+
+// relatedRail renders a list of related titles as a carousel of poster cards,
+// dropping the work being described and returning nil when nothing is left.
+//
+// Each card opens the ref-based detail, exactly as a catalog or search card
+// does: a related item is a virtual item (ADR 0028), and opening one is a read.
+func (s *Service) relatedRail(title string, items []v1.RelatedItem, self v1.ContentRef) ui.El {
+	cards := make([]ui.El, 0, len(items))
+	for _, it := range items {
+		if it.Ref == self {
+			continue
+		}
+		cards = append(cards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
+	}
+	if len(cards) == 0 {
+		return nil
+	}
+	return ui.Section(title, ui.Carousel(cards...))
 }
