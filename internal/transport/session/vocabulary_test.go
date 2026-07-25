@@ -180,7 +180,7 @@ func TestAnUninterpretableActionIsStrippedFromItsNode(t *testing.T) {
 // A sequence is all-or-nothing. Half a sequence is a change nobody asked for,
 // which is worse than none of it.
 func TestASequenceIsStrippedWhenAnyStepIsUninterpretable(t *testing.T) {
-	node := ui.Screen(ui.Pressable(ui.OnTap(ui.Sequence(ui.Back(), ui.Submit())))).Build()
+	node := ui.Screen(ui.Pressable(ui.OnTap(ui.Sequence(ui.Back(), ui.Submit(ui.Invoke("createLocalUser", nil)))))).Build()
 	out, d := degrade(node, declaring(nil, []string{sdui.KindSubmit}))
 	if out.GetChildren()[0].GetProps().GetFields()["action"] != nil {
 		t.Error("a sequence containing an uninterpretable step was still sent")
@@ -205,11 +205,14 @@ func TestAPropThatIsNotAnActionIsLeftAlone(t *testing.T) {
 }
 
 func TestMissingReportsWhatTheClientLacks(t *testing.T) {
-	p, a := declaring([]string{"Form"}, []string{"submit"}).missing()
-	if len(p) != 1 || p[0] != "Form" {
+	// Named against the live vocabulary rather than a memorised gap: `Form` used
+	// to stand here and stopped being a primitive when it turned out to be a
+	// composition, which made this assertion pass by naming nothing.
+	p, a := declaring([]string{sdui.TypeSkeleton}, []string{sdui.KindQuery}).missing()
+	if len(p) != 1 || p[0] != sdui.TypeSkeleton {
 		t.Errorf("missing primitives = %v", p)
 	}
-	if len(a) != 1 || a[0] != "submit" {
+	if len(a) != 1 || a[0] != sdui.KindQuery {
 		t.Errorf("missing actions = %v", a)
 	}
 	// An undeclared client is not "missing" anything — it made no claim.
