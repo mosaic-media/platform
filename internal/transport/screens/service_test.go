@@ -425,7 +425,9 @@ func TestHomeScreenRendersContinueWatchingRail(t *testing.T) {
 		t.Fatal("home with an in-progress item has no Continue watching rail")
 	}
 
-	card, ok := find(rail, sdui.TypePosterCard)
+	// A landscape tile, not a poster: the rail carries a progress bar and a
+	// resume affordance over the artwork, which a 2:3 frame has no room for.
+	card, ok := find(rail, sdui.TypeMediaTile)
 	if !ok {
 		t.Fatal("continue-watching rail has no card")
 	}
@@ -440,6 +442,10 @@ func TestHomeScreenRendersContinueWatchingRail(t *testing.T) {
 	// A resume-progress fraction (30 of 60 minutes).
 	if got, _ := prop(card, "progress").(float64); got != 0.5 {
 		t.Fatalf("card progress = %v, want 0.5", prop(card, "progress"))
+	}
+	// …and how much of it is left, for the veil the tile shows on approach.
+	if got, _ := prop(card, "progressLabel").(string); got != "30 min left" {
+		t.Fatalf("card progressLabel = %q, want %q", got, "30 min left")
 	}
 	// The tap resumes rather than navigating — a node cannot open a rich detail
 	// (ADR 0071), so the card carries a play action, not a navigation.

@@ -6,6 +6,8 @@ package screens
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 
 	sdui "github.com/mosaic-media/contracts/sdui"
@@ -93,14 +95,15 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 			picks = append(picks, heroPick{item: items[0], kicker: c.Catalog.Name})
 		}
 		if upNext == nil {
-			// "Trending now" — the items neighbouring the first featured one — leads
-			// the library as a rail of glass MediaTiles, the showcase row for the
-			// acrylic material (the edge light tracks the hero art across the row).
-			// Library rows below stay plain PosterCards.
+			// "Trending now" — the items neighbouring the first featured one —
+			// leads the library. Posters, like every browse row: the landscape
+			// tile is reserved for continue-watching, where the 16:9 frame is
+			// carrying a progress bar and a resume affordance rather than just
+			// being a larger picture.
 			upCards := make([]ui.El, 0, homeUpNextItems)
 			for j := 1; j < len(items) && j <= homeUpNextItems; j++ {
 				it := items[j]
-				upCards = append(upCards, s.mediaTile(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
+				upCards = append(upCards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
 			}
 			if len(upCards) > 0 {
 				upNext = ui.Section("Trending now", ui.Carousel(upCards...))
@@ -143,18 +146,18 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	}
 
 	// The home is a cinematic backdrop the content rides over. A Rotator auto-
-	// advances the hero slides (mostly artwork — no pills/overview/buttons) and is
-	// `sticky`, so it stays put while the library, carried on a glass "sheet",
-	// scrolls UP over it: the sheet's acrylic top edge catches the active hero's
-	// light on the way past. Both live in the Screen's edge-to-edge `bleed` slot
-	// (the sheet owns its own gutter), so the padded body collapses ($childCount 0).
-	// When enrichment failed for every pick there's no hero; the sheet stands alone.
+	// advances the full-viewport hero slides; the library then rides UP over the
+	// hero's floor, pulled into it by `overlap` so the first rail breaks the
+	// bottom edge of the artwork rather than starting cleanly below it. Both live
+	// in the Screen's edge-to-edge `bleed` slot (the rails own their gutter), so
+	// the padded body collapses ($childCount 0). When enrichment failed for every
+	// pick there is no hero and the rails stand alone.
 	sheetEls := make([]ui.El, 0, len(rows)+2)
 	sheetEls = append(sheetEls, ui.Prop("style", map[string]any{
-		"glass": true, "bg": "bg", "radius": "xl",
-		"direction": "column", "gap": 8,
-		"px": "gutter", "pt": 8, "pb": 9,
+		"direction": "column", "gap": 7,
+		"px": "gutter", "pb": 9,
 		"position": "relative", "z": "raised",
+		"overlap": 7,
 	}))
 	// Continue watching leads the sheet: the most personal rail, above the
 	// browse rows below it. It is gated by having something in progress — an
@@ -187,6 +190,12 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 // It is full-bleed and tagged with the catalog it leads (the `kicker`). A
 // metadata fetch that fails just yields no hero (nil) rather than failing the
 // home screen.
+//
+// The hero carries its own copy and controls — the kicker, the title treatment,
+// the meta pills, the synopsis and a play/more-info pair. It reads as the
+// landing surface rather than as a picture with a caption, and every affordance
+// on it leads somewhere the viewer can already go: the detail screen it
+// summarises.
 func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.CatalogItem, kicker string) *ui.Element {
 	prev, err := s.content.PreviewContent(ctx, app.PreviewContentQuery{Caller: caller, Ref: it.Ref})
 	if err != nil {
@@ -198,15 +207,44 @@ func (s *Service) heroFromItem(ctx context.Context, caller v1.Caller, it v1.Cata
 		title = it.Title
 	}
 
-	// The home hero is artwork first: just the catalog kicker + the title (or logo)
-	// over the backdrop — no overview, no meta pills, no buttons. That "detail page"
-	// chrome belongs on the detail screen; here the poster is the hero.
-	return ui.Hero(title,
+	// The pills, in the order the eye reads them: how good, how old, how long,
+	// what kind. Each is omitted rather than shown empty — a hero wearing "★ 0.0"
+	// is worse than one wearing nothing.
+	pills := make([]string, 0, 4)
+	if m.Rating > 0 {
+		pills = append(pills, fmt.Sprintf("★ %.1f", m.Rating))
+	}
+	if y := yearLabel(m.Year); y != "" {
+		pills = append(pills, y)
+	}
+	if m.Runtime != "" {
+		pills = append(pills, m.Runtime)
+	}
+	if len(m.Genres) > 0 {
+		pills = append(pills, strings.Join(m.Genres, " · "))
+	}
+
+	detail := ui.Navigate(screenDetail, map[string]any{paramRef: refInput(it.Ref)})
+	els := []ui.El{
 		ui.Prop("variant", "feature"),
 		ui.When(kicker != "", ui.Prop("kicker", kicker)),
 		ui.Backdrop(s.art(m.Backdrop)),
 		ui.When(m.Logo != "", ui.Logo(s.art(m.Logo))),
-	)
+		ui.When(len(pills) > 0, ui.Meta(pills...)),
+		ui.When(m.Overview != "", ui.Overview(m.Overview)),
+		// The hero cannot offer Play itself: a catalog item is a virtual ref, and
+		// there is no Part behind it until it has been materialised (ADR 0028).
+		// An affordance with nothing behind it is the dead end ADR 0036 exists to
+		// remove, so the primary says what it actually does — and the secondary
+		// is the one act the hero *can* perform on a virtual item, dropped once
+		// the item is already in the library.
+		ui.Actions(
+			ui.Button("More info", "primary", ui.IconName("info"), ui.OnTap(detail)),
+			ui.When(!it.InLibrary, ui.Button("Add to library", "secondary", ui.IconName("plus"),
+				ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(it.Ref)})))),
+		),
+	}
+	return ui.Hero(title, els...)
 }
 
 // continueWatchingSection renders the home's continue-watching rail from the
@@ -287,9 +325,18 @@ func (s *Service) continueCard(ctx context.Context, caller v1.Caller, item v1.In
 		poster = s.art(p)
 	}
 
-	els := make([]ui.El, 0, 4)
-	if poster != "" {
-		els = append(els, ui.Poster(poster))
+	els := make([]ui.El, 0, 6)
+	els = append(els, ui.Prop("mediaType", string(work.Node.MediaType)))
+	// The rail is landscape, so it wants the backdrop rather than the poster: a
+	// 2:3 poster cropped to 16:9 is a band across the middle of the artwork. The
+	// poster is the fallback, because a card with the wrong shape of art still
+	// beats a card with none.
+	art := poster
+	if b := work.Node.Artwork.Backdrop; b != "" {
+		art = s.art(b)
+	}
+	if art != "" {
+		els = append(els, ui.Poster(art))
 	}
 	// Name the episode under the series title; a film's item has nothing to add.
 	if item.Node.ItemType == v1.ItemEpisode && item.Node.Title != "" {
@@ -297,6 +344,9 @@ func (s *Service) continueCard(ctx context.Context, caller v1.Caller, item v1.In
 	}
 	if f := progressFraction(item.State); f > 0 {
 		els = append(els, ui.Progress(f))
+		if left := remainingLabel(item.State); left != "" {
+			els = append(els, ui.ProgressLabel(left))
+		}
 	}
 	els = append(els, ui.OnTap(ui.Invoke(playPartAction, map[string]any{
 		paramPartID: string(item.State.PartID),
@@ -304,7 +354,25 @@ func (s *Service) continueCard(ctx context.Context, caller v1.Caller, item v1.In
 		"title":     title,
 		"poster":    poster,
 	})))
-	return ui.PosterCard(title, string(work.Node.MediaType), els...)
+	return ui.MediaTile(title, els...)
+}
+
+// remainingLabel is how much of an in-progress item is left, for the veil a
+// continue-watching tile shows on approach ("42 min left"). Empty when the
+// player never reported a length, or when the remainder rounds to nothing —
+// "0 min left" on something a viewer is about to finish reads as a bug.
+func remainingLabel(st v1.PlaybackState) string {
+	left := st.Duration - st.Position
+	if st.Duration <= 0 || left <= 0 {
+		return ""
+	}
+	if h := int(left.Hours()); h > 0 {
+		return fmt.Sprintf("%dh %02dm left", h, int(left.Minutes())%60)
+	}
+	if mins := int(left.Minutes()); mins > 0 {
+		return fmt.Sprintf("%d min left", mins)
+	}
+	return ""
 }
 
 // progressFraction is a viewer's position as a 0..1 fraction for a resume bar,

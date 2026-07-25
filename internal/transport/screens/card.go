@@ -34,22 +34,3 @@ func (s *Service) contentCard(ref v1.ContentRef, title string, year int, poster 
 	els = append(els, ui.OnTap(ui.Navigate(screenDetail, map[string]any{paramRef: refInput(ref)})))
 	return ui.PosterCard(title, string(ref.MediaType), els...)
 }
-
-// mediaTile renders a content item as a glass-framed MediaTile — the home's
-// showcase card, whose acrylic frame catches the artwork's directional light. It
-// carries the same ref/title/poster/badge as contentCard, differing only in the
-// component (and thus the material treatment).
-func (s *Service) mediaTile(ref v1.ContentRef, title string, year int, poster string, inLibrary bool) *ui.Element {
-	els := []ui.El{ui.Title(title), ui.Prop("mediaType", string(ref.MediaType))}
-	if y := yearLabel(year); y != "" {
-		els = append(els, ui.Subtitle(y))
-	}
-	if poster != "" {
-		els = append(els, ui.Poster(s.art(poster)))
-	}
-	if inLibrary {
-		els = append(els, ui.BadgeText("In library"))
-	}
-	els = append(els, ui.OnTap(ui.Navigate(screenDetail, map[string]any{paramRef: refInput(ref)})))
-	return ui.Component("MediaTile", els...)
-}
