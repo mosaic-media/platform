@@ -24,6 +24,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/transport/rpc"
+	"github.com/mosaic-media/platform/internal/transport/screens"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -31,13 +32,19 @@ import (
 // handler on the API mux.
 type Handler struct {
 	svc *app.Service
+	// screens emits the one tree this service serves (ADR 0097). It is the same
+	// emit-side the session transport uses: a screen is a screen whether or not
+	// the person looking at it has signed in yet.
+	screens *screens.Service
 }
 
 // Compile-time proof the handler satisfies the generated service contract.
 var _ authv1connect.AuthServiceHandler = (*Handler)(nil)
 
 // NewHandler wires the auth transport over the application services.
-func NewHandler(svc *app.Service) *Handler { return &Handler{svc: svc} }
+func NewHandler(svc *app.Service) *Handler {
+	return &Handler{svc: svc, screens: screens.NewService(svc, nil)}
+}
 
 // SignIn authenticates a local user and issues a session.
 //
@@ -46,6 +53,23 @@ func NewHandler(svc *app.Service) *Handler { return &Handler{svc: svc} }
 // design: AuthenticateLocalUser collapses them so this endpoint cannot be used
 // to enumerate which usernames exist. This method must not un-collapse it by
 // adding detail of its own.
+// SignInScreen serves the tree a client renders before it has a session
+// (ADR 0097).
+//
+// It authenticates nothing and reads nothing: the tree is the same for every
+// caller, because it says nothing about the install. That is the decision, not
+// an omission — the household's profiles, the library's size and the server's
+// name are all facts about the house, and this screen is the locked door.
+//
+// The error message a caller hands back is the one this service gave it, so a
+// refusal is stated by the surface that asked rather than by a panel beside it.
+// It is echoed rather than looked up: there is no state here to look one up in.
+func (h *Handler) SignInScreen(_ context.Context, req *connect.Request[authv1.SignInScreenRequest]) (*connect.Response[authv1.SignInScreenResponse], error) {
+	return connect.NewResponse(&authv1.SignInScreenResponse{
+		Screen: h.screens.SignInScreen(req.Msg.GetError()),
+	}), nil
+}
+
 func (h *Handler) SignIn(ctx context.Context, req *connect.Request[authv1.SignInRequest]) (*connect.Response[authv1.SignInResponse], error) {
 	r := req.Msg
 	result, err := h.svc.AuthenticateLocalUser(ctx, app.AuthenticateLocalUserCommand{
