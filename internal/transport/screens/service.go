@@ -89,14 +89,21 @@ const (
 )
 
 // Empty-state illustration keys the client maps to an icon.
+//
+// **These must be names in the client's glyph set**, and "collections" was not
+// one — so every "no collections yet" state Mosaic has ever drawn rendered a
+// blank circle where its illustration should be. Nothing reported it: the Icon
+// primitive resolves an unknown name to nothing rather than failing, which is
+// the right behaviour for an open vocabulary and the reason a typo here is
+// invisible. The set is `IconName` in sdui-react's shared.tsx.
 const (
-	emptyIconCollections = "collections"
+	emptyIconCollections = "grid"
 	emptyIconSearch      = "search"
-	// emptyIconNotFound illustrates a route that resolves to nothing. It is its
-	// own key rather than a reuse of the search icon: a wrong link and an empty
-	// search result are different situations, and a client is entitled to draw
-	// them differently.
-	emptyIconNotFound = "not-found"
+	// emptyIconNotFound illustrates a route that resolves to nothing. "error"
+	// rather than a not-found glyph of its own: growing the client's icon set is
+	// a client release, and a wrong link is well enough served by the glyph that
+	// already means "this did not work".
+	emptyIconNotFound = "error"
 )
 
 // importContentMutation is the Platform mutation a detail's Add-to-library action
