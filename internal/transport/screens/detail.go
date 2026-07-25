@@ -354,6 +354,10 @@ func (s *Service) episodesSection(ctx context.Context, caller v1.Caller, ref v1.
 			ui.Prop("index", strconv.Itoa(e.Episode)),
 			ui.When(e.Overview != "", ui.Overview(e.Overview)),
 			ui.When(e.Thumbnail != "", ui.Prop("thumbnail", s.art(e.Thumbnail))),
+			// The row's facts column. A preview carries neither a runtime nor a
+			// quality — the two the mockups put here — but it does carry the air
+			// date, and nothing was using it, so the column rendered empty.
+			ui.When(e.Released != "", ui.Aired(e.Released)),
 			ui.When(watched[e.Episode], ui.Prop("watched", true)),
 		))
 	}
