@@ -295,9 +295,12 @@ func (h *Handler) Subscribe(ctx context.Context, req *connect.Request[sessionv1.
 	return s.serve(ctx, r.GetResumeCursor(), onConnect, stream.Send)
 }
 
-// pushShell renders the app shell and enqueues it (ADR 0031).
+// pushShell renders the app shell for the current route and enqueues it
+// (ADR 0031).
 func (h *Handler) pushShell(ctx context.Context, s *liveSession) {
-	node, err := h.screens.Render(ctx, "shell", s.caller, nil)
+	screen := s.currentRoute().screen
+	s.setShellChrome(screen)
+	node, err := h.screens.Render(ctx, "shell", s.caller, map[string]any{"screen": screen})
 	if err != nil {
 		s.enqueue(regionMsg(ctx, s, contentRegion, sessionv1.RegionUpdate_REPLACE, errorNode(err.Error())))
 		return
@@ -314,6 +317,17 @@ func (h *Handler) pushContent(ctx context.Context, s *liveSession) {
 // pushRender renders a screen and replaces the content region with it, or an
 // error node if the render fails (ADR 0029's error surface, unchanged).
 func (h *Handler) pushRender(ctx context.Context, s *liveSession, screen string, params map[string]any) {
+	// The frame the app wears is a property of the screen being shown, and the
+	// two sides of Mosaic wear different ones. Re-push it when the side changes
+	// — not on every navigation, because the tree is identical for every screen
+	// on the same side and re-sending it would cost a payload per tap.
+	if screens.ShellChromeFor(screen) != screens.ShellChromeFor(s.shellChrome()) {
+		s.setShellChrome(screen)
+		if node, err := h.screens.Render(ctx, "shell", s.caller, map[string]any{"screen": screen}); err == nil {
+			s.enqueue(shellMsg(ctx, s, node))
+		}
+	}
+
 	// What this client can decode, for the screens that describe a release
 	// rather than play one (ADR 0049). Set here because this is where the live
 	// session is in hand; every screen that does not want it ignores it.

@@ -84,8 +84,11 @@ const (
 	paramLevel      = "level"
 	paramComponent  = "component"
 	paramTrace      = "trace"
-	paramOrder      = "order"
-	paramFailed     = "failed"
+	// paramScreen names the screen the shell is being rendered around, so the
+	// frame can wear the chrome that screen belongs to.
+	paramScreen = "screen"
+	paramOrder  = "order"
+	paramFailed = "failed"
 )
 
 // Empty-state illustration keys the client maps to an icon.
@@ -224,7 +227,9 @@ func (s *Service) art(u string) string {
 func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, params map[string]any) (sdui.Node, error) {
 	switch name {
 	case screenShell:
-		return s.shellScreen()
+		// The shell wears the chrome of the screen it is framing, which the
+		// caller names in params — the transport knows the route, this does not.
+		return s.shellScreen(stringParam(params, paramScreen))
 	case screenHome:
 		return s.homeScreen(ctx, caller)
 	case screenSearch:

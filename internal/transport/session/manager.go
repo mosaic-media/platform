@@ -71,6 +71,8 @@ type liveSession struct {
 	// is parked in cond.Wait.
 	profileMu sync.Mutex
 	profile   clientProfile
+	// chromeScreen is the screen whose chrome the client was last sent.
+	chromeScreen string
 	// vocab is what the client declared it can *render*, guarded by the same
 	// lock and for the same reason: Attach writes it and every later push reads
 	// it. The two declarations arrive on the same call and are never read apart.
@@ -341,6 +343,24 @@ func (s *liveSession) currentRoute() route {
 	s.routeMu.Lock()
 	defer s.routeMu.Unlock()
 	return s.current
+}
+
+// The chrome the client is currently wearing.
+//
+// Tracked on the session rather than derived from the route, because the
+// question being asked is "does the frame the client already has still fit",
+// and the route has moved by the time that is asked. It starts empty, so the
+// first render after connect always settles it.
+func (s *liveSession) shellChrome() string {
+	s.routeMu.Lock()
+	defer s.routeMu.Unlock()
+	return s.chromeScreen
+}
+
+func (s *liveSession) setShellChrome(screen string) {
+	s.routeMu.Lock()
+	s.chromeScreen = screen
+	s.routeMu.Unlock()
 }
 
 // setProfile records what the client declared it can decode (ADR 0047).
