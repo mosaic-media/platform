@@ -64,10 +64,41 @@ func NewHandler(svc *app.Service) *Handler {
 // The error message a caller hands back is the one this service gave it, so a
 // refusal is stated by the surface that asked rather than by a panel beside it.
 // It is echoed rather than looked up: there is no state here to look one up in.
-func (h *Handler) SignInScreen(_ context.Context, req *connect.Request[authv1.SignInScreenRequest]) (*connect.Response[authv1.SignInScreenResponse], error) {
+func (h *Handler) SignInScreen(ctx context.Context, req *connect.Request[authv1.SignInScreenRequest]) (*connect.Response[authv1.SignInScreenResponse], error) {
+	// Which door you are looking at. An unclaimed server has nobody to sign in
+	// as, so asking for a username and a password would be asking for something
+	// that does not exist yet (ADR 0098).
+	if !h.svc.ServerClaimed(ctx) {
+		return connect.NewResponse(&authv1.SignInScreenResponse{
+			Screen: h.screens.SetupScreen(req.Msg.GetError()),
+		}), nil
+	}
 	return connect.NewResponse(&authv1.SignInScreenResponse{
 		Screen: h.screens.SignInScreen(req.Msg.GetError()),
 	}), nil
+}
+
+// ClaimServer creates the first administrator of a server that has none, and
+// signs them in (ADR 0098).
+//
+// Unauthenticated by necessity: every command that could grant the first
+// authority is itself policy-gated. The application command refuses once any
+// user exists, and does the check and the create in one transaction, so this
+// handler adds no gate of its own — a second gate here would be a second place
+// for the two to disagree.
+func (h *Handler) ClaimServer(ctx context.Context, req *connect.Request[authv1.ClaimServerRequest]) (*connect.Response[authv1.ClaimServerResponse], error) {
+	r := req.Msg
+	result, err := h.svc.ClaimServer(ctx, app.ClaimServerCommand{
+		Username:    r.GetUsername(),
+		Password:    r.GetPassword(),
+		DisplayName: r.GetDisplayName(),
+		Email:       r.GetEmail(),
+		DeviceID:    domain.DeviceID(r.GetDeviceId()),
+	})
+	if err != nil {
+		return nil, rpc.Wrap(err)
+	}
+	return connect.NewResponse(&authv1.ClaimServerResponse{Session: sessionMessage(result.Session)}), nil
 }
 
 func (h *Handler) SignIn(ctx context.Context, req *connect.Request[authv1.SignInRequest]) (*connect.Response[authv1.SignInResponse], error) {
