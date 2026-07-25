@@ -69,6 +69,12 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 	} else if m.Runtime != "" {
 		pills = append(pills, m.Runtime)
 	}
+	// Genres ride the meta line as one pill, as the mockups draw them, rather
+	// than as a second row of tags beneath it. They carry no action here — a
+	// GenreTag with nothing to navigate to was decoration occupying a whole row.
+	if len(m.Genres) > 0 {
+		pills = append(pills, strings.Join(m.Genres, " · "))
+	}
 	// The age rating as the source labels it for its region. Display-only text
 	// (the scales are national and not comparable), and an empty one must not be
 	// read as "suitable for everyone" — so it is omitted rather than defaulted.
@@ -184,14 +190,6 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 		actions,
 		ui.Aside(s.detailInfoPanel(m, ref)),
 	}
-	if len(m.Genres) > 0 {
-		tags := make([]ui.El, 0, len(m.Genres))
-		for _, g := range m.Genres {
-			tags = append(tags, ui.GenreTag(g))
-		}
-		heroEls = append(heroEls, ui.Prop("showTags", true), ui.Slot("tags", tags...))
-	}
-
 	body := []ui.El{ui.Slot("bleed", ui.Component("DetailHero", heroEls...))}
 
 	if len(m.Cast) > 0 {
