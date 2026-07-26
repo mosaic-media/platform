@@ -40,7 +40,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mosaic-media/module-cinemeta v0.3.0
-	github.com/mosaic-media/module-remote-playback v0.3.1
+	github.com/mosaic-media/module-remote-playback v0.4.0
 	github.com/mosaic-media/module-tmdb v0.8.0
 	github.com/mosaic-media/sdk v0.24.0
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
