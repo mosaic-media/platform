@@ -234,7 +234,7 @@ func (s *Service) tracesScreen(ctx context.Context, caller v1.Caller, params map
 			ui.Origin(shortID(t.Trace)),
 			ui.Summary(summary),
 			ui.Value(formatDuration(t.Duration)),
-			ui.When(traceColor(t) != "", ui.Tone(traceColor(t))),
+			ui.When(traceColor(t) != "", ui.StatusTone(traceColor(t))),
 			ui.OnTap(ui.Navigate(screenTrace, map[string]any{paramTrace: t.Trace}))))
 	}
 	body = append(body, ui.Stack("vertical", 2, entries...).Build())
@@ -488,7 +488,7 @@ func spanRow(sp domain.TelemetrySpanRecord, depth int, total time.Duration) ui.E
 	return ui.SpanRow(sp.Name,
 		ui.Depth(indent),
 		ui.Share(share),
-		ui.Tone(tone),
+		ui.StatusTone(tone),
 		ui.Value(formatDuration(sp.Duration)))
 }
 
