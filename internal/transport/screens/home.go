@@ -107,6 +107,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 			}
 			if len(upCards) > 0 {
 				upNext = ui.Section("Trending now",
+					ui.Gap(4),
 					ui.ActionLabel("See all"),
 					ui.OnTap(ui.Navigate(screenCatalog, map[string]any{
 						paramModuleID: c.ModuleID, paramCatalogID: c.Catalog.ID, paramNativeType: c.Catalog.NativeType,
@@ -128,6 +129,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		// exists and pages properly (ADR 0028), it simply had nothing pointing at
 		// it from the surface every session lands on.
 		rows = append(rows, ui.Section(c.Catalog.Name,
+			ui.Gap(4),
 			ui.ActionLabel("See all"),
 			ui.OnTap(ui.Navigate(screenCatalog, map[string]any{
 				paramModuleID: c.ModuleID, paramCatalogID: c.Catalog.ID, paramNativeType: c.Catalog.NativeType,
@@ -372,9 +374,17 @@ func (s *Service) continueWatchingSection(ctx context.Context, caller v1.Caller)
 	// cards actually rendered rather than the query's total: a card whose Work
 	// read failed dropped out above, and a heading claiming twelve over a rail of
 	// eleven is a small lie that is very easy to ship.
+	// The rail's track is the tile's own width. These are 16:9 stills at 328,
+	// not 2:3 posters at 196, and left at the browse default the art collapses
+	// to a third of its height — the same defect the detail screen's cast and
+	// related rails had.
+	//
+	// The home's rails sit tighter under their headings than a settings panel's
+	// sections do: 14 rather than 24. Both are the design's, measured.
 	return ui.Section("Continue watching",
 		ui.Subtitle(strconv.Itoa(len(out))),
-		ui.Carousel(out...))
+		ui.Gap(4),
+		ui.Carousel(ui.ItemWidth(328), ui.Group(out...)))
 }
 
 // continueCard renders one continue-watching item: the work's poster with a
