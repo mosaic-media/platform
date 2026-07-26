@@ -80,10 +80,14 @@ const (
 	paramNodeID     = "nodeId"
 	paramSeason     = "season"
 	paramText       = "text"
-	paramPage       = "page"
-	paramLevel      = "level"
-	paramComponent  = "component"
-	paramTrace      = "trace"
+	// paramMediaType focuses a search on one kind of thing. Distinct from
+	// paramNativeType, which is a *provider's* own word for a type; this is the
+	// Platform's canonical one (ADR 0015).
+	paramMediaType = "mediaType"
+	paramPage      = "page"
+	paramLevel     = "level"
+	paramComponent = "component"
+	paramTrace     = "trace"
 	// paramScreen names the screen the shell is being rendered around, so the
 	// frame can wear the chrome that screen belongs to.
 	paramScreen = "screen"

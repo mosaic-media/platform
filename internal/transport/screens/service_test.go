@@ -77,6 +77,7 @@ type fakeQueries struct {
 
 	mu                  sync.Mutex
 	gotText             string
+	gotSearchMediaType  v1.MediaType
 	gotCatalogID        string
 	gotNodeID           v1.NodeID
 	gotPreviewRef       v1.ContentRef
@@ -141,8 +142,20 @@ func (f *fakeQueries) GetTrace(_ context.Context, q app.GetTraceQuery) (app.GetT
 func (f *fakeQueries) SearchAvailableContent(_ context.Context, q app.SearchAvailableContentQuery) (app.SearchAvailableContentResult, error) {
 	f.mu.Lock()
 	f.gotText = q.Text
+	f.gotSearchMediaType = q.MediaType
 	f.mu.Unlock()
-	return app.SearchAvailableContentResult{Results: f.results}, nil
+	// The fake filters as the providers would, so a test that asserts a focused
+	// page cannot pass on results the query said it did not want.
+	if q.MediaType == "" {
+		return app.SearchAvailableContentResult{Results: f.results}, nil
+	}
+	out := make([]v1.SearchResult, 0, len(f.results))
+	for _, r := range f.results {
+		if r.Ref.MediaType == q.MediaType {
+			out = append(out, r)
+		}
+	}
+	return app.SearchAvailableContentResult{Results: out}, nil
 }
 
 func (f *fakeQueries) ListModuleCatalogs(_ context.Context, _ app.ListModuleCatalogsQuery) (app.ListModuleCatalogsResult, error) {
