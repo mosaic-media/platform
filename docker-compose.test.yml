@@ -85,11 +85,13 @@ services:
       - mosaic-test-gomod:/go/pkg/mod
       - mosaic-test-gobuild:/root/.cache/go-build
     working_dir: /src/platform
-    # The full gate, in the order .github/workflows/verify.yml runs it, failing
-    # at the first thing that fails. Keep the two in step: this command is what
-    # a contributor runs, that workflow is what refuses the push. `go test` is
-    # the one step CI does not run — it has no database — which is the whole
-    # reason this file exists.
+    # The full gate, failing at the first thing that fails. This command is not
+    # merely the shape of what CI does, it *is* what CI does: both
+    # .github/workflows/verify.yml and release.yml run this file rather than a
+    # transcription of it, so the gate has one definition and cannot drift into
+    # two. verify.yml re-runs the four cheap steps ahead of it in a bare-runner
+    # job — the same checks, ordered so an unformatted file is reported in
+    # seconds — but `go test` against a real database runs only here.
     command:
       - bash
       - -eu

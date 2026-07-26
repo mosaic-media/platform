@@ -1,10 +1,36 @@
 name: verify
 
-# Server-side enforcement on every push and pull request. The headline gate is
-# the SPDX license header check (tools/licenseheader): a file without the header
-# fails here, so the header cannot drift regardless of a contributor's editor
-# setup. gofmt/vet/build ride along so a green check means the tree is also
-# formatted and compiles — not just that headers are present.
+# Server-side enforcement on every push and pull request, in two jobs ordered by
+# what they cost to be told.
+#
+# `checks` is the cheap half and runs first: the SPDX license header check
+# (tools/licenseheader), gofmt, `go vet` and `go build`, on a bare runner in
+# seconds. `gate` is the half that decides — docker-compose.test.yml, the same
+# command a contributor runs, which brings its own PostgreSQL and runs
+# `go test ./...` against it. The split is deliberate: an unformatted file is
+# then a twenty-second answer instead of a several-minute one, where a single
+# collapsed job would spend the whole suite to say "gofmt".
+#
+# Until the gate moved here it ran only on a version tag, in release.yml. That
+# left this workflow a compile check: `go test` ran nowhere on the way to main,
+# and the storage contract tests — the ones that need a real database — ran only
+# at release, which is the latest possible moment to learn. It matters most
+# where no person is reading the result: core-module-bump.yml opens dependency
+# bumps with auto-merge on and states that this workflow is what decides, so an
+# automated core module bump was being admitted on the strength of the tree
+# compiling. release.yml keeps its own `gate` job — ADR 0063 wants a release
+# pre-proven from the tag's own tree, not from a green check on an ancestor.
+#
+# `gate` needs the SDK beside this checkout because docker-compose.test.yml
+# mounts `../sdk`: test/sdkprobe is its own Go module resolving the SDK through
+# a `replace` to that path, and test/sdkboundary compiles it to prove the
+# published surface imports cleanly from outside (ADR 0016). It is checked out
+# at the version go.mod requires rather than at its default branch, for two
+# reasons — the probe then stands in for a third party resolving the version
+# this repository actually ships against, and a pull request here cannot go red
+# because somebody pushed to another repository. Compiling the current branches
+# together is a different question, asked by graph.yml, off the pull request
+# path on purpose.
 
 on:
   push:
@@ -19,7 +45,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,3 +71,49 @@ jobs:
 
       - name: go build
         run: go build ./...
+
+  gate:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      # Into `platform/` rather than the workspace root, so the SDK checkout
+      # below can be its sibling — which is what the compose file's `../sdk`
+      # mount resolves to.
+      - uses: actions/checkout@v4
+        with:
+          path: platform
+
+      # A missing `ref` is not an error to actions/checkout, it is the default
+      # branch — so a version this step failed to read would silently become
+      # "whatever the SDK's main happens to be", the one thing pinning it is
+      # meant to prevent. Hence the read fails loudly instead.
+      - name: Resolve the SDK version go.mod requires
+        working-directory: platform
+        run: |
+          version=$(awk '
+            $1 == "require" { sub(/^[[:space:]]*require[[:space:]]+/, "") }
+            $1 == "github.com/mosaic-media/sdk" { print $2; exit }
+          ' go.mod)
+          case "$version" in
+            v[0-9]*) ;;
+            *)
+              echo "::error::could not read the github.com/mosaic-media/sdk version from go.mod" >&2
+              exit 1
+              ;;
+          esac
+          echo "sdk_version=$version" >> "$GITHUB_ENV"
+          echo "SDK pinned at $version"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: mosaic-media/sdk
+          ref: ${{ env.sdk_version }}
+          path: sdk
+
+      # The whole gate — license headers, gofmt, vet, build and the tests
+      # against a real PostgreSQL. Deliberately the same one-line command a
+      # contributor runs, so there is one gate with one definition rather than a
+      # CI copy of it that can drift.
+      - name: Full container gate
+        working-directory: platform
+        run: docker compose -f docker-compose.test.yml run --rm test

@@ -140,8 +140,10 @@ docker compose -f docker-compose.test.yml run --rm test
 ```
 
 That is the whole gate — license headers, gofmt, `go vet`, `go build`, `go
-test` — in the order `.github/workflows/verify.yml` runs them. Append `bash` to
-the same command for a shell in that environment when iterating on one package.
+test` — and `.github/workflows/verify.yml` runs this exact command on every push
+and pull request, so what refuses a push is the thing you just ran rather than a
+CI transcription of it. Append `bash` to the same command for a shell in that
+environment when iterating on one package.
 
 **The reason is that this repository's two most important test dependencies
 fail soft.** Neither turns a run red when it is missing. Both let it pass while
@@ -188,7 +190,7 @@ the Platform" below.
 - Run the test container before declaring any slice done. Nothing is declared
   done on the strength of a host-side build, which on this machine is not
   available to be right or wrong about — there is no Go toolchain installed.
-- **Every Go file carries an SPDX header** (`AGPL-3.0-only`, the Platform's license). New files get it from the tool, not by hand, and the tool runs in the container like everything else: `docker compose -f docker-compose.test.yml run --rm test go run ./tools/licenseheader` adds it to any file missing it (pass file paths to limit it to those). **CI enforces it** — `.github/workflows/verify.yml` runs `go run ./tools/licenseheader -check` (plus gofmt/vet/build) on every push and PR, so a headerless file fails the check. A local pre-commit hook adds it for you before the commit — enable once per clone with `git config core.hooksPath .githooks`. Change the header text in one place — the `header` const in that tool.
+- **Every Go file carries an SPDX header** (`AGPL-3.0-only`, the Platform's license). New files get it from the tool, not by hand, and the tool runs in the container like everything else: `docker compose -f docker-compose.test.yml run --rm test go run ./tools/licenseheader` adds it to any file missing it (pass file paths to limit it to those). **CI enforces it** — `.github/workflows/verify.yml` runs `go run ./tools/licenseheader -check` in its fast `checks` job (with gofmt/vet/build) on every push and PR, so a headerless file fails the check in seconds, before the `gate` job runs the container suite behind it. A local pre-commit hook adds it for you before the commit — enable once per clone with `git config core.hooksPath .githooks`. Change the header text in one place — the `header` const in that tool.
 - Commit per passing slice — one commit (or focused set of commits) per slice, not one commit for the whole build sequence.
 - When ambiguity comes up, read the code first, then the three architecture documents. Do not substitute assumption for a decision. If neither answers it, say so — an honest gap is worth more than an invention that reads as settled.
 
