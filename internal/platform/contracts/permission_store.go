@@ -23,6 +23,21 @@ type PermissionStore interface {
 	// CreateRole persists a role and the permissions it carries. A duplicate
 	// id is Conflict.
 	CreateRole(ctx context.Context, role domain.Role) (domain.Role, error)
+	// FindRoleByName returns the role with the given name, or NotFound.
+	//
+	// **A role's name is unique across the install**, which is a fact the schema
+	// has always carried and no caller had ever had to know: the only role
+	// anything created was the bootstrap's Superuser, and it was created once.
+	// The moment a second account is provisioned from a preset, "create a role
+	// called User" stops being idempotent and starts being a Conflict — which is
+	// how three of four accounts came to exist with no authority at all.
+	//
+	// So a preset role is an install-wide named role that several people hold,
+	// not a per-account snapshot. The snapshot property the roadmap asks for is
+	// unchanged and belongs to the *role*: a role created today keeps the set it
+	// was created with, and nothing widens it afterwards except the owner
+	// reconciliation below.
+	FindRoleByName(ctx context.Context, name string) (domain.Role, error)
 	// FindRole returns the role with the given id, or NotFound.
 	//
 	// It exists for the delegation check (ADR 0069): granting a role must be

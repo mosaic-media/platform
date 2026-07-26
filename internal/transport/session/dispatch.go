@@ -81,11 +81,18 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		if err != nil {
 			return nil, err
 		}
-		_, err = h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
+		if _, err := h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
 			CallerSessionID: domain.SessionID(caller.Session),
 			TargetSessionID: target,
-		})
-		return nil, err
+		}); err != nil {
+			return nil, err
+		}
+		// And end that device's live session, so the revocation reaches it now
+		// rather than when its access token happens to expire. The target is
+		// somebody else's connection, which is exactly why the Manager is keyed
+		// by session id: this call has no other handle on it.
+		h.mgr.End(string(target))
+		return nil, nil
 	case "signOut":
 		// Ending *this* session (ADR 0102). It names no target and cannot: the
 		// session it arrives on is the one it revokes, which is what makes it
@@ -97,11 +104,17 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		// doorway comes back. That is the same path a refused session already
 		// took, which is why signing out and being signed out are one code path
 		// in the client rather than two.
-		_, err := h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
+		if _, err := h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
 			CallerSessionID: domain.SessionID(caller.Session),
 			TargetSessionID: domain.SessionID(s.ref),
-		})
-		return nil, err
+		}); err != nil {
+			return nil, err
+		}
+		// End the live session too, after the revocation and never before: the
+		// credential is what actually ended, and closing the stream first would
+		// drop a client that was still signed in if the command then failed.
+		h.mgr.End(s.ref)
+		return nil, nil
 	case "createAccount":
 		// Provisioning a household member (ADR 0069). Three commands behind one
 		// action — see accounts.go for why they are three and what a failure

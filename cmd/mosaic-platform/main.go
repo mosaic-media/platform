@@ -654,6 +654,25 @@ func run() error {
 		boot.Warn("ffmpeg/ffprobe not found; playback relays unprobed, so a release whose audio the client cannot decode will play silently")
 	}
 
+	// Keep the install owner's authority current (ADR 0069).
+	//
+	// Every other role is a snapshot and stays one — an account created before
+	// an action existed does not silently gain it — and the owner's is the one
+	// that must not be, because it is the root of every other grant. Run
+	// unconditionally, before and independently of the environment-variable
+	// bootstrap below: a server claimed through the setup wizard (ADR 0098) has
+	// an owner that bootstrap never sees, and leaving it out meant an upgrade
+	// could add an action nobody on the install could ever hold.
+	ownerCtx, cancelOwner := context.WithTimeout(context.Background(), 30*time.Second)
+	ownerChanged, err := bootstrap.ReconcileOwnerRole(ownerCtx, set.UnitOfWork, superuserPermissions())
+	cancelOwner()
+	if err != nil {
+		return fmt.Errorf("reconcile the owner role failed: %w", err)
+	}
+	if ownerChanged {
+		boot.Info("the owner role was brought up to date with this build's action set")
+	}
+
 	// Optionally seed the first administrator. There is no in-band way to
 	// grant the very first authority — every command that could is itself
 	// policy-gated — so this bridges that gap for initial setup, gated on both

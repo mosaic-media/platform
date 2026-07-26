@@ -93,6 +93,18 @@ var boundaryExempt = map[string]string{
 	// rather than a new thing to be permitted. It reveals nothing a caller
 	// holding that credential could not already reach.
 	"SessionForCaller": "resolves a credential to its own session; authenticates, has no action to authorize, and discloses nothing the credential does not already grant",
+	// GetCurrentUser answers "who am I". It authenticates and deliberately does
+	// not authorize, for the same reason as the row above: the record is the
+	// caller's own and the session already proves it, so a permission to be told
+	// what you have just proved is not an access control.
+	//
+	// It required `user.read` until a second account existed. That is
+	// administrator authority, so every viewer was refused their own name and
+	// the account cluster — which is on every screen — drew a question mark for
+	// them. The exemption is the correction, and it is written here rather than
+	// worked around because this list is what makes "not in the table" a
+	// decision instead of an oversight.
+	"GetCurrentUser": "the caller's own record; authenticates, has no action to authorize, and discloses nothing the session does not already prove",
 }
 
 // RefreshSession is not in either list, and cannot be: it carries no caller at
@@ -311,6 +323,9 @@ func boundaryCases() []boundaryCase {
 		{"GetUserPreferences", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetUserPreferences(ctx, app.GetUserPreferencesQuery{Caller: caller(sid)}))
 		}},
+		{"GetRoleByName", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.GetRoleByName(ctx, app.GetRoleByNameQuery{Caller: caller(sid), Name: "User"}))
+		}},
 		{"GrantablePermissions", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GrantablePermissions(ctx, app.GrantablePermissionsQuery{
 				Caller: caller(sid), Preset: app.PresetNameUser,
@@ -360,9 +375,6 @@ func boundaryCases() []boundaryCase {
 		{"ListUsers", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListUsers(ctx, app.ListUsersQuery{CallerSessionID: sid}))
 		}},
-		{"GetCurrentUser", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
-			return discard(s.GetCurrentUser(ctx, app.GetCurrentUserQuery{Caller: v1.Caller{Session: string(sid)}}))
-		}},
 		{"GetUserByID", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetUserByID(ctx, app.GetUserByIDQuery{CallerSessionID: sid, UserID: "user-1"}))
 		}},
@@ -393,8 +405,12 @@ func boundaryCases() []boundaryCase {
 			}))
 		}},
 		{"RevokeSession", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			// **Somebody else's** session, which is the case that needs a grant.
+			// Ending your own is signing out and is deliberately ungated, so a
+			// case naming the caller's own session would assert the opposite of
+			// what this suite is for. The harness seeds this one to another user.
 			return discard(s.RevokeSession(ctx, app.RevokeSessionCommand{
-				CallerSessionID: sid, TargetSessionID: "session-target",
+				CallerSessionID: sid, TargetSessionID: boundaryOtherSession,
 			}))
 		}},
 
@@ -447,6 +463,11 @@ func TestEveryEntryPointRejectsAnUnknownSession(t *testing.T) {
 	}
 }
 
+// boundaryOtherSession is a session the caller does not own, seeded for
+// RevokeSession — the one entry point whose grant is only required when the
+// target is not yours.
+const boundaryOtherSession = domain.SessionID("session-somebody-else")
+
 // TestEveryEntryPointRejectsACallerWithoutGrants is gate 3. The caller here is
 // real — the session resolves — and holds no role at all, so the default-deny
 // engine must refuse. A handler that authenticates and then forgets policy
@@ -459,6 +480,9 @@ func TestEveryEntryPointRejectsACallerWithoutGrants(t *testing.T) {
 			db := newFakeDB()
 			tr := &trace{}
 			db.seedSession(session, "user-nobody", testNow)
+			// A session belonging to somebody else, for the one case whose
+			// authorisation depends on whose it is.
+			db.seedSession(boundaryOtherSession, "user-somebody-else", testNow)
 			svc := newTestService(db, tr, testNow)
 
 			err := tc.call(context.Background(), svc, session)

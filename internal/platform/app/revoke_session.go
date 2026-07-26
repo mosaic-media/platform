@@ -51,18 +51,44 @@ func (s *Service) RevokeSession(ctx context.Context, cmd RevokeSessionCommand) (
 		return RevokeSessionResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
-	az, err := s.enterSession(ctx, cmd.CallerSessionID, ActionSessionRevoke,
-		policy.Resource{Type: "session", ID: string(cmd.TargetSessionID)})
+	// 2. authenticate the caller. Authorisation is deferred to inside the
+	// transaction, because it depends on *whose* session is being ended and that
+	// cannot be known before the target is read.
+	userID, err := s.authenticate(ctx, domain.SessionCredential(cmd.CallerSessionID))
 	if err != nil {
 		return RevokeSessionResult{}, err
 	}
+	az := authorized{userID: userID}
 
 	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
 		// 5. load state through contracts.
-		if _, err := tx.Sessions().FindByID(ctx, cmd.TargetSessionID); err != nil {
+		target, err := tx.Sessions().FindByID(ctx, cmd.TargetSessionID)
+		if err != nil {
 			return err
+		}
+
+		// 3. authorize — **owning the target is what stands in for the grant.**
+		//
+		// Ending your own session is signing out, and signing out cannot be a
+		// privilege: an account that could not do it would be an account nobody
+		// could hand a shared television back from. Ending *somebody else's* is
+		// an administrative act and needs `user.session.revoke`, which is the
+		// sentence the transport has claimed since the device list landed and
+		// which nothing enforced — the action was simply required of everybody,
+		// so ordinary accounts could not sign out and administrators could end
+		// anyone.
+		//
+		// The check is here rather than at the top because it needs the target's
+		// owner, and the target has to be read to know it. That is also why this
+		// is the one command whose steps 2 and 3 are separated.
+		if target.UserID != az.userID {
+			subject := policy.Subject{UserID: az.userID}
+			if err := s.authorize(ctx, subject, ActionSessionRevoke,
+				policy.Resource{Type: "session", ID: string(cmd.TargetSessionID)},
+				policy.PolicyContext{}); err != nil {
+				return err
+			}
 		}
 
 		// 6. apply domain rules: revoke the target session and every

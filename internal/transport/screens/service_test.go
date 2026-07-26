@@ -838,11 +838,16 @@ func TestCatalogScreenRendersItemsAsDetailLinks(t *testing.T) {
 }
 
 func TestVirtualDetailShowsAddToLibrary(t *testing.T) {
-	fake := &fakeQueries{previewMeta: v1.ContentMetadata{
-		Title: "Blade Runner 2049", Year: 2017, Overview: "A blade runner uncovers a secret.",
-		Backdrop: "http://cdn/bd.jpg", Logo: "http://cdn/logo.png", Rating: 8.0, Runtime: "164 min",
-		Cast: []v1.Person{{Name: "Ryan Gosling"}, {Name: "Harrison Ford"}}, Genres: []string{"Sci-Fi"},
-	}}
+	fake := &fakeQueries{
+		previewMeta: v1.ContentMetadata{
+			Title: "Blade Runner 2049", Year: 2017, Overview: "A blade runner uncovers a secret.",
+			Backdrop: "http://cdn/bd.jpg", Logo: "http://cdn/logo.png", Rating: 8.0, Runtime: "164 min",
+			Cast: []v1.Person{{Name: "Ryan Gosling"}, {Name: "Harrison Ford"}}, Genres: []string{"Sci-Fi"},
+		},
+		// Curating the library is an administrator's authority (ADR 0069), so
+		// the control is drawn only for a caller who holds it.
+		allow: map[string]bool{string(app.ActionContentImport): true},
+	}
 	node := render(t, &Service{content: fake}, "detail", map[string]any{"ref": map[string]any{
 		"provider": "stremio", "nativeId": "tt1254207", "nativeType": "movie",
 		"mediaType": "movie", "externalScheme": "imdb", "externalId": "tt1254207",
@@ -891,6 +896,7 @@ func TestInLibraryDetailShowsInLibraryMarker(t *testing.T) {
 	fake := &fakeQueries{
 		previewInLibrary: true, previewNodeID: "n-9",
 		previewMeta: v1.ContentMetadata{Title: "Already Here", Year: 2020},
+		allow:       map[string]bool{string(app.ActionContentImport): true},
 	}
 	node := render(t, &Service{content: fake}, "detail", map[string]any{"ref": map[string]any{
 		"provider": "stremio", "nativeId": "tt1", "nativeType": "movie", "mediaType": "movie",
@@ -1013,6 +1019,7 @@ func TestSettingsScreenHostsModuleUI(t *testing.T) {
 	fake := &fakeQueries{
 		settingsUI:      []byte(moduleUI),
 		settingsModules: []app.SettingsModule{{ModuleID: "aiostreams", Name: "AIOStreams"}},
+		allow:           map[string]bool{string(app.ActionModuleRead): true},
 	}
 
 	node := render(t, &Service{content: fake}, "settings", map[string]any{"moduleId": "aiostreams"})
@@ -1059,6 +1066,9 @@ func TestSettingsNavReachesEveryModuleWithAScreen(t *testing.T) {
 			{ModuleID: "stremio", Name: "Stremio addon source"},
 			{ModuleID: "tmdb", Name: "TMDB"},
 		},
+		// The nav asks before it reads: a caller who may not list modules gets
+		// no module rows rather than a settings screen that will not open.
+		allow: map[string]bool{string(app.ActionModuleRead): true},
 	}
 
 	node := render(t, &Service{content: fake}, "settings", nil)

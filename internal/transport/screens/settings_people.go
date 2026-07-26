@@ -80,13 +80,20 @@ func (s *Service) peoplePanel(ctx context.Context, caller v1.Caller, nav setting
 	} else {
 		rows := make([]ui.El, 0, len(res.Users))
 		for _, u := range res.Users {
+			// The way in is a control in the row's own slot, not an action on
+			// the row. **A SettingsRow reads no `action`**, so setting one
+			// compiled, rendered, changed nothing and reported nothing — the
+			// props bag accepts anything, which is how ui.Subtitle came to be
+			// set on a Stack for the whole life of a screen. The Devices
+			// section already had the right idiom and this now matches it.
 			rows = append(rows, ui.SettingsRow(displayNameOf(u),
 				ui.Summary(personSummary(s.rolesFor(ctx, caller, u.ID), u.Username)),
 				ui.Value(titleWords(string(u.Status))),
-				ui.OnTap(ui.Navigate(screenSettings, map[string]any{
-					paramSection: sectionPeople,
-					paramUserID:  string(u.ID),
-				}))))
+				ui.Group(ui.Button("Manage", "quiet",
+					ui.OnTap(ui.Navigate(screenSettings, map[string]any{
+						paramSection: sectionPeople,
+						paramUserID:  string(u.ID),
+					}))))))
 		}
 		body = append(body, ui.Stack("vertical", 0, rows...).Build())
 	}
@@ -205,8 +212,10 @@ func (s *Service) newAccountPanel(ctx context.Context, caller v1.Caller, nav set
 				sdui.Var(fieldAccountUsername, sdui.VarString, ""),
 				sdui.Var(fieldAccountEmail, sdui.VarString, ""),
 				sdui.Var(fieldAccountPassword, sdui.VarString, ""),
+				sdui.Var(fieldFormError, sdui.VarString, ""),
 			)),
 			ui.Form(
+				ui.BindError(fieldFormError),
 				ui.SubmitLabel("Create account"),
 				// The preset travels in the action rather than in the scope,
 				// because it is not something this form collects — it is which

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -78,8 +79,10 @@ type claimEnvelope struct {
 	Username        string `json:"username"`
 	Password        string `json:"password"`
 	ConfirmPassword string `json:"confirmPassword"`
-	// StreamSource is the picker's single value: a repository and a module id
-	// separated by a space. It is split with the same function that wrote it.
+	// StreamSource is the picker's value: the module id, and nothing else. The
+	// repository it comes from is resolved server-side from the catalogue the
+	// step was drawn from, so this endpoint cannot be asked to install something
+	// from somewhere the Platform did not offer.
 	StreamSource string `json:"streamSource"`
 }
 
@@ -89,17 +92,14 @@ func (h *Handler) claimServer(ctx context.Context, r *authv1.InvokeRequest, clie
 	if err := decodeInput(r.GetInput(), &env); err != nil {
 		return nil, err
 	}
-	repository, moduleID := screens.SplitStreamSource(env.StreamSource)
-
 	result, err := h.svc.ClaimServer(ctx, app.ClaimServerCommand{
-		ServerName:             env.ServerName,
-		Username:               env.Username,
-		DisplayName:            env.DisplayName,
-		Password:               env.Password,
-		ConfirmPassword:        env.ConfirmPassword,
-		DeviceID:               domain.DeviceID(r.GetDeviceId()),
-		StreamSourceRepository: repository,
-		StreamSourceModuleID:   moduleID,
+		ServerName:           env.ServerName,
+		Username:             env.Username,
+		DisplayName:          env.DisplayName,
+		Password:             env.Password,
+		ConfirmPassword:      env.ConfirmPassword,
+		DeviceID:             domain.DeviceID(r.GetDeviceId()),
+		StreamSourceModuleID: strings.TrimSpace(env.StreamSource),
 	})
 	if err != nil {
 		if out, ok := fieldErrorsOutcome(err); ok {

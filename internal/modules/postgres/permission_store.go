@@ -100,6 +100,18 @@ func (s *permissionStore) FindRole(ctx context.Context, roleID domain.RoleID) (d
 	return role, nil
 }
 
+func (s *permissionStore) FindRoleByName(ctx context.Context, name string) (domain.Role, error) {
+	row := s.q.QueryRow(ctx, `SELECT id, name, permissions FROM roles WHERE name = $1`, name)
+	var role domain.Role
+	if err := row.Scan(&role.ID, &role.Name, &role.Permissions); err != nil {
+		if isNoRows(err) {
+			return domain.Role{}, contracts.NewError(contracts.NotFound, "no role with that name")
+		}
+		return domain.Role{}, mapError("find role by name", err)
+	}
+	return role, nil
+}
+
 func (s *permissionStore) CreateRole(ctx context.Context, role domain.Role) (domain.Role, error) {
 	_, err := s.q.Exec(ctx,
 		`INSERT INTO roles (id, name, permissions) VALUES ($1, $2, $3)`,

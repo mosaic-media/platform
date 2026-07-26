@@ -689,6 +689,15 @@ func (s fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (do
 	if _, exists := s.db.rolesByID[role.ID]; exists {
 		return domain.Role{}, contracts.NewError(contracts.Conflict, "role already exists")
 	}
+	// The name is unique too, and the fake now says so. It did not, and the
+	// difference cost three accounts their authority on a real install while
+	// every test here passed: a fake with a weaker constraint than the schema is
+	// a fake that certifies code the database will refuse.
+	for _, existing := range s.db.rolesByID {
+		if existing.Name == role.Name {
+			return domain.Role{}, contracts.NewError(contracts.Conflict, "a role with that name already exists")
+		}
+	}
 	s.db.rolesByID[role.ID] = role
 	return role, nil
 }
@@ -1516,6 +1525,21 @@ func (db *fakeDB) seedPart(part v1.Part) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.parts[part.ID] = part
+}
+
+// FindRoleByName mirrors the real store's unique index on the name column,
+// which is the constraint that turned "create the User role" into something
+// that can only happen once. The fake enforced nothing, which is why creating
+// four accounts produced three with no authority and every test stayed green.
+func (s fakePermissionStore) FindRoleByName(_ context.Context, name string) (domain.Role, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for _, role := range s.db.rolesByID {
+		if role.Name == name {
+			return role, nil
+		}
+	}
+	return domain.Role{}, contracts.NewError(contracts.NotFound, "no role with that name")
 }
 
 // FindRole resolves a role across every user's roles, mirroring the real

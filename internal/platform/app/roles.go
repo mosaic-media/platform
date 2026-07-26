@@ -44,6 +44,17 @@ const (
 // it, and keep its own settings.
 func userActions() []policy.Action {
 	return []policy.Action{
+		// **Signing in.** It was in the administrator preset and not this one,
+		// so every ordinary account this Platform could create was refused a
+		// session — the password was right, the account was active, and the
+		// policy engine denied `session.create`. Nobody saw it because nobody
+		// had ever made a second account: the only account that existed was the
+		// bootstrap superuser, which holds everything.
+		//
+		// It belongs here because it is the floor of having an account at all.
+		// An account that cannot authenticate is not a reduced account, it is a
+		// row in a table.
+		ActionSessionCreate,
 		ActionContentRead,
 		ActionContentResolve,
 		// Where they got to (ADR 0046). These belong to the *ordinary* preset
@@ -64,7 +75,10 @@ func userActions() []policy.Action {
 func administratorActions() []policy.Action {
 	return append(userActions(),
 		ActionUserCreate, ActionUserRead, ActionUserList, ActionUserStatusUpdate,
-		ActionSessionCreate, ActionSessionRevoke,
+		// ActionSessionRevoke is *somebody else's* session. Ending your own
+		// needs no permission at all — see RevokeSession, where owning the
+		// target is what stands in for the grant.
+		ActionSessionRevoke,
 		ActionPermissionRead,
 		ActionRoleCreate, ActionRoleGrant,
 		ActionConfigDraft, ActionConfigValidate, ActionConfigActivate, ActionConfigRead,

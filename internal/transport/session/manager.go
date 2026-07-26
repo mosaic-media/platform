@@ -489,6 +489,36 @@ func (m *Manager) session(ref string) *liveSession {
 	return s
 }
 
+// End closes one session and forgets it: its sender goroutine returns, its
+// stream ends, and its live state is discarded.
+//
+// It is what a *revocation* needs and reaping does not provide. Signing out
+// revokes the credential server-side, and without this the client carried on
+// rendering: the push lane is a long-lived stream that makes no call to be
+// refused, so nothing on either side noticed until the access token expired
+// ten minutes later. A sign-out that takes ten minutes is not a sign-out, and
+// on a shared device it is the whole feature failing.
+//
+// Ending the stream is also what makes it *one* path in the client: a dropped
+// stream is a reconnect, the reconnect presents a revoked credential, and the
+// client takes the same route it takes for any refused session — clear the
+// pair, ask for the door. Nothing in the client has to know a sign-out
+// happened.
+func (m *Manager) End(ref string) {
+	m.mu.Lock()
+	s := m.sessions[ref]
+	delete(m.sessions, ref)
+	m.mu.Unlock()
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.closed = true
+	s.cond.Broadcast()
+	s.mu.Unlock()
+	m.retire(s)
+}
+
 // reap discards sessions with no active stream that have been idle past ttl,
 // returning how many were removed. It is pure over the injected now, so a test
 // drives it without waiting on wall-clock.

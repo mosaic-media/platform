@@ -174,9 +174,20 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 			action: ui.Navigate(screenExtensions, nil),
 		})
 	}
-	res, err := s.content.ListSettingsModules(ctx, app.ListSettingsModulesQuery{Caller: caller})
-	if err != nil {
-		return settingsNavModel{}, err
+	// A caller who may not read modules gets no module rows, not an error.
+	//
+	// This failed the **whole settings screen** for every ordinary account: the
+	// query authorises `module.read`, which is administrator authority, so a
+	// viewer opening settings got "no role grants module.read" where their own
+	// Account panel should have been. The nav is a list of what this caller can
+	// open, and the honest answer to "may I list modules" is a shorter list.
+	var res app.ListSettingsModulesResult
+	if s.content.CallerCan(ctx, caller, app.ActionModuleRead, "module") {
+		var err error
+		res, err = s.content.ListSettingsModules(ctx, app.ListSettingsModulesQuery{Caller: caller})
+		if err != nil {
+			return settingsNavModel{}, err
+		}
 	}
 	for _, m := range res.Modules {
 		entries = append(entries, settingsNavEntry{

@@ -12,6 +12,7 @@ import (
 	sdui "github.com/mosaic-media/contracts/sdui"
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/domain"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // The People panels (roadmap M1.3). Every command behind them was complete and
@@ -53,16 +54,24 @@ func TestThePeoplePanelLeadsIntoEachAccount(t *testing.T) {
 	fake.currentUser = admin()
 	node := render(t, &Service{content: fake}, "settings", map[string]any{"section": "people"})
 
-	var rows []sdui.Node
-	findAll(node, "SettingsRow", &rows)
+	// **Asserted on the control, not on the row's props.** The first version of
+	// this test checked that the row carried an `action` — which it did, and
+	// which SettingsRow reads nothing of, so the assertion passed over a list
+	// that could not be clicked. A prop nobody renders is exactly as absent as
+	// no prop at all, and only a test that looks for the rendered control can
+	// tell the difference.
+	var buttons []sdui.Node
+	findAll(node, "Button", &buttons)
 	var opened bool
-	for _, r := range rows {
-		if prop(r, "label") == "Sam" && r.GetProps().AsMap()["action"] != nil {
+	for _, b := range buttons {
+		action, _ := b.GetProps().AsMap()["action"].(map[string]any)
+		params, _ := action["params"].(map[string]any)
+		if params["userId"] == "user-sam" {
 			opened = true
 		}
 	}
 	if !opened {
-		t.Error("no row opens Sam's account, so the list is still a list of things nobody can press")
+		t.Error("nothing opens Sam's account, so the list is still a list of things nobody can press")
 	}
 	if !strings.Contains(treeStrings(node), "Add a viewer") {
 		t.Error("an administrator is offered no way to add anybody")
@@ -234,6 +243,59 @@ func writeStrings(v any, b *strings.Builder) {
 	case []any:
 		for _, sub := range t {
 			writeStrings(sub, b)
+		}
+	}
+}
+
+// An affordance a caller could not exercise is not drawn (ADR 0036).
+//
+// The detail screen offered "Add to library" to everybody, because everybody
+// was one account holding everything. The first ordinary account pressed it and
+// got nothing at all: curating the library is `content.import`, which the viewer
+// preset does not carry.
+func TestTheLibraryControlsAreNotDrawnForSomebodyWhoCannotCurate(t *testing.T) {
+	viewerOnly := &fakeQueries{
+		previewMeta: v1.ContentMetadata{Title: "Blade Runner 2049", Year: 2017},
+		allow:       map[string]bool{},
+	}
+	ref := map[string]any{
+		"provider": "stremio", "nativeId": "tt1254207", "nativeType": "movie", "mediaType": "movie",
+	}
+	node := render(t, &Service{content: viewerOnly}, "detail", map[string]any{"ref": ref})
+	if _, ok := findButton(node, "Add to library"); ok {
+		t.Error("a viewer was offered a control that imports, which they cannot do")
+	}
+
+	// And an administrator still gets it, so the gate is a gate rather than a
+	// deletion.
+	curator := &fakeQueries{
+		previewMeta: v1.ContentMetadata{Title: "Blade Runner 2049", Year: 2017},
+		allow:       map[string]bool{string(app.ActionContentImport): true},
+	}
+	node = render(t, &Service{content: curator}, "detail", map[string]any{"ref": ref})
+	if _, ok := findButton(node, "Add to library"); !ok {
+		t.Error("somebody who may import was not offered the control")
+	}
+}
+
+// Settings must open for an ordinary account. The nav reads the module list,
+// which authorises `module.read` — administrator authority — so a viewer got
+// "no role grants module.read" where their own Account panel should have been.
+func TestSettingsOpensForSomebodyWhoHoldsNothingAdministrative(t *testing.T) {
+	fake := &fakeQueries{
+		currentUser: viewer(),
+		allow:       map[string]bool{},
+	}
+	node := render(t, &Service{content: fake}, "settings", nil)
+
+	text := treeStrings(node)
+	if !strings.Contains(text, "Sam") {
+		t.Errorf("a viewer's own account panel did not render: %s", text)
+	}
+	// And the rooms they cannot enter are absent rather than refusing.
+	for _, absent := range []string{"People", "Extension store"} {
+		if _, ok := findNavItem(node, absent); ok {
+			t.Errorf("the nav offers %q to a caller who cannot open it", absent)
 		}
 	}
 }

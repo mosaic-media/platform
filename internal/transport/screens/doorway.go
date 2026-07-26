@@ -5,8 +5,6 @@
 package screens
 
 import (
-	"strings"
-
 	sdui "github.com/mosaic-media/contracts/sdui"
 	"github.com/mosaic-media/contracts/ui"
 
@@ -54,6 +52,13 @@ const (
 	fieldConfirmPassword = "confirmPassword"
 	fieldStreamSource    = "streamSource"
 	fieldStep            = "step"
+	// fieldFormError is where a client writes a rejection that belongs to the
+	// submission rather than to any one field — a wrong password, a service
+	// that was down. Declaring it is what asks to be told; a form binds some
+	// node's text to it and thereby decides where the message appears. A door
+	// that did not declare it would simply show nothing, which is the right
+	// behaviour for a form that did not ask.
+	fieldFormError = "formError"
 )
 
 // DoorwayModel is everything the doorway is drawn from.
@@ -102,8 +107,13 @@ func signInDoorway(state app.ServerState) sdui.Node {
 				ui.Vars(sdui.Vars(
 					sdui.Var(fieldUsername, sdui.VarString, ""),
 					sdui.Var(fieldPassword, sdui.VarString, ""),
+					sdui.Var(fieldFormError, sdui.VarString, ""),
 				)),
 				ui.Form(
+					// The refusal shows above the button, bound rather than set:
+					// the server cannot know at render time what the answer will
+					// be, and the client cannot know where this form wants it.
+					ui.BindError(fieldFormError),
 					ui.SubmitLabel("Sign in"),
 					ui.SubmitAction(ui.Submit(ui.Invoke(SignInAction, nil), "")),
 					ui.TextField("Username",
@@ -171,6 +181,7 @@ func setupDoorway(model DoorwayModel) sdui.Node {
 					sdui.Var(fieldPassword, sdui.VarString, ""),
 					sdui.Var(fieldConfirmPassword, sdui.VarString, ""),
 					sdui.Var(fieldStreamSource, sdui.VarString, ""),
+					sdui.Var(fieldFormError, sdui.VarString, ""),
 				)),
 				setupRail(),
 				setupServerStep(),
@@ -319,7 +330,7 @@ func setupStreamSourceStep(options app.SetupOptions) ui.El {
 		choices = append(choices, map[string]any{"value": "", "label": "Skip for now"})
 		for _, s := range options.StreamSources {
 			choices = append(choices, map[string]any{
-				"value": s.Repository + " " + s.ModuleID,
+				"value": s.ModuleID,
 				"label": streamSourceLabel(s),
 			})
 		}
@@ -361,24 +372,51 @@ func setupReviewStep() ui.El {
 			map[string]any{"label": "Server name", "value": sdui.Bind(fieldServerName)},
 			map[string]any{"label": "Administrator", "value": sdui.Bind(fieldUsername)},
 		})),
-		ui.Banner("Claiming this server creates that account, gives it every permission, and signs "+
-			"you in on this device. Nobody else can claim it afterwards.", ui.ToneInfo),
-		ui.Form(
-			ui.SubmitLabel("Claim this server"),
-			ui.SubmitAction(ui.Submit(ui.Invoke(ClaimServerAction, nil), "")),
-		),
+		// The third step's answer, in the two states it has. Two boxes rather
+		// than one bound row, because "none" is a sentence and the module id is a
+		// value, and a row that rendered an empty string for the first would look
+		// like a step that had not been asked.
+		ui.Box(
+			ui.VisibleWhen(map[string]any{"field": fieldStreamSource, "notEmpty": true}),
+			ui.InfoPanel(ui.Rows([]any{
+				map[string]any{"label": "Stream source", "value": sdui.Bind(fieldStreamSource)},
+			}))),
+		ui.Box(
+			ui.VisibleWhen(map[string]any{"not": map[string]any{"field": fieldStreamSource, "notEmpty": true}}),
+			ui.InfoPanel(ui.Rows([]any{
+				map[string]any{"label": "Stream source", "value": "None — add one later in Settings"},
+			}))),
+		// Either the claim, or what is stopping it. **Not both, and never
+		// neither.**
+		//
+		// A submit whose scope fails validation is refused by the client before
+		// anything is sent, and the fields it marks are on steps two and three —
+		// which are not on screen from here. So a review step that always drew
+		// the button had a state where pressing it did nothing at all and said
+		// nothing at all, which is the worst thing a final step can do. The
+		// predicate is over the same scope the submit collects, so the two
+		// cannot disagree about whether the form is ready.
+		ui.Box(
+			ui.VisibleWhen(map[string]any{"all": []any{
+				map[string]any{"field": fieldServerName, "notEmpty": true},
+				map[string]any{"field": fieldUsername, "notEmpty": true},
+				map[string]any{"field": fieldPassword, "notEmpty": true},
+			}}),
+			ui.Stack("vertical", 5,
+				ui.Banner("Claiming this server creates that account, gives it every permission, and "+
+					"signs you in on this device. Nobody else can claim it afterwards.", ui.ToneInfo),
+				ui.Form(
+					ui.BindError(fieldFormError),
+					ui.SubmitLabel("Claim this server"),
+					ui.SubmitAction(ui.Submit(ui.Invoke(ClaimServerAction, nil), "")),
+				))),
+		ui.Box(
+			ui.VisibleWhen(map[string]any{"any": []any{
+				map[string]any{"not": map[string]any{"field": fieldServerName, "notEmpty": true}},
+				map[string]any{"not": map[string]any{"field": fieldUsername, "notEmpty": true}},
+				map[string]any{"not": map[string]any{"field": fieldPassword, "notEmpty": true}},
+			}}),
+			ui.Banner("Something above is still blank. Go back and fill in the server's name, and "+
+				"the username and password for your account.", ui.ToneWarning)),
 	)
-}
-
-// SplitStreamSource reads the picker's value back into a repository and a module
-// id.
-//
-// They travel as one string because a Select carries one value, and they are
-// separated by a space because neither a repository URL nor a module id may
-// contain one. Exported so the pre-session dispatch reads it back with the same
-// function the picker was written with, rather than with a second split that
-// could disagree about the separator.
-func SplitStreamSource(v string) (repository, moduleID string) {
-	repository, moduleID, _ = strings.Cut(strings.TrimSpace(v), " ")
-	return repository, moduleID
 }

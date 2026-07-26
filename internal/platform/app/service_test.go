@@ -475,12 +475,45 @@ func TestRevokeSessionDeniedByPolicyDoesNotMutateState(t *testing.T) {
 		t.Fatal("expected the target session to remain unrevoked when policy denies")
 	}
 
+	// The target is read before the policy is asked, because *whose* session it
+	// is decides whether a grant is needed at all: ending your own is signing
+	// out, and signing out is not a privilege. So the transaction opens, reads,
+	// refuses and rolls back — and the rollback is the part that matters, which
+	// the unrevoked target above is the assertion on.
 	assertTrace(t, tr, []string{
 		"tokens.find_access",
 		"sessions.find_by_id",
+		"uow.begin",
+		"sessions.find_by_id",
 		"permissions.roles_for_user",
 		"events.publish:authorization.denied",
+		"uow.rolled_back",
 	})
+}
+
+// Ending your own session needs no grant. It is the half of ADR 0102's
+// revocation that a household member has to be able to do — an account that
+// could not sign out is an account nobody can hand a shared television back
+// from — and it was refused for every ordinary account, because the action was
+// required of everybody and only the administrator preset carried it.
+func TestAViewerCanEndTheirOwnSessionWithoutTheGrant(t *testing.T) {
+	db := newFakeDB()
+	tr := &trace{}
+	db.seedSession("session-viewer", "user-viewer", testNow)
+	svc := newTestService(db, tr, testNow)
+
+	if _, err := svc.RevokeSession(context.Background(), app.RevokeSessionCommand{
+		CallerSessionID: "session-viewer",
+		TargetSessionID: "session-viewer",
+	}); err != nil {
+		t.Fatalf("an account with no grants could not sign itself out: %v", err)
+	}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if !db.sessions["session-viewer"].Revoked() {
+		t.Fatal("the session was not revoked")
+	}
 }
 
 // --- GetUserByID ---

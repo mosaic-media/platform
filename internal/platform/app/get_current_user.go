@@ -9,7 +9,6 @@ import (
 
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/domain"
-	"github.com/mosaic-media/platform/internal/platform/policy"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -31,24 +30,31 @@ type GetCurrentUserResult struct {
 // into a name. `GetUserByID` cannot serve that — it needs the answer as its
 // input.
 //
-// It authorises `user.read` against the caller's own id, like every other read
-// of a user. That is not obviously right — the record is the caller's own, and a
-// session already proves ownership of it, so an argument exists for
-// authenticating and stopping there. The boundary conformance test settles it:
-// every caller-bearing entry point on this Service denies a caller with no
-// grants, and carving one exception into that rule for a convenience would make
-// the rule something each reader has to check rather than rely on. The cost is
-// that an account holding no role at all cannot read its own name, which is a
-// state the install should not be able to reach.
+// **It authenticates and deliberately does not authorise**, which is a change
+// from how it was first written. It used to require `user.read`, on the
+// argument that carving an exception into the boundary rule for a convenience
+// would make the rule something each reader has to check rather than rely on.
+// That argument was made when the only account that existed held everything,
+// and the cost it accepted — "an account holding no role cannot read its own
+// name" — turned out to be the ordinary case the moment a second account
+// existed: `user.read` is administrator authority, so every viewer on the
+// server was refused their own name and the account cluster on every screen
+// drew a question mark.
+//
+// There is no action to gate here. The record is the caller's own, the session
+// already proves that, and a permission to be told what you have just proved is
+// not an access control. It joins the small exempt list beside
+// SessionForCaller, which is the same shape of fact about the credential
+// presented.
 func (s *Service) GetCurrentUser(ctx context.Context, q GetCurrentUserQuery) (GetCurrentUserResult, error) {
 	if q.Caller.Session == "" {
 		return GetCurrentUserResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
-	az, err := s.enter(ctx, q.Caller, ActionUserRead, policy.Resource{Type: "user"})
+	userID, err := s.authenticateCaller(ctx, q.Caller)
 	if err != nil {
 		return GetCurrentUserResult{}, err
 	}
-	user, err := s.users.FindByID(ctx, az.userID)
+	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return GetCurrentUserResult{}, err
 	}

@@ -89,27 +89,72 @@ func (h *Handler) createAccount(ctx context.Context, caller v1.Caller, input []b
 		return err
 	}
 
-	// The role is named after the preset and carries a **snapshot** of it,
-	// narrowed to what this grantor holds. Snapshotted deliberately: an account
-	// created today does not gain an action the Platform adds tomorrow, which is
-	// correct for everyone except the install owner — whose role the boot-time
-	// reconciliation keeps current, because it is the root of every other grant.
+	// The install's role for this preset, made the first time somebody asks for
+	// it and carrying a **snapshot** of the preset narrowed to what that first
+	// grantor held. Snapshotted deliberately: a role created today does not gain
+	// an action the Platform adds tomorrow, which is correct for every role
+	// except the install owner's — whose the boot-time reconciliation keeps
+	// current, because it is the root of every other grant.
 	perms := make([]string, 0, len(offer.Selected))
 	for _, p := range offer.Selected {
 		perms = append(perms, string(p))
 	}
-	role, err := h.svc.CreateRole(ctx, app.CreateRoleCommand{
-		CallerSessionID: session, Name: env.Preset, Permissions: perms,
-	})
+	roleID, err := h.presetRole(ctx, caller, env.Preset, perms)
 	if err != nil {
 		return h.partialAccount(ctx, created.User, "the role could not be created", err)
 	}
 	if _, err := h.svc.GrantRole(ctx, app.GrantRoleCommand{
-		CallerSessionID: session, UserID: created.User.ID, RoleID: role.Role.ID,
+		CallerSessionID: session, UserID: created.User.ID, RoleID: roleID,
 	}); err != nil {
 		return h.partialAccount(ctx, created.User, "the role could not be granted", err)
 	}
 	return nil
+}
+
+// presetRole finds the install's role for a preset, creating it the first time.
+//
+// **A role name is unique across the install**, which makes "create the User
+// role" something that can happen exactly once. Creating one per account was
+// the first attempt and it produced three accounts out of four holding no
+// authority at all — each one a Conflict on the second insert, each one an
+// account that could not sign in. The browser found it; nothing else could,
+// because the fakes had no unique index.
+//
+// So a preset role is an install-wide named role that several people hold. That
+// does not weaken the snapshot the roadmap asks for: the snapshot belongs to the
+// role, taken when the role was created, and nothing widens it afterwards — an
+// account provisioned today still never gains an action added tomorrow.
+//
+// The set is only used when the role is being created. An existing one is
+// granted as it stands, bounded by what the grantor holds (ADR 0069), so a
+// reduced administrator granting a wider existing role is refused with the
+// permissions named rather than silently handed a narrower one.
+func (h *Handler) presetRole(ctx context.Context, caller v1.Caller, preset string, perms []string) (domain.RoleID, error) {
+	existing, err := h.svc.GetRoleByName(ctx, app.GetRoleByNameQuery{Caller: caller, Name: preset})
+	if err != nil {
+		return "", err
+	}
+	if existing.Found {
+		return existing.Role.ID, nil
+	}
+	created, err := h.svc.CreateRole(ctx, app.CreateRoleCommand{
+		CallerSessionID: domain.SessionID(caller.Session), Name: preset, Permissions: perms,
+	})
+	if err != nil {
+		// Two administrators provisioning at once both find nothing and both
+		// insert; the unique index makes exactly one of them the winner, and the
+		// loser reads what the winner made rather than failing an account over a
+		// race that resolved correctly.
+		if contracts.CategoryOf(err) == contracts.Conflict {
+			if again, readErr := h.svc.GetRoleByName(ctx, app.GetRoleByNameQuery{
+				Caller: caller, Name: preset,
+			}); readErr == nil && again.Found {
+				return again.Role.ID, nil
+			}
+		}
+		return "", err
+	}
+	return created.Role.ID, nil
 }
 
 // partialAccount reports an account left without authority.
@@ -207,11 +252,10 @@ type grantPresetEnvelope struct {
 // grantPreset adds a preset's worth of authority to an account that already
 // exists.
 //
-// It creates a role rather than reusing one, for the same reason creating an
-// account does: a role row is a snapshot, and two accounts sharing one would
-// mean widening the first widened the second. The permission set is the
-// grantor's own, narrowed by the preset, so a reduced administrator confers a
-// reduced role and never their own idea of the word.
+// It goes through the same find-or-create the account creation does, so an
+// install has one role per preset however it was reached. The permission set is
+// the grantor's own narrowed by the preset, and it is only used if the role has
+// to be made — granting an existing one is bounded by what the grantor holds.
 func (h *Handler) grantPreset(ctx context.Context, caller v1.Caller, input []byte) error {
 	var env grantPresetEnvelope
 	if err := json.Unmarshal(nonEmpty(input), &env); err != nil {
@@ -236,16 +280,20 @@ func (h *Handler) grantPreset(ctx context.Context, caller v1.Caller, input []byt
 		perms = append(perms, string(p))
 	}
 
-	session := domain.SessionID(caller.Session)
-	role, err := h.svc.CreateRole(ctx, app.CreateRoleCommand{
-		CallerSessionID: session, Name: env.Preset, Permissions: perms,
-	})
+	roleID, err := h.presetRole(ctx, caller, env.Preset, perms)
 	if err != nil {
 		return err
 	}
 	_, err = h.svc.GrantRole(ctx, app.GrantRoleCommand{
-		CallerSessionID: session, UserID: domain.UserID(env.UserID), RoleID: role.Role.ID,
+		CallerSessionID: domain.SessionID(caller.Session),
+		UserID:          domain.UserID(env.UserID),
+		RoleID:          roleID,
 	})
+	if err != nil && contracts.CategoryOf(err) == contracts.Conflict {
+		// Already granted. Saying so beats "conflict", which reads as a failure
+		// for something that is in fact the state the person was asking for.
+		return contracts.NewError(contracts.Conflict, "this account already holds the "+env.Preset+" role")
+	}
 	return err
 }
 

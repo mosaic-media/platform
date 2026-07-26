@@ -191,3 +191,66 @@ func TestBootstrapReconcilesTheSuperuserRole(t *testing.T) {
 		t.Errorf("policy still denies the reconciled action: %s", decision.Reason)
 	}
 }
+
+// TestOwnerRoleIsReconciledOnEveryBoot covers the same failure arriving through
+// the door claiming opened.
+//
+// The reconciliation above lives inside EnsureAdmin, which runs only when the
+// environment-variable bootstrap is configured. A server claimed through the
+// setup wizard (ADR 0098) never calls it, so its owner's authority froze at the
+// moment of claiming — and an action added by a later build would then be one
+// nobody on that install could ever hold, because the root of every grant did
+// not have it and cannot delegate what it lacks.
+func TestOwnerRoleIsReconciledOnEveryBoot(t *testing.T) {
+	requirePostgres(t)
+
+	pool := freshDatabase(t)
+	c := context.Background()
+	if err := postgres.Migrate(c, pool); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	var mod postgres.Module
+	cs := mod.Bind(pool)
+
+	// An unclaimed server has no owner role. That is the ordinary state of a
+	// fresh install and the very first thing this runs against, so it must not
+	// be an error.
+	if changed, err := bootstrapReconcile(c, cs, []domain.Permission{"content.read"}); err != nil {
+		t.Fatalf("reconciling an unclaimed server: %v", err)
+	} else if changed {
+		t.Error("an unclaimed server reported a reconciliation")
+	}
+
+	// A claim writes the owner's role directly, exactly as ClaimServer does.
+	role, err := cs.Permissions.CreateRole(c, domain.Role{
+		ID: "role-owner", Name: "Superuser", Permissions: []domain.Permission{"content.read"},
+	})
+	if err != nil {
+		t.Fatalf("seed the owner role: %v", err)
+	}
+
+	current := []domain.Permission{"content.read", "session.create"}
+	if changed, err := bootstrapReconcile(c, cs, current); err != nil {
+		t.Fatalf("ReconcileOwnerRole: %v", err)
+	} else if !changed {
+		t.Fatal("a stale owner role was left as it was")
+	}
+	back, err := cs.Permissions.FindRole(c, role.ID)
+	if err != nil {
+		t.Fatalf("FindRole: %v", err)
+	}
+	if len(back.Permissions) != 2 {
+		t.Fatalf("the owner role carries %v, want the build's current set", back.Permissions)
+	}
+
+	// Idempotent, in either order: a boot that changes nothing writes nothing.
+	if changed, err := bootstrapReconcile(c, cs, []domain.Permission{"session.create", "content.read"}); err != nil {
+		t.Fatalf("second ReconcileOwnerRole: %v", err)
+	} else if changed {
+		t.Error("a boot that changed nothing reported a write")
+	}
+}
+
+func bootstrapReconcile(c context.Context, cs *postgres.ContractSet, perms []domain.Permission) (bool, error) {
+	return bootstrap.ReconcileOwnerRole(c, cs.UnitOfWork, perms)
+}

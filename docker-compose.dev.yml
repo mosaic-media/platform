@@ -62,10 +62,20 @@ services:
         condition: service_healthy
     environment:
       MOSAIC_POSTGRES_DSN: "postgres://mosaic:mosaic@postgres:5432/mosaic?sslmode=disable"
-      MOSAIC_BOOTSTRAP_ADMIN_USERNAME: "admin"
-      MOSAIC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
       MOSAIC_API_ADDR: ":8081"
       MOSAIC_HEALTH_ADDR: ":8080"
+      # Where this install writes its name (ADR 0098). In a volume rather than
+      # on the bind mount, so a claimed dev stack keeps its identity across a
+      # rebuild and `docker compose down -v` returns it to unclaimed — which is
+      # the state the setup wizard is reached from.
+      MOSAIC_INSTANCE_FILE: "/var/lib/mosaic/instance.json"
+      # **No MOSAIC_BOOTSTRAP_ADMIN_*.** The stack used to seed `admin`/`admin`,
+      # which meant a fresh dev stack was already claimed and the setup wizard
+      # was unreachable from it — the one screen every real install starts on
+      # was the one screen nobody here could see. First boot now shows the
+      # doorway, exactly as a household's would (ADR 0098). The env-var
+      # bootstrap is untouched and still there for an automated deployment that
+      # never puts a human in front of it; set the pair here to use it.
       # The TMDB read token (ADR 0072), from ./.env or your shell — never a
       # GitHub secret, which reaches only CI, not a local build. Empty is fine.
       TMDB_RAC: "${TMDB_RAC:-}"
@@ -87,6 +97,7 @@ services:
       # that boundary turns a warm rebuild from seconds into minutes.
       - mosaic-dev-gomod:/go/pkg/mod
       - mosaic-dev-gobuild:/root/.cache/go-build
+      - mosaic-dev-state:/var/lib/mosaic
     ports:
       - "8081:8081"
       - "8080:8080"
@@ -187,6 +198,9 @@ volumes:
   mosaic-dev-pgdata18:
   mosaic-dev-gomod:
   mosaic-dev-gobuild:
+  # This install's identity (ADR 0098), deliberately outside the database it is
+  # insurance against.
+  mosaic-dev-state:
   mosaic-dev-npm:
   mosaic-dev-node-root:
   mosaic-dev-node-shell:

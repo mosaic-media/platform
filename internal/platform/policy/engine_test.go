@@ -127,8 +127,16 @@ func (failingPermissionStore) AttributesForUser(context.Context, domain.UserID) 
 	return nil, nil
 }
 
+func (fakePermissionStore) FindRoleByName(context.Context, string) (domain.Role, error) {
+	return domain.Role{}, nil
+}
+
 func (fakePermissionStore) FindRole(context.Context, domain.RoleID) (domain.Role, error) {
 	return domain.Role{}, nil
+}
+
+func (failingPermissionStore) FindRoleByName(context.Context, string) (domain.Role, error) {
+	return domain.Role{}, contracts.NewError(contracts.Unavailable, "permission store unreachable")
 }
 
 func (failingPermissionStore) FindRole(context.Context, domain.RoleID) (domain.Role, error) {

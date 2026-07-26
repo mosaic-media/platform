@@ -388,6 +388,11 @@ func (s fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (do
 	if s.db.rolesByID == nil {
 		s.db.rolesByID = map[domain.RoleID]domain.Role{}
 	}
+	for _, existing := range s.db.rolesByID {
+		if existing.Name == role.Name {
+			return domain.Role{}, contracts.NewError(contracts.Conflict, "a role with that name already exists")
+		}
+	}
 	s.db.rolesByID[role.ID] = role
 	return role, nil
 }
@@ -493,6 +498,55 @@ func (fakePasswordVerifier) Verify(plaintext, hash string) (bool, error) {
 	return hash == "insecure-test-hash:"+plaintext, nil
 }
 
+// fakeExtensions is the smallest ExtensionManager a claim needs: a catalogue to
+// resolve a chosen stream source against, and a record of what was installed.
+type fakeExtensions struct {
+	mu        sync.Mutex
+	available []app.ExtensionCatalogueEntry
+	installed []string
+	err       error
+}
+
+func (f *fakeExtensions) Install(_ context.Context, repository, moduleID string) (domain.InstalledExtension, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return domain.InstalledExtension{}, f.err
+	}
+	f.installed = append(f.installed, repository+"/"+moduleID)
+	return domain.InstalledExtension{ModuleID: moduleID, Repository: repository}, nil
+}
+
+func (f *fakeExtensions) Uninstall(context.Context, string) error { return nil }
+
+func (f *fakeExtensions) InstalledExtensions(context.Context) ([]domain.InstalledExtension, error) {
+	return nil, nil
+}
+
+func (f *fakeExtensions) Available(context.Context) ([]app.ExtensionCatalogueEntry, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.available, nil
+}
+
+func newTestServiceWithExtensions(db *fakeDB, now time.Time, ext app.ExtensionManager) *app.Service {
+	return app.NewService(app.Deps{
+		UnitOfWork:       fakeUnitOfWork{db: db},
+		Sessions:         fakeSessionStore{db: db},
+		Users:            fakeUserStore{db: db},
+		Credentials:      fakeCredentialStore{db: db},
+		Permissions:      fakePermissionStore{db: db},
+		Clock:            fakeClock{now: now},
+		IDs:              &fakeIDGenerator{},
+		ContentIDs:       &fakeIDGenerator{},
+		Policy:           policy.NewEngine(fakePermissionStore{db: db}),
+		Events:           fakeEventPublisher{},
+		PasswordVerifier: fakePasswordVerifier{},
+		Tokens:           fakeTokenStore{db: db},
+		Extensions:       ext,
+	})
+}
+
 func newTestService(db *fakeDB, now time.Time) *app.Service {
 	return app.NewService(app.Deps{
 		UnitOfWork:       fakeUnitOfWork{db: db},
@@ -512,6 +566,17 @@ func newTestService(db *fakeDB, now time.Time) *app.Service {
 		ModuleSettings:   nil,
 		Tokens:           fakeTokenStore{db: db},
 	})
+}
+
+func (s fakePermissionStore) FindRoleByName(_ context.Context, name string) (domain.Role, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for _, role := range s.db.rolesByID {
+		if role.Name == name {
+			return role, nil
+		}
+	}
+	return domain.Role{}, contracts.NewError(contracts.NotFound, "no role with that name")
 }
 
 func (fakePermissionStore) FindRole(context.Context, domain.RoleID) (domain.Role, error) {

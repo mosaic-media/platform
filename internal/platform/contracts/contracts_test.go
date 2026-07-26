@@ -241,6 +241,10 @@ var (
 	_ contracts.ComponentHealthReporter = mockComponentHealthReporter{}
 )
 
+func (mockPermissionStore) FindRoleByName(context.Context, string) (domain.Role, error) {
+	return domain.Role{}, nil
+}
+
 func (mockPermissionStore) FindRole(context.Context, domain.RoleID) (domain.Role, error) {
 	return domain.Role{}, nil
 }

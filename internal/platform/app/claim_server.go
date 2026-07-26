@@ -67,13 +67,18 @@ type ClaimServerCommand struct {
 	// DeviceID names the device claiming, because claiming signs you in and a
 	// session belongs to a device.
 	DeviceID domain.DeviceID
-	// StreamSourceModuleID and StreamSourceRepository name the extension module
-	// the household chose as its source of streams, if it chose one. Optional:
-	// metadata and catalogs work on a fresh install with no credential at all
-	// (ADR 0072), so skipping this leaves a browsable Mosaic that cannot play,
-	// which is an honest state and a recoverable one.
-	StreamSourceModuleID   string
-	StreamSourceRepository string
+	// StreamSourceModuleID names the extension module the household chose as its
+	// source of streams, if it chose one. Optional: metadata and catalogs work
+	// on a fresh install with no credential at all (ADR 0072), so skipping this
+	// leaves a browsable Mosaic that cannot play, which is an honest state and a
+	// recoverable one.
+	//
+	// The repository it comes from is **not** carried beside it. A setup form
+	// that sent both would be a form a caller could point at a repository of
+	// their own, on the one endpoint that runs unauthenticated; resolving it
+	// from the catalogue the Platform already trusts means the only installable
+	// things are the ones the Platform was going to offer anyway.
+	StreamSourceModuleID string
 }
 
 // ClaimServerResult is the owner, their first session, and what became of the
@@ -114,13 +119,13 @@ func validateClaimServerCommand(cmd ClaimServerCommand) error {
 	}
 	switch {
 	case strings.TrimSpace(cmd.Username) == "":
-		reject("username", "Choose a username.")
+		reject("username", "Choose a username for your account.")
 	case strings.ContainsFunc(cmd.Username, unicode.IsSpace):
 		reject("username", "A username cannot contain spaces.")
 	}
 	switch {
 	case cmd.Password == "":
-		reject("password", "Choose a password.")
+		reject("password", "Choose a password for your account.")
 	case len([]rune(cmd.Password)) < minPasswordLength:
 		reject("password", "Use at least 8 characters.")
 	}
@@ -128,7 +133,7 @@ func validateClaimServerCommand(cmd ClaimServerCommand) error {
 	// their confirmation does not match a password that was itself refused is
 	// two complaints about one mistake.
 	if cmd.Password != "" && len([]rune(cmd.Password)) >= minPasswordLength && cmd.ConfirmPassword != cmd.Password {
-		reject("confirmPassword", "This does not match the password above.")
+		reject("confirmPassword", "The two passwords do not match.")
 	}
 	if cmd.DeviceID == "" {
 		// Not a field on any form: the client supplies it. It is a bad request
@@ -136,9 +141,33 @@ func validateClaimServerCommand(cmd ClaimServerCommand) error {
 		return contracts.NewError(contracts.InvalidArgument, "device id is required")
 	}
 	if len(fields) > 0 {
-		return contracts.RejectFields("This server could not be set up yet.", fields...)
+		// **The summary repeats the individual messages, and that is not
+		// redundancy.** The wizard is four steps in one scope, and a rejection
+		// about the password marks a field on step two while the person is
+		// looking at step four — where the form-level line is the only thing
+		// they can see. A generic "that did not work" there would be a refusal
+		// with no way to act on it.
+		//
+		// It is also the case client-side validation stopped covering when the
+		// steps became hidden branches rather than hidden fields: a Box that is
+		// not rendered unmounts its inputs, and an unmounted input's rules
+		// leave the scope, so the check that used to run before anything was
+		// sent now runs here instead.
+		return contracts.RejectFields(summarise(fields), fields...)
 	}
 	return nil
+}
+
+// summarise joins the field messages into the one line a form shows above its
+// button. Each rejection is written to stand alone for exactly this reason —
+// "Use at least 8 characters" reads as an instruction wherever it appears,
+// where "too short" would need the field beside it to mean anything.
+func summarise(fields []contracts.FieldRejection) string {
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		out = append(out, f.Message)
+	}
+	return strings.Join(out, " ")
 }
 
 // ClaimServer creates the first account and signs it in.
@@ -159,6 +188,19 @@ func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (Clai
 	// a transaction. The one that actually holds is inside it.
 	if !s.ServerState(ctx).Claimable() {
 		return ClaimServerResult{}, contracts.NewError(contracts.Conflict, "this server has already been claimed")
+	}
+
+	// **Resolved before the claim, not after.** The catalogue read is gated on
+	// the server still being claimable — deliberately, so a claimed server never
+	// reaches a remote repository for an unauthenticated caller — which means
+	// asking for it after the commit asks a server that has just stopped being
+	// claimable and gets nothing. It answered "Mosaic no longer offers
+	// aiostreams" on the very claim that chose it, and no test saw it: every
+	// one of them either had no extension manager or never got as far as the
+	// install. It took claiming a server in a browser.
+	streamRepository, streamOffered := "", cmd.StreamSourceModuleID == ""
+	if cmd.StreamSourceModuleID != "" {
+		streamRepository, streamOffered = s.streamSourceRepository(ctx, cmd.StreamSourceModuleID)
 	}
 
 	var result ClaimServerResult
@@ -254,7 +296,8 @@ func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (Clai
 	// things the owner can fix from Settings, and refusing to let them in over
 	// either would be the worse answer.
 	result.ServerName, result.IdentityProblem = s.recordIdentity(ctx, strings.TrimSpace(cmd.ServerName))
-	result.StreamSource, result.StreamSourceProblem = s.installStreamSource(ctx, result.Tokens, cmd)
+	result.StreamSource, result.StreamSourceProblem = s.installStreamSource(
+		ctx, result.Tokens, cmd.StreamSourceModuleID, streamRepository, streamOffered)
 
 	telemetry.From(ctx).For("auth").Info("server claimed",
 		telemetry.Identifier("username", result.User.Username),
@@ -295,25 +338,46 @@ func (s *Service) recordIdentity(ctx context.Context, name string) (string, stri
 // moment ago and carries `extension.manage`, so the ordinary authorised path
 // works unchanged — this is not a special case, it is the normal command with a
 // caller that is one second old.
-func (s *Service) installStreamSource(ctx context.Context, tokens domain.TokenPair, cmd ClaimServerCommand) (string, string) {
-	if cmd.StreamSourceModuleID == "" {
+func (s *Service) installStreamSource(
+	ctx context.Context, tokens domain.TokenPair, moduleID, repository string, offered bool,
+) (string, string) {
+	if moduleID == "" {
 		return "", ""
 	}
 	if s.extensions == nil {
 		return "", "This build cannot install modules, so no stream source was added."
 	}
+	if !offered {
+		return "", "Mosaic no longer offers " + moduleID + ". You can add a stream source from Settings."
+	}
 	_, err := s.InstallExtension(ctx, InstallExtensionCommand{
 		Caller:     v1.CallerFromSession(tokens.AccessToken),
-		Repository: cmd.StreamSourceRepository,
-		ModuleID:   cmd.StreamSourceModuleID,
+		Repository: repository,
+		ModuleID:   moduleID,
 	})
 	if err != nil {
 		telemetry.From(ctx).For("auth").Warn("the chosen stream source did not install",
-			telemetry.String("module", cmd.StreamSourceModuleID), telemetry.Err(err))
-		return "", "Mosaic could not install " + cmd.StreamSourceModuleID + ": " + err.Error() +
+			telemetry.String("module", moduleID), telemetry.Err(err))
+		return "", "Mosaic could not install " + moduleID + ": " + err.Error() +
 			" You can add a stream source from Settings."
 	}
-	return cmd.StreamSourceModuleID, ""
+	return moduleID, ""
+}
+
+// streamSourceRepository resolves which trusted repository offers a module,
+// among the ones the setup step was allowed to offer.
+//
+// It re-reads rather than trusting a value the claim carried, and it filters on
+// the stream role for the same reason the step does: the question is "may this
+// be installed during setup", and answering it from the catalogue means the
+// answer cannot be widened by the request.
+func (s *Service) streamSourceRepository(ctx context.Context, moduleID string) (string, bool) {
+	for _, e := range s.SetupOptions(ctx).StreamSources {
+		if e.ModuleID == moduleID {
+			return e.Repository, true
+		}
+	}
+	return "", false
 }
 
 // permissionsOf converts a preset's actions into the permissions a role row

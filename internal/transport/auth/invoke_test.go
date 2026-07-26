@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 
 	authv1 "github.com/mosaic-media/contracts/gen/mosaic/auth/v1"
+	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/transport/auth"
 )
@@ -211,6 +212,67 @@ func TestSigningInThroughTheDoorMintsASessionWithItsCapabilities(t *testing.T) {
 	}
 	if len(signed.GetSession().GetCapabilities()) == 0 {
 		t.Error("the minted session carries no capability set, so a client cannot gate anything")
+	}
+}
+
+// The stream source the household picked is installed, and the repository it
+// comes from is the Platform's answer rather than the caller's.
+//
+// **This is the test the browser wrote.** The repository was resolved after the
+// claim committed, from a catalogue read that is deliberately gated on the
+// server still being claimable — so it answered "Mosaic no longer offers
+// aiostreams" on the very claim that had just chosen it. Every test passed:
+// each one either had no extension manager or never reached the install.
+func TestClaimingInstallsTheStreamSourceThatWasChosen(t *testing.T) {
+	ext := &fakeExtensions{available: []app.ExtensionCatalogueEntry{
+		{Repository: "mosaic-official", ModuleID: "aiostreams", Provides: []string{"stream"}},
+		{Repository: "mosaic-official", ModuleID: "fanart-tv", Provides: []string{"artwork"}},
+	}}
+	h := auth.NewHandler(newTestServiceWithExtensions(newFakeDB(), testNow, ext))
+
+	msg, err := invoke(t, h, "claimServer", map[string]any{
+		"serverName": "One", "username": "alex",
+		"password": "correct horse", "confirmPassword": "correct horse",
+		"streamSource": "aiostreams",
+	})
+	if err != nil {
+		t.Fatalf("claimServer: %v", err)
+	}
+	if msg.GetSigned() == nil {
+		t.Fatalf("claiming did not sign anyone in: %+v", msg.GetOutcome())
+	}
+
+	ext.mu.Lock()
+	defer ext.mu.Unlock()
+	if len(ext.installed) != 1 || ext.installed[0] != "mosaic-official/aiostreams" {
+		t.Fatalf("installed %v, want the chosen source from the repository that offers it", ext.installed)
+	}
+}
+
+// A module the catalogue does not offer as a stream source is not installed,
+// whatever the request says. The claim still succeeds: the account is the part
+// that had to work, and a source can be added from Settings.
+func TestAClaimWillNotInstallSomethingTheCatalogueDidNotOffer(t *testing.T) {
+	ext := &fakeExtensions{available: []app.ExtensionCatalogueEntry{
+		{Repository: "mosaic-official", ModuleID: "fanart-tv", Provides: []string{"artwork"}},
+	}}
+	h := auth.NewHandler(newTestServiceWithExtensions(newFakeDB(), testNow, ext))
+
+	msg, err := invoke(t, h, "claimServer", map[string]any{
+		"serverName": "One", "username": "alex",
+		"password": "correct horse", "confirmPassword": "correct horse",
+		"streamSource": "fanart-tv",
+	})
+	if err != nil {
+		t.Fatalf("claimServer: %v", err)
+	}
+	if msg.GetSigned() == nil {
+		t.Fatal("a claim naming an unofferable source failed outright; the account is not the optional half")
+	}
+	ext.mu.Lock()
+	defer ext.mu.Unlock()
+	if len(ext.installed) != 0 {
+		t.Fatalf("installed %v from an unauthenticated request", ext.installed)
 	}
 }
 

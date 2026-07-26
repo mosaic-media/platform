@@ -114,6 +114,49 @@ func EnsureAdmin(
 	return created, nil
 }
 
+// ReconcileOwnerRole brings the install owner's role back in line with the
+// Platform's current action set, on every boot, however the owner was created.
+//
+// **It exists because claiming made the old reconciliation unreachable.** That
+// one runs inside EnsureAdmin, which runs only when the environment-variable
+// bootstrap is configured — so a server claimed through the setup wizard has an
+// owner whose role is a snapshot taken at the moment of claiming and never
+// touched again. Upgrade that install, and the owner cannot grant the action
+// the upgrade added: not to anybody, ever, because an authority the root of
+// every grant does not hold can never be delegated. It is the same defect
+// reconcileSuperuser was written for, arriving by a door that did not exist
+// when it was written.
+//
+// It matches the role by **name**, which the structural check below deliberately
+// does not. The two are answering different questions: that one is repairing an
+// install whose role may be called anything, because it was seeded by a build
+// that named it differently; this one is maintaining a role the claim itself
+// created and named, one boot ago or a hundred. A name is safe to match on when
+// you are the thing that wrote it.
+//
+// Writes nothing when nothing changed, so an ordinary boot costs one read.
+func ReconcileOwnerRole(ctx context.Context, uow contracts.UnitOfWork, perms []domain.Permission) (bool, error) {
+	changed := false
+	err := uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
+		role, err := tx.Permissions().FindRoleByName(ctx, superuserRoleName)
+		if err != nil {
+			// No owner role means an unclaimed server, or one seeded by a build
+			// that named it something else — neither is this function's business
+			// and neither is an error.
+			if contracts.CategoryOf(err) == contracts.NotFound {
+				return nil
+			}
+			return err
+		}
+		if samePermissions(role.Permissions, perms) {
+			return nil
+		}
+		changed = true
+		return tx.Permissions().SetRolePermissions(ctx, role.ID, perms)
+	})
+	return changed, err
+}
+
 // reconcileSuperuser brings the owner account's role back in line with the
 // Platform's current action set.
 //

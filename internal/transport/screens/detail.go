@@ -299,9 +299,19 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 
 	els := make([]ui.El, 0, 5)
 
+	// Curating the library is an administrator's authority, not a viewer's
+	// (ADR 0069), so the control that does it is drawn only for a caller who
+	// holds it (ADR 0036). It was drawn for everybody while everybody was the
+	// same account; the first ordinary account pressed it and got nothing —
+	// which is the dead end the paragraph above this function is about, on the
+	// same screen.
+	canImport := s.content.CallerCan(ctx, caller, app.ActionContentImport, "content")
+
 	if !res.InLibrary {
-		els = append(els, ui.Button("Add to library", "primary", ui.IconName("plus"),
-			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
+		if canImport {
+			els = append(els, ui.Button("Add to library", "primary", ui.IconName("plus"),
+				ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
+		}
 		if hasTrailer {
 			els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
 		}
@@ -384,8 +394,10 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 	// (additive — nothing is removed). It is offered explicitly rather than run
 	// on every view because an aggregator fan-out costs seconds and most views
 	// never lead to a play.
-	els = append(els, ui.IconButton("refresh", "Refresh sources", "pill",
-		ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
+	if canImport {
+		els = append(els, ui.IconButton("refresh", "Refresh sources", "pill",
+			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
+	}
 
 	return ui.Actions(els...)
 }
