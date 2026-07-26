@@ -41,17 +41,71 @@
 # builds on one machine, which is how a `replace` for a published module ends up
 # committed by accident.
 #
-# **npm side: there is no local override, and this file used to claim there
-# was.** The comment here read "the lockfile already links `@mosaic-media/sdui`
-# to `../sdui`". It does not: `web/package-lock.json` resolves that package from
-# `https://registry.npmjs.org`, pinned by integrity hash. The same wrong belief
-# in `web`'s CLAUDE.md is what let the Shell sit on a stale contract version
-# while a field was silently dropped on the wire — no error at any layer.
+# **npm side: a tarball packed at start-up, not a link and not a saved
+# dependency.** This file used to say there was no npm override at all, and
+# before that it claimed the lockfile linked `@mosaic-media/sdui` to the sibling
+# checkout. It never did — `web/package-lock.json` resolves that package from
+# `https://registry.npmjs.org`, pinned by integrity hash — so a local contract
+# edit reached the Platform instantly and never reached the Shell. That gap is
+# what let the Shell sit on a stale contract while a field was dropped on the
+# wire with no error at any layer: Connect-ES serialises only the fields in the
+# schema it was built with, so the client sent the field, the wire dropped it,
+# the call returned 200 and the server saw nil.
 #
-# So a local edit in `contracts` reaches the Go side through the workspace below
-# and does **not** reach the Shell. Making it do so needs an npm link or a
-# workspace entry that does not exist yet; the mount on the `web` service is
-# kept so the path resolves, not because npm reads it.
+# The `web` command below closes it. `npm pack /src/contracts` builds the tarball
+# npm would publish, and the Shell and the storybook install *that*. Three
+# choices in it are load-bearing, and each was the second thing tried:
+#
+#   * **A tarball, not `npm install /src/contracts`.** Given a directory npm
+#     symlinks it, and a symlink is resolved to its real path — so the contract's
+#     own `@bufbuild/protobuf` is looked up from `/src/contracts/node_modules`,
+#     which is not inside the Shell's tree. On a contracts checkout that has
+#     never had npm run on it — the correct state, since that repository runs
+#     everything in its container — it is not there at all, and Vite answers the
+#     Shell's import with a 403: the real path is outside its `fs.allow` root. On
+#     a checkout that *has* been installed on the host, it resolves to a second
+#     copy of protobuf-es and the stack appears to work. A directory install
+#     therefore passes or fails on whether a stray `node_modules` exists in
+#     another repository, which is the worst possible thing for it to depend on.
+#     The tarball is extracted into the Shell's own tree, so resolution,
+#     pre-bundling and `fs.allow` all behave exactly as they do for the published
+#     package: the overlay differs from production in where the bytes came from
+#     and nowhere else. It also honours the contract's `files` field, so an
+#     export missing from `files` breaks here rather than only after a publish.
+#
+#   * **`--no-save`.** A plain `npm install <spec>` rewrites
+#     `packages/shell/package.json`, `packages/storybook/package.json` and
+#     `package-lock.json` on the host — pinning `"@mosaic-media/sdui":
+#     "file:../../../contracts"`, and re-encoding the rest of each file while it
+#     is in there. Those are committed files in another repository, and pinning a
+#     path into them is the same mistake as committing a `replace` for a
+#     published module: a tree that only builds on one machine. `--no-save`
+#     writes into node_modules and touches nothing else, which is what makes
+#     this the npm counterpart of a container-only `go.work`.
+#
+#   * **Both workspaces, not just the Shell.** They ask for different ranges
+#     (`^0.53.0` and `^0.41.0`), so naming only `mosaic-shell` makes npm nest the
+#     local copy under `packages/shell/node_modules` and leave the registry's
+#     0.41.0 hoisted at the root for the storybook — two answers to "which
+#     contract is this?" in one tree. Naming both collapses it to one hoisted
+#     copy. Nothing here serves the storybook, so this is about the tree having
+#     one answer rather than about anything this stack renders.
+#
+# **`--force` on Vite, and the overlay's own node_modules volumes.** Both fall
+# out of `--no-save`, and the second was found by running the *published* stack
+# afterwards. Vite decides whether to reuse its dependency pre-bundle by hashing
+# the lockfile, which `--no-save` leaves untouched — so without `--force` a
+# contract edit plus a restart re-serves the previous bundle, and the loop this
+# file exists for silently does not happen. The pre-bundle also outlives the
+# stack: with the node_modules volumes shared, `docker compose -f
+# docker-compose.dev.yml up` on a warm volume served the *overlay's* contract to
+# the browser while the Platform served the published one. npm had reverted the
+# tree correctly and the Platform was right; only the browser was wrong, which is
+# the one direction nothing here checks. The volumes on the service below keep
+# the two stacks' trees, and their caches, apart.
+#
+# So a local edit in `contracts` now reaches both halves, and both on a restart:
+# the Go side through the workspace below, the Shell through the tarball.
 services:
   platform:
     volumes:
@@ -84,7 +138,34 @@ services:
 
   web:
     volumes:
-      # Kept so the path resolves, not because npm reads it — see the npm note
-      # at the top of this file. sdui-react is a workspace package and needs no
+      # The Shell's half of the contract comes from here — see the npm note at
+      # the top of this file. sdui-react is a workspace package and needs no
       # mount either way.
       - ../contracts:/src/contracts
+      # **Its own node_modules, not the published stack's** — these override the
+      # base file's mounts at the same paths, so the overlay's tree and its Vite
+      # pre-bundle are a separate artefact, for the reason in the `--force` note
+      # at the top of this file. Sharing them was tried and leaks the local
+      # contract into the published stack.
+      #
+      # The storybook gets a volume the base file does not give it, so the install
+      # below writes Linux node_modules into a volume rather than through the bind
+      # mount onto the host.
+      - mosaic-dev-local-node-root:/src/web/node_modules
+      - mosaic-dev-local-node-shell:/src/web/packages/shell/node_modules
+      - mosaic-dev-local-node-sdui:/src/web/packages/sdui-react/node_modules
+      - mosaic-dev-local-node-storybook:/src/web/packages/storybook/node_modules
+    command: >
+      sh -c "npm install --no-fund --no-audit &&
+             rm -rf /tmp/contract-pack && mkdir -p /tmp/contract-pack &&
+             npm pack --silent --pack-destination /tmp/contract-pack /src/contracts &&
+             echo 'contracts: ^ that tarball, packed from /src/contracts — the Shell is built against the sibling checkout, not the registry' &&
+             npm install --no-save --no-fund --no-audit --workspace mosaic-shell --workspace mosaic-storybook /tmp/contract-pack/*.tgz &&
+             npm run build --workspace @mosaic-media/sdui-react &&
+             exec npm run dev --workspace mosaic-shell -- --host 0.0.0.0 --port 5173 --strictPort --force"
+
+volumes:
+  mosaic-dev-local-node-root:
+  mosaic-dev-local-node-shell:
+  mosaic-dev-local-node-sdui:
+  mosaic-dev-local-node-storybook:

@@ -119,24 +119,36 @@ services:
       MOSAIC_PLATFORM_URL: "http://platform:8081"
     volumes:
       - ../web:/src/web
-      # This comment used to say the web lockfile links @mosaic-media/sdui to
-      # the sibling checkout rather than the registry. It does not:
-      # web/package-lock.json resolves that package from registry.npmjs.org,
-      # pinned by integrity hash. Believing otherwise is what let the Shell run
-      # against a stale contract version while a field was dropped on the wire
-      # with no error at any layer.
+      # **This file installs the contract from the registry, and that is the
+      # point of it rather than an oversight.** web/package-lock.json resolves
+      # @mosaic-media/sdui from registry.npmjs.org, pinned by integrity hash, so
+      # what the Shell is compiled against is decided by the version in
+      # packages/shell/package.json and by nothing else — not by this mount, and
+      # not by anything on the disk beside it. A stale version fails silently:
+      # Connect-ES serialises only the fields in the schema it was built with, so
+      # when the Shell was pinned behind the Platform the client sent the field,
+      # the wire dropped it, the call returned 200 and the server saw nil.
+      # Nothing errored at any layer. Check the installed version before
+      # suspecting the code.
       #
-      # The same is true of `@mosaic-media/sdui-react`, and the local overlay
-      # used to claim otherwise. It is a workspace package, but the Shell only
-      # *links* to the workspace copy while its dependency range still matches
-      # the workspace version: bump sdui-react and not `packages/shell`'s range
+      # The same is true of `@mosaic-media/sdui-react`, in a way that is easier
+      # to trip over. It is a workspace package, but the Shell only *links* to
+      # the workspace copy while its dependency range still matches the
+      # workspace version: bump sdui-react and not `packages/shell`'s range
       # and npm quietly installs the published one into the Shell's own
       # node_modules, where it shadows the link. Nothing fails — the Shell keeps
       # rendering, against the client from before the change. Bump both.
       #
-      # The mount is kept so the path resolves, but npm does not read it — a
-      # local contracts edit does not reach the Shell without an npm link that
-      # does not exist yet.
+      # **The mount is unread here, and read by the local overlay.** It used to
+      # be kept only so the path resolved, with nothing on either side of the
+      # stack looking at it; that is now the difference between the two files
+      # rather than a dead end. docker-compose.local.yml packs this checkout with
+      # `npm pack` and installs the tarball into the workspaces that consume it,
+      # so a local contract edit reaches the Shell there — and deliberately not
+      # here, because this file is what a contributor with no local changes runs
+      # and what CI would. The overlay installs with `--no-save` and keeps its own
+      # node_modules volumes for exactly that separation; read the npm note at the
+      # top of that file before sharing them again.
       # (module-remote-playback used to need a mount here too; it is published
       # now, so the Go side of this file needs no checkouts at all.)
       - ../contracts:/src/contracts
@@ -145,12 +157,22 @@ services:
       # install writes tens of thousands of small files, which is the worst
       # possible shape for a cross-OS mount, and it keeps the container's Linux
       # binaries from colliding with a host-side install.
+      #
+      # packages/storybook/node_modules has no volume, so what npm nests there
+      # does land on the host through the bind mount — a real if small hole in
+      # the paragraph above, and the reason the local overlay adds a fourth
+      # volume the moment it starts installing into that workspace.
       - mosaic-dev-node-root:/src/web/node_modules
       - mosaic-dev-node-shell:/src/web/packages/shell/node_modules
       - mosaic-dev-node-sdui:/src/web/packages/sdui-react/node_modules
     # --host is required: without it Vite binds to loopback inside the container
     # and nothing on the host can reach it, which looks exactly like the dev
     # server failing to start.
+    #
+    # The local overlay replaces this whole command rather than extending it —
+    # compose has no way to extend one — so it carries its own copy of these three
+    # steps with the contract install spliced in. A step added here needs adding
+    # there too; there is no check that says so.
     command: >
       sh -c "npm install --no-fund --no-audit &&
              npm run build --workspace @mosaic-media/sdui-react &&
