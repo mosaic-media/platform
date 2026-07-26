@@ -70,10 +70,21 @@ type fakeQueries struct {
 	// "this caller holds telemetry.read", which is what decides whether the
 	// expert-mode affordance is drawn at all.
 	canReadTelemetry bool
-	expertModeOn     bool
-	logs             []domain.TelemetryLogRecord
-	traces           []domain.TelemetryTraceSummary
-	spans            []domain.TelemetrySpanRecord
+	// canReadJobs is the same for job.read (ADR 0017). Separate from the one
+	// above because the two are separate grants and the nav draws them
+	// separately — a fake that answered one bool for every action could not
+	// tell the difference between "sees both" and "sees the one it holds".
+	canReadJobs  bool
+	expertModeOn bool
+	logs         []domain.TelemetryLogRecord
+	traces       []domain.TelemetryTraceSummary
+	spans        []domain.TelemetrySpanRecord
+
+	// jobs, jobAttempts and jobLogs back the background-work screens.
+	jobs        []domain.Job
+	jobAttempts []domain.JobAttempt
+	jobLogs     []domain.JobLog
+	jobErr      error
 
 	mu                  sync.Mutex
 	gotText             string
@@ -85,6 +96,8 @@ type fakeQueries struct {
 	gotLogFilter        domain.TelemetryLogFilter
 	gotTraceFilter      domain.TelemetryTraceFilter
 	gotTraceID          string
+	gotJobFilter        domain.JobFilter
+	gotJobID            domain.JobID
 }
 
 // currentUser, users and rolesByUser back the Account and People panels.
@@ -112,10 +125,54 @@ func (f *fakeQueries) ExpertModeEnabled(context.Context, v1.Caller) bool {
 	return f.expertModeOn
 }
 
-func (f *fakeQueries) CallerCan(context.Context, v1.Caller, policy.Action, string) bool {
+func (f *fakeQueries) CallerCan(_ context.Context, _ v1.Caller, action policy.Action, _ string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.canReadTelemetry
+	switch action {
+	case app.ActionJobRead:
+		return f.canReadJobs
+	case app.ActionTelemetryRead:
+		return f.canReadTelemetry
+	default:
+		// Every other affordance the nav asks about — user.read, module.read —
+		// keeps the old blanket answer, so tests written before the split are
+		// unaffected by it.
+		return f.canReadTelemetry
+	}
+}
+
+func (f *fakeQueries) ListJobs(_ context.Context, q app.ListJobsQuery) (app.ListJobsResult, error) {
+	f.mu.Lock()
+	f.gotJobFilter = q.Filter
+	f.mu.Unlock()
+	if f.jobErr != nil {
+		return app.ListJobsResult{}, f.jobErr
+	}
+	if q.Filter.Status == "" {
+		return app.ListJobsResult{Jobs: f.jobs}, nil
+	}
+	out := make([]domain.Job, 0, len(f.jobs))
+	for _, j := range f.jobs {
+		if j.Status == q.Filter.Status {
+			out = append(out, j)
+		}
+	}
+	return app.ListJobsResult{Jobs: out}, nil
+}
+
+func (f *fakeQueries) GetJob(_ context.Context, q app.GetJobQuery) (app.GetJobResult, error) {
+	f.mu.Lock()
+	f.gotJobID = q.JobID
+	f.mu.Unlock()
+	if f.jobErr != nil {
+		return app.GetJobResult{}, f.jobErr
+	}
+	for _, j := range f.jobs {
+		if j.ID == q.JobID {
+			return app.GetJobResult{Job: j, Attempts: f.jobAttempts, Logs: f.jobLogs}, nil
+		}
+	}
+	return app.GetJobResult{}, contracts.NewError(contracts.NotFound, "job not found")
 }
 
 func (f *fakeQueries) QueryTelemetryLogs(_ context.Context, q app.QueryTelemetryLogsQuery) (app.QueryTelemetryLogsResult, error) {

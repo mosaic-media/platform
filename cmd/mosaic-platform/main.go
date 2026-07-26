@@ -33,6 +33,7 @@ import (
 	"github.com/mosaic-media/platform/internal/composition/bootstrap"
 	"github.com/mosaic-media/platform/internal/composition/builtin"
 	"github.com/mosaic-media/platform/internal/composition/extensions"
+	compositionjobs "github.com/mosaic-media/platform/internal/composition/jobs"
 	"github.com/mosaic-media/platform/internal/modules/postgres"
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/config"
@@ -123,18 +124,6 @@ const (
 // crash and keeps working when PostgreSQL does not, which is the case it
 // exists for (ADR 0058).
 const telemetryLogPath = "logs/mosaic-platform.log"
-
-// telemetryPartitionsAhead is how many days of telemetry partitions to keep
-// created in advance. Generous on purpose: partition creation belongs in a
-// scheduled job, the jobs runner does not exist (ADR 0058), and a process that
-// runs for a fortnight without restarting must not reach a midnight with
-// nowhere to put its records.
-const telemetryPartitionsAhead = 14
-
-// telemetryMaintenanceInterval is how often partitions are extended and
-// expired ones dropped. Hourly is far more often than a daily boundary needs,
-// which is the point: it means a missed tick costs nothing.
-const telemetryMaintenanceInterval = time.Hour
 
 // superuserPermissions is the authority the first user receives: every action
 // the application services check (ADR 0069).
@@ -257,47 +246,6 @@ func main() {
 		// rather than having to exempt it.
 		_, _ = os.Stderr.WriteString("mosaic-platform: " + err.Error() + "\n")
 		os.Exit(1)
-	}
-}
-
-// telemetryMaintenance extends the partition window and drops expired
-// partitions on a ticker until ctx ends.
-//
-// This is a scheduled job wearing a goroutine, and it says so: it wants the
-// jobs runner, a scheduler and the system principal (ADR 0017, ADR 0058),
-// none of which exist. Running it here is the honest interim rather than
-// leaving retention unenforced and calling the phase done — but it means
-// retention runs only while the process does, and a Platform that is down for
-// a month comes back with a month of records it intended to have dropped.
-func telemetryMaintenance(ctx context.Context, store *postgres.TelemetryStore, svc *app.Service, lg *telemetry.Logger) {
-	ticker := time.NewTicker(telemetryMaintenanceInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case now := <-ticker.C:
-			if err := store.EnsurePartitions(ctx, now.UTC(), telemetryPartitionsAhead); err != nil {
-				lg.Error("extend telemetry partitions failed", telemetry.Err(err))
-			}
-			// Read per sweep rather than cached at boot, which is what makes
-			// the retention fields Hot (ADR 0058): an administrator shortening
-			// retention should take effect on the next sweep, not the next
-			// restart.
-			r := svc.TelemetryRetention(ctx)
-			retention := postgres.Retention{Logs: r.Logs, Spans: r.Spans}
-			dropped, err := store.DropExpiredPartitions(ctx, now.UTC(), retention)
-			if err != nil {
-				lg.Error("drop expired telemetry partitions failed", telemetry.Err(err))
-				continue
-			}
-			if dropped > 0 {
-				lg.Info("dropped expired telemetry partitions",
-					telemetry.Int("partitions", dropped),
-					telemetry.Duration("log_retention", retention.Logs),
-					telemetry.Duration("span_retention", retention.Spans))
-			}
-		}
 	}
 }
 
@@ -432,8 +380,12 @@ func run() error {
 	// logged before this point describes bringing the database up, and is
 	// exactly the narration that must not depend on the database existing.
 	telemetryStore := postgres.NewTelemetryStore(set.Pool)
+	// Once at boot, before the jobs runner exists, because the very first
+	// records this process writes are the ones describing its own start-up.
+	// From here on the same work is a scheduled job (ADR 0058) and this call is
+	// not repeated.
 	partitionCtx, partitionCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	err = telemetryStore.EnsurePartitions(partitionCtx, time.Now().UTC(), telemetryPartitionsAhead)
+	err = telemetryStore.EnsurePartitions(partitionCtx, time.Now().UTC(), app.TelemetryPartitionsAhead)
 	partitionCancel()
 	if err != nil {
 		// Not fatal. A Platform that refuses to start because it cannot store
@@ -607,6 +559,11 @@ func run() error {
 		ModuleSettings:   set.ModuleSettings,
 		UserPreferences:  set.UserPreferences,
 		TelemetryQueries: set.TelemetryQueries,
+		// The retention sweep's storage side, and the queue that drives it
+		// (ADR 0017, ADR 0058). Both reached as contracts, so the application
+		// service never names a PostgreSQL type.
+		TelemetryMaintenance: set.TelemetryMaintenance,
+		Jobs:                 set.Jobs,
 
 		PlaybackResolutions: set.PlaybackResolutions,
 		PlaybackStates:      set.PlaybackStates,
@@ -720,7 +677,23 @@ func run() error {
 	// records is not silently discarded.
 	bufferedSink.Start(serveCtx)
 	spanSink.Start(serveCtx)
-	go telemetryMaintenance(serveCtx, telemetryStore, svc, root.For("telemetry"))
+
+	// Background work (ADR 0017's system principal, ADR 0058's retention
+	// sweep). The runner claims from PostgreSQL with `FOR UPDATE SKIP LOCKED`
+	// and the scheduler enqueues each recurring kind's current occurrence under
+	// an idempotency key, so starting it at boot is also how a restart resumes:
+	// there is no state held here to recover.
+	jobRuntime := compositionjobs.New(compositionjobs.Deps{
+		Service: svc,
+		Store:   set.Jobs,
+		Clock:   set.Clock,
+		IDs:     set.IDs,
+		Owner:   resource.BootID,
+	})
+	jobRuntime.Start(serveCtx)
+	boot.Info("jobs runner started",
+		telemetry.String("owner", resource.BootID),
+		telemetry.String("kinds", fmt.Sprint(jobRuntime.Runner.Kinds())))
 
 	handoff := &health.Handoff{
 		Metadata:    generationMetadata,
@@ -839,6 +812,12 @@ func run() error {
 	defer shutdownCancel()
 	_ = apiServer.Shutdown(shutdownCtx)
 	_ = httpServer.Shutdown(shutdownCtx)
+
+	// Let a job in flight finish writing its outcome before the pool closes.
+	// A handler killed here is not lost — its lease lapses and the next boot
+	// reclaims it — but it would come back as a spent attempt with no recorded
+	// result, which reads as a mystery rather than as a shutdown.
+	jobRuntime.Runner.Wait(shutdownCtx)
 
 	result := runtime.Shutdown(shutdownCtx, lifecycle, worker)
 	if result.FinalDrainErr != nil {

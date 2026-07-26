@@ -73,12 +73,13 @@ type RecordPartProbeResult struct {
 // It is a write on a read path, which is unusual enough to justify. The caller
 // has already been authorised to read this content and to play it; what is
 // recorded is a fact about a file rather than anything about the person, and it
-// would be identical whoever triggered it. Recording it still authorises
-// `content.bind` — writing to the content graph is a write — which means a
-// read-only viewer cannot warm this cache. That is the correct refusal and the
-// wrong outcome, and it is the system principal ADR 0017 named: work with no
-// user behind it has nobody to authorise as. Until that exists the caller
-// swallows a denial and re-probes next time.
+// would be identical whoever triggered it. Recording it authorises
+// `content.bind`, because writing to the content graph is a write — which used
+// to mean a read-only viewer could not warm this cache, and re-probed on every
+// play forever. **The playback transport now records as the system principal**
+// (ADR 0017): this handler is unchanged, the gate is unchanged, and what
+// changed is who the caller is. The event's actor is the system rather than the
+// viewer, which is the honest attribution — nobody asked for this write.
 func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeCommand) (RecordPartProbeResult, error) {
 	// 1. validate command shape.
 	if cmd.Caller.Session == "" {

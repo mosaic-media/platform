@@ -284,14 +284,19 @@ func (h *Handler) mediaInfo(ctx context.Context, caller v1.Caller, res app.Resol
 // recordProbe stores what the probe learned, so the next play of this release
 // skips it.
 //
-// Best-effort by design, and the failure worth naming is authorisation rather
-// than I/O: recording writes to the content graph, so it asks for
-// `content.bind`, and a read-only viewer does not have it. That viewer still
-// plays — they simply do not warm the cache for anyone, and every one of their
-// plays re-probes. It is the correct refusal and the wrong outcome, and the
-// missing piece is the system principal (ADR 0017): work that belongs to the
-// install rather than to whoever happened to press play.
-func (h *Handler) recordProbe(ctx context.Context, caller v1.Caller, partID v1.PartID, info playback.MediaInfo) {
+// **It records as the system principal, not as the viewer** (ADR 0017).
+// Recording writes to the content graph, so it asks for `content.bind`, and a
+// read-only viewer does not have it — so this used to be a correct refusal with
+// a wrong outcome: that viewer played, warmed the cache for nobody, and
+// re-probed on every play forever. What is being recorded is a fact about a
+// file. It would be identical whoever pressed play, it is not about the person,
+// and the install is the one that wants it kept. That makes it exactly the
+// no-user work the system principal exists for, and the viewer's own authority
+// to *play* is unchanged and was checked before this is reached.
+//
+// Still best-effort: a storage failure must not fail a playback that has
+// already resolved.
+func (h *Handler) recordProbe(ctx context.Context, _ v1.Caller, partID v1.PartID, info playback.MediaInfo) {
 	if partID == "" {
 		return
 	}
@@ -300,7 +305,7 @@ func (h *Handler) recordProbe(ctx context.Context, caller v1.Caller, partID v1.P
 		return
 	}
 	_, err = h.svc.RecordPartProbe(ctx, app.RecordPartProbeCommand{
-		Caller: caller, PartID: partID,
+		Caller: h.svc.SystemCaller(), PartID: partID,
 		Container:  info.Container,
 		VideoCodec: info.Video.Codec,
 		AudioCodec: playback.SummaryAudioCodec(info),

@@ -13,8 +13,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
+
+// compile-time assertion that the store is the maintenance contract the
+// retention job drives (ADR 0058). Without it, a signature change here would
+// surface as a nil interface at composition rather than as a build failure.
+var _ contracts.TelemetryMaintenanceStore = (*TelemetryStore)(nil)
 
 // The partitioned parents created by migrations 0014 and 0015. Both are
 // maintained together: they share a partitioning scheme precisely so there is
@@ -178,11 +184,10 @@ func marshalFields(fields []telemetry.Field) ([]byte, error) {
 // the failure mode of a missing partition is every insert in the batch
 // failing, which is exactly when telemetry is least able to report it.
 //
-// This belongs in a scheduled job. The jobs runner, a scheduler and the system
-// principal do not exist (ADR 0017, ADR 0058), so the composition root calls
-// this at boot and on a ticker instead. That is a stated interim, and it is
-// why `ahead` is generous: a process that runs for a week without restarting
-// must not run out.
+// This is driven by a scheduled job (app.PurgeTelemetry, run by the jobs
+// runner as the system principal). It is also called once at boot, before the
+// runner exists, because the first records this process writes are the ones
+// describing its own start-up.
 func (s *TelemetryStore) EnsurePartitions(ctx context.Context, day time.Time, ahead int) error {
 	day = day.UTC().Truncate(24 * time.Hour)
 	for _, table := range partitionedTables {
@@ -205,16 +210,6 @@ func (s *TelemetryStore) EnsurePartitions(ctx context.Context, day time.Time, ah
 	return nil
 }
 
-// Retention is how long each signal is kept before its partitions are dropped.
-// The two differ by an order of magnitude (ADR 0058: logs 14 days, traces 72
-// hours) because they answer different questions — a log line is evidence
-// weeks later, a span is diagnosis while the problem is fresh, and spans are
-// far more numerous.
-type Retention struct {
-	Logs  time.Duration
-	Spans time.Duration
-}
-
 // DropExpiredPartitions removes every partition wholly older than retention,
 // returning how many it dropped.
 //
@@ -222,7 +217,12 @@ type Retention struct {
 // deleting a day of rows rewrites and vacuums a table an administrator may be
 // querying, while dropping a partition is a catalogue update that finishes
 // instantly and returns the disk immediately.
-func (s *TelemetryStore) DropExpiredPartitions(ctx context.Context, now time.Time, r Retention) (int, error) {
+//
+// The two retentions differ by an order of magnitude (ADR 0058: logs 14 days,
+// traces 72 hours) because they answer different questions — a log line is
+// evidence weeks later, a span is diagnosis while the problem is fresh, and
+// spans are far more numerous.
+func (s *TelemetryStore) DropExpiredPartitions(ctx context.Context, now time.Time, r contracts.PartitionRetention) (int, error) {
 	total := 0
 	for table, retention := range map[string]time.Duration{
 		telemetryLogTable:  r.Logs,

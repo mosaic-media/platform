@@ -40,9 +40,14 @@ const (
 	// The expert-mode diagnostics screens (ADR 0058). Reaching any of them
 	// requires telemetry.read; the affordance that leads here is hidden from
 	// anyone without it.
-	screenLogs        = "logs"
-	screenTraces      = "traces"
-	screenTrace       = "trace"
+	screenLogs   = "logs"
+	screenTraces = "traces"
+	screenTrace  = "trace"
+	// The background-work screens (ADR 0017). Same expert-mode group as the
+	// telemetry ones and a different permission: `job.read` is what the
+	// install did to itself, `telemetry.read` is what its users did.
+	screenJobs        = "jobs"
+	screenJob         = "job"
 	screenCollections = "collections"
 	screenCatalog     = "catalog"
 	screenDetail      = "detail"
@@ -93,6 +98,12 @@ const (
 	paramScreen = "screen"
 	paramOrder  = "order"
 	paramFailed = "failed"
+	// The jobs screens' params. paramStatus is a job status rather than a
+	// generic one — nothing else on any screen filters by "status", and giving
+	// it a shared name is how a key comes to mean two things.
+	paramJobID  = "jobId"
+	paramStatus = "status"
+	paramKind   = "kind"
 )
 
 // Empty-state illustration keys the client maps to an icon.
@@ -188,6 +199,11 @@ type contentQueries interface {
 	QueryTelemetryLogs(context.Context, app.QueryTelemetryLogsQuery) (app.QueryTelemetryLogsResult, error)
 	ListTraces(context.Context, app.ListTracesQuery) (app.ListTracesResult, error)
 	GetTrace(context.Context, app.GetTraceQuery) (app.GetTraceResult, error)
+	// The background-work reads (ADR 0017). Each authorises job.read for
+	// itself, so the screens cannot be reached without the grant however the
+	// affordance was drawn.
+	ListJobs(context.Context, app.ListJobsQuery) (app.ListJobsResult, error)
+	GetJob(context.Context, app.GetJobQuery) (app.GetJobResult, error)
 	// CallerCan decides whether an affordance is drawn at all. It is the only
 	// method here that answers about authority rather than returning data, and
 	// it never substitutes for the checks above.
@@ -254,6 +270,10 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.tracesScreen(ctx, caller, params)
 	case screenTrace:
 		return s.traceScreen(ctx, caller, params)
+	case screenJobs:
+		return s.jobsScreen(ctx, caller, params)
+	case screenJob:
+		return s.jobScreen(ctx, caller, params)
 	default:
 		// A route that names no screen is a 404, not a transport error. Returning
 		// NotFound here put the raw string "no screen named colletions" into the

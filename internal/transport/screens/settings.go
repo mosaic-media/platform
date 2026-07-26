@@ -30,6 +30,7 @@ const (
 	sectionExtensions = "extensions"
 	sectionTraces     = "traces"
 	sectionLogs       = "logs"
+	sectionJobs       = "jobs"
 	moduleSectionKey  = "module:"
 )
 
@@ -200,15 +201,30 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 	// denied the data behind it. It remains a hint and never a gate: each screen
 	// authorises telemetry.read for itself, so navigating straight to one without
 	// the grant is refused regardless of what was drawn.
-	nav.showExpertMode = s.content.CallerCan(ctx, caller, app.ActionTelemetryRead, "telemetry")
+	canReadTelemetry := s.content.CallerCan(ctx, caller, app.ActionTelemetryRead, "telemetry")
+	canReadJobs := s.content.CallerCan(ctx, caller, app.ActionJobRead, "job")
+	nav.showExpertMode = canReadTelemetry || canReadJobs
 	if nav.showExpertMode {
 		nav.expertModeOn = s.content.ExpertModeEnabled(ctx, caller)
 	}
+	// Each row inside the group is gated on its own permission, because they
+	// are different disclosures: the queue is what the install did to itself,
+	// telemetry is what its users did (ADR 0017). A caller granted one and not
+	// the other sees exactly the rows they can open. Expert mode stays the
+	// *level* control over the group and never the gate — each screen
+	// authorises for itself.
 	if nav.showExpertMode && nav.expertModeOn {
-		groups = append(groups, settingsNavGroup{label: "Diagnostics", entries: []settingsNavEntry{
-			{key: sectionTraces, label: "Traces", icon: "info", action: ui.Navigate(screenTraces, nil)},
-			{key: sectionLogs, label: "Logs", icon: "list", action: ui.Navigate(screenLogs, nil)},
-		}})
+		var diagnostics []settingsNavEntry
+		if canReadTelemetry {
+			diagnostics = append(diagnostics,
+				settingsNavEntry{key: sectionTraces, label: "Traces", icon: "info", action: ui.Navigate(screenTraces, nil)},
+				settingsNavEntry{key: sectionLogs, label: "Logs", icon: "list", action: ui.Navigate(screenLogs, nil)})
+		}
+		if canReadJobs {
+			diagnostics = append(diagnostics,
+				settingsNavEntry{key: sectionJobs, label: "Jobs", icon: "list", action: ui.Navigate(screenJobs, nil)})
+		}
+		groups = append(groups, settingsNavGroup{label: "Diagnostics", entries: diagnostics})
 	}
 
 	nav.groups = groups

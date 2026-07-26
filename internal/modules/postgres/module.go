@@ -60,6 +60,8 @@ func (Module) Manifest() builtin.Manifest {
 			"PlaybackResolutionStore",
 			"PlaybackStateStore",
 			"TelemetryQueryStore",
+			"TelemetryMaintenanceStore",
+			"JobStore",
 			"Clock",
 			"IDGenerator",
 			"HealthProbe",
@@ -103,8 +105,16 @@ type ContractSet struct {
 	PlaybackStates contracts.PlaybackStateStore
 	// TelemetryQueries reads stored telemetry back (ADR 0058).
 	TelemetryQueries contracts.TelemetryQueryStore
-	Clock            contracts.Clock
-	IDs              contracts.IDGenerator
+	// TelemetryMaintenance creates and drops the partitions telemetry lives
+	// in. It is the same *TelemetryStore the composition root writes records
+	// through, exposed here as the contract the retention job drives so that
+	// nothing above the module has to name a PostgreSQL type.
+	TelemetryMaintenance contracts.TelemetryMaintenanceStore
+	// Jobs is the background-work queue (ADR 0017). Pool-backed rather than
+	// transaction-scoped: a claim is its own transaction.
+	Jobs  contracts.JobStore
+	Clock contracts.Clock
+	IDs   contracts.IDGenerator
 	// ContentIDs generates UUIDv7 identifiers for the content model, whose
 	// tables use native uuid columns. IDs stays UUIDv4 for the
 	// infrastructure tables, which keep their text ids and are not migrated
@@ -165,12 +175,15 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		PlaybackResolutions: NewPlaybackResolutionStore(pool),
 		PlaybackStates:      NewPlaybackStateStore(pool),
 
-		TelemetryQueries: NewTelemetryQueryStore(pool),
-		Clock:            NewClock(),
-		IDs:              NewIDGenerator(),
-		ContentIDs:       NewUUIDv7Generator(),
-		Health:           NewHealthProbe(pool),
-		HealthReporter:   NewComponentHealthReporter(pool),
+		TelemetryQueries:     NewTelemetryQueryStore(pool),
+		TelemetryMaintenance: NewTelemetryStore(pool),
+		Jobs:                 NewJobStore(pool),
+
+		Clock:          NewClock(),
+		IDs:            NewIDGenerator(),
+		ContentIDs:     NewUUIDv7Generator(),
+		Health:         NewHealthProbe(pool),
+		HealthReporter: NewComponentHealthReporter(pool),
 	}
 }
 

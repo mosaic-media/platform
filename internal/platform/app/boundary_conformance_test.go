@@ -303,6 +303,23 @@ func boundaryCases() []boundaryCase {
 		{"GetTrace", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetTrace(ctx, app.GetTraceQuery{Caller: caller(sid), TraceID: "trace-1"}))
 		}},
+		{"PurgeTelemetry", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.PurgeTelemetry(ctx, app.PurgeTelemetryCommand{Caller: caller(sid)}))
+		}},
+
+		// --- background work (ADR 0017) ---
+		//
+		// These carry an ordinary caller like every row above, which is the
+		// point of them being here: the system principal is a *caller*, not a
+		// bypass, so the same handlers must still refuse an unknown session and
+		// an ungranted user. A separate test asserts the system principal gets
+		// through the same gate.
+		{"ListJobs", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListJobs(ctx, app.ListJobsQuery{Caller: caller(sid)}))
+		}},
+		{"GetJob", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.GetJob(ctx, app.GetJobQuery{Caller: caller(sid), JobID: "job-1"}))
+		}},
 
 		// --- users, roles, sessions ---
 		{"CreateLocalUser", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {

@@ -84,6 +84,14 @@ func administratorActions() []policy.Action {
 func superuserActions() []policy.Action {
 	return append(administratorActions(),
 		ActionTelemetryRead, ActionTelemetryExport, ActionTelemetryConfigure,
+		// Reading the background-work queue is the same class of insight about
+		// the install rather than about a person, and it lands in the same
+		// tier: a superuser sees the queue, and an administrator is granted it
+		// deliberately. `telemetry.configure` is already here, which is what
+		// the retention sweep authorises — so the *sweep* running as the system
+		// principal and an *administrator* running one by hand would be the
+		// same permission, as they should be.
+		ActionJobRead,
 		// ActionAuditRead and ActionAuditExport join here when the audit store
 		// is built (ADR 0057) — same category, named now so the decision does
 		// not need remaking.

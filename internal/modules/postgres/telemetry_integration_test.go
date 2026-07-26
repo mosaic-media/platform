@@ -155,7 +155,7 @@ func TestTelemetryRetentionDropsWholeOldPartitions(t *testing.T) {
 		t.Fatalf("WriteBatch: %v", err)
 	}
 
-	dropped, err := store.DropExpiredPartitions(ctx, now, postgres.Retention{Logs: 3 * 24 * time.Hour, Spans: 3 * 24 * time.Hour})
+	dropped, err := store.DropExpiredPartitions(ctx, now, contracts.PartitionRetention{Logs: 3 * 24 * time.Hour, Spans: 3 * 24 * time.Hour})
 	if err != nil {
 		t.Fatalf("DropExpiredPartitions: %v", err)
 	}

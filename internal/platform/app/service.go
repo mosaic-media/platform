@@ -47,6 +47,21 @@ type Service struct {
 	extensions       ExtensionManager
 	sessionManager   *sessions.Manager
 	configManager    *config.Manager
+
+	// telemetryMaintenance creates and drops the partitions stored telemetry
+	// lives in (ADR 0058). Optional: a Service built without one refuses
+	// PurgeTelemetry with Unavailable, which is what a test service or a
+	// deployment with no queryable sink should do rather than pretending a
+	// sweep happened.
+	telemetryMaintenance contracts.TelemetryMaintenanceStore
+	// jobs is the background-work queue (ADR 0017's no-user case). Optional
+	// for the same reason.
+	jobs contracts.JobStore
+
+	// systemSession is the opaque reference SystemCaller hands out. Minted per
+	// process in NewService — see system_principal.go for why it is random
+	// rather than a well-known constant.
+	systemSession string
 }
 
 // Deps are the collaborators a Service is built from. They are passed as a named
@@ -99,6 +114,14 @@ type Deps struct {
 	// surface (ADR 0058). Read-only and outside any transaction, like the
 	// write side and for the mirror-image reason.
 	TelemetryQueries contracts.TelemetryQueryStore
+	// TelemetryMaintenance creates the partitions telemetry is written into
+	// and drops the ones retention has run out on. It is what PurgeTelemetry
+	// drives, and PurgeTelemetry is what the retention job calls.
+	TelemetryMaintenance contracts.TelemetryMaintenanceStore
+	// Jobs is the background-work queue (ADR 0017). Optional: a Service built
+	// without one reports no jobs and refuses the job queries with
+	// Unavailable, which is the honest answer for a build with no runner.
+	Jobs contracts.JobStore
 }
 
 // NewService wires a Service to its Platform contracts, policy decision point
@@ -128,6 +151,10 @@ func NewService(d Deps) *Service {
 		extensions:       d.Extensions,
 		sessionManager:   sessions.NewManager(d.Clock, d.IDs),
 		configManager:    config.NewManager(d.Clock, d.IDs, config.PlatformSchema()),
+
+		telemetryMaintenance: d.TelemetryMaintenance,
+		jobs:                 d.Jobs,
+		systemSession:        newSystemSessionRef(),
 	}
 }
 
@@ -147,8 +174,16 @@ func (s *Service) authenticate(ctx context.Context, sessionID domain.SessionID) 
 // v1.Caller carries an opaque session reference (ADR 0017), which resolves to
 // the same internal session identity as any other caller. The Caller is only
 // as authoritative as that session, which this validates.
+//
+// The one reference that is not a session is the system principal, which
+// resolvePrincipal recognises before any store is read — see
+// system_principal.go.
 func (s *Service) authenticateCaller(ctx context.Context, caller v1.Caller) (domain.UserID, error) {
-	return s.authenticate(ctx, domain.SessionID(caller.Session))
+	p, err := s.resolvePrincipal(ctx, caller)
+	if err != nil {
+		return "", err
+	}
+	return p.userID, nil
 }
 
 // authorize resolves step 3 of the command boundary (and the equivalent
@@ -220,6 +255,11 @@ func (s *Service) authorize(ctx context.Context, subject policy.Subject, action 
 type authorized struct {
 	userID domain.UserID
 	caller v1.Caller
+	// system marks work the Platform did on its own initiative rather than for
+	// a person (ADR 0017). A handler reads it only to describe what it did —
+	// an event actor, a log line — never to decide what it may do, which is
+	// the policy decision point's answer and was already given.
+	system bool
 }
 
 // enter runs the two boundary gates once and returns the proof. It is the
@@ -227,14 +267,20 @@ type authorized struct {
 // authenticate-then-authorize is a property of this function rather than of
 // each handler remembering it in the right order.
 func (s *Service) enter(ctx context.Context, caller v1.Caller, action policy.Action, resource policy.Resource) (authorized, error) {
-	callerID, err := s.authenticateCaller(ctx, caller)
+	p, err := s.resolvePrincipal(ctx, caller)
 	if err != nil {
 		return authorized{}, err
 	}
-	if err := s.authorize(ctx, policy.Subject{UserID: callerID}, action, resource, policy.PolicyContext{}); err != nil {
+	// The system principal goes through the same authorize call as anyone
+	// else, carrying a flag the engine reads (ADR 0017). It is not a branch
+	// around the gate: the decision is still the policy decision point's, it
+	// is still spanned and still refusable, and moving it here would put an
+	// authorization rule in the enforcement point.
+	subject := policy.Subject{UserID: p.userID, System: p.system}
+	if err := s.authorize(ctx, subject, action, resource, policy.PolicyContext{}); err != nil {
 		return authorized{}, err
 	}
-	return authorized{userID: callerID, caller: caller}, nil
+	return authorized{userID: p.userID, caller: caller, system: p.system}, nil
 }
 
 // enterSession is enter for the handlers that take a raw domain.SessionID
