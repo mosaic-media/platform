@@ -12,10 +12,13 @@ name: core module bump
 # *after* that proof, so `go get` here is not racing the proxy.
 #
 # **What this deliberately does not do is merge.** It opens a pull request and
-# turns on auto-merge, so `verify.yml` is what actually decides. ADR 0063's
-# guarantee that every released binary is pre-proven is a property of the gate
-# having run, and a required check on a PR is where that is enforced
-# mechanically rather than by trusting the ordering of steps in a job. The PR
+# asks for auto-merge, so `verify.yml` is what decides. ADR 0063's guarantee
+# that every released binary is pre-proven is a property of the gate having run,
+# and a required check on a PR is where that is enforced mechanically rather
+# than by trusting the ordering of steps in a job — **that required check does
+# not exist yet**, which is why auto-merge is off on this repository and a bump
+# waits for a person; see the note on the merge step at the foot of this file.
+# The PR
 # also leaves the thing a bot commit on main would not: a record of which
 # module tag caused which Platform commit, which is most of the diagnosis the
 # first time a bump breaks the build.
@@ -133,8 +136,28 @@ jobs:
             --body "$(printf '%s\n\n%s\n\n%s' \
               "Automated core module bump: \`${current}\` → \`${version}\` (ADR 0078)." \
               "Dispatched by [\`${short}\`](https://${module}/releases/tag/${version}) after its release workflow proved the tag resolvable through the public proxy." \
-              "Auto-merge is on; \`verify.yml\` decides.")" \
+              "\`verify.yml\` decides; merge once it is green.")" \
             --base main \
             --head "$branch"
 
-          gh pr merge "$branch" --auto --squash
+          # Auto-merge is requested, not required, and its failure must not be
+          # this job's failure: by the time this line runs the branch is pushed
+          # and the pull request is open, so a red run here would report that no
+          # bump was sent when one was — the opposite of what happened, and the
+          # exact misreport the missing-token guard above exists to avoid in the
+          # other direction. It fails today because auto-merge is disabled on
+          # this repository, which is itself deliberate rather than an oversight:
+          #
+          # **auto-merge without a required check is not a gate.** GitHub merges
+          # an auto-merge pull request as soon as it is mergeable, and `main`
+          # here has no branch protection and no required status check, so
+          # `verify.yml` would not have to pass — it would not even have to have
+          # started. That would turn this comment's whole claim ("verify.yml is
+          # what actually decides") into a mechanism that decides nothing, and
+          # ADR 0063's guarantee that every released binary is pre-proven would
+          # rest on nobody having looked. Until a ruleset makes `verify.yml`
+          # required on `main`, a bump waits for a person to see it green, and
+          # that wait is the gate.
+          if ! gh pr merge "$branch" --auto --squash; then
+            echo "::warning::auto-merge was not enabled — the pull request is open and merges once verify.yml is green and someone merges it."
+          fi
