@@ -54,8 +54,8 @@ github.com/mosaic-media/contracts v0.53.0 h1:/6BynJZTGkJ5LWKVQN3ONDvgewjFNdlcis+
 github.com/mosaic-media/contracts v0.53.0/go.mod h1:PTcqIYfXR9ATnb2ihAWD2sfg4+Tjihne7yIDfJwXUJ0=
 github.com/mosaic-media/module-cinemeta v0.3.0 h1:zzPl7VxI/Nx2xVh3g8+629uDwh2VSmTzzyxma42+IDc=
 github.com/mosaic-media/module-cinemeta v0.3.0/go.mod h1:pDUna5vmFTCzUztehUn7TENoCW0okUCDHb6Y07XGuFM=
-github.com/mosaic-media/module-remote-playback v0.3.1 h1:CdhNEjuzXohNb6/s53vNP7Jn31+tqUo3UQnSdBpmFY0=
-github.com/mosaic-media/module-remote-playback v0.3.1/go.mod h1:HLZSMlWqVDNU2pRFGDHAdBGfv8DJGwo4klUyIPR4wo4=
+github.com/mosaic-media/module-remote-playback v0.4.0 h1:H2g0gSNCjrGIVKrn1YuF7uglQHR7qXYBO41Kb+Ug3JI=
+github.com/mosaic-media/module-remote-playback v0.4.0/go.mod h1:tk2fxHCICbj8Bzz6axlK42aooD9wDqDH/rUUXR9YJt0=
 github.com/mosaic-media/module-tmdb v0.8.0 h1:cjhKC0fCiUw/0wHBISQTl36udXyWa3Iz3Bji+orC8Kg=
 github.com/mosaic-media/module-tmdb v0.8.0/go.mod h1:HCxbcjf8/xxKyb/3bomUMHIhfDKIXdCr+bCVUpPHSEk=
 github.com/mosaic-media/sdk v0.24.0 h1:8P4Jaxp2KZOB88IczZEJbZn31woPbgTwjS+GmGov/RQ=
