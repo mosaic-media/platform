@@ -10,12 +10,12 @@ require (
 
 require golang.org/x/crypto v0.54.0
 
-require github.com/mosaic-media/contracts v0.53.0
+require github.com/mosaic-media/contracts v0.54.0
 
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/hashicorp/go-plugin v1.8.0
-	github.com/mosaic-media/sdk/host v0.5.0
+	github.com/mosaic-media/sdk/host v0.6.0
 	golang.org/x/net v0.57.0
 	google.golang.org/protobuf v1.36.11
 )
@@ -41,7 +41,7 @@ require (
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mosaic-media/module-cinemeta v0.3.0
 	github.com/mosaic-media/module-remote-playback v0.4.0
-	github.com/mosaic-media/module-tmdb v0.9.0
+	github.com/mosaic-media/module-tmdb v0.10.0
 	github.com/mosaic-media/sdk v0.24.0
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	golang.org/x/sync v0.22.0
