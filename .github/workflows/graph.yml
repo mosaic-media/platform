@@ -1,0 +1,176 @@
+name: graph
+
+# The one gate that compiles these repositories *together*, from their current
+# branches, in a single Go workspace.
+#
+# Every other gate in the graph compiles one repository against the versions
+# pinned in its own go.mod, and those pins have drifted a long way apart. This
+# repository requires contracts v0.53.0 and sdk v0.24.0; module-tmdb pins
+# contracts v0.32.0; module-cinemeta and module-remote-playback pin sdk v0.22.0;
+# sdk/host pins contracts v0.16.0. Nothing is broken by that on its own —
+# minimum-version selection quietly raises every one of them to this
+# repository's inside the platform build. What it means is that a module's
+# boundary_test.go passes against a contract version the shipped binary never
+# loads, and that an incompatibility between two current branches is invisible
+# until a bump PR days later, where it reads as the bump's fault rather than as
+# the fault of the commit that caused it.
+#
+# **What a green run here proves is that the HEADs of these repositories are
+# mutually compatible.** A workspace overrides every `require` with the checkout
+# beside it, so a breaking change in contracts or sdk fails on the day it lands.
+#
+# **It does not prove that the pinned versions are honest.** It cannot: workspace
+# mode is exactly the mode in which no `require` line is read. That is a
+# different question — whether what a repository *ships* is the thing it was
+# tested against — and each repository's own verify.yml is where it gets asked,
+# against its own pins and through the public proxy. Neither gate subsumes the
+# other, and a green run here is not a reason to soften one there.
+#
+# Because it follows moving default branches it can go red with nothing in this
+# repository having changed. That is what a canary is for, and it is why this is
+# not on `pull_request`: it reports on the graph, and a contributor here must not
+# be blocked by somebody else's push elsewhere.
+#
+# One caveat on the tests. This job sets no MOSAIC_TEST_POSTGRES_DSN, so the
+# platform's storage contract tests take their embedded-PostgreSQL path, which
+# starts when the runner allows it and skips with a reason when it does not. A
+# skip is not a pass, and docker-compose.test.yml — the gate release.yml runs — is
+# still the only place those are guaranteed to execute. The load-bearing answer
+# from this workflow is the compile-and-unit one.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Daily, an hour before integration.yml. The repositories move
+    # independently, so most breakage here arrives from a commit in a repository
+    # that has no reason to notify this one; a day is the interval that bounds
+    # how long such a commit can sit unnoticed.
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    # Fired by each core module's release.yml once its own release has completed
+    # (ADR 0078). A release is the moment a module's branch becomes something
+    # this repository will require, so it is the moment worth re-checking the
+    # whole graph.
+    types: [graph-check]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Not per-ref: every trigger asks the same question about the same set of
+  # default branches, so a second run would only duplicate the first. Not
+  # cancelled in progress either — a scheduled run that gets killed by a push
+  # is a day's coverage lost for no gain.
+  group: graph
+  cancel-in-progress: false
+
+jobs:
+  graph:
+    runs-on: ubuntu-latest
+    steps:
+      # Each repository into its own path, because a workspace needs them all on
+      # disk at once. The default token reads the siblings because they are
+      # public; a repository turned private would need a token with access here.
+      - uses: actions/checkout@v4
+        with:
+          path: platform
+
+      - uses: actions/checkout@v4
+        with:
+          repository: mosaic-media/sdk
+          path: sdk
+
+      - uses: actions/checkout@v4
+        with:
+          repository: mosaic-media/contracts
+          path: contracts
+
+      - uses: actions/checkout@v4
+        with:
+          repository: mosaic-media/module-tmdb
+          path: module-tmdb
+
+      - uses: actions/checkout@v4
+        with:
+          repository: mosaic-media/module-cinemeta
+          path: module-cinemeta
+
+      # The three extension modules are deliberately absent. They are not go.mod
+      # dependencies of this repository at all (ADR 0081) — a user installs one
+      # at runtime — so they share no dependency graph with this build and a
+      # workspace has nothing to prove about them. integration.yml is what
+      # exercises those, against a real published release.
+      - uses: actions/checkout@v4
+        with:
+          repository: mosaic-media/module-remote-playback
+          path: module-remote-playback
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: platform/go.mod
+
+      # `./sdk/host` is listed separately and must stay that way: it is its own
+      # Go module nested inside the sdk repository, and `go work use ./sdk` adds
+      # only the module rooted at that directory. Omitting it would leave the
+      # platform's `github.com/mosaic-media/sdk/host` requirement resolving from
+      # the proxy at v0.4.0 while everything around it came from HEAD — the exact
+      # silent-substitution this workflow exists to remove, reintroduced in the
+      # one dependency most likely to break, since host is what carries the
+      # contracts types across the process boundary.
+      - name: Workspace over every checkout
+        run: |
+          go work init
+          go work use \
+            ./platform \
+            ./sdk \
+            ./sdk/host \
+            ./contracts \
+            ./module-tmdb \
+            ./module-cinemeta \
+            ./module-remote-playback
+          echo "--- go.work ---"; cat go.work
+
+      # `go build ./...` cannot be run from the workspace root. The root is not
+      # itself inside a module, and Go rejects a pattern whose directory prefix
+      # sits above every module root — "directory prefix . does not contain
+      # modules listed in go.work". So the build is per module, from `go list -m`,
+      # which in workspace mode lists exactly the modules go.work names.
+      #
+      # Deriving the list rather than writing it again is the point. Spelling the
+      # prefixes out — `go build ./sdk/... ./contracts/... …` — does compile, and
+      # it silently drops sdk/host: a parent prefix does not match packages in a
+      # module nested beneath it, so `./sdk/...` covers the sdk module alone. That
+      # is the same omission `go work use ./sdk` makes, arriving by a second route
+      # and this time with a green run over it. Read from go.work, the list cannot
+      # disagree with the workspace it is checking.
+      #
+      # Resolution is still the workspace's: go.work sits above every one of these
+      # directories and is found by walking up, so each module builds against its
+      # siblings' branches rather than its own pinned versions.
+      - name: go build
+        run: |
+          for dir in $(go list -m -f '{{.Dir}}'); do
+            echo "::group::go build ./... in ${dir#"$GITHUB_WORKSPACE/"}"
+            ( cd "$dir" && go build ./... )
+            echo "::endgroup::"
+          done
+
+      - name: go test
+        run: |
+          failed=""
+          for dir in $(go list -m -f '{{.Dir}}'); do
+            name=${dir#"$GITHUB_WORKSPACE/"}
+            echo "::group::go test ./... in $name"
+            ( cd "$dir" && go test ./... ) || failed="$failed $name"
+            echo "::endgroup::"
+          done
+
+          # Every module is tested before anything fails, rather than stopping at
+          # the first. When a contract change breaks three consumers, three names
+          # is the diagnosis and the first name alone is a misleading start on it.
+          if [ -n "$failed" ]; then
+            echo "::error::tests failed in:$failed"
+            exit 1
+          fi
