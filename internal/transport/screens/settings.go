@@ -613,7 +613,7 @@ func installedExtensionsSection(installed []app.InstalledExtension, provides map
 			ui.Origin(e.Version+" · "+e.Repository+" · signed by "+e.SignedBy),
 			ui.Summary(extensionBlurb(descriptions[e.ModuleID], roles)),
 			ui.Capabilities(capabilityProps(roles)),
-			ui.Button("Uninstall", "danger", ui.OnTap(ui.Invoke(uninstallExtensionAction, map[string]any{
+			ui.Button("Uninstall", "dangerQuiet", ui.OnTap(ui.Invoke(uninstallExtensionAction, map[string]any{
 				paramModuleID: e.ModuleID,
 			})))))
 	}
@@ -639,7 +639,7 @@ func availableExtensionsSection(available []app.ExtensionCatalogueEntry, install
 			ui.Origin(e.ModuleID+" · "+e.Version+" · "+e.Repository),
 			ui.Summary(extensionBlurb(e.Description, e.Provides)),
 			ui.Capabilities(capabilityProps(e.Provides)),
-			ui.Button("Install…", "secondary", ui.OnTap(ui.Overlay(ui.SurfaceModal, installOverlay(e))))))
+			ui.Button("Install…", "quiet", ui.OnTap(ui.Overlay(ui.SurfaceModal, installOverlay(e))))))
 	}
 	if len(cards) == 0 {
 		return ui.Section("Available",

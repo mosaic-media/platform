@@ -174,7 +174,7 @@ func logRow(r domain.TelemetryLogRecord) ui.El {
 		els = append(els, ui.Meta(fields))
 	}
 	if r.Trace != "" {
-		els = append(els, ui.Button("Trace "+shortID(r.Trace), "ghost",
+		els = append(els, ui.Button("Trace "+shortID(r.Trace), "quiet",
 			ui.OnTap(ui.Navigate(screenTrace, map[string]any{paramTrace: r.Trace}))))
 	}
 	return ui.Stack("vertical", 2, els...)
@@ -361,66 +361,143 @@ func traceColor(t domain.TelemetryTraceSummary) string {
 // and lives outside this process (ADR 0054). Anything whose parent is not in
 // the result set is a root here.
 func (s *Service) traceScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
+	nav, navErr := s.settingsNav(ctx, caller)
+	if navErr != nil {
+		return nil, navErr
+	}
+	nav.selected = true
+
 	traceID := stringParam(params, paramTrace)
 	res, err := s.content.GetTrace(ctx, app.GetTraceQuery{Caller: caller, TraceID: traceID})
 	if err != nil {
 		return nil, err
 	}
 
-	rows := []ui.El{ui.Badge("trace "+traceID, "neutral")}
+	const lead = "Where the time went, and what the code was saying while it went there."
+	if len(res.Spans) == 0 && len(res.Logs) == 0 {
+		return settingsFrame(nav, sectionTraces, "Trace", lead,
+			ui.EmptyState(emptyIconSearch, "Nothing is stored for that trace").Build()), nil
+	}
+
+	body := make([]sdui.Node, 0, 2)
 
 	if len(res.Spans) > 0 {
 		total := rootDuration(res.Spans)
-		spans := make([]ui.El, 0, len(res.Spans))
-		for _, sp := range orderSpans(res.Spans) {
-			spans = append(spans, spanRow(sp.span, sp.depth, total))
+		ordered := orderSpans(res.Spans)
+		rows := make([]ui.El, 0, len(ordered))
+		for _, sp := range ordered {
+			rows = append(rows, spanRow(sp.span, sp.depth, total))
 		}
-		rows = append(rows, ui.Section("Waterfall", ui.Stack("vertical", 2, spans...)))
+
+		// The panel's header answers the three questions a waterfall is opened
+		// with — what ran, which trace this is, and whether it came out all
+		// right — before any of the bars are read.
+		summary := fmt.Sprintf("%d %s · %s", len(res.Spans), plural(len(res.Spans), "span"),
+			formatDuration(total))
+		if failed := failedSpans(res.Spans); failed > 0 {
+			summary += fmt.Sprintf(" · %d failed", failed)
+		} else {
+			summary += " · ok"
+		}
+		body = append(body, ui.DetailPanel(traceRootName(res.Spans),
+			ui.Origin("trace="+shortID(traceID)),
+			ui.Summary(summary),
+			ui.Stack("vertical", 2, rows...),
+		).Build())
 	}
 
 	if len(res.Logs) > 0 {
-		logs := make([]ui.El, 0, len(res.Logs))
+		rows := make([]any, 0, len(res.Logs))
 		for _, r := range res.Logs {
-			logs = append(logs, ui.Stack("vertical", 2,
-				ui.Badge(r.Time.Format("15:04:05.000")+" · "+r.Level+" · "+r.Component, logTone(r.Level)),
-				ui.Subtitle(r.Message)))
+			rows = append(rows, map[string]any{
+				"time":    r.Time.Format("15:04:05.000"),
+				"level":   r.Level,
+				"tone":    logColor(r.Level),
+				"service": logService(r),
+				"message": r.Message,
+			})
 		}
-		rows = append(rows, ui.Section("Records", ui.Stack("vertical", 4, logs...)))
+		body = append(body, ui.DetailPanel("Correlated records",
+			ui.Summary(strconv.Itoa(len(res.Logs))+" "+plural(len(res.Logs), "record")),
+			ui.LogTable(ui.Rows(rows)),
+		).Build())
 	}
 
-	return ui.Screen(ui.Title("Trace"), ui.Stack("vertical", 12, rows...)).Build(), nil
+	return settingsFrame(nav, sectionTraces, "Trace", lead, body...), nil
+}
+
+// traceRootName is the operation a person recognises — the entry span's name.
+func traceRootName(spans []domain.TelemetrySpanRecord) string {
+	byID := make(map[string]bool, len(spans))
+	for _, sp := range spans {
+		byID[sp.Span] = true
+	}
+	for _, sp := range spans {
+		// Anything whose parent is not in the set is a root here: the entry
+		// span's parent is the *client's* span and lives outside this process
+		// (ADR 0054).
+		if sp.Parent == "" || !byID[sp.Parent] {
+			return sp.Name
+		}
+	}
+	return "Trace"
+}
+
+// failedSpans counts the spans that did not succeed. A trace can come out ok
+// with something inside it having failed and been recovered, which is invisible
+// from the outcome alone.
+func failedSpans(spans []domain.TelemetrySpanRecord) int {
+	n := 0
+	for _, sp := range spans {
+		if sp.Status == "error" {
+			n++
+		}
+	}
+	return n
 }
 
 // spanRow renders one span, indented by depth and showing its share of the
 // whole. The share is the point: a waterfall exists to answer "which part of
 // this was the time", and a duration alone does not.
 func spanRow(sp domain.TelemetrySpanRecord, depth int, total time.Duration) ui.El {
-	name := strings.Repeat("    ", depth) + sp.Name
-	meta := formatDuration(sp.Duration)
+	share := "0%"
 	if total > 0 {
-		meta += fmt.Sprintf(" · %d%%", int(sp.Duration*100/total))
-	}
-	if sp.Module != "" {
-		meta += " · module:" + sp.Module
-	}
-	tone := "neutral"
-	if sp.Status != "ok" {
-		tone = "danger"
-		if sp.ErrorCategory != "" {
-			meta += " · " + sp.ErrorCategory
+		pct := 100 * float64(sp.Duration) / float64(total)
+		if pct > 100 {
+			pct = 100
 		}
+		// A span that ran always draws something. A bar rounded away reads as a
+		// span that took no time, which is a different claim from "too short to
+		// see".
+		if pct < 1 && sp.Duration > 0 {
+			pct = 1
+		}
+		share = fmt.Sprintf("%.0f%%", pct)
 	}
-	return ui.Stack("vertical", 1, ui.Subtitle(name), ui.Badge(meta, tone))
+	tone := "accent"
+	if sp.Status == "error" {
+		tone = "danger"
+	}
+	// Depth as a space token rather than as leading whitespace in the name,
+	// which is what it used to be: indentation belongs to the layout, and a name
+	// padded with spaces cannot be selected or searched for.
+	indent := depth
+	if indent > 6 {
+		indent = 6
+	}
+	return ui.SpanRow(sp.Name,
+		ui.Depth(indent),
+		ui.Share(share),
+		ui.Tone(tone),
+		ui.Value(formatDuration(sp.Duration)))
 }
 
-// spanAtDepth pairs a span with its depth in the tree.
+// spanAtDepth is a span and how deep it sits in the trace's tree.
 type spanAtDepth struct {
 	span  domain.TelemetrySpanRecord
 	depth int
 }
 
-// orderSpans arranges spans parent-before-child, depth-first, so the rendered
-// list reads as a tree.
 func orderSpans(spans []domain.TelemetrySpanRecord) []spanAtDepth {
 	bySpan := make(map[string]domain.TelemetrySpanRecord, len(spans))
 	children := make(map[string][]domain.TelemetrySpanRecord, len(spans))

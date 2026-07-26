@@ -157,14 +157,26 @@ func TestTraceScreenNestsSpansByParent(t *testing.T) {
 			t.Fatalf("span %q missing from the waterfall: %s", want, rendered)
 		}
 	}
-	// Indentation carries the tree, and it lives inside the label rather than
-	// across lines — so assert the exact depths rather than counting columns.
-	// A flat list would render every name at depth zero.
-	if !strings.Contains(rendered, `"    module.search"`) {
-		t.Fatalf("module.search should sit one level in: %s", rendered)
+	// Depth carries the tree, as a layout property rather than as spaces inside
+	// the name — a name padded with whitespace cannot be selected or searched
+	// for, and the indentation belonged to the layout all along. A flat list
+	// would render every span at depth zero.
+	var spans []sdui.Node
+	findAll(node, "SpanRow", &spans)
+	if len(spans) != 3 {
+		t.Fatalf("span rows = %d, want 3", len(spans))
 	}
-	if !strings.Contains(rendered, `"        http GET example"`) {
-		t.Fatalf("the HTTP span should sit two levels in, under the module: %s", rendered)
+	for i, want := range []struct {
+		name  string
+		depth int
+	}{{"Navigate", 0}, {"module.search", 1}, {"http GET example", 2}} {
+		if got, _ := prop(spans[i], "title").(string); got != want.name {
+			t.Errorf("span %d = %q, want %q", i, got, want.name)
+		}
+		got, _ := prop(spans[i], "depth").(float64)
+		if int(got) != want.depth {
+			t.Errorf("%s depth = %v, want %d", want.name, got, want.depth)
+		}
 	}
 	// The share of the whole is the point of a waterfall — a duration alone
 	// does not say which part *was* the time.
