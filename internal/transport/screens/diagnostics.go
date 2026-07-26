@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,12 @@ import (
 
 // logsScreen is the log viewer: filter, and a page of records newest first.
 func (s *Service) logsScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
+	nav, navErr := s.settingsNav(ctx, caller)
+	if navErr != nil {
+		return nil, navErr
+	}
+	nav.selected = true
+
 	filter := domain.TelemetryLogFilter{
 		MinLevel:  stringParam(params, paramLevel),
 		Component: stringParam(params, paramComponent),
@@ -48,18 +55,100 @@ func (s *Service) logsScreen(ctx context.Context, caller v1.Caller, params map[s
 		return nil, err
 	}
 
-	rows := []ui.El{levelFilterRow(params)}
+	const lead = "Structured records, correlated with the trace that produced them."
+	body := make([]sdui.Node, 0, 4)
+	if counts := levelCountRow(res.Records); counts != nil {
+		body = append(body, counts.Build())
+	}
+	body = append(body, levelFilterRow(params).Build())
 	if len(res.Records) == 0 {
-		rows = append(rows, ui.EmptyState(emptyIconSearch, "No records match that filter in the last day"))
-		return ui.Screen(ui.Title("Logs"), ui.Stack("vertical", 12, rows...)).Build(), nil
+		body = append(body, ui.EmptyState(emptyIconSearch, "No records match that filter in the last day").Build())
+		return settingsFrame(nav, sectionLogs, "Logs", lead, body...), nil
 	}
 
-	entries := make([]ui.El, 0, len(res.Records))
+	// A table rather than a stack of cards, as the design draws it. The columns
+	// are how a log is actually read: the eye runs down one of them looking for
+	// the line that is different, which a stack of differently-shaped cards
+	// makes impossible.
+	rows := make([]any, 0, len(res.Records))
 	for _, r := range res.Records {
-		entries = append(entries, logRow(r))
+		row := map[string]any{
+			"time":    r.Time.Format("15:04:05"),
+			"level":   r.Level,
+			"tone":    logColor(r.Level),
+			"service": logService(r),
+			"message": r.Message,
+		}
+		if r.Trace != "" {
+			row["trace"] = shortID(r.Trace)
+			// The trace id is a navigation into the waterfall, which is the move
+			// that makes a log line useful: "what else happened because of this?"
+			// becomes a tap rather than a copied string.
+			row["action"] = ui.Navigate(screenTrace, map[string]any{paramTrace: r.Trace})
+		}
+		rows = append(rows, row)
 	}
-	rows = append(rows, ui.Stack("vertical", 4, entries...))
-	return ui.Screen(ui.Title("Logs"), ui.Stack("vertical", 12, rows...)).Build(), nil
+	body = append(body, ui.LogTable(ui.Rows(rows)).Build())
+
+	// The footer states what is on screen and how long it will be kept. It does
+	// not state a total: the query returns the matching window, and there is no
+	// count of everything stored to compare it against.
+	footer := strconv.Itoa(len(res.Records)) + " " + plural(len(res.Records), "record")
+	body = append(body, ui.Stack("horizontal", 4,
+		ui.Component("Text", ui.Prop("text", footer),
+			ui.Prop("style", map[string]any{"variant": "xs", "color": "text-faint"})),
+	).Build())
+
+	return settingsFrame(nav, sectionLogs, "Logs", lead, body...), nil
+}
+
+// levelCountRow is the design's run of level chips with their counts. It counts
+// what came back rather than what exists: the query is a filtered window, and a
+// chip claiming a total the screen cannot see would be a number nobody could
+// check.
+func levelCountRow(records []domain.TelemetryLogRecord) *ui.Element {
+	counts := map[string]int{}
+	for _, r := range records {
+		counts[strings.ToLower(r.Level)]++
+	}
+	chips := make([]ui.El, 0, 4)
+	for _, lv := range []string{"info", "warn", "error", "debug"} {
+		if counts[lv] == 0 {
+			continue
+		}
+		chips = append(chips, ui.StatCard(strings.ToUpper(lv), strconv.Itoa(counts[lv])))
+	}
+	if len(chips) == 0 {
+		return nil
+	}
+	return ui.Grid(ui.MinColumnWidth(120), ui.Gap(3), ui.Group(chips...))
+}
+
+// logColor is the colour token a level takes in the table.
+func logColor(level string) string {
+	switch strings.ToLower(level) {
+	case "error":
+		return "danger"
+	case "warn", "warning":
+		return "warning"
+	case "debug":
+		return "text-faint"
+	default:
+		return "text-muted"
+	}
+}
+
+// logService is what the record says it came from, preferring the module over
+// the component: on a line emitted inside an extension, the module is the
+// answer to "who said this" and the component is an implementation detail.
+func logService(r domain.TelemetryLogRecord) string {
+	if r.Module != "" {
+		return r.Module
+	}
+	if r.Component != "" {
+		return r.Component
+	}
+	return r.Service
 }
 
 // logRow renders one record. The trace id is a navigation into the waterfall,
@@ -94,6 +183,12 @@ func logRow(r domain.TelemetryLogRecord) ui.El {
 // tracesScreen lists recent traces: what ran, how long it took, and whether
 // anything inside it failed.
 func (s *Service) tracesScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
+	nav, navErr := s.settingsNav(ctx, caller)
+	if navErr != nil {
+		return nil, navErr
+	}
+	nav.selected = true
+
 	filter := domain.TelemetryTraceFilter{Order: domain.TraceOrderRecent}
 	if stringParam(params, paramOrder) == string(domain.TraceOrderSlowest) {
 		filter.Order = domain.TraceOrderSlowest
@@ -105,29 +200,157 @@ func (s *Service) tracesScreen(ctx context.Context, caller v1.Caller, params map
 		return nil, err
 	}
 
-	rows := []ui.El{traceFilterRow(filter)}
+	const lead = "Spans from every request, scan and extension call."
 	if len(res.Traces) == 0 {
-		rows = append(rows, ui.EmptyState(emptyIconSearch, "No traces recorded in the last day"))
-		return ui.Screen(ui.Title("Traces"), ui.Stack("vertical", 12, rows...)).Build(), nil
+		return settingsFrame(nav, sectionTraces, "Traces", lead,
+			traceFilterRow(filter).Build(),
+			ui.EmptyState(emptyIconSearch, "No traces recorded in the last day").Build()), nil
 	}
+
+	// The design leads with the shape of the data rather than with the list:
+	// percentiles, an error rate and a throughput, then where the time actually
+	// went. All of it is computed from the summaries already in hand — the store
+	// is not asked a second question.
+	body := make([]sdui.Node, 0, 4)
+	if stats := traceStats(res.Traces); stats != nil {
+		body = append(body, stats.Build())
+	}
+	if hist := latencyHistogram(res.Traces); hist != nil {
+		body = append(body, hist.Build())
+	}
+	body = append(body, traceFilterRow(filter).Build())
 
 	entries := make([]ui.El, 0, len(res.Traces))
 	for _, t := range res.Traces {
-		meta := fmt.Sprintf("%s · %s · %d spans", t.StartedAt.Format("15:04:05"), formatDuration(t.Duration), t.Spans)
+		summary := fmt.Sprintf("%s · %d spans", t.StartedAt.Format("15:04:05"), t.Spans)
 		if t.Errors > 0 {
-			// Worth its own mention: a trace can succeed overall while
-			// something inside it failed and was recovered — a search
-			// swallowing an unreachable addon is exactly that, and it is
-			// invisible from the outcome alone.
-			meta += fmt.Sprintf(" · %d failed", t.Errors)
+			// Worth its own mention: a trace can succeed overall while something
+			// inside it failed and was recovered — a search swallowing an
+			// unreachable addon is exactly that, and it is invisible from the
+			// outcome alone.
+			summary += fmt.Sprintf(" · %d failed", t.Errors)
 		}
-		entries = append(entries, ui.Stack("vertical", 2,
-			ui.Button(t.Root, "ghost", ui.OnTap(ui.Navigate(screenTrace, map[string]any{paramTrace: t.Trace}))),
-			ui.Badge(meta, traceTone(t)),
-		))
+		entries = append(entries, ui.TraceRow(t.Root,
+			ui.Origin(shortID(t.Trace)),
+			ui.Summary(summary),
+			ui.Value(formatDuration(t.Duration)),
+			ui.When(traceColor(t) != "", ui.Tone(traceColor(t))),
+			ui.OnTap(ui.Navigate(screenTrace, map[string]any{paramTrace: t.Trace}))))
 	}
-	rows = append(rows, ui.Stack("vertical", 6, entries...))
-	return ui.Screen(ui.Title("Traces"), ui.Stack("vertical", 12, rows...)).Build(), nil
+	body = append(body, ui.Stack("vertical", 2, entries...).Build())
+	return settingsFrame(nav, sectionTraces, "Traces", lead, body...), nil
+}
+
+// traceStats is the design's row of figures over the traces in hand.
+//
+// Percentiles over the *returned* set, which is what the screen can honestly
+// claim: the query is a filtered, limited window, and a percentile presented as
+// the install's is a claim about traces this screen never saw.
+func traceStats(traces []domain.TelemetryTraceSummary) *ui.Element {
+	if len(traces) == 0 {
+		return nil
+	}
+	sorted := make([]time.Duration, 0, len(traces))
+	failed := 0
+	var earliest, latest time.Time
+	for _, t := range traces {
+		sorted = append(sorted, t.Duration)
+		if t.Status == "error" || t.Errors > 0 {
+			failed++
+		}
+		if earliest.IsZero() || t.StartedAt.Before(earliest) {
+			earliest = t.StartedAt
+		}
+		if t.StartedAt.After(latest) {
+			latest = t.StartedAt
+		}
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	pct := func(p float64) string {
+		i := int(float64(len(sorted)-1) * p)
+		return formatDuration(sorted[i])
+	}
+
+	cards := []ui.El{
+		ui.StatCard("P50", pct(0.50)),
+		ui.StatCard("P95", pct(0.95)),
+		ui.StatCard("P99", pct(0.99)),
+		ui.StatCard("Errors", fmt.Sprintf("%.1f%%", 100*float64(failed)/float64(len(traces)))),
+	}
+	// Throughput needs a window to divide by, and one trace has none. Omitted
+	// rather than shown as a rate over zero time.
+	if window := latest.Sub(earliest); window >= time.Second {
+		perMin := float64(len(traces)) / window.Minutes()
+		cards = append(cards, ui.StatCard("Throughput", fmt.Sprintf("%.0f / min", perMin)))
+	}
+	return ui.Grid(ui.MinColumnWidth(130), ui.Gap(3), ui.Group(cards...))
+}
+
+// latencyHistogram buckets the durations, which is what the percentiles cannot
+// show: whether the slow tail is two traces or a third of them.
+//
+// The bars are sized here rather than in the client because only the server
+// knows what the tallest bucket is, and a bar drawn as a fraction of something
+// the client guessed would be a different chart on every render.
+func latencyHistogram(traces []domain.TelemetryTraceSummary) *ui.Element {
+	if len(traces) < 2 {
+		return nil
+	}
+	edges := []time.Duration{
+		50 * time.Millisecond, 100 * time.Millisecond, 250 * time.Millisecond,
+		500 * time.Millisecond, time.Second,
+	}
+	labels := []string{"<50ms", "50–100", "100–250", "250–500", "500ms–1s", ">1s"}
+	counts := make([]int, len(labels))
+	for _, t := range traces {
+		placed := false
+		for i, e := range edges {
+			if t.Duration < e {
+				counts[i]++
+				placed = true
+				break
+			}
+		}
+		if !placed {
+			counts[len(counts)-1]++
+		}
+	}
+	tallest := 0
+	for _, c := range counts {
+		if c > tallest {
+			tallest = c
+		}
+	}
+	if tallest == 0 {
+		return nil
+	}
+	buckets := make([]any, 0, len(counts))
+	for i, c := range counts {
+		// A non-zero bucket always draws something: a bar rounded to nothing
+		// reads as an empty bucket, which is a different fact.
+		h := 0
+		if c > 0 {
+			h = 4 + int(44*float64(c)/float64(tallest))
+		}
+		buckets = append(buckets, map[string]any{
+			"label": labels[i], "count": strconv.Itoa(c), "height": h,
+		})
+	}
+	return ui.LatencyHistogram("Latency distribution",
+		ui.Summary(fmt.Sprintf("%d traces · %d buckets", len(traces), len(counts))),
+		ui.Buckets(buckets))
+}
+
+// traceColor is the status dot's colour, empty for a trace that ran clean.
+func traceColor(t domain.TelemetryTraceSummary) string {
+	switch {
+	case t.Status == "error":
+		return "danger"
+	case t.Errors > 0:
+		return "warning"
+	default:
+		return ""
+	}
 }
 
 // traceScreen is the waterfall for one trace: the span tree with durations,
@@ -268,32 +491,32 @@ func rootDuration(spans []domain.TelemetrySpanRecord) time.Duration {
 }
 
 // levelFilterRow offers the level filters as navigations back into this screen.
-func levelFilterRow(params map[string]any) ui.El {
+func levelFilterRow(params map[string]any) *ui.Element {
 	current := stringParam(params, paramLevel)
 	buttons := make([]ui.El, 0, 4)
 	for _, level := range []string{"debug", "info", "warn", "error"} {
-		style := "ghost"
+		style := "chip"
 		if level == current {
-			style = "secondary"
+			style = "chipOn"
 		}
 		buttons = append(buttons, ui.Button(level, style,
 			ui.OnTap(ui.Navigate(screenLogs, map[string]any{paramLevel: level}))))
 	}
-	return ui.Stack("horizontal", 6, buttons...)
+	return ui.Stack("horizontal", 2, ui.Wrap(true), ui.Group(buttons...))
 }
 
 // traceFilterRow offers the ordering and failed-only toggles.
-func traceFilterRow(f domain.TelemetryTraceFilter) ui.El {
-	recentStyle, slowestStyle, failedStyle := "ghost", "ghost", "ghost"
+func traceFilterRow(f domain.TelemetryTraceFilter) *ui.Element {
+	recentStyle, slowestStyle, failedStyle := "chip", "chip", "chip"
 	if f.Order == domain.TraceOrderSlowest {
-		slowestStyle = "secondary"
+		slowestStyle = "chipOn"
 	} else {
-		recentStyle = "secondary"
+		recentStyle = "chipOn"
 	}
 	if f.FailedOnly {
-		failedStyle = "secondary"
+		failedStyle = "chipOn"
 	}
-	return ui.Stack("horizontal", 6,
+	return ui.Stack("horizontal", 2, ui.Wrap(true),
 		ui.Button("Recent", recentStyle,
 			ui.OnTap(ui.Navigate(screenTraces, map[string]any{paramOrder: string(domain.TraceOrderRecent)}))),
 		ui.Button("Slowest", slowestStyle,
