@@ -15,6 +15,8 @@ package auth
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -31,13 +33,26 @@ import (
 // handler on the API mux.
 type Handler struct {
 	svc *app.Service
+	// bootstrapLimit bounds the one call reachable before authentication
+	// (ADR 0101). It is per-handler rather than global because there is one
+	// handler per process; a second would be a second Platform.
+	bootstrapLimit *limiter
+	// now is the clock the limiter reads, injectable so a test can spend a
+	// bucket and watch it refill without sleeping.
+	now func() time.Time
 }
 
 // Compile-time proof the handler satisfies the generated service contract.
 var _ authv1connect.AuthServiceHandler = (*Handler)(nil)
 
 // NewHandler wires the auth transport over the application services.
-func NewHandler(svc *app.Service) *Handler { return &Handler{svc: svc} }
+func NewHandler(svc *app.Service) *Handler {
+	return &Handler{
+		svc:            svc,
+		bootstrapLimit: newLimiter(bootstrapPerMinute, bootstrapBurst),
+		now:            time.Now,
+	}
+}
 
 // SignIn authenticates a local user and issues a session.
 //
@@ -95,4 +110,17 @@ func sessionMessage(s domain.Session) *authv1.Session {
 		ExpiresAt:    timestamppb.New(s.ExpiresAt),
 		AuthStrength: string(s.AuthStrength),
 	}
+}
+
+// Refresh exchanges a refresh token for a new pair (ADR 0102).
+//
+// **Not built yet.** The contract carries it because the pre-session bootstrap
+// and the bearer pair change the same file and shipped as one release; the
+// Platform's half of the pair lands in the slice after this one. Answering
+// Unimplemented is the honest interim: a client that calls it is told the
+// server does not do this, rather than being handed something that looks like a
+// session and is not.
+func (h *Handler) Refresh(context.Context, *connect.Request[authv1.RefreshRequest]) (*connect.Response[authv1.RefreshResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented,
+		errors.New("this Platform does not issue refresh tokens yet"))
 }

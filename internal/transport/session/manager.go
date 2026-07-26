@@ -26,6 +26,7 @@ import (
 
 	sessionv1 "github.com/mosaic-media/contracts/gen/mosaic/session/v1"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
+	"github.com/mosaic-media/platform/internal/transport/vocabulary"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -76,7 +77,7 @@ type liveSession struct {
 	// vocab is what the client declared it can *render*, guarded by the same
 	// lock and for the same reason: Attach writes it and every later push reads
 	// it. The two declarations arrive on the same call and are never read apart.
-	vocab clientVocabulary
+	vocab vocabulary.Client
 
 	// input-debounce state (ADR 0041's server-side coalescing, moved from the
 	// ordered read loop of ADR 0032 into session state).
@@ -386,7 +387,7 @@ func (s *liveSession) clientProfile() clientProfile {
 }
 
 // setVocabulary records what the client declared it can render (ADR 0084).
-func (s *liveSession) setVocabulary(v clientVocabulary) {
+func (s *liveSession) setVocabulary(v vocabulary.Client) {
 	s.profileMu.Lock()
 	s.vocab = v
 	s.profileMu.Unlock()
@@ -396,7 +397,7 @@ func (s *liveSession) setVocabulary(v clientVocabulary) {
 // and means "send everything", the behaviour every client had before the
 // declaration existed. A session can exist before any Attach, so undeclared is a
 // normal state rather than an error.
-func (s *liveSession) vocabulary() clientVocabulary {
+func (s *liveSession) vocabulary() vocabulary.Client {
 	s.profileMu.Lock()
 	defer s.profileMu.Unlock()
 	return s.vocab

@@ -7,6 +7,7 @@ package auth_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -133,7 +134,20 @@ func (s fakeUserStore) Update(_ context.Context, user domain.User) (domain.User,
 	return user, nil
 }
 
-func (s fakeUserStore) List(context.Context) ([]domain.User, error) { return nil, nil }
+// List answers over the seeded users, because the pre-session bootstrap reads
+// it to decide whether this server has been claimed (ADR 0101). It used to be a
+// stub returning nothing, which made a seeded server look unclaimed — a fake
+// that lies about the store it stands in for.
+func (s fakeUserStore) List(context.Context) ([]domain.User, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	out := make([]domain.User, 0, len(s.db.users))
+	for _, u := range s.db.users {
+		out = append(out, u)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
 
 type fakeSessionStore struct{ db *fakeDB }
 

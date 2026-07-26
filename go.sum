@@ -50,8 +50,8 @@ github.com/mattn/go-isatty v0.0.12/go.mod h1:cbi8OIDigv2wuxKPP5vlRcQ1OAZbq2CE4Ky
 github.com/mattn/go-isatty v0.0.14/go.mod h1:7GGIvUiUoEMVVmxf/4nioHXj79iQHKdU27kJ6hsGG94=
 github.com/mattn/go-isatty v0.0.17 h1:BTarxUcIeDqL27Mc+vyvdWYSL28zpIhv3RoTdsLMPng=
 github.com/mattn/go-isatty v0.0.17/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
-github.com/mosaic-media/contracts v0.54.0 h1:QIuzh15rXDFTMu+64MyeLEBeq84iMG8gSimMiFXoo5s=
-github.com/mosaic-media/contracts v0.54.0/go.mod h1:PTcqIYfXR9ATnb2ihAWD2sfg4+Tjihne7yIDfJwXUJ0=
+github.com/mosaic-media/contracts v0.55.0 h1:ZPvTJhExBVqxKSBjqyOtjTPbtRxnbB9t7t7fnuVliPg=
+github.com/mosaic-media/contracts v0.55.0/go.mod h1:PTcqIYfXR9ATnb2ihAWD2sfg4+Tjihne7yIDfJwXUJ0=
 github.com/mosaic-media/module-cinemeta v0.3.0 h1:zzPl7VxI/Nx2xVh3g8+629uDwh2VSmTzzyxma42+IDc=
 github.com/mosaic-media/module-cinemeta v0.3.0/go.mod h1:pDUna5vmFTCzUztehUn7TENoCW0okUCDHb6Y07XGuFM=
 github.com/mosaic-media/module-remote-playback v0.4.0 h1:H2g0gSNCjrGIVKrn1YuF7uglQHR7qXYBO41Kb+Ug3JI=

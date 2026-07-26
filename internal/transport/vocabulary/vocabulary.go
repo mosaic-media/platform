@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 
-package session
+// Package vocabulary is ADR 0084's negotiation, and the definition library as
+// one particular client should receive it.
+//
+// It lived inside the session transport until the pre-session bootstrap
+// (ADR 0101) needed the same machinery: the doorway carries the same vocabulary
+// declaration Attach carries, so negotiation applies to it unchanged, and a
+// second copy of "what can this client draw" is exactly the drift the
+// declaration exists to remove. Both transports read this one.
+package vocabulary
 
 import (
 	"context"
@@ -60,8 +68,8 @@ var contractActionKinds = func() map[string]bool {
 	return m
 }()
 
-// clientVocabulary is what a client declared it can render.
-type clientVocabulary struct {
+// Client is what a client declared it can render.
+type Client struct {
 	// version is the vocabulary edition the client was built against. It is not
 	// a claim to implement all of it — primitives and actions are the precise
 	// answer — so nothing branches on it yet; it is recorded so a version skew
@@ -75,12 +83,12 @@ type clientVocabulary struct {
 	declared bool
 }
 
-// vocabularyFrom converts a declaration into the filter the emit side applies.
-func vocabularyFrom(p *sessionv1.VocabularyProfile) clientVocabulary {
+// From converts a declaration into the filter the emit side applies.
+func From(p *sessionv1.VocabularyProfile) Client {
 	if p == nil {
-		return clientVocabulary{}
+		return Client{}
 	}
-	v := clientVocabulary{
+	v := Client{
 		version:    p.GetVersion(),
 		primitives: make(map[string]bool, len(p.GetPrimitives())),
 		actions:    make(map[string]bool, len(p.GetActions())),
@@ -95,28 +103,44 @@ func vocabularyFrom(p *sessionv1.VocabularyProfile) clientVocabulary {
 	return v
 }
 
-// rendersType reports whether the client can draw a node of this type. Anything
+// Version is the vocabulary edition the client was built against, empty when it
+// did not say. Nothing branches on it; it is reported so a version skew is
+// visible in telemetry before it is visible as a broken screen.
+func (v Client) Version() string { return v.version }
+
+// Counts is how many primitives and action kinds the client declared, for the
+// one telemetry line the declaration earns.
+func (v Client) Counts() (primitives, actions int) {
+	return len(v.primitives), len(v.actions)
+}
+
+// Declared reports whether the client said anything at all. An undeclared
+// client is an older one and gets everything, which is not the same answer as a
+// client that declared nothing.
+func (v Client) Declared() bool { return v.declared }
+
+// RendersType reports whether the client can draw a node of this type. Anything
 // that is not a primitive — a component, a module's own type — is the client's
 // to render from a definition, so it is always allowed through.
-func (v clientVocabulary) rendersType(typ string) bool {
+func (v Client) RendersType(typ string) bool {
 	if !v.declared || !contractPrimitives[typ] {
 		return true
 	}
 	return v.primitives[typ]
 }
 
-// interpretsAction reports whether the client's dispatcher handles this kind.
-func (v clientVocabulary) interpretsAction(kind string) bool {
+// InterpretsAction reports whether the client's dispatcher handles this kind.
+func (v Client) InterpretsAction(kind string) bool {
 	if !v.declared {
 		return true
 	}
 	return v.actions[kind]
 }
 
-// missing lists what the contract declares and this client did not, for the one
+// Missing lists what the contract declares and this client did not, for the one
 // telemetry line written when the declaration arrives. It is the number that
 // says whether a client is behind the contract, which nothing could say before.
-func (v clientVocabulary) missing() (primitives, actions []string) {
+func (v Client) Missing() (primitives, actions []string) {
 	if !v.declared {
 		return nil, nil
 	}
@@ -135,32 +159,32 @@ func (v clientVocabulary) missing() (primitives, actions []string) {
 	return primitives, actions
 }
 
-// degradation records what a pass removed, so it can be reported once per push
+// Degradation records what a pass removed, so it can be reported once per push
 // rather than once per node — a screen full of PosterCards on a client with no
 // ProgressBar would otherwise write one line per card.
-type degradation struct {
+type Degradation struct {
 	types   map[string]int
 	actions map[string]int
 }
 
-func (d *degradation) dropType(t string) {
+func (d *Degradation) dropType(t string) {
 	if d.types == nil {
 		d.types = map[string]int{}
 	}
 	d.types[t]++
 }
 
-func (d *degradation) dropAction(k string) {
+func (d *Degradation) dropAction(k string) {
 	if d.actions == nil {
 		d.actions = map[string]int{}
 	}
 	d.actions[k]++
 }
 
-func (d *degradation) empty() bool { return len(d.types) == 0 && len(d.actions) == 0 }
+func (d *Degradation) empty() bool { return len(d.types) == 0 && len(d.actions) == 0 }
 
 // summary renders the counts as a stable string ("PosterCard×4"), sorted so the
-// same degradation reads the same way in every log line.
+// same Degradation reads the same way in every log line.
 func summary(counts map[string]int) string {
 	keys := make([]string, 0, len(counts))
 	for k := range counts {
@@ -186,22 +210,22 @@ func itoa(n int) string {
 	return string(b)
 }
 
-// degrade returns node with everything the client cannot render removed, plus a
+// Degrade returns node with everything the client cannot render removed, plus a
 // record of what went. It returns the node unchanged — and allocates nothing —
 // for an undeclared client, which is every client built before this field.
 //
 // A dropped subtree is dropped whole: a node's children are its own, and keeping
 // orphaned grandchildren in the parent's place would rearrange a layout rather
 // than simplify it.
-func degrade(node *sduiv1.UINode, v clientVocabulary) (*sduiv1.UINode, degradation) {
-	var d degradation
+func Degrade(node *sduiv1.UINode, v Client) (*sduiv1.UINode, Degradation) {
+	var d Degradation
 	if !v.declared || node == nil {
 		return node, d
 	}
 	return degradeNode(node, v, &d), d
 }
 
-func degradeNode(node *sduiv1.UINode, v clientVocabulary, d *degradation) *sduiv1.UINode {
+func degradeNode(node *sduiv1.UINode, v Client, d *Degradation) *sduiv1.UINode {
 	if node == nil {
 		return nil
 	}
@@ -210,7 +234,7 @@ func degradeNode(node *sduiv1.UINode, v clientVocabulary, d *degradation) *sduiv
 		out.Props = degradeProps(p, v, d)
 	}
 	for _, c := range node.GetChildren() {
-		if !v.rendersType(c.GetType()) {
+		if !v.RendersType(c.GetType()) {
 			d.dropType(c.GetType())
 			continue
 		}
@@ -221,7 +245,7 @@ func degradeNode(node *sduiv1.UINode, v clientVocabulary, d *degradation) *sduiv
 		for name, list := range node.GetSlots() {
 			kept := &sduiv1.NodeList{}
 			for _, c := range list.GetNodes() {
-				if !v.rendersType(c.GetType()) {
+				if !v.RendersType(c.GetType()) {
 					d.dropType(c.GetType())
 					continue
 				}
@@ -240,8 +264,8 @@ func degradeNode(node *sduiv1.UINode, v clientVocabulary, d *degradation) *sduiv
 // action is inert and visible; removing the button removes an affordance the
 // server decided the screen needed, and the client may well have its own
 // disabled rendering for a control with nothing wired to it. Either way it is
-// reported, which is the part that was missing.
-func degradeProps(props *structpb.Struct, v clientVocabulary, d *degradation) *structpb.Struct {
+// reported, which is the part that was Missing.
+func degradeProps(props *structpb.Struct, v Client, d *Degradation) *structpb.Struct {
 	changed := false
 	fields := make(map[string]*structpb.Value, len(props.GetFields()))
 	for k, val := range props.GetFields() {
@@ -266,7 +290,7 @@ func degradeProps(props *structpb.Struct, v clientVocabulary, d *degradation) *s
 // a field called kind is not mistaken for one. A nested sequence disqualifies
 // the whole envelope: a sequence that ran half its steps is a worse outcome than
 // one that does not run, because the half it ran is a change nobody asked for.
-func unsupportedAction(val *structpb.Value, v clientVocabulary) (string, bool) {
+func unsupportedAction(val *structpb.Value, v Client) (string, bool) {
 	s := val.GetStructValue()
 	if s == nil {
 		return "", false
@@ -275,7 +299,7 @@ func unsupportedAction(val *structpb.Value, v clientVocabulary) (string, bool) {
 	if kind == "" || !contractActionKinds[kind] {
 		return "", false
 	}
-	if !v.interpretsAction(kind) {
+	if !v.InterpretsAction(kind) {
 		return kind, true
 	}
 	for _, nested := range s.GetFields()["actions"].GetListValue().GetValues() {
@@ -286,10 +310,10 @@ func unsupportedAction(val *structpb.Value, v clientVocabulary) (string, bool) {
 	return "", false
 }
 
-// report writes the one telemetry line a degraded push earns. This is the whole
+// Report writes the one telemetry line a degraded push earns. This is the whole
 // point of the slice: the client would have rendered a placeholder either way,
 // and nothing would have known.
-func (d degradation) report(ctx context.Context, session, where string) {
+func (d Degradation) Report(ctx context.Context, session, where string) {
 	if d.empty() {
 		return
 	}
@@ -306,21 +330,21 @@ func (d degradation) report(ctx context.Context, session, where string) {
 	telemetry.From(ctx).Warn("sdui degraded for this client's declared vocabulary", fields...)
 }
 
-// definitionsFor returns the component library as this client should receive it:
+// DefinitionsFor returns the component library as this client should receive it:
 // a definition whose template needs a primitive the client did not declare is
 // served with its fallback instead, when it has one.
 //
 // The selection is the server's because only the server knows the client's
 // declaration at the moment it sends the library, and because sending both
-// templates would make every client carry the cost of a degradation only some of
+// templates would make every client carry the cost of a Degradation only some of
 // them need.
 //
-// A definition that needs a missing primitive and has no fallback is served
+// A definition that needs a Missing primitive and has no fallback is served
 // unchanged and reported. There is nothing better to send — an omitted
 // definition renders as an Unknown placeholder for every node that uses it,
 // which is strictly worse than a template with a hole in it — but silence is not
 // the answer either.
-func definitionsFor(ctx context.Context, v clientVocabulary, library []byte, session string) []byte {
+func DefinitionsFor(ctx context.Context, v Client, library []byte, session string) []byte {
 	if !v.declared {
 		return library
 	}
@@ -365,9 +389,9 @@ func definitionsFor(ctx context.Context, v clientVocabulary, library []byte, ses
 	return out
 }
 
-func supportsAll(v clientVocabulary, need []string) bool {
+func supportsAll(v Client, need []string) bool {
 	for _, t := range need {
-		if !v.rendersType(t) {
+		if !v.RendersType(t) {
 			return false
 		}
 	}
