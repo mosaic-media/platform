@@ -593,4 +593,31 @@ func TestPlaybackStateAgainstPostgres(t *testing.T) {
 	if _, ok := states.States[items["Opened"]]; ok {
 		t.Error("an item at position zero has no state to return, but one came back")
 	}
+
+	// The watch history over the same rows (ADR 0103), and the one way its
+	// predicate differs from the rail's: a finished item belongs in a history
+	// and is deliberately absent from a continue-watching list. Asserted
+	// together with the rail above, because the whole risk of a third read over
+	// one table is that it quietly becomes a copy of the second.
+	history, err := svc.ListWatchHistory(c, app.ListWatchHistoryQuery{Caller: caller})
+	if err != nil {
+		t.Fatalf("ListWatchHistory: %v", err)
+	}
+	if len(history.Items) != 2 {
+		t.Fatalf("watch history has %d items, want the watched one and the finished one: %+v",
+			len(history.Items), history.Items)
+	}
+	seen := map[v1.NodeID]bool{}
+	for _, item := range history.Items {
+		seen[item.State.NodeID] = true
+		if item.Node.Title == "" {
+			t.Error("a history item carries no node, so a card could not render without a second query")
+		}
+	}
+	if !seen[items["Finished"]] {
+		t.Error("the finished item is missing from the history, which is the one thing a history is for")
+	}
+	if seen[items["Opened"]] {
+		t.Error("an item opened and closed at position zero appeared in the history")
+	}
 }

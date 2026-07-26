@@ -446,8 +446,15 @@ func tokensMsg() *sessionv1.ServerMessage {
 // A list rather than a flag on the action, because the property belongs to the
 // action rather than to the caller: whoever sends reportProgress, it is still
 // not something to confirm.
+//
+// signOut is here for a third reason again, and it is the sharpest one: the
+// credential it just revoked is the credential the re-render would authorise
+// with. Confirming and re-rendering would put an Unauthenticated error into the
+// content region of a screen the client is about to replace with the doorway —
+// a picture of a failure pushed over a success, which is precisely the shape
+// ADR 0102's first defect had.
 func silentAction(action string) bool {
-	return action == "reportProgress" || action == "recordImpression"
+	return action == "reportProgress" || action == "recordImpression" || action == "signOut"
 }
 
 // invokeToast is the confirmation shown when an action succeeds. It reflects the
@@ -465,6 +472,12 @@ func invokeToast(action string) string {
 		return "Extension removed"
 	case "setWatched":
 		return "Updated"
+	case "createAccount":
+		return "Account created"
+	case "setUserStatus":
+		return "Account updated"
+	case "grantPreset":
+		return "Permissions granted"
 	default:
 		return "Done"
 	}

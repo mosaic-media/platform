@@ -20,6 +20,7 @@ import (
 	"github.com/mosaic-media/contracts/sdui"
 	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/transport/auth"
+	"github.com/mosaic-media/platform/internal/transport/vocabulary"
 )
 
 // The pre-session bootstrap (ADR 0101). What is worth testing hardest is not
@@ -72,7 +73,7 @@ func TestBootstrapAnswersWithTheSkinTheDefinitionsAndTheTree(t *testing.T) {
 // carried unchanged.
 func TestBootstrapServesSetupWhileUnclaimedAndSignInOnceClaimed(t *testing.T) {
 	unclaimed := bootstrap(t, auth.NewHandler(newTestService(newFakeDB(), testNow)), nil)
-	if got := treeText(unclaimed.GetUiNode()); !strings.Contains(got, "has not been set up") {
+	if got := treeText(unclaimed.GetUiNode()); !strings.Contains(got, "Set up Mosaic") {
 		t.Errorf("an unclaimed server served: %s", got)
 	}
 
@@ -99,17 +100,35 @@ func TestBootstrapServesADefinitionSubsetAndNotTheLibrary(t *testing.T) {
 	if len(served) == 0 {
 		t.Fatal("the doorway was served no definitions at all")
 	}
-	// The doorway is three components. The library is dozens; a response that
-	// grew towards it is the failure, whatever the exact number is on the day.
-	if len(served) > 6 {
-		names := make([]string, 0, len(served))
-		for _, d := range served {
-			var n string
-			_ = json.Unmarshal(d["name"], &n)
-			names = append(names, n)
+	names := make([]string, 0, len(served))
+	for _, d := range served {
+		var n string
+		_ = json.Unmarshal(d["name"], &n)
+		names = append(names, n)
+	}
+
+	// Bounded against the library rather than against a number somebody
+	// remembered to update. The count moved once already — the doorway grew a
+	// form — and a hard cap would have failed for the right shape of change,
+	// which teaches the next person to raise it rather than to look.
+	var library []map[string]json.RawMessage
+	if err := json.Unmarshal(vocabulary.Library(), &library); err != nil {
+		t.Fatalf("decode the library: %v", err)
+	}
+	if len(served) >= len(library) {
+		t.Fatalf("the doorway disclosed %d of %d definitions (%s) — the subset has become the library",
+			len(served), len(library), strings.Join(names, ", "))
+	}
+
+	// And named, because a count alone would pass for a subset that happened to
+	// carry the wrong half. Nothing about the library a signed-in person browses
+	// should be enumerable from a door.
+	for _, leaked := range []string{"PosterCard", "AppShell", "DetailHero", "SettingsFrame", "LogTable"} {
+		for _, n := range names {
+			if n == leaked {
+				t.Errorf("the doorway disclosed %q, which no door draws", leaked)
+			}
 		}
-		t.Fatalf("the doorway disclosed %d definitions (%s) — the subset has grown into the library",
-			len(served), strings.Join(names, ", "))
 	}
 }
 

@@ -298,6 +298,9 @@ func boundaryCases() []boundaryCase {
 		{"ListInProgress", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListInProgress(ctx, v1.ListInProgressQuery{Caller: caller(sid)}))
 		}},
+		{"ListWatchHistory", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListWatchHistory(ctx, app.ListWatchHistoryQuery{Caller: caller(sid)}))
+		}},
 
 		// --- user preferences and telemetry reads ---
 		{"SetUserPreference", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {

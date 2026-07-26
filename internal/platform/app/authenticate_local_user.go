@@ -90,6 +90,21 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 		return AuthenticateLocalUserResult{}, contracts.NewError(contracts.Unauthenticated, "invalid credentials")
 	}
 
+	// A suspended account is refused **after** the credential is verified, and
+	// with a different category.
+	//
+	// After, because refusing before would answer differently for a suspended
+	// account and an unknown one against a wrong password, which is the
+	// enumeration the collapsing above exists to prevent. Different, because
+	// the two are different situations for the person in front of the screen:
+	// "your password is wrong" sends them off to retype something that was
+	// right, and there is nothing they can do about the other one but ask.
+	if user.Status != domain.UserActive {
+		s.publishAuditEvent(ctx, "authentication.refused", []byte(string(user.Status)), string(user.ID))
+		return AuthenticateLocalUserResult{}, contracts.NewError(contracts.PermissionDenied,
+			"this account cannot sign in")
+	}
+
 	// 3. authorize action through policy.
 	subject := policy.Subject{UserID: user.ID, AuthStrength: domain.AuthStrengthPassword}
 	resource := policy.Resource{Type: "user", ID: string(user.ID)}
@@ -108,7 +123,13 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 		// a row nobody can use and tokens with no session are a credential
 		// pointing at nothing (ADR 0102).
 		session, pair, err := s.sessionManager.Issue(
-			ctx, tx.Sessions(), tx.Tokens(), user.ID, cmd.DeviceID, domain.AuthStrengthPassword)
+			ctx, tx.Sessions(), tx.Tokens(), user.ID, cmd.DeviceID, domain.AuthStrengthPassword,
+			// What this account may do, resolved now and stamped on the session
+			// so a client can omit what it could not use (ADR 0036). Read
+			// outside the delegation path deliberately: this is a projection for
+			// drawing a screen, and every call the client then makes
+			// re-authorises against the grants as they are at that moment.
+			s.sessionCapabilities(ctx, user.ID))
 		if err != nil {
 			return err
 		}

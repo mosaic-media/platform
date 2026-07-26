@@ -35,6 +35,12 @@ const playbackStateColumns = `node_id, part_id, position_ms, duration_ms, finish
 // rail is a rail: nobody scrolls to the fortieth thing they half-started.
 const defaultInProgressLimit = 20
 
+// defaultWatchHistoryLimit caps a history read that named no limit. Larger than
+// the rail above because a history is a screen rather than a row of cards, and
+// still bounded because an unbounded read of a table that grows with every play
+// is the query that is fine for a year and then is not.
+const defaultWatchHistoryLimit = 100
+
 func (s *playbackStateStore) Get(ctx context.Context, userID domain.UserID, nodeID v1.NodeID) (v1.PlaybackState, error) {
 	row := s.q.QueryRow(ctx,
 		`SELECT `+playbackStateColumns+`
@@ -113,6 +119,44 @@ func (s *playbackStateStore) ListInProgress(ctx context.Context, userID domain.U
 	}
 	if err := rows.Err(); err != nil {
 		return nil, mapError("list in-progress playback", err)
+	}
+	return out, nil
+}
+
+// ListWatched is the watch history (ADR 0103): everything this viewer has a
+// state for, most recently touched first.
+//
+// `position_ms > 0 OR finished` is the whole of the difference from the read
+// above. An item opened and closed without watching leaves a row at position
+// zero, and a history that listed it would say somebody watched a thing they
+// looked at the poster of; an item marked watched explicitly can sit at zero
+// legitimately, and is exactly what a history is for.
+func (s *playbackStateStore) ListWatched(ctx context.Context, userID domain.UserID, limit int) ([]v1.PlaybackState, error) {
+	if limit <= 0 {
+		limit = defaultWatchHistoryLimit
+	}
+	rows, err := s.q.Query(ctx,
+		`SELECT `+playbackStateColumns+`
+		   FROM playback_states
+		  WHERE user_id = $1 AND (position_ms > 0 OR finished)
+		  ORDER BY updated_at DESC
+		  LIMIT $2`,
+		string(userID), limit)
+	if err != nil {
+		return nil, mapError("list watch history", err)
+	}
+	defer rows.Close()
+
+	var out []v1.PlaybackState
+	for rows.Next() {
+		state, err := scanPlaybackState(rows)
+		if err != nil {
+			return nil, mapError("list watch history", err)
+		}
+		out = append(out, state)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapError("list watch history", err)
 	}
 	return out, nil
 }

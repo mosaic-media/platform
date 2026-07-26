@@ -115,7 +115,7 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 	case sectionAccount:
 		return s.accountPanel(ctx, caller, nav)
 	case sectionPeople:
-		return s.peoplePanel(ctx, caller, nav)
+		return s.peoplePanel(ctx, caller, nav, params)
 	}
 	return settingsFrame(nav, active, "", "", noSectionPanel(nav.groups)), nil
 }

@@ -72,6 +72,19 @@ func (s *Service) RefreshSession(ctx context.Context, cmd RefreshSessionCommand)
 			return err
 		}
 
+		// Re-resolve what this account may do (ADR 0036). The stored set is the
+		// snapshot taken when the session was issued, and a session lives ninety
+		// days; a permission granted or withdrawn in that time would otherwise
+		// not reach the client's affordance gate until the next sign-in, which
+		// for a device that never signs out is never. Rotation happens every few
+		// minutes, so this is the natural place for it, and it costs one role
+		// read on a call that is already a transaction.
+		//
+		// The row keeps its issue-time value. Nothing reads it, the wire carries
+		// the current set, and adding a store write to keep a column nobody
+		// consumes in step would be work in the wrong direction.
+		session.Capabilities = s.sessionCapabilities(ctx, session.UserID)
+
 		result = RefreshSessionResult{Session: session, Tokens: pair}
 		return nil
 	})

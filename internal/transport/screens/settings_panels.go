@@ -6,7 +6,6 @@ package screens
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	sdui "github.com/mosaic-media/contracts/sdui"
@@ -116,48 +115,6 @@ func (s *Service) devicesSection(ctx context.Context, caller v1.Caller) *ui.Elem
 	}
 
 	return ui.Section("Devices", ui.Stack("vertical", 0, rows...))
-}
-
-// peoplePanel lists who can reach this server and what they are.
-//
-// The design's "Invite" control and its per-person "last seen" are absent: there
-// is no invitation flow and no session listing to read a last-seen from. What is
-// here is real — the accounts, their roles and whether each is active — and each
-// row's roles are the grants that actually decide what that person may do.
-func (s *Service) peoplePanel(ctx context.Context, caller v1.Caller, nav settingsNavModel) (sdui.Node, error) {
-	res, err := s.content.ListUsers(ctx, app.ListUsersQuery{
-		CallerSessionID: domain.SessionID(caller.Session),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(res.Users) == 0 {
-		return settingsFrame(nav, sectionPeople, "People",
-			"Who can reach this server, and what they are allowed to do.",
-			ui.EmptyState(emptyIconCollections, "No accounts on this server").Build(),
-		), nil
-	}
-
-	rows := make([]ui.El, 0, len(res.Users))
-	for _, u := range res.Users {
-		name := u.DisplayName
-		if name == "" {
-			name = u.Username
-		}
-		summary := u.Username
-		if roles := s.rolesFor(ctx, caller, u.ID); roles != "" {
-			summary = roles + " · " + u.Username
-		}
-		rows = append(rows, ui.SettingsRow(name,
-			ui.Summary(summary),
-			ui.Value(titleWords(string(u.Status)))))
-	}
-
-	return settingsFrame(nav, sectionPeople, "People",
-		fmt.Sprintf("%d %s on this server, and what each is allowed to do.",
-			len(res.Users), plural(len(res.Users), "account")),
-		ui.Stack("vertical", 0, rows...).Build(),
-	), nil
 }
 
 // rolesFor names a person's roles for their row, empty when they hold none or

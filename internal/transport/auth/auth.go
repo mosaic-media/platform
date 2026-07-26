@@ -96,12 +96,11 @@ func (h *Handler) SignOut(ctx context.Context, req *connect.Request[authv1.SignO
 
 // sessionMessage projects the domain session onto the wire.
 //
-// Two fields of domain.Session are deliberately not on the contract. RevokedAt,
+// One field of domain.Session is deliberately not on the contract: RevokedAt,
 // because a client only ever receives a session it was just issued, so it would
 // be nil in every message this transport can produce — whether a session is
 // still valid is answered by the next call failing Unauthenticated, not by a
-// cached timestamp. And Capabilities, because nothing populates it at issue
-// time; see the note on mosaic.auth.v1.Session.
+// cached timestamp.
 func sessionMessage(s domain.Session) *authv1.Session {
 	return &authv1.Session{
 		Id:           string(s.ID),
@@ -111,7 +110,27 @@ func sessionMessage(s domain.Session) *authv1.Session {
 		LastSeenAt:   timestamppb.New(s.LastSeenAt),
 		ExpiresAt:    timestamppb.New(s.ExpiresAt),
 		AuthStrength: string(s.AuthStrength),
+		Capabilities: capabilityStrings(s.Capabilities),
 	}
+}
+
+// capabilityStrings projects the session's capability set onto the wire
+// (ADR 0036).
+//
+// nil for an empty set rather than an empty slice, so "this Platform did not
+// resolve a capability set" and "this account holds nothing" are the same
+// absent field. They are the same thing to a client: neither is a statement it
+// may gate on, because gating is the server's and this is only what lets a
+// client omit an affordance it would have been refused anyway.
+func capabilityStrings(perms []domain.Permission) []string {
+	if len(perms) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(perms))
+	for _, p := range perms {
+		out = append(out, string(p))
+	}
+	return out
 }
 
 // Refresh exchanges a refresh token for a new pair, rotating it (ADR 0102).

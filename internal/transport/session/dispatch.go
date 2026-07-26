@@ -86,6 +86,31 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 			TargetSessionID: target,
 		})
 		return nil, err
+	case "signOut":
+		// Ending *this* session (ADR 0102). It names no target and cannot: the
+		// session it arrives on is the one it revokes, which is what makes it
+		// safe to put on the account cluster of every screen — an affordance
+		// that could be pointed at another device would need to say which.
+		//
+		// The client discovers the outcome the way it discovers any revocation:
+		// its next call fails Unauthenticated, it drops the stored pair, and the
+		// doorway comes back. That is the same path a refused session already
+		// took, which is why signing out and being signed out are one code path
+		// in the client rather than two.
+		_, err := h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
+			CallerSessionID: domain.SessionID(caller.Session),
+			TargetSessionID: domain.SessionID(s.ref),
+		})
+		return nil, err
+	case "createAccount":
+		// Provisioning a household member (ADR 0069). Three commands behind one
+		// action — see accounts.go for why they are three and what a failure
+		// between them leaves behind.
+		return nil, h.createAccount(ctx, caller, input)
+	case "setUserStatus":
+		return nil, h.setUserStatus(ctx, caller, input)
+	case "grantPreset":
+		return nil, h.grantPreset(ctx, caller, input)
 	case "setPreference":
 		key, value, err := preferenceFromInput(input)
 		if err != nil {

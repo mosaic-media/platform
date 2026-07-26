@@ -71,6 +71,14 @@ func NewManager(clock contracts.Clock, ids contracts.IDGenerator) *Manager {
 // which in the sign-in path are both transaction-scoped: a session with no
 // tokens is a row nobody can use, and tokens with no session are a credential
 // pointing at nothing.
+//
+// capabilities is the caller's flattened authority as it stands at this moment
+// (ADR 0036). It is **resolved by the caller and passed in** rather than read
+// here, because this package holds no permission store and should not acquire
+// one: a session manager that could read authority would be a second place
+// authority is decided, and there is exactly one — the policy engine, which
+// every later call goes through anyway. What is recorded here is a snapshot for
+// a client to omit affordances from, never a substitute for that check.
 func (m *Manager) Issue(
 	ctx context.Context,
 	sessions contracts.SessionStore,
@@ -78,6 +86,7 @@ func (m *Manager) Issue(
 	userID domain.UserID,
 	deviceID domain.DeviceID,
 	strength domain.AuthStrength,
+	capabilities []domain.Permission,
 ) (domain.Session, domain.TokenPair, error) {
 	now := m.clock.Now()
 	session := domain.Session{
@@ -88,6 +97,7 @@ func (m *Manager) Issue(
 		LastSeenAt:   now,
 		ExpiresAt:    now.Add(AbsoluteLifetime),
 		AuthStrength: strength,
+		Capabilities: capabilities,
 	}
 	stored, err := sessions.Create(ctx, session)
 	if err != nil {

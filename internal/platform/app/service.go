@@ -58,6 +58,11 @@ type Service struct {
 	// jobs is the background-work queue (ADR 0017's no-user case). Optional
 	// for the same reason.
 	jobs contracts.JobStore
+	// instance is what this install calls itself, held outside PostgreSQL
+	// (ADR 0098). Optional: a Service built without one has no name to report
+	// and records none when a server is claimed, which is what a test service
+	// or a deployment with no writable path should do.
+	instance contracts.InstanceIdentityStore
 
 	// systemSession is the opaque reference SystemCaller hands out. Minted per
 	// process in NewService — see system_principal.go for why it is random
@@ -128,6 +133,11 @@ type Deps struct {
 	// without one reports no jobs and refuses the job queries with
 	// Unavailable, which is the honest answer for a build with no runner.
 	Jobs contracts.JobStore
+	// Instance is the durable identity file (ADR 0098) — the one store that is
+	// deliberately not PostgreSQL, so a server's name outlives its database.
+	// Optional, and an absent one is a Platform with no name rather than a
+	// failure.
+	Instance contracts.InstanceIdentityStore
 }
 
 // NewService wires a Service to its Platform contracts, policy decision point
@@ -161,6 +171,7 @@ func NewService(d Deps) *Service {
 
 		telemetryMaintenance: d.TelemetryMaintenance,
 		jobs:                 d.Jobs,
+		instance:             d.Instance,
 		systemSession:        newSystemSessionRef(),
 	}
 }

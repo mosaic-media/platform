@@ -61,6 +61,9 @@ type fakeQueries struct {
 	// marks; the fake returns the whole map and lets the caller pick the ids.
 	inProgress     []v1.InProgressItem
 	playbackStates map[v1.NodeID]v1.PlaybackState
+	// watchHistory is what ListWatchHistory reports — the history screen's
+	// input (ADR 0103).
+	watchHistory []app.WatchedItem
 	// childrenByNode, when set for a node id, is what GetContentNode returns as
 	// that node's children — so a tree walk (series → seasons → episodes) can be
 	// exercised. Absent an entry, GetContentNode falls back to the flat children.
@@ -74,7 +77,10 @@ type fakeQueries struct {
 	// above because the two are separate grants and the nav draws them
 	// separately — a fake that answered one bool for every action could not
 	// tell the difference between "sees both" and "sees the one it holds".
-	canReadJobs  bool
+	canReadJobs bool
+	// allow is a per-action override for CallerCan, for tests that need more
+	// than one answer at a time.
+	allow        map[string]bool
 	expertModeOn bool
 	logs         []domain.TelemetryLogRecord
 	traces       []domain.TelemetryTraceSummary
@@ -123,6 +129,41 @@ func (f *fakeQueries) GetRolesForUser(_ context.Context, q app.GetRolesForUserQu
 	return app.GetRolesForUserResult{Roles: f.rolesByUser[q.TargetUserID]}, nil
 }
 
+func (f *fakeQueries) GetUserByID(_ context.Context, q app.GetUserByIDQuery) (app.GetUserByIDResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, u := range f.users {
+		if u.ID == q.UserID {
+			return app.GetUserByIDResult{User: u}, nil
+		}
+	}
+	return app.GetUserByIDResult{}, contracts.NewError(contracts.NotFound, "no such user")
+}
+
+func (f *fakeQueries) GetEffectivePermissions(_ context.Context, q app.GetEffectivePermissionsQuery) (app.GetEffectivePermissionsResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []domain.Permission
+	for _, r := range f.rolesByUser[q.TargetUserID] {
+		out = append(out, r.Permissions...)
+	}
+	return app.GetEffectivePermissionsResult{Permissions: out}, nil
+}
+
+func (f *fakeQueries) GrantablePermissions(_ context.Context, q app.GrantablePermissionsQuery) (app.GrantablePermissionsResult, error) {
+	preset, ok := app.Preset(q.Preset)
+	if !ok {
+		return app.GrantablePermissionsResult{}, contracts.NewError(contracts.InvalidArgument, "no such preset")
+	}
+	return app.GrantablePermissionsResult{Available: preset, Selected: preset}, nil
+}
+
+func (f *fakeQueries) ListWatchHistory(context.Context, app.ListWatchHistoryQuery) (app.ListWatchHistoryResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return app.ListWatchHistoryResult{Items: f.watchHistory}, nil
+}
+
 func (f *fakeQueries) ExpertModeEnabled(context.Context, v1.Caller) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -132,6 +173,16 @@ func (f *fakeQueries) ExpertModeEnabled(context.Context, v1.Caller) bool {
 func (f *fakeQueries) CallerCan(_ context.Context, _ v1.Caller, action policy.Action, _ string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// An explicit allow-list wins where a test set one. It exists for the People
+	// panels, which ask about five different actions and need to tell them
+	// apart — a fake answering one bool for every action could not distinguish
+	// "may read the user list" from "may create one", which is exactly the
+	// distinction those panels draw.
+	if f.allow != nil {
+		if v, ok := f.allow[string(action)]; ok {
+			return v
+		}
+	}
 	switch action {
 	case app.ActionJobRead:
 		return f.canReadJobs

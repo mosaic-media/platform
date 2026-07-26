@@ -30,6 +30,7 @@ import (
 	"github.com/mosaic-media/contracts/gen/mosaic/session/v1/sessionv1connect"
 	"github.com/mosaic-media/platform/internal/adapters/crypto"
 	"github.com/mosaic-media/platform/internal/adapters/extension"
+	"github.com/mosaic-media/platform/internal/adapters/instance"
 	"github.com/mosaic-media/platform/internal/composition/bootstrap"
 	"github.com/mosaic-media/platform/internal/composition/builtin"
 	"github.com/mosaic-media/platform/internal/composition/extensions"
@@ -110,6 +111,19 @@ const moduleSelectionEnv = "MOSAIC_MODULES"
 const extensionsDirEnv = "MOSAIC_EXTENSIONS_DIR"
 
 const defaultExtensionsDir = "mosaic-extensions"
+
+// instanceFileEnv names the file this install's identity is written to
+// (ADR 0098): the server name a household chose, kept **outside PostgreSQL** so
+// it still answers when the database does not.
+//
+// It is an infrastructure path read from the environment, like the DSN and the
+// extensions directory, and for the same reason: it has to be settable before
+// anything the configuration system needs is reachable. The default sits beside
+// the extensions directory, so a deployment that mounts one volume for durable
+// state gets both.
+const instanceFileEnv = "MOSAIC_INSTANCE_FILE"
+
+const defaultInstanceFile = "mosaic-instance.json"
 
 // serviceName and serviceVersion identify this process on every record it
 // emits. Mosaic is one host running more than one process — this one, the
@@ -530,6 +544,15 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("extension installer: %w", err)
 	}
+	// This install's identity (ADR 0098). Constructed before the Service because
+	// the Service reads it on the one call made before a client has anything —
+	// the pre-session bootstrap, which puts the server's name on its own door.
+	instanceFile := os.Getenv(instanceFileEnv)
+	if instanceFile == "" {
+		instanceFile = defaultInstanceFile
+	}
+	instanceIdentity := instance.NewFile(instanceFile)
+
 	extManager := extensions.NewManager(extensions.Deps{
 		Installer: installer,
 		Registry:  capRegistry,
@@ -570,6 +593,9 @@ func run() error {
 
 		PlaybackResolutions: set.PlaybackResolutions,
 		PlaybackStates:      set.PlaybackStates,
+
+		// The one store that is not PostgreSQL, on purpose (ADR 0098).
+		Instance: instanceIdentity,
 	})
 
 	// Close the construction cycle, then re-adopt the installed set. A spawned

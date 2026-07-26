@@ -5,7 +5,10 @@
 package screens
 
 import (
+	"context"
 	"testing"
+
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // The two sides of Mosaic wear different frames, and the shell is the only place
@@ -26,7 +29,7 @@ func TestShellWearsTheChromeOfTheScreenItFrames(t *testing.T) {
 		{screenLogs, chromeAdmin, "/ Settings / Logs"},
 		{screenTraces, chromeAdmin, "/ Settings / Traces"},
 	} {
-		node, err := (&Service{}).shellScreen(c.screen)
+		node, err := (&Service{}).shellScreen(context.Background(), v1.Caller{}, c.screen)
 		if err != nil {
 			t.Fatalf("%s: shellScreen: %v", c.screen, err)
 		}

@@ -5,8 +5,15 @@
 package screens
 
 import (
+	"context"
+	"errors"
+	"strings"
+
 	sdui "github.com/mosaic-media/contracts/sdui"
 	"github.com/mosaic-media/contracts/ui"
+
+	"github.com/mosaic-media/platform/internal/platform/app"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // The two chromes the app wears (ADR 0031).
@@ -59,7 +66,7 @@ func breadcrumbFor(screen string) string {
 // have decided otherwise. It is re-pushed when a navigation changes the chrome —
 // not on every navigation, because the tree is identical for every screen on the
 // same side and re-sending it would be a payload per tap for no change.
-func (s *Service) shellScreen(screen string) (sdui.Node, error) {
+func (s *Service) shellScreen(ctx context.Context, caller v1.Caller, screen string) (sdui.Node, error) {
 	chrome := chromeFor(screen)
 
 	els := []ui.El{
@@ -67,16 +74,7 @@ func (s *Service) shellScreen(screen string) (sdui.Node, error) {
 		ui.Chrome(chrome),
 		// Desktop right cluster. It is the same on both sides: whoever you are
 		// signed in as is the one thing that does not change between rooms.
-		ui.Slot("account",
-			ui.Component("Menu",
-				ui.Prop("initial", "A"),
-				ui.Prop("label", "Account"),
-				ui.Prop("items", []any{
-					map[string]any{"label": "Collections", "icon": "list", "action": ui.Navigate(screenCollections, nil)},
-					map[string]any{"label": "Settings", "icon": "settings", "action": ui.Navigate(screenSettings, nil)},
-				}),
-			),
-		),
+		s.accountMenu(ctx, caller),
 	}
 
 	if chrome == chromeAdmin {
@@ -102,6 +100,86 @@ func (s *Service) shellScreen(screen string) (sdui.Node, error) {
 		),
 	)
 	return ui.Component("AppShell", els...).Build(), nil
+}
+
+// accountMenu is the frame's who-you-are cluster.
+//
+// It renders per caller, which the shell did not do before: the initial was the
+// literal letter "A" for every account on every install, which nobody could see
+// was wrong while there was only ever one account and it happened to be called
+// Adam. A shell that says the same thing to four people is the exact failure
+// this milestone exists to end.
+//
+// **Sign out lives here and nowhere else.** ADR 0102's device list ends other
+// devices and deliberately draws no control for the one you are looking
+// through, on the grounds that signing yourself out belongs on its own
+// affordance rather than inside a list of devices. This is that affordance: the
+// account cluster, which is the only chrome present on every screen, so handing
+// a shared device over never means finding a settings page first.
+func (s *Service) accountMenu(ctx context.Context, caller v1.Caller) ui.El {
+	initial, name := "?", ""
+	// A Service with no query surface is a frame test, not a signed-in person.
+	// It draws the cluster without a name rather than refusing to draw a shell.
+	if res, err := s.currentUser(ctx, caller); err == nil {
+		name = res.User.DisplayName
+		if name == "" {
+			name = res.User.Username
+		}
+		initial = initialOf(name)
+	}
+
+	items := []any{
+		map[string]any{"label": "Collections", "icon": "list", "action": ui.Navigate(screenCollections, nil)},
+		// Where a person's own viewing lives (ADR 0103). It is in the account
+		// cluster rather than in the nav rail because it is about you rather than
+		// about the library — the nav is the four rooms everybody shares, and this
+		// is the one screen no two people on the server see the same.
+		map[string]any{"label": "Your history", "icon": "play", "action": ui.Navigate(screenHistory, nil)},
+		map[string]any{"label": "Settings", "icon": "settings", "action": ui.Navigate(screenSettings, nil)},
+		// Tone danger because it ends the session rather than opening a screen,
+		// and because the row above it is "Settings" — two adjacent rows that
+		// look alike and do very different things is how somebody signs out of a
+		// shared television by accident.
+		map[string]any{"label": "Sign out", "icon": "error", "tone": "danger", "action": ui.Invoke(signOutAction, nil)},
+	}
+	label := "Account"
+	if name != "" {
+		label = "Account: " + name
+	}
+	return ui.Slot("account",
+		ui.Component("Menu",
+			ui.Prop("initial", initial),
+			// The accessible name carries who is signed in, because the visible
+			// trigger is a single letter and "A" announced on its own says
+			// nothing at all.
+			ui.Prop("label", label),
+			ui.Prop("items", items),
+		),
+	)
+}
+
+// currentUser reads who is asking, or an error when there is nothing to ask.
+func (s *Service) currentUser(ctx context.Context, caller v1.Caller) (app.GetCurrentUserResult, error) {
+	if s.content == nil {
+		return app.GetCurrentUserResult{}, errNoQuerySurface
+	}
+	return s.content.GetCurrentUser(ctx, app.GetCurrentUserQuery{Caller: caller})
+}
+
+// errNoQuerySurface is what a Service built without query services answers.
+var errNoQuerySurface = errors.New("this Service has no query surface")
+
+// initialOf is the letter the account circle shows.
+//
+// The first rune rather than the first byte: a display name beginning with a
+// multi-byte character would otherwise render as half of one, which is the
+// ordinary case for most of the world and never the case in a test written in
+// English.
+func initialOf(name string) string {
+	for _, r := range strings.TrimSpace(name) {
+		return strings.ToUpper(string(r))
+	}
+	return "?"
 }
 
 // navItem builds one sidebar navigation button that navigates to a screen.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
 // Privilege cannot escalate through delegation (ADR 0069).
@@ -47,6 +48,40 @@ func (s *Service) effectivePermissions(ctx context.Context, userID domain.UserID
 		}
 	}
 	return held, nil
+}
+
+// sorted returns the set as a stable, sorted slice.
+//
+// Order matters wherever the set is stored or sent: a session's capability list
+// round-trips through the database and onto the wire, and a map iteration would
+// reorder it on every issue, making two identical sessions look different to
+// anything comparing them.
+func (p permissionSet) sorted() []domain.Permission {
+	out := make([]domain.Permission, 0, len(p))
+	for k := range p {
+		out = append(out, k)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// sessionCapabilities resolves what to stamp on a session being issued
+// (ADR 0036).
+//
+// A failure costs the capability set and never the sign-in. The set is what
+// lets a client omit an affordance it could not use; without it a client draws
+// everything and the server refuses what it should, which is the behaviour
+// every session had before this existed. Refusing to sign somebody in because
+// their role list could not be read would be a far worse answer.
+func (s *Service) sessionCapabilities(ctx context.Context, userID domain.UserID) []domain.Permission {
+	held, err := s.effectivePermissions(ctx, userID)
+	if err != nil {
+		telemetry.From(ctx).For("auth").Warn(
+			"could not resolve the capability set for a new session; affordance gating stays server-side for it",
+			telemetry.Identifier("user", string(userID)), telemetry.Err(err))
+		return nil
+	}
+	return held.sorted()
 }
 
 // ensureCanDelegate verifies that granting wanted would not give away authority

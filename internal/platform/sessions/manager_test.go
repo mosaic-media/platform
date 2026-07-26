@@ -214,7 +214,8 @@ func newHarness() *harness {
 func (h *harness) issue(t *testing.T) (domain.Session, domain.TokenPair) {
 	t.Helper()
 	session, pair, err := h.manager.Issue(context.Background(), h.sessions, h.tokens,
-		"user-1", "device-1", domain.AuthStrengthPassword)
+		"user-1", "device-1", domain.AuthStrengthPassword,
+		[]domain.Permission{"content.read", "playback.write"})
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -227,6 +228,12 @@ func TestIssueCreatesASessionAndItsFirstPair(t *testing.T) {
 
 	if session.UserID != "user-1" || session.DeviceID != "device-1" {
 		t.Fatalf("session = %+v", session)
+	}
+	// The capability set is stamped on at issue time (ADR 0036). It was modelled
+	// on domain.Session from the beginning and populated by nothing, so a
+	// session that carries what it was given is the whole of what changed.
+	if len(session.Capabilities) != 2 {
+		t.Errorf("session.Capabilities = %v, want the two it was issued with", session.Capabilities)
 	}
 	// The absolute lifetime, not the 24 hours a session used to have — which
 	// made "come back after a fortnight and still be signed in" impossible by
@@ -500,7 +507,7 @@ func TestRevokingOneDeviceLeavesTheOthersSignedIn(t *testing.T) {
 	phone, phonePair := h.issue(t)
 
 	tv, tvPair, err := h.manager.Issue(context.Background(), h.sessions, h.tokens,
-		"user-1", "device-tv", domain.AuthStrengthPassword)
+		"user-1", "device-tv", domain.AuthStrengthPassword, nil)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}

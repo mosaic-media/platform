@@ -1585,6 +1585,26 @@ func (s *fakePlaybackStateStore) ListInProgress(_ context.Context, userID domain
 	return out, nil
 }
 
+func (s *fakePlaybackStateStore) ListWatched(_ context.Context, userID domain.UserID, limit int) ([]v1.PlaybackState, error) {
+	s.trace.record("playback.listWatched")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var out []v1.PlaybackState
+	for key, state := range s.db.playbackStates {
+		// The history's predicate, not the rail's: finished items belong in it,
+		// and an item opened at zero and never watched does not.
+		if key.user != userID || (state.Position <= 0 && !state.Finished) {
+			continue
+		}
+		out = append(out, state)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (s *fakePlaybackStateStore) Upsert(_ context.Context, userID domain.UserID, state v1.PlaybackState) (v1.PlaybackState, error) {
 	s.trace.record("playback.upsert")
 	s.db.mu.Lock()

@@ -36,6 +36,7 @@ type fakeDB struct {
 	refreshTokens map[string]domain.RefreshToken
 	passwords     map[domain.UserID]domain.PasswordCredential
 	roles         map[domain.UserID][]domain.Role
+	rolesByID     map[domain.RoleID]domain.Role
 	outbox        []domain.OutboxEvent
 }
 
@@ -48,6 +49,7 @@ func newFakeDB() *fakeDB {
 		refreshTokens: make(map[string]domain.RefreshToken),
 		passwords:     make(map[domain.UserID]domain.PasswordCredential),
 		roles:         make(map[domain.UserID][]domain.Role),
+		rolesByID:     make(map[domain.RoleID]domain.Role),
 	}
 }
 
@@ -375,11 +377,31 @@ func (fakePermissionStore) AttributesForUser(context.Context, domain.UserID) ([]
 	return nil, nil
 }
 
-func (fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (domain.Role, error) {
+// CreateRole and GrantRole record, rather than accepting and forgetting. They
+// used to do neither, which was fine while nothing in this package created a
+// role; the claim does, and a test that could not read back what authority the
+// owner ended up with would assert the one thing about claiming that matters
+// least.
+func (s fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (domain.Role, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if s.db.rolesByID == nil {
+		s.db.rolesByID = map[domain.RoleID]domain.Role{}
+	}
+	s.db.rolesByID[role.ID] = role
 	return role, nil
 }
 
-func (fakePermissionStore) GrantRole(context.Context, domain.Grant) error { return nil }
+func (s fakePermissionStore) GrantRole(_ context.Context, grant domain.Grant) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	role, ok := s.db.rolesByID[grant.RoleID]
+	if !ok {
+		return contracts.NewError(contracts.Conflict, "no such role")
+	}
+	s.db.roles[grant.UserID] = append(s.db.roles[grant.UserID], role)
+	return nil
+}
 func (fakePermissionStore) SetRolePermissions(context.Context, domain.RoleID, []domain.Permission) error {
 	return nil
 }

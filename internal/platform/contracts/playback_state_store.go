@@ -34,6 +34,16 @@ type PlaybackStateStore interface {
 	// ListInProgress returns started-but-unfinished states, most recently
 	// touched first, capped by limit.
 	ListInProgress(ctx context.Context, userID domain.UserID, limit int) ([]v1.PlaybackState, error)
+	// ListWatched returns every state this viewer has, finished or not, most
+	// recently touched first, capped by limit — the watch history (ADR 0103).
+	//
+	// It is a third read over the same rows rather than a flag on the one above,
+	// because the two orderings are the same and the predicates are not: the
+	// continue-watching list deliberately excludes finished items and items
+	// opened at position zero, and a history that excluded either would not be
+	// one. Collapsing them into a filtered call would put the difference in a
+	// parameter nobody reading a call site can see.
+	ListWatched(ctx context.Context, userID domain.UserID, limit int) ([]v1.PlaybackState, error)
 	// Upsert writes one state, replacing whatever was there.
 	Upsert(ctx context.Context, userID domain.UserID, state v1.PlaybackState) (v1.PlaybackState, error)
 }

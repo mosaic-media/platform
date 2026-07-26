@@ -7,6 +7,7 @@ package app
 import (
 	"context"
 
+	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
@@ -16,7 +17,27 @@ type ServerState struct {
 	// Claimed is whether anybody owns this server yet. Unclaimed means no
 	// account exists, so the doorway is setup rather than sign-in.
 	Claimed bool
+	// Name is what the household called this server, empty until it has been
+	// named. It is read from the durable file rather than the database
+	// (ADR 0098), which is the one fact here that survives PostgreSQL being
+	// down.
+	//
+	// Disclosing it to an unauthenticated caller is deliberate and bounded: a
+	// server name is what tells a person they are looking at the right door,
+	// and it is a name a household chose to see on their own screens. It is the
+	// only thing about the install that is disclosed — no account count, no
+	// usernames, no version.
+	Name string
+	// Degraded reports that the claimed answer below is a fallback rather than a
+	// reading. It exists so the doorway can say "I cannot reach my database"
+	// instead of drawing a sign-in form that will refuse every attempt.
+	Degraded bool
 }
+
+// Claimable reports whether a claim may proceed. It is the one place the
+// fallback matters: a store that could not be read answers Claimed, so an
+// unreadable database can never be mistaken for an empty one.
+func (s ServerState) Claimable() bool { return !s.Claimed && !s.Degraded }
 
 // ServerState answers which doorway to serve.
 //
@@ -39,14 +60,41 @@ type ServerState struct {
 // showing a setup screen on a server that has an owner invites somebody to try
 // to claim it, while showing sign-in on an unclaimed one is merely a dead end.
 func (s *Service) ServerState(ctx context.Context) ServerState {
+	state := ServerState{Name: s.serverName(ctx)}
 	if s.users == nil {
-		return ServerState{Claimed: true}
+		state.Claimed, state.Degraded = true, true
+		return state
 	}
 	users, err := s.users.List(ctx)
 	if err != nil {
 		telemetry.From(ctx).For("auth").Error(
 			"could not read whether this server is claimed; serving the sign-in doorway", telemetry.Err(err))
-		return ServerState{Claimed: true}
+		state.Claimed, state.Degraded = true, true
+		return state
 	}
-	return ServerState{Claimed: len(users) > 0}
+	state.Claimed = len(users) > 0
+	return state
+}
+
+// serverName reads the durable identity file, empty when there is none or it
+// cannot be read.
+//
+// It never fails for the same reason the state above never fails: this is the
+// one call made before a client can do anything, and an unnamed door is a door.
+// A Platform built without an identity store — a test service, a deployment
+// with no writable path — is the ordinary case of "there is no name", not an
+// error.
+func (s *Service) serverName(ctx context.Context) string {
+	if s.instance == nil {
+		return ""
+	}
+	identity, err := s.instance.Read(ctx)
+	if err != nil {
+		if contracts.CategoryOf(err) != contracts.NotFound {
+			telemetry.From(ctx).For("auth").Warn(
+				"could not read this server's name; the doorway will not show one", telemetry.Err(err))
+		}
+		return ""
+	}
+	return identity.Name
 }

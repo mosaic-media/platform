@@ -22,6 +22,7 @@ package screens
 
 import (
 	"context"
+	"time"
 
 	sdui "github.com/mosaic-media/contracts/sdui"
 
@@ -52,6 +53,11 @@ const (
 	screenCatalog     = "catalog"
 	screenDetail      = "detail"
 	screenSettings    = "settings"
+	// screenHistory is what this viewer has watched (ADR 0103). It is its own
+	// screen rather than a settings panel because it is content — a grid of
+	// things you can open — and the settings side of the app is a working
+	// surface with no artwork on it.
+	screenHistory = "history"
 	// screenExtensions is the browse-and-install surface for extension modules
 	// (ADR 0081). It is its own screen rather than a settings section because
 	// listing what is available reaches the trusted repository over the network,
@@ -68,6 +74,11 @@ const (
 	// tenth action a client can invoke, and the first that is about the
 	// account rather than about content.
 	revokeSessionAction = "revokeSession"
+	// signOutAction ends the session it arrives on. It is distinct from
+	// revokeSession, which names a target: this one cannot name one, so it
+	// cannot be pointed at somebody else's device, and the affordance that
+	// emits it needs to know nothing but that you are signed in.
+	signOutAction = "signOut"
 )
 
 // Screen param keys. Each is written into a Navigate action's params by the
@@ -178,10 +189,18 @@ type contentQueries interface {
 	// read takes the id of the user to read, which is useless to a screen that
 	// holds a session and wants to say "you".
 	GetCurrentUser(context.Context, app.GetCurrentUserQuery) (app.GetCurrentUserResult, error)
-	// ListUsers and GetRolesForUser back the People panel: the accounts on this
-	// server and what each of them is allowed to do.
+	// The People panels (ADR 0069, roadmap M1.3). Every one of these was a
+	// complete application service whose only callers were tests; naming them
+	// here is the first half of the door, and the dispatch cases beside them are
+	// the second.
 	ListUsers(context.Context, app.ListUsersQuery) (app.ListUsersResult, error)
+	GetUserByID(context.Context, app.GetUserByIDQuery) (app.GetUserByIDResult, error)
 	GetRolesForUser(context.Context, app.GetRolesForUserQuery) (app.GetRolesForUserResult, error)
+	GetEffectivePermissions(context.Context, app.GetEffectivePermissionsQuery) (app.GetEffectivePermissionsResult, error)
+	// GrantablePermissions is what a grantor may confer, narrowed to what they
+	// hold (ADR 0069). It is the offer side of the delegation rule and the
+	// reason a create-account form can be honest about what it will grant.
+	GrantablePermissions(context.Context, app.GrantablePermissionsQuery) (app.GrantablePermissionsResult, error)
 	// ListNodeParts reads one item's releases. FirstPlayablePart answers the
 	// same question about a *work* and deliberately will not walk into a
 	// series' seasons to pick an episode; once the screen has picked one itself
@@ -197,6 +216,12 @@ type contentQueries interface {
 	// ListPlaybackStates backs the watched marks on a season's episode rows — one
 	// batched read over the season's nodes rather than a query per row.
 	ListPlaybackStates(context.Context, v1.ListPlaybackStatesQuery) (v1.ListPlaybackStatesResult, error)
+	// ListWatchHistory backs the history screen (ADR 0103): everything this
+	// viewer has watched, finished or not. Deliberately not on the SDK's
+	// ContentService — no module needs to read a person's viewing back, and the
+	// one list ADR 0103 is most emphatic is private should not be on the surface
+	// every installed extension holds.
+	ListWatchHistory(context.Context, app.ListWatchHistoryQuery) (app.ListWatchHistoryResult, error)
 
 	// The expert-mode reads (ADR 0058). Each authorises telemetry.read for
 	// itself, so a screen calling one cannot be reached without the grant even
@@ -229,6 +254,10 @@ type contentQueries interface {
 type Service struct {
 	content contentQueries
 	artwork func(string) string
+	// clock is what the screens read when a render depends on the time — how
+	// long ago something was watched, so far. Injected rather than time.Now so a
+	// test can assert "Yesterday" without waiting a day; nil means time.Now.
+	clock func() time.Time
 }
 
 // NewService wires the emit-side to the application services. artwork rewrites a
@@ -257,7 +286,7 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 	case screenShell:
 		// The shell wears the chrome of the screen it is framing, which the
 		// caller names in params — the transport knows the route, this does not.
-		return s.shellScreen(stringParam(params, paramScreen))
+		return s.shellScreen(ctx, caller, stringParam(params, paramScreen))
 	case screenHome:
 		return s.homeScreen(ctx, caller)
 	case screenSearch:
@@ -270,6 +299,8 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.detailScreen(ctx, caller, params)
 	case screenSettings:
 		return s.settingsScreen(ctx, caller, params)
+	case screenHistory:
+		return s.historyScreen(ctx, caller)
 	case screenExtensions:
 		return s.extensionsScreen(ctx, caller)
 	case screenLogs:
