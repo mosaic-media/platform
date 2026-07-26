@@ -72,6 +72,15 @@ jobs:
       - name: go build
         run: go build ./...
 
+      # The dev stack runs a `-tags mosaicdev` build (ADR 0099), whose source
+      # lives in this repository and whose only compiled-in difference is that it
+      # can repoint the module repository from the environment. A tag nothing
+      # builds is a tag that stops compiling silently, and the first person to
+      # find out is whoever brings up the local stack. The container gate runs
+      # its tests; this is the seconds-not-minutes half.
+      - name: go build (development registry)
+        run: go build -tags mosaicdev ./...
+
   gate:
     needs: checks
     runs-on: ubuntu-latest

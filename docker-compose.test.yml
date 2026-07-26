@@ -109,6 +109,19 @@ services:
         go vet ./...
         go build ./...
         go test ./...
+        # The development-registry build (ADR 0099). `-tags mosaicdev` compiles a
+        # different half of the extension package — the one that can repoint the
+        # module repository from the environment — and the dev stack runs it, so
+        # it is a build this repository ships the source of and must keep green.
+        # An untested tag split rots in the direction that matters: the half a
+        # release does NOT contain is the half nothing else exercises.
+        #
+        # vet across everything, because a tag can break any package that reaches
+        # the changed one; tests only for the package the tag affects, because
+        # re-running the whole suite (the database contract tests included) for a
+        # build that differs in one file buys nothing for the minutes it costs.
+        go vet -tags mosaicdev ./...
+        go test -tags mosaicdev ./internal/adapters/extension/...
 
 volumes:
   mosaic-test-gomod:

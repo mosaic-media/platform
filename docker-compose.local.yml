@@ -108,12 +108,34 @@
 # the Go side through the workspace below, the Shell through the tarball.
 services:
   platform:
+    depends_on:
+      # The base file already waits on postgres; both are named because a
+      # compose override merges this mapping key by key, and a partial one here
+      # would be a silent ordering change rather than an error.
+      postgres:
+        condition: service_healthy
+      # The index must exist before the Platform boots, because the Platform
+      # reads the development key at boot and a missing one is a hard failure
+      # (ADR 0099). `registry` is itself gated on the one-shot build below.
+      registry:
+        condition: service_healthy
     volumes:
       - ../sdk:/src/sdk
       - ../contracts:/src/contracts
       - ../module-remote-playback:/src/module-remote-playback
       - ../module-tmdb:/src/module-tmdb
       - ../module-cinemeta:/src/module-cinemeta
+      # The development repository's **public** key, read-only. The private half
+      # is in a different volume that only registry-build mounts. This is the
+      # out-of-band path the compiled-in official key takes by being compiled in:
+      # a key fetched from the repository it authenticates would verify anything
+      # that repository ever served.
+      - mosaic-dev-local-registry-key:/keys:ro
+      # Installed extensions on a volume rather than under the working
+      # directory. The default is relative to it, which here is the bind mount —
+      # so every install would write a Linux binary and its manifest into the
+      # host checkout, untracked and unignored.
+      - mosaic-dev-local-extensions:/var/lib/mosaic/extensions
     environment:
       # GOWORK points the workspace *outside* the bind mount. Writing go.work
       # into /src/platform would put it on the host, where its container paths
@@ -121,6 +143,18 @@ services:
       # /src/contracts not existing. A workspace is a local-development artifact and
       # must not escape into a repository.
       GOWORK: /work/go.work
+      # Point the official repository at the local one, and name the key its
+      # index is signed with (ADR 0099). **Both, or the boot fails** — the
+      # override exists to exercise verification against a development key, so
+      # half of it is a configuration error rather than a partial override.
+      #
+      # These are read only by a binary built with `-tags mosaicdev`, which the
+      # command below does and a release build cannot; setting them on a shipped
+      # Platform does nothing at all. The Platform logs the override at Warn on
+      # every boot, with the key's fingerprint.
+      MOSAIC_DEV_REPOSITORY_URL: "http://registry"
+      MOSAIC_DEV_REPOSITORY_KEY: /keys/dev-registry.key.pub
+      MOSAIC_EXTENSIONS_DIR: /var/lib/mosaic/extensions
     # Written at start rather than baked into the image: the image is shared with
     # the published stack and must not carry a workspace at all.
     command: >
@@ -134,7 +168,7 @@ services:
                done;
              done &&
              cd /src/platform &&
-             exec go run -ldflags \"-X github.com/mosaic-media/module-tmdb.defaultReadAccessToken=$${TMDB_RAC}\" ./cmd/mosaic-platform"
+             exec go run -tags mosaicdev -ldflags \"-X github.com/mosaic-media/module-tmdb.defaultReadAccessToken=$${TMDB_RAC}\" ./cmd/mosaic-platform"
 
   web:
     volumes:
@@ -164,8 +198,106 @@ services:
              npm run build --workspace @mosaic-media/sdui-react &&
              exec npm run dev --workspace mosaic-shell -- --host 0.0.0.0 --port 5173 --strictPort --force"
 
+  # ── The local module repository (ADR 0099) ────────────────────────────────
+  #
+  # The three *extension* modules cannot be overlaid the way the core ones are
+  # above: they are not Platform dependencies, they are installed at runtime
+  # (ADR 0081), so a local change to one reaches the Platform through the
+  # install path or not at all. Until these two services existed, "not at all"
+  # was the honest answer — seeing a one-line change run meant tagging a
+  # release, cross-compiling five targets, hand-editing the registry's
+  # catalogue, dispatching its publish workflow and waiting for GitHub Pages.
+  #
+  # So the loop is closed by standing up the *whole* producer side locally: a
+  # one-shot service that builds each sibling checkout, signs an index over the
+  # results with a throwaway key, and a file server that publishes it. What the
+  # Platform then does is unchanged in every respect — fetch the index, verify
+  # its signature, authenticate the manifests it carries, download the binary,
+  # check it against its signed digest, spawn it, check the handshake. The
+  # override moves *which key and which URL*, and nothing else; see ADR 0099 and
+  # internal/adapters/extension/devregistry.go for why that is behind a build
+  # tag rather than an environment flag on the shipped binary.
+  #
+  # To rebuild the index after editing a module, without restarting the stack:
+  #
+  #   docker compose -f docker-compose.dev.yml -f docker-compose.local.yml run --rm registry-build
+  #
+  # then uninstall and reinstall the module from the extensions surface. A
+  # rebuilt index does not reach an already-installed module on its own, and
+  # that is ADR 0081 working: boot re-adopts the *pinned* bytes from disk rather
+  # than silently upgrading to whatever a catalogue now lists.
+  registry-build:
+    build:
+      # The dev image, so the toolchain that builds these modules is the one the
+      # Platform beside them is built with. A second Dockerfile would drift, and
+      # the drift would surface as a module that builds here and will not run
+      # there.
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/src/platform
+      - ../sdk:/src/sdk
+      - ../contracts:/src/contracts
+      # The extension checkouts. They are mounted **here and not on the
+      # platform service**, which is the whole shape of ADR 0081: an extension
+      # is built and published like a third party's, then installed at runtime.
+      # Mounting one into the Platform's workspace would compile it in and prove
+      # nothing about the path a user takes.
+      - ../module-stremio-addons:/src/module-stremio-addons
+      - ../module-aiostreams:/src/module-aiostreams
+      - ../module-fanart-tv:/src/module-fanart-tv
+      # What the file server publishes, and the key it is signed with — separate
+      # volumes because only the public half of that key should ever reach the
+      # Platform, and neither half should be reachable over HTTP.
+      - mosaic-dev-local-registry:/registry
+      - mosaic-dev-local-registry-key:/keys
+      # The go.work this writes, and the module cache. /work is a volume rather
+      # than a bind mount for the same reason the platform service's is: a
+      # workspace naming container paths must not escape onto the host.
+      - mosaic-dev-local-registry-work:/work
+      - mosaic-dev-gomod:/go/pkg/mod
+      - mosaic-dev-gobuild:/root/.cache/go-build
+    # Runs to completion and exits; `registry` waits for that exit to be a
+    # success. A failure here therefore stops the stack coming up with an empty
+    # or stale index, rather than surfacing as an extensions list that is
+    # mysteriously missing the module just edited.
+    restart: "no"
+    command: ["bash", "/src/platform/tools/localregistry/assemble.sh"]
+
+  registry:
+    # Static files over HTTP, which is all a module repository is (ADR 0065: the
+    # signature and the digests are what protect a download, not the host — so
+    # the host can be four lines of compose). Plain HTTP rather than TLS for the
+    # same reason: a certificate would protect nothing the signature does not,
+    # and every extra moving part here is one that can break the loop instead of
+    # the code under test.
+    image: nginx:1.27-alpine
+    depends_on:
+      registry-build:
+        condition: service_completed_successfully
+    volumes:
+      - mosaic-dev-local-registry:/usr/share/nginx/html:ro
+    ports:
+      # Published so the index can be read from the host while debugging —
+      # `curl -s localhost:8082/index.json | head`. Nothing needs it: the
+      # Platform reaches this service by name on the compose network.
+      - "8082:80"
+    healthcheck:
+      # A signed index *and* its signature. Serving one without the other is the
+      # failure mode worth catching here: the Platform fetches them as two
+      # requests and verifies the second against the first, so a half-published
+      # repository reads as a signature that does not verify.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/index.json && wget -q -O /dev/null http://127.0.0.1/index.json.sig"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
 volumes:
   mosaic-dev-local-node-root:
   mosaic-dev-local-node-shell:
   mosaic-dev-local-node-sdui:
   mosaic-dev-local-node-storybook:
+  mosaic-dev-local-registry:
+  mosaic-dev-local-registry-key:
+  mosaic-dev-local-registry-work:
+  mosaic-dev-local-extensions:

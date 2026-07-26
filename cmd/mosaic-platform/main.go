@@ -526,10 +526,28 @@ func run() error {
 		return fmt.Errorf("default module repository trust: %w", err)
 	}
 	if repo, ok := extRegistry.Lookup(extension.OfficialRepositoryName); ok {
-		boot.Info("trusting extension repository",
-			telemetry.String("repository", repo.Name),
-			telemetry.String("url", repo.URL),
-			telemetry.Bool("official", repo.Official))
+		// A repository under the official *name* that is not Official is a
+		// development override (ADR 0099) — only a build made with `-tags
+		// mosaicdev` can produce one, and only from the two MOSAIC_DEV_REPOSITORY_*
+		// variables. It is logged at Warn, naming the URL and the fingerprint of
+		// the key now vouching for every module this Platform will download and
+		// run, because "which key am I trusting" is a question a Platform should
+		// answer out loud the moment the answer is not the one it shipped with.
+		// A release binary cannot reach this branch.
+		if repo.Official {
+			boot.Info("trusting extension repository",
+				telemetry.String("repository", repo.Name),
+				telemetry.String("url", repo.URL),
+				telemetry.Bool("official", repo.Official))
+		} else {
+			boot.Warn("DEVELOPMENT BUILD: the official module repository is overridden — modules will be installed from a local repository and verified against a development key, not Mosaic's",
+				telemetry.String("repository", repo.Name),
+				telemetry.String("url", repo.URL),
+				telemetry.String("key", repo.KeyFingerprint()),
+				telemetry.String("official_url", extension.OfficialRepositoryURL),
+				telemetry.String("set_by", extension.DevRepositoryURLEnv+" and "+extension.DevRepositoryKeyEnv),
+				telemetry.Bool("official", repo.Official))
+		}
 	}
 
 	// The layer-3 egress-containment posture (ADR 0064, ADR 0080). The Platform

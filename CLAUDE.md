@@ -208,6 +208,52 @@ sibling working copies of `sdk`, `sdui` and the modules instead of their
 published versions — that overlay writes a `go.work` inside the container only,
 which is why switching between published and local changes no committed file.
 
+### The local module registry (ADR 0099)
+
+The overlay above covers the **core** modules, which are compiled in. The three
+**extension** modules are not Platform dependencies at all (ADR 0081), so a
+local change to one reaches a running Platform through the *install path* or not
+at all — and the install path leads to the official registry, whose URL and
+trusted key are compiled into the binary.
+
+The overlay therefore also stands up a **local registry**: `registry-build`
+compiles each sibling extension checkout, assembles a manifest per module and
+signs an index over them with a throwaway key
+(`tools/localregistry/assemble.sh`, the local counterpart of the registry
+repository's `scripts/assemble.sh`); `registry` serves it over HTTP. The
+Platform is pointed at it by `MOSAIC_DEV_REPOSITORY_URL` and
+`MOSAIC_DEV_REPOSITORY_KEY`, and warns at `Warn` on every boot that it is doing
+so, with the key's fingerprint.
+
+**Nothing is bypassed** — a development key signs a development index, and every
+check the real path runs still runs: the index signature, the manifests it
+authenticates, the SDK major, the binary's signed digest, the handshake. That is
+the point of it; a loop that skipped verification would exercise a path
+production does not have.
+
+**Those two variables only exist in a `-tags mosaicdev` build**, which is what
+the overlay's `go run` builds and what a release is not. In a shipped binary the
+mechanism is not switched off, it is absent — see
+`internal/adapters/extension/devregistry_off.go`, and ADR 0099 for why the guard
+is a build tag rather than a runtime check. Both configurations are gated:
+`docker-compose.test.yml` runs `go vet -tags mosaicdev ./...` and the tagged
+tests for the extension package after the ordinary suite.
+
+The loop, after editing a module:
+
+```bash
+docker compose -f docker-compose.dev.yml -f docker-compose.local.yml run --rm registry-build
+```
+
+then **uninstall and reinstall** the module from the extensions surface. A
+rebuilt index does not reach an already-installed module on its own: boot
+re-adopts the pinned bytes from disk rather than following a catalogue that has
+moved (ADR 0081), which is the pin working rather than a gap. Local builds are
+versioned `local-<git describe>`, so a working copy reads
+`local-v0.28.0-1-gb34c5be-dirty` in the catalogue and in the install record and
+cannot be mistaken for a release. `curl -s localhost:8082/index.json` reads the
+served index from the host.
+
 The stack sets `MOSAIC_POSTGRES_DSN` and the
 `MOSAIC_BOOTSTRAP_ADMIN_USERNAME` + `MOSAIC_BOOTSTRAP_ADMIN_PASSWORD` pair for
 you. The Platform then migrates, seeds the admin, registers the
