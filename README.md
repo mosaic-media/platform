@@ -58,7 +58,7 @@ docker compose -f docker-compose.dev.yml up
 ```
 
 Add `-f docker-compose.local.yml` after the first `-f` file to build against the
-sibling working copies of `sdk`, `sdui` and the modules instead of their
+sibling working copies of `sdk`, `contracts` and the modules instead of their
 published versions.
 
 ### PostgreSQL for tests
