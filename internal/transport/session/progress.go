@@ -110,13 +110,13 @@ func (h *Handler) reportProgress(ctx context.Context, s *liveSession, input []by
 
 	if env.Final {
 		s.cancelProgress()
-		h.writeProgress(ctx, s.caller, env)
+		h.writeProgress(ctx, s.currentCaller(), env)
 		return nil
 	}
 	s.armProgress(env, func(pending progressEnvelope) {
 		writeCtx, cancel := context.WithTimeout(context.Background(), progressWriteTimeout)
 		defer cancel()
-		h.writeProgress(writeCtx, s.caller, pending)
+		h.writeProgress(writeCtx, s.currentCaller(), pending)
 	})
 	return nil
 }
@@ -199,7 +199,7 @@ func (h *Handler) flushProgress(s *liveSession) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), progressWriteTimeout)
 	defer cancel()
-	h.writeProgress(ctx, s.caller, pending)
+	h.writeProgress(ctx, s.currentCaller(), pending)
 }
 
 // markFinishedEnvelope is the setWatched action input.

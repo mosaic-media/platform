@@ -62,6 +62,7 @@ func (Module) Manifest() builtin.Manifest {
 			"TelemetryQueryStore",
 			"TelemetryMaintenanceStore",
 			"JobStore",
+			"TokenStore",
 			"Clock",
 			"IDGenerator",
 			"HealthProbe",
@@ -112,9 +113,12 @@ type ContractSet struct {
 	TelemetryMaintenance contracts.TelemetryMaintenanceStore
 	// Jobs is the background-work queue (ADR 0017). Pool-backed rather than
 	// transaction-scoped: a claim is its own transaction.
-	Jobs  contracts.JobStore
-	Clock contracts.Clock
-	IDs   contracts.IDGenerator
+	Jobs contracts.JobStore
+	// Tokens is the direct read handle for a session's bearer pair (ADR 0102):
+	// an access token is validated on every call, so it must not open one.
+	Tokens contracts.TokenStore
+	Clock  contracts.Clock
+	IDs    contracts.IDGenerator
 	// ContentIDs generates UUIDv7 identifiers for the content model, whose
 	// tables use native uuid columns. IDs stays UUIDv4 for the
 	// infrastructure tables, which keep their text ids and are not migrated
@@ -178,6 +182,7 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		TelemetryQueries:     NewTelemetryQueryStore(pool),
 		TelemetryMaintenance: NewTelemetryStore(pool),
 		Jobs:                 NewJobStore(pool),
+		Tokens:               NewTokenStore(pool),
 
 		Clock:          NewClock(),
 		IDs:            NewIDGenerator(),

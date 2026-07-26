@@ -93,6 +93,7 @@ func (t *tx) UserPreferences() contracts.UserPreferenceStore {
 	return &userPreferenceStore{q: t.q}
 }
 func (t *tx) Credentials() contracts.CredentialStore { return &credentialStore{q: t.q} }
+func (t *tx) Tokens() contracts.TokenStore           { return &tokenStore{q: t.q} }
 
 // The content model (ADR 0013). These share the same pgx.Tx as every store
 // above, so a node, its parts and the outbox event announcing it commit

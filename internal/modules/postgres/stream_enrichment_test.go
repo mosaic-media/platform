@@ -82,7 +82,8 @@ func TestCrossProviderStreamEnrichmentAgainstPostgres(t *testing.T) {
 	}
 
 	svc := app.NewService(app.Deps{
-		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions,
+		Tokens: cs.Tokens, Users: cs.Users, Credentials: cs.Credentials,
 		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Parts: cs.Parts, Clock: cs.Clock,
 		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
 		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},
@@ -101,6 +102,7 @@ func TestCrossProviderStreamEnrichmentAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
+	session = seedCredential(t, c, cs, session)
 	if err := seedRoleGrant(c, pool, user.ID, "Importer", []domain.Permission{
 		domain.Permission(app.ActionContentImport),
 		domain.Permission(app.ActionContentCreate),

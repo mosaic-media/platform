@@ -80,6 +80,10 @@ type fakeQueries struct {
 	traces       []domain.TelemetryTraceSummary
 	spans        []domain.TelemetrySpanRecord
 
+	// userSessions and currentSession back the Devices section (ADR 0102).
+	userSessions   []domain.Session
+	currentSession domain.SessionID
+
 	// jobs, jobAttempts and jobLogs back the background-work screens.
 	jobs        []domain.Job
 	jobAttempts []domain.JobAttempt
@@ -139,6 +143,12 @@ func (f *fakeQueries) CallerCan(_ context.Context, _ v1.Caller, action policy.Ac
 		// unaffected by it.
 		return f.canReadTelemetry
 	}
+}
+
+func (f *fakeQueries) ListSessions(_ context.Context, _ app.ListSessionsQuery) (app.ListSessionsResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return app.ListSessionsResult{Sessions: f.userSessions, Current: f.currentSession}, nil
 }
 
 func (f *fakeQueries) ListJobs(_ context.Context, q app.ListJobsQuery) (app.ListJobsResult, error) {

@@ -44,6 +44,7 @@ func (mockTx) UserPreferences() contracts.UserPreferenceStore { return nil }
 func (mockTx) PlaybackStates() contracts.PlaybackStateStore   { return nil }
 
 func (mockTx) InstalledExtensions() contracts.InstalledExtensionStore { return nil }
+func (mockTx) Tokens() contracts.TokenStore                           { return nil }
 
 type mockUserStore struct{}
 
@@ -71,6 +72,14 @@ type mockSessionStore struct{}
 
 func (mockSessionStore) Create(ctx context.Context, session domain.Session) (domain.Session, error) {
 	return session, nil
+}
+
+func (mockSessionStore) Touch(ctx context.Context, id domain.SessionID, at time.Time) (domain.Session, error) {
+	return domain.Session{ID: id, LastSeenAt: at}, nil
+}
+
+func (mockSessionStore) ListForUser(ctx context.Context, userID domain.UserID, now time.Time) ([]domain.Session, error) {
+	return nil, nil
 }
 
 func (mockSessionStore) FindByID(ctx context.Context, id domain.SessionID) (domain.Session, error) {

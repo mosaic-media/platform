@@ -559,6 +559,9 @@ func run() error {
 		ModuleSettings:   set.ModuleSettings,
 		UserPreferences:  set.UserPreferences,
 		TelemetryQueries: set.TelemetryQueries,
+		// The session's bearer pair (ADR 0102). Direct, because validating an
+		// access token happens on every call and must not open a transaction.
+		Tokens: set.Tokens,
 		// The retention sweep's storage side, and the queue that drives it
 		// (ADR 0017, ADR 0058). Both reached as contracts, so the application
 		// service never names a PostgreSQL type.

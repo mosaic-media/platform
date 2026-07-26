@@ -44,6 +44,11 @@ const (
 	// existed while the process did, so a Platform down for a month came back
 	// with a month of records it had intended to drop.
 	KindTelemetryRetention = "telemetry.retention"
+	// KindSessionTokenSweep deletes expired access and refresh tokens
+	// (ADR 0102). The access-token table is the fastest-growing thing in the
+	// schema — one row per client per ten minutes, forever — and nothing else
+	// would ever remove them.
+	KindSessionTokenSweep = "session.tokens.sweep"
 )
 
 // TelemetryRetentionInterval is how often the retention sweep runs.
@@ -53,6 +58,12 @@ const (
 // one midnight, and running twenty-four times a day means a missed hour, a
 // restart or a failed attempt costs nothing at all.
 const TelemetryRetentionInterval = time.Hour
+
+// SessionTokenSweepInterval is how often expired credentials are deleted. Daily
+// rather than hourly: nothing is wrong while an expired token sits in a table
+// it can never be validated from, so this is disk hygiene and does not need to
+// be prompt.
+const SessionTokenSweepInterval = 24 * time.Hour
 
 // Deps are what the runner and scheduler are built from.
 type Deps struct {
@@ -82,6 +93,7 @@ func New(deps Deps) Runtime {
 		Owner: deps.Owner,
 	})
 	runner.Register(KindTelemetryRetention, telemetryRetention(deps.Service))
+	runner.Register(KindSessionTokenSweep, sessionTokenSweep(deps.Service))
 
 	scheduler := jobs.NewScheduler(jobs.SchedulerDeps{
 		Store: deps.Store,
@@ -89,6 +101,7 @@ func New(deps Deps) Runtime {
 		IDs:   deps.IDs,
 		Schedules: []jobs.Schedule{
 			{Kind: KindTelemetryRetention, Every: TelemetryRetentionInterval},
+			{Kind: KindSessionTokenSweep, Every: SessionTokenSweepInterval},
 		},
 	})
 
@@ -99,6 +112,20 @@ func New(deps Deps) Runtime {
 func (r Runtime) Start(ctx context.Context) {
 	r.Runner.Start(ctx)
 	r.Scheduler.Start(ctx)
+}
+
+// sessionTokenSweep is the handler for KindSessionTokenSweep. Idempotent for
+// the same reason the retention sweep is: deleting rows that are already gone
+// deletes nothing.
+func sessionTokenSweep(svc *app.Service) jobs.Handler {
+	return func(ctx context.Context, _ domain.Job) error {
+		res, err := svc.PurgeSessionTokens(ctx, app.PurgeSessionTokensCommand{Caller: svc.SystemCaller()})
+		if err != nil {
+			return err
+		}
+		telemetry.From(ctx).Info("expired session tokens swept", telemetry.Int("rows", res.Deleted))
+		return nil
+	}
 }
 
 // telemetryRetention is the handler for KindTelemetryRetention.

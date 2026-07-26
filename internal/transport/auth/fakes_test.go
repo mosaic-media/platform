@@ -31,18 +31,23 @@ type fakeDB struct {
 	users     map[domain.UserID]domain.User
 	usernames map[string]domain.UserID
 	sessions  map[domain.SessionID]domain.Session
-	passwords map[domain.UserID]domain.PasswordCredential
-	roles     map[domain.UserID][]domain.Role
-	outbox    []domain.OutboxEvent
+	// The two halves of the session credential (ADR 0102).
+	accessTokens  map[string]domain.AccessToken
+	refreshTokens map[string]domain.RefreshToken
+	passwords     map[domain.UserID]domain.PasswordCredential
+	roles         map[domain.UserID][]domain.Role
+	outbox        []domain.OutboxEvent
 }
 
 func newFakeDB() *fakeDB {
 	return &fakeDB{
-		users:     make(map[domain.UserID]domain.User),
-		usernames: make(map[string]domain.UserID),
-		sessions:  make(map[domain.SessionID]domain.Session),
-		passwords: make(map[domain.UserID]domain.PasswordCredential),
-		roles:     make(map[domain.UserID][]domain.Role),
+		users:         make(map[domain.UserID]domain.User),
+		usernames:     make(map[string]domain.UserID),
+		sessions:      make(map[domain.SessionID]domain.Session),
+		accessTokens:  make(map[string]domain.AccessToken),
+		refreshTokens: make(map[string]domain.RefreshToken),
+		passwords:     make(map[domain.UserID]domain.PasswordCredential),
+		roles:         make(map[domain.UserID][]domain.Role),
 	}
 }
 
@@ -181,6 +186,143 @@ func (s fakeSessionStore) Revoke(_ context.Context, id domain.SessionID) error {
 	return nil
 }
 
+func (s fakeSessionStore) Touch(_ context.Context, id domain.SessionID, at time.Time) (domain.Session, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	session, ok := s.db.sessions[id]
+	if !ok {
+		return domain.Session{}, contracts.NewError(contracts.NotFound, "session not found")
+	}
+	session.LastSeenAt = at
+	s.db.sessions[id] = session
+	return session, nil
+}
+
+func (s fakeSessionStore) ListForUser(_ context.Context, userID domain.UserID, now time.Time) ([]domain.Session, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var out []domain.Session
+	for _, session := range s.db.sessions {
+		if session.UserID == userID && !session.Revoked() && !session.ExpiredAt(now) {
+			out = append(out, session)
+		}
+	}
+	return out, nil
+}
+
+// fakeTokenStore is the session's bearer pair (ADR 0102) in memory. Spending a
+// refresh token is exactly-one-winner under the lock, like the conditional
+// UPDATE it stands in for — a fake that let two callers both win would make the
+// reuse-detection path pass without being exercised.
+type fakeTokenStore struct{ db *fakeDB }
+
+func (s fakeTokenStore) SaveAccess(_ context.Context, t domain.AccessToken) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.accessTokens[t.Hash] = t
+	return nil
+}
+
+func (s fakeTokenStore) FindAccess(_ context.Context, hash string) (domain.AccessToken, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	t, ok := s.db.accessTokens[hash]
+	if !ok {
+		return domain.AccessToken{}, contracts.NewError(contracts.NotFound, "access token not found")
+	}
+	return t, nil
+}
+
+func (s fakeTokenStore) SaveRefresh(_ context.Context, t domain.RefreshToken) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.refreshTokens[t.Hash] = t
+	return nil
+}
+
+func (s fakeTokenStore) FindRefresh(_ context.Context, hash string) (domain.RefreshToken, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	t, ok := s.db.refreshTokens[hash]
+	if !ok {
+		return domain.RefreshToken{}, contracts.NewError(contracts.NotFound, "refresh token not found")
+	}
+	return t, nil
+}
+
+func (s fakeTokenStore) MarkRefreshUsed(_ context.Context, hash string, at time.Time) (bool, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	t, ok := s.db.refreshTokens[hash]
+	if !ok || t.UsedAt != nil || t.RevokedAt != nil {
+		return false, nil
+	}
+	used := at
+	t.UsedAt = &used
+	s.db.refreshTokens[hash] = t
+	return true, nil
+}
+
+func (s fakeTokenStore) RevokeChain(_ context.Context, chainID domain.ID, at time.Time) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	touched := map[domain.SessionID]bool{}
+	for hash, t := range s.db.refreshTokens {
+		if t.ChainID != chainID {
+			continue
+		}
+		touched[t.SessionID] = true
+		if t.RevokedAt == nil {
+			revoked := at
+			t.RevokedAt = &revoked
+			s.db.refreshTokens[hash] = t
+		}
+	}
+	for hash, t := range s.db.accessTokens {
+		if touched[t.SessionID] {
+			delete(s.db.accessTokens, hash)
+		}
+	}
+	return nil
+}
+
+func (s fakeTokenStore) RevokeSession(_ context.Context, id domain.SessionID, at time.Time) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for hash, t := range s.db.refreshTokens {
+		if t.SessionID == id && t.RevokedAt == nil {
+			revoked := at
+			t.RevokedAt = &revoked
+			s.db.refreshTokens[hash] = t
+		}
+	}
+	for hash, t := range s.db.accessTokens {
+		if t.SessionID == id {
+			delete(s.db.accessTokens, hash)
+		}
+	}
+	return nil
+}
+
+func (s fakeTokenStore) DeleteExpired(_ context.Context, before time.Time) (int, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	n := 0
+	for hash, t := range s.db.accessTokens {
+		if t.ExpiresAt.Before(before) {
+			delete(s.db.accessTokens, hash)
+			n++
+		}
+	}
+	for hash, t := range s.db.refreshTokens {
+		if t.ExpiresAt.Before(before) {
+			delete(s.db.refreshTokens, hash)
+			n++
+		}
+	}
+	return n, nil
+}
+
 type fakeCredentialStore struct{ db *fakeDB }
 
 func (s fakeCredentialStore) SavePassword(_ context.Context, credential domain.PasswordCredential) error {
@@ -276,6 +418,7 @@ func (tx fakeTx) Sessions() contracts.SessionStore       { return fakeSessionSto
 func (tx fakeTx) Permissions() contracts.PermissionStore { return fakePermissionStore{db: tx.db} }
 func (tx fakeTx) Outbox() contracts.EventOutbox          { return fakeEventOutbox{db: tx.db} }
 func (tx fakeTx) Credentials() contracts.CredentialStore { return fakeCredentialStore{db: tx.db} }
+func (tx fakeTx) Tokens() contracts.TokenStore           { return fakeTokenStore{db: tx.db} }
 
 // The auth transport reaches none of these. They are nil rather than fake
 // stores nothing exercises, so a method that starts using one fails loudly.
@@ -345,6 +488,7 @@ func newTestService(db *fakeDB, now time.Time) *app.Service {
 		PasswordVerifier: fakePasswordVerifier{},
 		Capabilities:     nil,
 		ModuleSettings:   nil,
+		Tokens:           fakeTokenStore{db: db},
 	})
 }
 

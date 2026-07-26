@@ -117,3 +117,49 @@ func scanSession(row pgx.Row) (domain.Session, error) {
 	session.RevokedAt = revokedAt
 	return session, nil
 }
+
+// Touch records that the session was used, moving LastSeenAt (ADR 0102). Idle
+// expiry is measured from that column, and it was written at issue and never
+// again.
+func (s *sessionStore) Touch(ctx context.Context, id domain.SessionID, at time.Time) (domain.Session, error) {
+	row := s.q.QueryRow(ctx,
+		`UPDATE sessions SET last_seen_at = $2 WHERE id = $1 RETURNING `+sessionColumns,
+		string(id), at.UTC())
+	session, err := scanSession(row)
+	if err != nil {
+		if isNoRows(err) {
+			return domain.Session{}, contracts.NewError(contracts.NotFound, "session not found")
+		}
+		return domain.Session{}, mapError("touch session", err)
+	}
+	return session, nil
+}
+
+// ListForUser returns a user's live sessions, newest first — the device list
+// (ADR 0102). Revoked and expired ones are excluded because a list of devices
+// somebody can no longer be signed in on is a list of things they cannot act
+// on.
+func (s *sessionStore) ListForUser(ctx context.Context, userID domain.UserID, now time.Time) ([]domain.Session, error) {
+	rows, err := s.q.Query(ctx,
+		`SELECT `+sessionColumns+` FROM sessions
+		  WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > $2
+		  ORDER BY last_seen_at DESC, issued_at DESC`,
+		string(userID), now.UTC())
+	if err != nil {
+		return nil, mapError("list sessions for user", err)
+	}
+	defer rows.Close()
+
+	var out []domain.Session
+	for rows.Next() {
+		session, err := scanSession(rows)
+		if err != nil {
+			return nil, mapError("scan session", err)
+		}
+		out = append(out, session)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapError("list sessions for user", err)
+	}
+	return out, nil
+}

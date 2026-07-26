@@ -15,7 +15,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"connectrpc.com/connect"
@@ -71,7 +70,10 @@ func (h *Handler) SignIn(ctx context.Context, req *connect.Request[authv1.SignIn
 	if err != nil {
 		return nil, rpc.Wrap(err)
 	}
-	return connect.NewResponse(&authv1.SignInResponse{Session: sessionMessage(result.Session)}), nil
+	return connect.NewResponse(&authv1.SignInResponse{
+		Session: sessionMessage(result.Session),
+		Tokens:  tokenPairMessage(result.Tokens),
+	}), nil
 }
 
 // SignOut revokes a session. The caller and the target are named separately
@@ -112,15 +114,38 @@ func sessionMessage(s domain.Session) *authv1.Session {
 	}
 }
 
-// Refresh exchanges a refresh token for a new pair (ADR 0102).
+// Refresh exchanges a refresh token for a new pair, rotating it (ADR 0102).
 //
-// **Not built yet.** The contract carries it because the pre-session bootstrap
-// and the bearer pair change the same file and shipped as one release; the
-// Platform's half of the pair lands in the slice after this one. Answering
-// Unimplemented is the honest interim: a client that calls it is told the
-// server does not do this, rather than being handed something that looks like a
-// session and is not.
-func (h *Handler) Refresh(context.Context, *connect.Request[authv1.RefreshRequest]) (*connect.Response[authv1.RefreshResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented,
-		errors.New("this Platform does not issue refresh tokens yet"))
+// It is unauthenticated in the session sense and authenticated in every sense
+// that matters: the refresh token is the credential, and presenting a spent one
+// revokes the whole chain rather than merely being refused. That is what makes
+// theft detectable instead of silent, and it is why a client must store the new
+// pair and discard the old one the instant this returns.
+func (h *Handler) Refresh(ctx context.Context, req *connect.Request[authv1.RefreshRequest]) (*connect.Response[authv1.RefreshResponse], error) {
+	r := req.Msg
+	result, err := h.svc.RefreshSession(ctx, app.RefreshSessionCommand{
+		RefreshToken: r.GetRefreshToken(),
+		DeviceID:     domain.DeviceID(r.GetDeviceId()),
+	})
+	if err != nil {
+		return nil, rpc.Wrap(err)
+	}
+	return connect.NewResponse(&authv1.RefreshResponse{
+		Session: sessionMessage(result.Session),
+		Tokens:  tokenPairMessage(result.Tokens),
+	}), nil
+}
+
+// tokenPairMessage projects the issued pair onto the wire.
+//
+// This is the only place either plaintext exists outside the moment it was
+// generated. Nothing stores it, nothing logs it, and the store holds hashes —
+// so a client that loses the pair cannot be sent it again, only a new one.
+func tokenPairMessage(pair domain.TokenPair) *authv1.TokenPair {
+	return &authv1.TokenPair{
+		AccessToken:      pair.AccessToken,
+		AccessExpiresAt:  timestamppb.New(pair.AccessExpiresAt),
+		RefreshToken:     pair.RefreshToken,
+		RefreshExpiresAt: timestamppb.New(pair.RefreshExpiresAt),
+	}
 }

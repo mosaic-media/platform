@@ -119,7 +119,7 @@ func (s *Service) resolvePrincipal(ctx context.Context, caller v1.Caller) (princ
 	if s.isSystemCaller(caller) {
 		return principal{userID: SystemUserID, system: true}, nil
 	}
-	userID, err := s.authenticate(ctx, domain.SessionID(caller.Session))
+	userID, err := s.authenticate(ctx, domain.SessionCredential(caller.Session))
 	if err != nil {
 		return principal{}, err
 	}

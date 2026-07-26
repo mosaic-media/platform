@@ -77,6 +77,7 @@ func TestApplicationServicesRunAgainstPostgres(t *testing.T) {
 	svc := app.NewService(app.Deps{
 		UnitOfWork:       cs.UnitOfWork,
 		Sessions:         cs.Sessions,
+		Tokens:           cs.Tokens,
 		Users:            cs.Users,
 		Credentials:      cs.Credentials,
 		Config:           cs.Config,
@@ -108,6 +109,7 @@ func TestApplicationServicesRunAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed admin session: %v", err)
 	}
+	adminSession = seedCredential(t, c, cs, adminSession)
 	adminActions := []domain.Permission{
 		domain.Permission(app.ActionUserCreate),
 		domain.Permission(app.ActionUserRead),
@@ -153,7 +155,7 @@ func TestApplicationServicesRunAgainstPostgres(t *testing.T) {
 	if err := seedRoleGrant(c, pool, created.User.ID, "Reader", []domain.Permission{domain.Permission(app.ActionUserRead)}); err != nil {
 		t.Fatalf("seed reader role: %v", err)
 	}
-	got, err := svc.GetUserByID(c, app.GetUserByIDQuery{CallerSessionID: auth.Session.ID, UserID: created.User.ID})
+	got, err := svc.GetUserByID(c, app.GetUserByIDQuery{CallerSessionID: domain.SessionID(auth.Tokens.AccessToken), UserID: created.User.ID})
 	if err != nil {
 		t.Fatalf("GetUserByID with issued session: %v", err)
 	}
@@ -165,7 +167,7 @@ func TestApplicationServicesRunAgainstPostgres(t *testing.T) {
 	if _, err := svc.RevokeSession(c, app.RevokeSessionCommand{CallerSessionID: adminSession.ID, TargetSessionID: auth.Session.ID}); err != nil {
 		t.Fatalf("RevokeSession: %v", err)
 	}
-	_, err = svc.GetUserByID(c, app.GetUserByIDQuery{CallerSessionID: auth.Session.ID, UserID: created.User.ID})
+	_, err = svc.GetUserByID(c, app.GetUserByIDQuery{CallerSessionID: domain.SessionID(auth.Tokens.AccessToken), UserID: created.User.ID})
 	if contracts.CategoryOf(err) != contracts.Unauthenticated {
 		t.Fatalf("expected Unauthenticated using revoked session, got %v", err)
 	}

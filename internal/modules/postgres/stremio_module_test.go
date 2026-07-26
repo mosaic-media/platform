@@ -61,7 +61,8 @@ func TestImportSourceModuleAgainstPostgres(t *testing.T) {
 	registry.Register(source)
 
 	svc := app.NewService(app.Deps{
-		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions,
+		Tokens: cs.Tokens, Users: cs.Users, Credentials: cs.Credentials,
 		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Clock: cs.Clock,
 		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
 		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},
@@ -82,6 +83,7 @@ func TestImportSourceModuleAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
+	session = seedCredential(t, c, cs, session)
 	actions := []domain.Permission{
 		domain.Permission(app.ActionContentImport),
 		domain.Permission(app.ActionContentCreate),

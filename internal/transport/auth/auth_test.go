@@ -132,9 +132,12 @@ func TestSignOutRevokesTheSession(t *testing.T) {
 		t.Fatalf("SignIn: %v", err)
 	}
 	id := in.Msg.GetSession().GetId()
+	// The caller presents its access token; the target is a session id. Since
+	// ADR 0102 they are different values and this call carries both.
+	access := in.Msg.GetTokens().GetAccessToken()
 
 	out, err := handler.SignOut(context.Background(), connect.NewRequest(&authv1.SignOutRequest{
-		CallerSession: id, TargetSession: id,
+		CallerSession: access, TargetSession: id,
 	}))
 	if err != nil {
 		t.Fatalf("SignOut: %v", err)

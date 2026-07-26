@@ -11,6 +11,7 @@ import (
 	sessionv1 "github.com/mosaic-media/contracts/gen/mosaic/session/v1"
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
+	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	"github.com/mosaic-media/platform/internal/transport/playback"
 	"github.com/mosaic-media/platform/internal/transport/screens"
@@ -37,7 +38,7 @@ import (
 // the "Next episode" control beside it. Most actions push nothing (a nil slice)
 // and re-render the content region instead; playPart is the one that pushes.
 func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, input []byte) ([]*sessionv1.ServerMessage, error) {
-	caller := s.caller
+	caller := s.currentCaller()
 	switch action {
 	case "importContent":
 		ref, err := importRefFromInput(input)
@@ -70,6 +71,21 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		return nil, h.svc.UninstallExtension(ctx, app.UninstallExtensionCommand{
 			Caller: caller, ModuleID: moduleID,
 		})
+	case "revokeSession":
+		// Ending one device's session (ADR 0102). The target is a session id
+		// from the device list; the caller is this connection's own credential,
+		// and the command's own boundary decides whether they may — a viewer
+		// ending their own phone and an administrator ending somebody else's
+		// TV are the same call and a different authorisation.
+		target, err := sessionIDFromInput(input)
+		if err != nil {
+			return nil, err
+		}
+		_, err = h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
+			CallerSessionID: domain.SessionID(caller.Session),
+			TargetSessionID: target,
+		})
+		return nil, err
 	case "setPreference":
 		key, value, err := preferenceFromInput(input)
 		if err != nil {
@@ -138,7 +154,7 @@ type playEnvelope struct {
 // readable form — the resolved URL may carry a debrid credential, so the client
 // receives an opaque handle to the Platform's own origin instead.
 func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([]*sessionv1.ServerMessage, error) {
-	caller := s.caller
+	caller := s.currentCaller()
 	// What this client said it can decode, declared on Attach (ADR 0047). It is
 	// read once and used twice — to rank candidates and to plan the streams —
 	// because those two must agree: choosing a release for its codecs and then
@@ -504,4 +520,24 @@ func (h *Handler) recordImpression(ctx context.Context, s *liveSession, input []
 		telemetry.String("screen", env.Screen),
 		telemetry.String("kind", env.Kind))
 	return nil
+}
+
+// sessionIDFromInput reads the session a revokeSession action names.
+//
+// The value is a session id and not a credential — it is what a device list
+// shows and what revocation targets — so passing one here reveals nothing and
+// grants nothing on its own: the command authorises the caller before it acts.
+func sessionIDFromInput(input []byte) (domain.SessionID, error) {
+	var env struct {
+		SessionID string `json:"sessionId"`
+	}
+	if len(input) > 0 {
+		if err := json.Unmarshal(input, &env); err != nil {
+			return "", contracts.NewError(contracts.InvalidArgument, "revoke session: input is not valid JSON")
+		}
+	}
+	if env.SessionID == "" {
+		return "", contracts.NewError(contracts.InvalidArgument, "revoke session: a session id is required")
+	}
+	return domain.SessionID(env.SessionID), nil
 }

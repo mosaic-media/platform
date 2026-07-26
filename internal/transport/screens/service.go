@@ -64,6 +64,10 @@ const (
 	// session transport.
 	installExtensionAction   = "installExtension"
 	uninstallExtensionAction = "uninstallExtension"
+	// revokeSessionAction ends one device's session (ADR 0102). It is the
+	// tenth action a client can invoke, and the first that is about the
+	// account rather than about content.
+	revokeSessionAction = "revokeSession"
 )
 
 // Screen param keys. Each is written into a Navigate action's params by the
@@ -101,9 +105,10 @@ const (
 	// The jobs screens' params. paramStatus is a job status rather than a
 	// generic one — nothing else on any screen filters by "status", and giving
 	// it a shared name is how a key comes to mean two things.
-	paramJobID  = "jobId"
-	paramStatus = "status"
-	paramKind   = "kind"
+	paramJobID     = "jobId"
+	paramSessionID = "sessionId"
+	paramStatus    = "status"
+	paramKind      = "kind"
 )
 
 // Empty-state illustration keys the client maps to an icon.
@@ -204,6 +209,9 @@ type contentQueries interface {
 	// affordance was drawn.
 	ListJobs(context.Context, app.ListJobsQuery) (app.ListJobsResult, error)
 	GetJob(context.Context, app.GetJobQuery) (app.GetJobResult, error)
+	// ListSessions backs the Devices section: where this account is signed in,
+	// so a person can end a device they no longer have (ADR 0102).
+	ListSessions(context.Context, app.ListSessionsQuery) (app.ListSessionsResult, error)
 	// CallerCan decides whether an affordance is drawn at all. It is the only
 	// method here that answers about authority rather than returning data, and
 	// it never substitutes for the checks above.

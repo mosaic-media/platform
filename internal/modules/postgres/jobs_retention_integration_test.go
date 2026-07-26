@@ -100,22 +100,25 @@ func TestARecurringJobRunsWithNoUserAndRetentionRemovesRows(t *testing.T) {
 		Owner:   "boot-under-test",
 	})
 
-	// The scheduler enqueues the occurrence. No caller, no session, no request.
+	// The scheduler enqueues one occurrence of every recurring kind this build
+	// carries. No caller, no session, no request anywhere in the picture.
 	created, err := runtime.Scheduler.Tick(ctx)
 	if err != nil {
 		t.Fatalf("Tick: %v", err)
 	}
-	if created != 1 {
-		t.Fatalf("the schedule enqueued %d jobs, want 1", created)
+	if created == 0 {
+		t.Fatal("the schedule enqueued nothing")
 	}
 
-	// And the runner runs it.
+	// And the runner runs them. Asserted against what was enqueued rather than
+	// against a literal, so adding a recurring kind does not break this test
+	// for a reason that has nothing to do with what it is about.
 	ran, err := runtime.Runner.RunOnce(ctx)
 	if err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
-	if ran != 1 {
-		t.Fatalf("the runner claimed %d jobs, want 1", ran)
+	if ran != created {
+		t.Fatalf("the runner claimed %d of %d enqueued jobs", ran, created)
 	}
 
 	queued, err := cs.Jobs.List(ctx, domain.JobFilter{Kind: compositionjobs.KindTelemetryRetention})

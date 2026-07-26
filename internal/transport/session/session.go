@@ -21,8 +21,10 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	"github.com/mosaic-media/platform/internal/transport/playback"
+	"github.com/mosaic-media/platform/internal/transport/rpc"
 	"github.com/mosaic-media/platform/internal/transport/screens"
 	"github.com/mosaic-media/platform/internal/transport/vocabulary"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // inputDebounce is the server-side coalescing window for search-as-you-type
@@ -107,16 +109,47 @@ type TicketMinter interface {
 // Manager exposes the session store for lifecycle wiring (reaper, shutdown).
 func (h *Handler) Manager() *Manager { return h.mgr }
 
+// bind resolves the credential a call presented to its live session (ADR 0102).
+//
+// This is where the transport authenticates. Every call on this service carries
+// an access token, and until it is resolved there is nothing to key live state
+// by: the token rotates every few minutes and the session does not, so the
+// mailbox, the replay cursor and the current route belong to the session id
+// rather than to whatever the client happened to be holding when it connected.
+//
+// A refusal here is Unauthenticated, which is the whole reason a client can
+// implement refresh at all: before this, an expired credential reached the
+// screen builders and came back as an error *rendered into the content region*,
+// so the client saw a successful call carrying a picture of a failure and had
+// nothing to retry on. That was found by opening a browser twenty-five hours
+// after signing in, and by nothing else.
+func (h *Handler) bind(ctx context.Context, credential string) (*liveSession, error) {
+	if credential == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session is required"))
+	}
+	caller := v1.CallerFromSession(credential)
+	session, err := h.svc.SessionForCaller(ctx, caller)
+	if err != nil {
+		return nil, rpc.Wrap(err)
+	}
+	s := h.mgr.session(string(session.ID))
+	// The credential is recorded per call rather than at construction: a client
+	// that refreshed is presenting a new one, and everything rendered for it
+	// must authorise as the caller that actually asked.
+	s.setCaller(caller)
+	return s, nil
+}
+
 // Attach (re)binds a caller to a session and, if a screen is named, re-asserts
 // it and re-renders the content — the reconnect re-declaration ADR 0032 did over
 // the socket, now an explicit intent (ADR 0041). With no screen it just ensures
 // the session exists.
 func (h *Handler) Attach(ctx context.Context, req *connect.Request[sessionv1.AttachRequest]) (*connect.Response[sessionv1.Ack], error) {
 	r := req.Msg
-	if r.GetSession() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session is required"))
+	s, err := h.bind(ctx, r.GetSession())
+	if err != nil {
+		return nil, err
 	}
-	s := h.mgr.session(r.GetSession())
 	// The declaration rides Attach because it cannot change without a reconnect
 	// and Attach is the one call every client makes on every connect. It is
 	// recorded before anything renders, so the first screen a client sees is
@@ -162,10 +195,10 @@ func (h *Handler) Attach(ctx context.Context, req *connect.Request[sessionv1.Att
 // Navigate opens a screen and renders it into the content region.
 func (h *Handler) Navigate(ctx context.Context, req *connect.Request[sessionv1.NavigateRequest]) (*connect.Response[sessionv1.Ack], error) {
 	r := req.Msg
-	if r.GetSession() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session is required"))
+	s, err := h.bind(ctx, r.GetSession())
+	if err != nil {
+		return nil, err
 	}
-	s := h.mgr.session(r.GetSession())
 	s.setCurrent(route{screen: r.GetScreen(), params: decodeParams(r.GetParams())})
 	h.pushContent(ctx, s)
 	return connect.NewResponse(&sessionv1.Ack{}), nil
@@ -179,13 +212,13 @@ func (h *Handler) Navigate(ctx context.Context, req *connect.Request[sessionv1.N
 // and re-renders the current content so the change shows.
 func (h *Handler) Invoke(ctx context.Context, req *connect.Request[sessionv1.InvokeRequest]) (*connect.Response[sessionv1.Ack], error) {
 	r := req.Msg
-	if r.GetSession() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session is required"))
-	}
 	if !safeAction(r.GetAction()) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown action"))
 	}
-	s := h.mgr.session(r.GetSession())
+	s, err := h.bind(ctx, r.GetSession())
+	if err != nil {
+		return nil, err
+	}
 	outcomes, err := h.dispatch(ctx, s, r.GetAction(), r.GetInput())
 	if err != nil {
 		// A rejection that names fields goes to the fields (ADR 0089). A toast
@@ -227,10 +260,10 @@ func (h *Handler) Invoke(ctx context.Context, req *connect.Request[sessionv1.Inv
 // the navigation route, so clearing the field returns to whatever was open.
 func (h *Handler) SubmitInput(ctx context.Context, req *connect.Request[sessionv1.InputRequest]) (*connect.Response[sessionv1.Ack], error) {
 	r := req.Msg
-	if r.GetSession() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session is required"))
+	s, err := h.bind(ctx, r.GetSession())
+	if err != nil {
+		return nil, err
 	}
-	s := h.mgr.session(r.GetSession())
 	h.onInput(s, r.GetValue())
 	return connect.NewResponse(&sessionv1.Ack{}), nil
 }
@@ -241,10 +274,10 @@ func (h *Handler) SubmitInput(ctx context.Context, req *connect.Request[sessionv
 // disconnects, the session closes, or a newer Subscribe supersedes it.
 func (h *Handler) Subscribe(ctx context.Context, req *connect.Request[sessionv1.SubscribeRequest], stream *connect.ServerStream[sessionv1.ServerMessage]) error {
 	r := req.Msg
-	if r.GetSession() == "" {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("session is required"))
+	s, err := h.bind(ctx, r.GetSession())
+	if err != nil {
+		return err
 	}
-	s := h.mgr.session(r.GetSession())
 	onConnect := func() {
 		if s.currentRoute().screen == "" {
 			s.setCurrent(route{screen: "home"})
@@ -264,7 +297,7 @@ func (h *Handler) Subscribe(ctx context.Context, req *connect.Request[sessionv1.
 func (h *Handler) pushShell(ctx context.Context, s *liveSession) {
 	screen := s.currentRoute().screen
 	s.setShellChrome(screen)
-	node, err := h.screens.Render(ctx, "shell", s.caller, map[string]any{"screen": screen})
+	node, err := h.screens.Render(ctx, "shell", s.currentCaller(), map[string]any{"screen": screen})
 	if err != nil {
 		s.enqueue(regionMsg(ctx, s, contentRegion, sessionv1.RegionUpdate_REPLACE, errorNode(err.Error())))
 		return
@@ -287,7 +320,7 @@ func (h *Handler) pushRender(ctx context.Context, s *liveSession, screen string,
 	// on the same side and re-sending it would cost a payload per tap.
 	if screens.ShellChromeFor(screen) != screens.ShellChromeFor(s.shellChrome()) {
 		s.setShellChrome(screen)
-		if node, err := h.screens.Render(ctx, "shell", s.caller, map[string]any{"screen": screen}); err == nil {
+		if node, err := h.screens.Render(ctx, "shell", s.currentCaller(), map[string]any{"screen": screen}); err == nil {
 			s.enqueue(shellMsg(ctx, s, node))
 		}
 	}
@@ -296,7 +329,7 @@ func (h *Handler) pushRender(ctx context.Context, s *liveSession, screen string,
 	// rather than play one (ADR 0049). Set here because this is where the live
 	// session is in hand; every screen that does not want it ignores it.
 	ctx = screens.WithClientCodecs(ctx, s.clientProfile().codecs())
-	node, err := h.screens.Render(ctx, screen, s.caller, params)
+	node, err := h.screens.Render(ctx, screen, s.currentCaller(), params)
 	if err != nil {
 		s.enqueue(regionMsg(ctx, s, contentRegion, sessionv1.RegionUpdate_REPLACE, errorNode(err.Error())))
 		return

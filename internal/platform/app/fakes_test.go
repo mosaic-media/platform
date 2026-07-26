@@ -18,6 +18,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/platform/policy"
+	"github.com/mosaic-media/platform/internal/platform/sessions"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -64,13 +65,15 @@ type fakeDBSnapshot struct {
 // query reads) and through a fakeTx (for the command write path), mirroring
 // how a real adapter would expose one database through several contracts.
 type fakeDB struct {
-	mu        sync.Mutex
-	users     map[domain.UserID]domain.User
-	usernames map[string]domain.UserID
-	sessions  map[domain.SessionID]domain.Session
-	passwords map[domain.UserID]domain.PasswordCredential
-	configs   map[domain.ConfigVersionID]domain.ConfigVersion
-	outbox    []domain.OutboxEvent
+	mu            sync.Mutex
+	users         map[domain.UserID]domain.User
+	usernames     map[string]domain.UserID
+	sessions      map[domain.SessionID]domain.Session
+	accessTokens  map[string]domain.AccessToken
+	refreshTokens map[string]domain.RefreshToken
+	passwords     map[domain.UserID]domain.PasswordCredential
+	configs       map[domain.ConfigVersionID]domain.ConfigVersion
+	outbox        []domain.OutboxEvent
 	// roles is never written by any Service command in this slice — it is
 	// a fixture the tests seed directly, standing in for the admin-
 	// controlled permission assignment this slice does not build a command
@@ -103,6 +106,8 @@ func newFakeDB() *fakeDB {
 		users:           make(map[domain.UserID]domain.User),
 		usernames:       make(map[string]domain.UserID),
 		sessions:        make(map[domain.SessionID]domain.Session),
+		accessTokens:    make(map[string]domain.AccessToken),
+		refreshTokens:   make(map[string]domain.RefreshToken),
 		passwords:       make(map[domain.UserID]domain.PasswordCredential),
 		configs:         make(map[domain.ConfigVersionID]domain.ConfigVersion),
 		roles:           make(map[domain.UserID][]domain.Role),
@@ -117,6 +122,15 @@ func newFakeDB() *fakeDB {
 	}
 }
 
+// seedSession seeds a live session **and an access token whose plaintext is the
+// session id**.
+//
+// Since ADR 0102 a caller presents an access token rather than a session id, so
+// a fixture that seeded only the session would make every test in this package
+// Unauthenticated. Minting a credential equal to the id keeps the hundred
+// existing call sites — which pass a seeded id as the caller — saying exactly
+// what they always said, while the code under test goes through the real
+// token lookup rather than a special case for tests.
 func (db *fakeDB) seedSession(id domain.SessionID, userID domain.UserID, now time.Time) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -128,6 +142,12 @@ func (db *fakeDB) seedSession(id domain.SessionID, userID domain.UserID, now tim
 		LastSeenAt:   now.Add(-time.Hour),
 		ExpiresAt:    now.Add(time.Hour),
 		AuthStrength: domain.AuthStrengthPassword,
+	}
+	db.accessTokens[sessions.HashToken(string(id))] = domain.AccessToken{
+		Hash:      sessions.HashToken(string(id)),
+		SessionID: id,
+		IssuedAt:  now.Add(-time.Hour),
+		ExpiresAt: now.Add(time.Hour),
 	}
 }
 
@@ -438,6 +458,161 @@ func (s *fakeSessionStore) Revoke(_ context.Context, id domain.SessionID) error 
 	return nil
 }
 
+// Touch records that the session was used, moving LastSeenAt — the column idle
+// expiry is measured from (ADR 0102).
+func (s *fakeSessionStore) Touch(_ context.Context, id domain.SessionID, at time.Time) (domain.Session, error) {
+	s.trace.record("sessions.touch")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	session, ok := s.db.sessions[id]
+	if !ok {
+		return domain.Session{}, contracts.NewError(contracts.NotFound, "session not found")
+	}
+	session.LastSeenAt = at
+	s.db.sessions[id] = session
+	return session, nil
+}
+
+// ListForUser is the device list (ADR 0102): live sessions only.
+func (s *fakeSessionStore) ListForUser(_ context.Context, userID domain.UserID, now time.Time) ([]domain.Session, error) {
+	s.trace.record("sessions.list_for_user")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var out []domain.Session
+	for _, session := range s.db.sessions {
+		if session.UserID != userID || session.Revoked() || session.ExpiredAt(now) {
+			continue
+		}
+		out = append(out, session)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].LastSeenAt.After(out[j].LastSeenAt) })
+	return out, nil
+}
+
+// fakeTokenStore implements contracts.TokenStore over the shared fake database.
+type fakeTokenStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func (s *fakeTokenStore) SaveAccess(_ context.Context, token domain.AccessToken) error {
+	s.trace.record("tokens.save_access")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.accessTokens[token.Hash] = token
+	return nil
+}
+
+func (s *fakeTokenStore) FindAccess(_ context.Context, hash string) (domain.AccessToken, error) {
+	s.trace.record("tokens.find_access")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	token, ok := s.db.accessTokens[hash]
+	if !ok {
+		return domain.AccessToken{}, contracts.NewError(contracts.NotFound, "access token not found")
+	}
+	return token, nil
+}
+
+func (s *fakeTokenStore) SaveRefresh(_ context.Context, token domain.RefreshToken) error {
+	s.trace.record("tokens.save_refresh")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.refreshTokens[token.Hash] = token
+	return nil
+}
+
+func (s *fakeTokenStore) FindRefresh(_ context.Context, hash string) (domain.RefreshToken, error) {
+	s.trace.record("tokens.find_refresh")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	token, ok := s.db.refreshTokens[hash]
+	if !ok {
+		return domain.RefreshToken{}, contracts.NewError(contracts.NotFound, "refresh token not found")
+	}
+	return token, nil
+}
+
+// MarkRefreshUsed spends a token under the lock, so the fake has the same
+// exactly-one-winner property the conditional UPDATE has. A fake that let two
+// callers both win would make the reuse-detection test pass by not testing it.
+func (s *fakeTokenStore) MarkRefreshUsed(_ context.Context, hash string, at time.Time) (bool, error) {
+	s.trace.record("tokens.mark_refresh_used")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	token, ok := s.db.refreshTokens[hash]
+	if !ok || token.UsedAt != nil || token.RevokedAt != nil {
+		return false, nil
+	}
+	used := at
+	token.UsedAt = &used
+	s.db.refreshTokens[hash] = token
+	return true, nil
+}
+
+func (s *fakeTokenStore) RevokeChain(_ context.Context, chainID domain.ID, at time.Time) error {
+	s.trace.record("tokens.revoke_chain")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	sessions := map[domain.SessionID]bool{}
+	for hash, token := range s.db.refreshTokens {
+		if token.ChainID != chainID {
+			continue
+		}
+		sessions[token.SessionID] = true
+		if token.RevokedAt == nil {
+			revoked := at
+			token.RevokedAt = &revoked
+			s.db.refreshTokens[hash] = token
+		}
+	}
+	for hash, token := range s.db.accessTokens {
+		if sessions[token.SessionID] {
+			delete(s.db.accessTokens, hash)
+		}
+	}
+	return nil
+}
+
+func (s *fakeTokenStore) RevokeSession(_ context.Context, id domain.SessionID, at time.Time) error {
+	s.trace.record("tokens.revoke_session")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for hash, token := range s.db.refreshTokens {
+		if token.SessionID == id && token.RevokedAt == nil {
+			revoked := at
+			token.RevokedAt = &revoked
+			s.db.refreshTokens[hash] = token
+		}
+	}
+	for hash, token := range s.db.accessTokens {
+		if token.SessionID == id {
+			delete(s.db.accessTokens, hash)
+		}
+	}
+	return nil
+}
+
+func (s *fakeTokenStore) DeleteExpired(_ context.Context, before time.Time) (int, error) {
+	s.trace.record("tokens.delete_expired")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	n := 0
+	for hash, token := range s.db.accessTokens {
+		if token.ExpiresAt.Before(before) {
+			delete(s.db.accessTokens, hash)
+			n++
+		}
+	}
+	for hash, token := range s.db.refreshTokens {
+		if token.ExpiresAt.Before(before) {
+			delete(s.db.refreshTokens, hash)
+			n++
+		}
+	}
+	return n, nil
+}
+
 // fakeCredentialStore implements contracts.CredentialStore. Only the
 // password methods this slice's commands use are exercised by tests;
 // passkey and recovery methods exist to satisfy the interface shape.
@@ -702,6 +877,9 @@ func (tx *fakeTx) Users() contracts.UserStore { return &fakeUserStore{db: tx.db,
 func (tx *fakeTx) Sessions() contracts.SessionStore {
 	return &fakeSessionStore{db: tx.db, trace: tx.trace}
 }
+func (tx *fakeTx) Tokens() contracts.TokenStore {
+	return &fakeTokenStore{db: tx.db, trace: tx.trace}
+}
 func (tx *fakeTx) Permissions() contracts.PermissionStore {
 	return fakePermissionStore{db: tx.db, trace: tx.trace}
 }
@@ -917,6 +1095,7 @@ func baseTestDeps(db *fakeDB, tr *trace, now time.Time) app.Deps {
 		UserPreferences:  &fakeUserPreferenceStore{db: db, trace: tr},
 		PlaybackStates:   &fakePlaybackStateStore{db: db, trace: tr},
 		TelemetryQueries: fakeTelemetryQueryStore{},
+		Tokens:           &fakeTokenStore{db: db, trace: tr},
 	}
 }
 

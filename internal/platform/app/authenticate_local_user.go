@@ -29,6 +29,11 @@ type AuthenticateLocalUserCommand struct {
 // session has been issued.
 type AuthenticateLocalUserResult struct {
 	Session domain.Session
+	// Tokens is the bearer pair (ADR 0102). Its plaintext exists here and
+	// nowhere else — nothing stores it, nothing logs it, and there is no way to
+	// read it back, which is what makes a database read of the token tables
+	// useless to whoever performed it.
+	Tokens domain.TokenPair
 }
 
 func validateAuthenticateLocalUserCommand(cmd AuthenticateLocalUserCommand) error {
@@ -98,8 +103,12 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
 		// 5/6. no further state to load: the new session is the direct
 		// outcome of the verified credential, so issuing it is this
-		// command's only domain rule.
-		session, err := s.sessionManager.Issue(ctx, tx.Sessions(), user.ID, cmd.DeviceID, domain.AuthStrengthPassword)
+		// command's only domain rule. The session and its first pair of tokens
+		// are written through the same Tx, because a session with no tokens is
+		// a row nobody can use and tokens with no session are a credential
+		// pointing at nothing (ADR 0102).
+		session, pair, err := s.sessionManager.Issue(
+			ctx, tx.Sessions(), tx.Tokens(), user.ID, cmd.DeviceID, domain.AuthStrengthPassword)
 		if err != nil {
 			return err
 		}
@@ -110,7 +119,7 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 			return err
 		}
 
-		result = AuthenticateLocalUserResult{Session: session}
+		result = AuthenticateLocalUserResult{Session: session, Tokens: pair}
 		return nil
 	})
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/app"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/domain"
+	"github.com/mosaic-media/platform/internal/platform/sessions"
 )
 
 var testNow = time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
@@ -84,6 +85,7 @@ func TestCreateLocalUserFollowsCommandBoundaryOrder(t *testing.T) {
 	// evaluation both happen before the UnitOfWork opens, and every write
 	// (user, credential, outbox) happens inside that same transaction.
 	assertTrace(t, tr, []string{
+		"tokens.find_access",
 		"sessions.find_by_id",
 		"permissions.roles_for_user",
 		"uow.begin",
@@ -134,6 +136,7 @@ func TestCreateLocalUserDeniedByPolicyDoesNotMutateState(t *testing.T) {
 	// The UnitOfWork must never open when authorization fails, and the
 	// denial must be audited.
 	assertTrace(t, tr, []string{
+		"tokens.find_access",
 		"sessions.find_by_id",
 		"permissions.roles_for_user",
 		"events.publish:authorization.denied",
@@ -159,7 +162,7 @@ func TestCreateLocalUserRejectsUnauthenticatedSession(t *testing.T) {
 	}
 
 	// Policy must never be consulted for a caller that failed authentication.
-	assertTrace(t, tr, []string{"sessions.find_by_id"})
+	assertTrace(t, tr, []string{"tokens.find_access"})
 }
 
 func TestCreateLocalUserRejectsRevokedSession(t *testing.T) {
@@ -173,6 +176,15 @@ func TestCreateLocalUserRejectsRevokedSession(t *testing.T) {
 		IssuedAt:  testNow.Add(-time.Hour),
 		ExpiresAt: testNow.Add(time.Hour),
 		RevokedAt: &revokedAt,
+	}
+	// A live access token pointing at it, so this exercises the refusal it is
+	// named for — a revoked *session* — rather than an unknown credential,
+	// which a different test already covers.
+	db.accessTokens[sessions.HashToken("session-revoked")] = domain.AccessToken{
+		Hash:      sessions.HashToken("session-revoked"),
+		SessionID: "session-revoked",
+		IssuedAt:  testNow.Add(-time.Hour),
+		ExpiresAt: testNow.Add(time.Hour),
 	}
 	db.mu.Unlock()
 	svc := newTestService(db, tr, testNow)
@@ -189,7 +201,7 @@ func TestCreateLocalUserRejectsRevokedSession(t *testing.T) {
 	if got := contracts.CategoryOf(err); got != contracts.Unauthenticated {
 		t.Fatalf("CategoryOf(err) = %s, want %s", got, contracts.Unauthenticated)
 	}
-	assertTrace(t, tr, []string{"sessions.find_by_id"})
+	assertTrace(t, tr, []string{"tokens.find_access", "sessions.find_by_id"})
 }
 
 func TestCreateLocalUserRejectsDuplicateUsernameAndRollsBack(t *testing.T) {
@@ -228,6 +240,7 @@ func TestCreateLocalUserRejectsDuplicateUsernameAndRollsBack(t *testing.T) {
 	}
 
 	assertTrace(t, tr, []string{
+		"tokens.find_access",
 		"sessions.find_by_id",
 		"permissions.roles_for_user",
 		"uow.begin",
@@ -389,10 +402,16 @@ func TestSessionIssuedValidatedAndRevoked(t *testing.T) {
 		t.Fatalf("AuthenticateLocalUser() error = %v", err)
 	}
 
-	// Validate: the new session can be used to authenticate a subsequent
-	// call (GetUserByID's own authenticate step).
+	// Validate: the pair issued with the session authenticates a subsequent
+	// call (GetUserByID's own authenticate step). The credential is the access
+	// token rather than the session id since ADR 0102 — the id is what a
+	// device list names and what revocation targets, and it is not a
+	// credential.
+	if auth.Tokens.AccessToken == "" || auth.Tokens.RefreshToken == "" {
+		t.Fatal("sign-in issued a session with no bearer pair")
+	}
 	queried, err := svc.GetUserByID(context.Background(), app.GetUserByIDQuery{
-		CallerSessionID: auth.Session.ID,
+		CallerSessionID: domain.SessionID(auth.Tokens.AccessToken),
 		UserID:          created.User.ID,
 	})
 	if err != nil {
@@ -457,6 +476,7 @@ func TestRevokeSessionDeniedByPolicyDoesNotMutateState(t *testing.T) {
 	}
 
 	assertTrace(t, tr, []string{
+		"tokens.find_access",
 		"sessions.find_by_id",
 		"permissions.roles_for_user",
 		"events.publish:authorization.denied",
@@ -485,7 +505,7 @@ func TestGetUserByIDReturnsUser(t *testing.T) {
 
 	// Proves the query boundary still authenticates and authorizes before
 	// reading state, even though it never opens a UnitOfWork.
-	assertTrace(t, tr, []string{"sessions.find_by_id", "permissions.roles_for_user", "users.find_by_id"})
+	assertTrace(t, tr, []string{"tokens.find_access", "sessions.find_by_id", "permissions.roles_for_user", "users.find_by_id"})
 }
 
 func TestGetUserByIDDeniesWhenPolicyRejects(t *testing.T) {
@@ -507,7 +527,7 @@ func TestGetUserByIDDeniesWhenPolicyRejects(t *testing.T) {
 	}
 
 	// The store must never be read when authorization fails.
-	assertTrace(t, tr, []string{"sessions.find_by_id", "permissions.roles_for_user", "events.publish:authorization.denied"})
+	assertTrace(t, tr, []string{"tokens.find_access", "sessions.find_by_id", "permissions.roles_for_user", "events.publish:authorization.denied"})
 }
 
 func TestGetUserByIDReturnsNotFoundForMissingUser(t *testing.T) {

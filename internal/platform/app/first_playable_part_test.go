@@ -74,6 +74,7 @@ func TestFirstPlayablePartClearsTheBoundaryOnce(t *testing.T) {
 	// per child until the walk finds something. No re-entry: the boundary
 	// appears exactly once, at the front.
 	assertTrace(t, tr, []string{
+		"tokens.find_access",
 		"sessions.find_by_id",
 		"permissions.roles_for_user",
 		"nodes.list_children",
@@ -136,6 +137,7 @@ func TestFirstPlayablePartDoesNotDisguiseADenialAsNothingToPlay(t *testing.T) {
 	// The denial stopped at the boundary: no store was touched, and the
 	// denial was audited.
 	assertTrace(t, tr, []string{
+		"tokens.find_access",
 		"sessions.find_by_id",
 		"permissions.roles_for_user",
 		"events.publish:authorization.denied",
@@ -193,6 +195,7 @@ func TestFirstPlayablePartSkipsContainerChildren(t *testing.T) {
 
 	// The container child was skipped without a parts read.
 	assertTrace(t, tr, []string{
+		"tokens.find_access",
 		"sessions.find_by_id",
 		"permissions.roles_for_user",
 		"nodes.list_children",

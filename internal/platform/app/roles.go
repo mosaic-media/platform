@@ -92,6 +92,10 @@ func superuserActions() []policy.Action {
 		// principal and an *administrator* running one by hand would be the
 		// same permission, as they should be.
 		ActionJobRead,
+		// The credential tables' own housekeeping (ADR 0102). Install-level
+		// rather than about any one person's session, which is why it is here
+		// and not in the administrator preset beside user.session.revoke.
+		ActionSessionMaintain,
 		// ActionAuditRead and ActionAuditExport join here when the audit store
 		// is built (ADR 0057) — same category, named now so the decision does
 		// not need remaking.

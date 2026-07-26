@@ -54,7 +54,8 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	hasher := crypto.NewPasswordHasher()
 
 	svc := app.NewService(app.Deps{
-		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions,
+		Tokens: cs.Tokens, Users: cs.Users, Credentials: cs.Credentials,
 		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Clock: cs.Clock,
 		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
 		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: hasher,
@@ -112,6 +113,16 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	if sessionID == "" {
 		t.Fatal("sign-in returned no session id")
 	}
+	// The credential is the access token, not the session id (ADR 0102): the
+	// id is what a device list names and what revocation targets, and it is
+	// not something a caller presents.
+	accessToken := signIn.Msg.GetTokens().GetAccessToken()
+	if accessToken == "" {
+		t.Fatal("sign-in returned no bearer pair")
+	}
+	if accessToken == sessionID {
+		t.Fatal("the access token is the session id — the pair is not a pair")
+	}
 	if signIn.Msg.GetSession().GetUserId() != string(admin.ID) {
 		t.Fatalf("session.user_id = %q, want %q", signIn.Msg.GetSession().GetUserId(), admin.ID)
 	}
@@ -131,7 +142,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	// reached through the session's Invoke actions or, as here, by the composed
 	// service directly.
 	const title = "Fullmetal Alchemist: Brotherhood"
-	caller := v1.CallerFromSession(sessionID)
+	caller := v1.CallerFromSession(accessToken)
 	work, err := svc.AddContentWork(c, v1.AddContentWorkCommand{
 		Caller: caller, MediaType: v1.MediaAnimeSeries, Title: title,
 		ExternalIDs: []byte(`{"anilist":"5114"}`),
@@ -145,7 +156,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	// the stream performs on connect is the screen under test rather than home.
 	sessionClient := sessionv1connect.NewSessionServiceClient(server.Client(), server.URL)
 	if _, err := sessionClient.Attach(c, connect.NewRequest(&sessionv1.AttachRequest{
-		Session: sessionID, Screen: "detail", Params: []byte(`{"nodeId":"` + workID + `"}`),
+		Session: accessToken, Screen: "detail", Params: []byte(`{"nodeId":"` + workID + `"}`),
 	})); err != nil {
 		t.Fatalf("Attach: %v", err)
 	}
@@ -153,7 +164,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	streamCtx, cancel := context.WithTimeout(c, 30*time.Second)
 	defer cancel()
 	stream, err := sessionClient.Subscribe(streamCtx, connect.NewRequest(&sessionv1.SubscribeRequest{
-		Session: sessionID,
+		Session: accessToken,
 	}))
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)

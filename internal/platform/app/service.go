@@ -33,6 +33,7 @@ type Service struct {
 	moduleSettings   contracts.ModuleSettingsStore
 	userPreferences  contracts.UserPreferenceStore
 	telemetryQueries contracts.TelemetryQueryStore
+	tokens           contracts.TokenStore
 	nodes            contracts.NodeStore
 	parts            contracts.PartStore
 	resolutions      contracts.PlaybackResolutionStore
@@ -114,6 +115,11 @@ type Deps struct {
 	// surface (ADR 0058). Read-only and outside any transaction, like the
 	// write side and for the mirror-image reason.
 	TelemetryQueries contracts.TelemetryQueryStore
+	// Tokens is the direct read handle for a session's bearer pair (ADR 0102):
+	// validating an access token happens on every call and must not open a
+	// transaction. Writes go through the UnitOfWork, where a pair and the
+	// session it belongs to commit together.
+	Tokens contracts.TokenStore
 	// TelemetryMaintenance creates the partitions telemetry is written into
 	// and drops the ones retention has run out on. It is what PurgeTelemetry
 	// drives, and PurgeTelemetry is what the retention job calls.
@@ -137,6 +143,7 @@ func NewService(d Deps) *Service {
 		moduleSettings:   d.ModuleSettings,
 		userPreferences:  d.UserPreferences,
 		telemetryQueries: d.TelemetryQueries,
+		tokens:           d.Tokens,
 		nodes:            d.Nodes,
 		parts:            d.Parts,
 		resolutions:      d.PlaybackResolutions,
@@ -158,12 +165,16 @@ func NewService(d Deps) *Service {
 	}
 }
 
-// authenticate resolves the caller identity behind sessionID. It is step 2
+// authenticate resolves the caller identity behind a credential. It is step 2
 // of the command boundary and the equivalent gate for
 // queries: it runs before any policy or state check, and failure stops
 // processing immediately.
-func (s *Service) authenticate(ctx context.Context, sessionID domain.SessionID) (domain.UserID, error) {
-	session, err := s.sessionManager.Validate(ctx, s.sessionStore, sessionID)
+//
+// The credential is an **access token** since ADR 0102, not a session id: it
+// resolves to a session, is minutes-lived where the session is months-lived,
+// and rotates where the session does not.
+func (s *Service) authenticate(ctx context.Context, credential domain.SessionCredential) (domain.UserID, error) {
+	session, err := s.sessionManager.Validate(ctx, s.sessionStore, s.tokens, credential)
 	if err != nil {
 		return "", err
 	}
@@ -286,6 +297,12 @@ func (s *Service) enter(ctx context.Context, caller v1.Caller, action policy.Act
 // enterSession is enter for the handlers that take a raw domain.SessionID
 // rather than the published v1.Caller — the users, roles, sessions and config
 // families, which predate the content surface and were never part of it.
+//
+// **Those handlers' CallerSessionID fields carry an access token, not a session
+// id** (ADR 0102). The field name and its type are unchanged because renaming
+// fifteen fields and the hundred call sites that construct them is churn this
+// change does not need — but the mismatch is named here, at the one place the
+// conversion happens, rather than left for a reader to discover.
 //
 // Two forms rather than one because the two families genuinely differ at the
 // signature: a v1.Caller is the opaque reference a module or client holds

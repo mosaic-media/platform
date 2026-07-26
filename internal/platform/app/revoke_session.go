@@ -17,6 +17,12 @@ const ActionSessionRevoke policy.Action = "user.session.revoke"
 
 // RevokeSessionCommand revokes a session server-side: remote sign-out revokes
 // server-side session records rather than relying on clients deleting tokens.
+//
+// CallerSessionID carries the caller's **access token** since ADR 0102, not a
+// session id; TargetSessionID is a real session id, which is what a device list
+// names and is not itself a credential. The field names predate the pair and
+// are left alone rather than renamed across a hundred call sites — see the note
+// on Service.enterSession.
 type RevokeSessionCommand struct {
 	CallerSessionID domain.SessionID
 	TargetSessionID domain.SessionID
@@ -59,8 +65,12 @@ func (s *Service) RevokeSession(ctx context.Context, cmd RevokeSessionCommand) (
 			return err
 		}
 
-		// 6. apply domain rules: revoke the target session.
-		if err := s.sessionManager.Revoke(ctx, tx.Sessions(), cmd.TargetSessionID); err != nil {
+		// 6. apply domain rules: revoke the target session and every
+		// credential behind it. Signing out has a meaning it did not have
+		// before ADR 0102 — the refresh chain ends, rather than a client merely
+		// dropping the value it was holding — and it takes effect at once
+		// rather than when an access token happens to expire.
+		if err := s.sessionManager.Revoke(ctx, tx.Sessions(), tx.Tokens(), cmd.TargetSessionID); err != nil {
 			return err
 		}
 

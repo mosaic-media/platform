@@ -71,7 +71,8 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 	// The admin signs in with its real password (verified by Argon2id) and
 	// then uses the authority it was granted, all through the services.
 	svc := app.NewService(app.Deps{
-		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions,
+		Tokens: cs.Tokens, Users: cs.Users, Credentials: cs.Credentials,
 		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Clock: cs.Clock,
 		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
 		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: hasher,
@@ -89,7 +90,7 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 	// It holds role.create, so this succeeds; a caller without it would be
 	// denied.
 	if _, err := svc.CreateRole(c, app.CreateRoleCommand{
-		CallerSessionID: auth.Session.ID, Name: "Editor",
+		CallerSessionID: domain.SessionID(auth.Tokens.AccessToken), Name: "Editor",
 		Permissions: []string{string(app.ActionContentRead)},
 	}); err != nil {
 		t.Fatalf("admin could not exercise its granted authority: %v", err)

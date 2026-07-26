@@ -62,7 +62,8 @@ func TestPlaybackResolutionAgainstPostgres(t *testing.T) {
 	}
 
 	svc := app.NewService(app.Deps{
-		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions,
+		Tokens: cs.Tokens, Users: cs.Users, Credentials: cs.Credentials,
 		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Parts: cs.Parts, Clock: cs.Clock,
 		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
 		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},
@@ -145,7 +146,8 @@ func TestPlaybackResolutionWithNoConsumerInstalled(t *testing.T) {
 	registry.Register(&fakeImportModule{id: "stremio"})
 
 	svc := app.NewService(app.Deps{
-		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions,
+		Tokens: cs.Tokens, Users: cs.Users, Credentials: cs.Credentials,
 		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Parts: cs.Parts, Clock: cs.Clock,
 		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
 		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},
@@ -203,6 +205,7 @@ func seedPlaybackUser(t *testing.T, c context.Context, cs *postgres.ContractSet,
 	if err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
+	session = seedCredential(t, c, cs, session)
 	actions := []domain.Permission{
 		domain.Permission(app.ActionContentImport),
 		domain.Permission(app.ActionContentCreate),
@@ -244,7 +247,7 @@ func TestPlaybackResolutionCacheAgainstPostgres(t *testing.T) {
 
 	deps := func(reg *app.CapabilityRegistry) app.Deps {
 		return app.Deps{
-			UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+			UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Tokens: cs.Tokens, Users: cs.Users, Credentials: cs.Credentials,
 			Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Parts: cs.Parts, Clock: cs.Clock,
 			IDs: cs.IDs, ContentIDs: cs.ContentIDs,
 			Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},
@@ -347,7 +350,8 @@ func TestPartProbeIsDurableAgainstPostgres(t *testing.T) {
 	registry.Register(remoteplayback.New())
 
 	svc := app.NewService(app.Deps{
-		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions,
+		Tokens: cs.Tokens, Users: cs.Users, Credentials: cs.Credentials,
 		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Parts: cs.Parts, Clock: cs.Clock,
 		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
 		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},
@@ -488,7 +492,8 @@ func TestPlaybackStateAgainstPostgres(t *testing.T) {
 	cs := mod.Bind(pool)
 
 	svc := app.NewService(app.Deps{
-		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions, Users: cs.Users, Credentials: cs.Credentials,
+		UnitOfWork: cs.UnitOfWork, Sessions: cs.Sessions,
+		Tokens: cs.Tokens, Users: cs.Users, Credentials: cs.Credentials,
 		Config: cs.Config, Permissions: cs.Permissions, Nodes: cs.Nodes, Parts: cs.Parts, Clock: cs.Clock,
 		IDs: cs.IDs, ContentIDs: cs.ContentIDs,
 		Policy: policy.NewEngine(cs.Permissions), Events: noopPublisher{}, PasswordVerifier: reversibleVerifier{},

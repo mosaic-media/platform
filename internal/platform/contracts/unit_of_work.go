@@ -32,6 +32,12 @@ type Tx interface {
 	Outbox() EventOutbox
 	Credentials() CredentialStore
 
+	// Tokens is the session's bearer pair (ADR 0102). It joins the set because
+	// issuing a pair and creating the session it belongs to have to commit
+	// together: a session with no tokens is a row nobody can use, and tokens
+	// with no session are a credential pointing at nothing.
+	Tokens() TokenStore
+
 	// The content model (ADR 0013) — the first stores added to this set
 	// since it was closed.
 	Nodes() NodeStore

@@ -86,7 +86,26 @@ var boundaryExempt = map[string]string{
 	// own — the affordance it feeds is separately gated on telemetry.read, and
 	// a test asserts a stored preference cannot surface it without the grant.
 	"ExpertModeEnabled": "display preference; authenticates but does not authorize, returns a bool, and reveals nothing the permission has not already allowed",
+	// SessionForCaller answers "which session is this credential" (ADR 0102).
+	// It authenticates — an unknown credential is Unauthenticated, like
+	// everywhere else — and deliberately does not authorize, because there is
+	// no action to gate: it is a fact about the credential already presented
+	// rather than a new thing to be permitted. It reveals nothing a caller
+	// holding that credential could not already reach.
+	"SessionForCaller": "resolves a credential to its own session; authenticates, has no action to authorize, and discloses nothing the credential does not already grant",
 }
+
+// RefreshSession is not in either list, and cannot be: it carries no caller at
+// all, so the reflection pass never sees it (ADR 0102).
+//
+// That is the honest shape rather than an omission. Step 2 of its boundary is
+// the refresh token itself, exactly as the password credential plays that role
+// in AuthenticateLocalUser — there is no caller session to look up, because the
+// whole point of the call is that the caller's access token has expired. And
+// there is deliberately no step 3: refreshing is not a new authority, it is the
+// continuation of one already granted, so a policy action gating it would be an
+// action nobody could hold before they had refreshed. Its own tests cover what
+// it must refuse.
 
 func boundaryCases() []boundaryCase {
 	return []boundaryCase{
@@ -319,6 +338,14 @@ func boundaryCases() []boundaryCase {
 		}},
 		{"GetJob", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetJob(ctx, app.GetJobQuery{Caller: caller(sid), JobID: "job-1"}))
+		}},
+
+		// --- the session's own devices (ADR 0102) ---
+		{"ListSessions", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListSessions(ctx, app.ListSessionsQuery{Caller: caller(sid)}))
+		}},
+		{"PurgeSessionTokens", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.PurgeSessionTokens(ctx, app.PurgeSessionTokensCommand{Caller: caller(sid)}))
 		}},
 
 		// --- users, roles, sessions ---

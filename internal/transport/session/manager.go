@@ -52,13 +52,24 @@ type route struct {
 	params map[string]any
 }
 
-// liveSession is one client session, keyed by its opaque session ref (ADR 0017).
-// It owns the outbound mailbox (history + seq), the current route and the
-// input-coalescing state. Its zero value is not usable; build it with
+// liveSession is one client session, keyed by its **session id** (ADR 0017,
+// ADR 0102). It owns the outbound mailbox (history + seq), the current route and
+// the input-coalescing state. Its zero value is not usable; build it with
 // newLiveSession.
+//
+// It used to be keyed by the value the client presents, which was the session
+// id until the credential became a bearer pair. An access token rotates every
+// few minutes, so keying by it would orphan this whole structure on every
+// refresh — cursor, route and mailbox — and the client would see a reconnect it
+// did not ask for each time its credential turned over.
 type liveSession struct {
-	ref    string
-	caller v1.Caller
+	ref string
+
+	// callerMu guards the credential the *current* caller presented. It changes
+	// whenever the client refreshes, which is routine, so it is read under a
+	// lock rather than fixed at construction.
+	callerMu sync.Mutex
+	caller   v1.Caller
 
 	// routeMu guards current. Concurrent unary handlers write it (navigate,
 	// attach) and the input-debounce timer reads it (to return to the open
@@ -108,9 +119,24 @@ type liveSession struct {
 }
 
 func newLiveSession(ref string, now time.Time) *liveSession {
-	s := &liveSession{ref: ref, caller: v1.CallerFromSession(ref), lastSeen: now}
+	s := &liveSession{ref: ref, lastSeen: now}
 	s.cond = sync.NewCond(&s.mu)
 	return s
+}
+
+// setCaller records the credential this connection is currently presenting, so
+// everything the Platform renders for it authorises as the caller that asked.
+func (s *liveSession) setCaller(caller v1.Caller) {
+	s.callerMu.Lock()
+	defer s.callerMu.Unlock()
+	s.caller = caller
+}
+
+// currentCaller is the credential to forward into the application services.
+func (s *liveSession) currentCaller() v1.Caller {
+	s.callerMu.Lock()
+	defer s.callerMu.Unlock()
+	return s.caller
 }
 
 // enqueue assigns the next seq to msg, appends it to the outbound history and
