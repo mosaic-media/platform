@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -109,14 +110,18 @@ func (s *Service) historyCard(ctx context.Context, caller v1.Caller, item app.Wa
 		return nil
 	}
 
-	els := make([]ui.El, 0, 6)
+	els := make([]ui.El, 0, 5)
 	if p := work.Node.Artwork.Poster; p != "" {
 		els = append(els, ui.Poster(s.art(p)))
 	}
-	// Name the episode under the series title. A film's item adds nothing the
-	// title has not already said.
-	if item.Node.ItemType == v1.ItemEpisode && item.Node.Title != "" {
-		els = append(els, ui.Subtitle(item.Node.Title))
+	// **Only props a PosterCard reads.** It binds title, subtitle, poster,
+	// badge, progress, mediaType, origin and action — and neither `meta` nor
+	// `progressLabel`, both of which this card set on its first attempt and
+	// neither of which drew anything. A props bag accepts whatever it is given,
+	// so the card looked right in a test that asserted the props and was missing
+	// half its information in a browser.
+	if sub := historySubtitle(item, s.now()); sub != "" {
+		els = append(els, ui.Subtitle(sub))
 	}
 	if item.State.Finished {
 		// A finished item shows a mark rather than a full progress bar. A bar at
@@ -125,17 +130,28 @@ func (s *Service) historyCard(ctx context.Context, caller v1.Caller, item app.Wa
 		els = append(els, ui.BadgeText("Watched"))
 	} else if f := progressFraction(item.State); f > 0 {
 		els = append(els, ui.Progress(f))
-		if left := remainingLabel(item.State); left != "" {
-			els = append(els, ui.ProgressLabel(left))
-		}
-	}
-	if when := watchedWhen(item.State.UpdatedAt, s.now()); when != "" {
-		els = append(els, ui.Meta(when))
 	}
 	els = append(els, ui.OnTap(ui.Navigate(screenDetail, map[string]any{
 		paramNodeID: string(work.Node.ID),
 	})))
 	return ui.PosterCard(work.Node.Title, string(work.Node.MediaType), els...)
+}
+
+// historySubtitle is the one line under a history card: which episode it was,
+// when it was watched, or both.
+//
+// One line because the card has one place to put it. The episode comes first
+// because it identifies the thing, and the time qualifies it — and a film,
+// which has no episode to name, simply gets the time.
+func historySubtitle(item app.WatchedItem, now time.Time) string {
+	parts := make([]string, 0, 2)
+	if item.Node.ItemType == v1.ItemEpisode && item.Node.Title != "" {
+		parts = append(parts, item.Node.Title)
+	}
+	if when := watchedWhen(item.State.UpdatedAt, now); when != "" {
+		parts = append(parts, when)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // watchedWhen says when, in the coarsest unit that is still true.
