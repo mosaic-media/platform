@@ -123,7 +123,9 @@ func resolve(client *http.Client, manifest, kind, imdb string) (string, error) {
 		Streams []struct {
 			Name          string `json:"name"`
 			Title         string `json:"title"`
+			Description   string `json:"description"`
 			URL           string `json:"url"`
+			ExternalURL   string `json:"externalUrl"`
 			InfoHash      string `json:"infoHash"`
 			BehaviorHints struct {
 				Filename string `json:"filename"`
@@ -137,7 +139,29 @@ func resolve(client *http.Client, manifest, kind, imdb string) (string, error) {
 		return "", fmt.Errorf("the instance returned no streams for %s — try another id, or check the profile has sources enabled", imdb)
 	}
 
+	// Reachable-but-unconfigured is its own state and must not be reported as
+	// "no debrid". An unconfigured instance answers 200 with a placeholder
+	// carrying an externalUrl to its own configuration page and neither a url
+	// nor an infoHash — which looks identical to broken from the outside while
+	// being one settings screen from working, and conflating the two is the
+	// mistake module-aiostreams' own notes single out.
+	placeholders := 0
 	magnets := 0
+	for _, s := range body.Streams {
+		if s.URL == "" && s.InfoHash == "" && s.ExternalURL != "" {
+			placeholders++
+		}
+	}
+	if placeholders == len(body.Streams) {
+		note := firstLine(body.Streams[0].Description)
+		if note == "" {
+			note = firstLine(body.Streams[0].Title)
+		}
+		return "", fmt.Errorf("the instance is reachable but UNCONFIGURED — it answered with a placeholder (%q) and no playable result.\n"+
+			"That is not the same as having no debrid service: this instance has no profile at all, so it resolves nothing for anyone.\n"+
+			"Point %s at an instance whose URL carries your own profile", note, manifestEnv)
+	}
+
 	for _, s := range body.Streams {
 		if s.URL == "" {
 			magnets++
