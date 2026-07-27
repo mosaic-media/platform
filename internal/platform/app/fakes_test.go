@@ -1018,9 +1018,15 @@ func (s *fakeWatchAvailabilityStore) ListStale(_ context.Context, limit int) ([]
 	}
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
-	out := make([]contracts.WatchAvailability, 0, len(s.db.watchAvail))
-	for _, a := range s.db.watchAvail {
-		out = append(out, a)
+	// Walks the stored metadata, not this table, so a work that has never been
+	// asked about sorts first — the backfill the real store's NULLS FIRST does.
+	out := make([]contracts.WatchAvailability, 0, len(s.db.nodeMetadata))
+	for nodeID := range s.db.nodeMetadata {
+		if a, ok := s.db.watchAvail[nodeID]; ok {
+			out = append(out, a)
+			continue
+		}
+		out = append(out, contracts.WatchAvailability{NodeID: nodeID})
 	}
 	// Oldest first, id breaking the tie — the real store's total order, so a
 	// test asserting the rotation asserts the same thing against both.

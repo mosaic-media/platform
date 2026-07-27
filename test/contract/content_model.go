@@ -1871,22 +1871,37 @@ func RunWatchAvailabilityContract(t *testing.T, newDeps Factory) {
 		}
 	})
 
-	// The refresh works oldest-first, which is what makes a bounded run reach
-	// every title eventually instead of the same ones every time.
-	t.Run("stale rows come back oldest first", func(t *testing.T) {
+	// The refresh works never-asked first, then oldest-first. The first half is
+	// what makes it a **backfill**: every library that predates this store has no
+	// rows at all, and a pass that only revisited what it had already written
+	// would keep such a library permanently outside the feature.
+	t.Run("stale works come back never-asked first, then oldest", func(t *testing.T) {
 		d := newDeps(t)
-		if d.WatchAvailability == nil {
+		if d.WatchAvailability == nil || d.NodeMetadata == nil {
 			t.Skip("no WatchAvailabilityStore in this implementation")
 		}
 		c := ctx(t)
 
-		for i, age := range []time.Duration{time.Hour, 72 * time.Hour, 24 * time.Hour} {
-			work := newWork(nodeID(i+1), v1.MediaMovie, "Film "+strconv.Itoa(i), now)
+		// Every work has a stored metadata document — that is what puts it in the
+		// rotation, because it is what the refresh re-asks with. Only two have
+		// been asked about.
+		for i := 1; i <= 3; i++ {
+			work := newWork(nodeID(i), v1.MediaMovie, "Film "+strconv.Itoa(i), now)
 			if _, err := d.Nodes.Create(c, work); err != nil {
 				t.Fatalf("Create: %v", err)
 			}
+			if _, err := d.NodeMetadata.Upsert(c, contracts.NodeMetadata{
+				NodeID: work.ID, Document: []byte(`{}`), Source: "tmdb", FetchedAt: now,
+			}); err != nil {
+				t.Fatalf("Upsert metadata: %v", err)
+			}
+		}
+		for id, age := range map[v1.NodeID]time.Duration{
+			nodeID(1): time.Hour,
+			nodeID(2): 72 * time.Hour,
+		} {
 			if _, err := d.WatchAvailability.Upsert(c, contracts.WatchAvailability{
-				NodeID: work.ID, Region: "GB", CheckedAt: now.Add(-age),
+				NodeID: id, Region: "GB", CheckedAt: now.Add(-age),
 			}); err != nil {
 				t.Fatalf("Upsert: %v", err)
 			}
@@ -1899,8 +1914,32 @@ func RunWatchAvailabilityContract(t *testing.T, newDeps Factory) {
 		if len(stale) != 2 {
 			t.Fatalf("stale = %v, want the budget of 2", stale)
 		}
-		if stale[0] != nodeID(2) || stale[1] != nodeID(3) {
-			t.Fatalf("stale = %v, want the 72h then the 24h row", stale)
+		if stale[0] != nodeID(3) {
+			t.Fatalf("stale[0] = %v, want the never-asked work first", stale[0])
+		}
+		if stale[1] != nodeID(2) {
+			t.Fatalf("stale[1] = %v, want the 72h row before the 1h one", stale[1])
+		}
+	})
+
+	// A work with no stored metadata is not in the rotation at all, because
+	// there is no ref to re-ask with. It enters when it is first enriched.
+	t.Run("a work that was never enriched is not re-asked about", func(t *testing.T) {
+		d := newDeps(t)
+		if d.WatchAvailability == nil || d.NodeMetadata == nil {
+			t.Skip("no WatchAvailabilityStore in this implementation")
+		}
+		c := ctx(t)
+
+		if _, err := d.Nodes.Create(c, newWork(nodeID(1), v1.MediaMovie, "Solaris", now)); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		stale, err := d.WatchAvailability.ListStale(c, 10)
+		if err != nil {
+			t.Fatalf("ListStale: %v", err)
+		}
+		if len(stale) != 0 {
+			t.Fatalf("stale = %v, want none — nothing has ever described that work", stale)
 		}
 	})
 }

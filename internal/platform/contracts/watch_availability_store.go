@@ -49,13 +49,18 @@ type WatchAvailabilityStore interface {
 	// and merging two would produce availability nobody reported.
 	Upsert(ctx context.Context, availability WatchAvailability) (WatchAvailability, error)
 
-	// ListStale returns the node ids whose availability is oldest first, up to
-	// limit — what the refresh works through.
+	// ListStale returns the works most in need of a re-ask, up to limit.
 	//
-	// **A node with no row at all is not returned**, and that is deliberate
-	// rather than an omission: this is a projection of a metadata answer, so a
-	// work that has never been enriched has nothing to project and nothing to
-	// re-ask about. What brings a work in is its first enrichment; what keeps it
-	// current is this.
+	// **A work with no availability row yet comes first**, and that is what makes
+	// the refresh a backfill on its first runs rather than only a maintenance
+	// pass. Every library that predates this store is in exactly that state — the
+	// facet is empty until something asks — so a pass that only revisited rows it
+	// had already written would keep an existing library permanently outside the
+	// feature.
+	//
+	// What it walks is the **stored metadata**, not the whole library: this is a
+	// projection of a metadata answer, and a work that has never been enriched
+	// has no ref to re-ask with (see the refresh's storedRefFor). A work enters
+	// the rotation when it is first enriched and stays in it from then on.
 	ListStale(ctx context.Context, limit int) ([]v1.NodeID, error)
 }

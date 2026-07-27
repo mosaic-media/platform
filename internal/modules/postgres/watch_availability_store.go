@@ -57,12 +57,19 @@ func (s *watchAvailabilityStore) ListStale(ctx context.Context, limit int) ([]v1
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
 	}
 	rows, err := s.q.Query(ctx,
+		// A LEFT JOIN from the stored metadata rather than a scan of this table,
+		// so a work that has never been asked about sorts first — NULLS FIRST is
+		// the backfill, and it is what lets a library that predates this store
+		// enter the feature at all.
+		//
 		// node_id breaks the tie, so the order is total. Without it a run and
 		// the run after it could take the same rows and never reach the rest —
 		// a refresh that starves half the library while reporting a full budget
 		// every time.
-		`SELECT node_id FROM node_watch_availability
-		 ORDER BY checked_at, node_id
+		`SELECT m.node_id
+		 FROM node_metadata m
+		 LEFT JOIN node_watch_availability w ON w.node_id = m.node_id
+		 ORDER BY w.checked_at NULLS FIRST, m.node_id
 		 LIMIT $1`, limit)
 	if err != nil {
 		return nil, mapError("list stale watch availability", err)

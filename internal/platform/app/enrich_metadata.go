@@ -89,8 +89,41 @@ func (s *Service) enrichMetadataErr(ctx context.Context, caller v1.Caller, ref v
 
 	s.storeMetadata(ctx, ref.Provider, workID, meta)
 	s.storeAvailability(ctx, workID, meta.Watch)
+	s.storeGenres(ctx, workID, meta.Genres)
 	s.topUpTree(ctx, caller, workID, meta.Episodes)
 	return nil
+}
+
+// storeGenres keeps the work's stored genres in step with what its source now
+// says (roadmap M2.4).
+//
+// **Without this the facet is empty on every library that predates it**, and
+// silently so. A module writes genres on `AddContentWork`, and every module
+// dedups before writing — so a title already in the library is never re-added
+// and never gains them. That is the same shape as the stale-artwork follow-up
+// ADR 0071 recorded as owed, arriving for a field where the consequence is
+// worse: a poster that never refreshes is visibly the old poster, and a genre
+// that never arrives is a chip nobody is offered.
+//
+// It replaces rather than merges, because the genres are one source's whole
+// answer about one title and the same source that imported it — a union would
+// accumulate every name a provider ever used and never drop one it retired.
+//
+// It writes only when the value actually differs, so an ordinary refresh of an
+// unchanged title costs a read and no write.
+func (s *Service) storeGenres(ctx context.Context, workID v1.NodeID, genres []string) {
+	node, err := s.nodes.FindByID(ctx, workID)
+	if err != nil {
+		return
+	}
+	if slices.Equal(node.Genres, genres) {
+		return
+	}
+	node.Genres = genres
+	if _, err := s.nodes.Update(ctx, node); err != nil {
+		telemetry.From(ctx).Warn("metadata enrichment could not store genres",
+			telemetry.String("node_id", string(workID)), telemetry.Err(err))
+	}
 }
 
 // storeAvailability writes the queryable projection of where a work can be

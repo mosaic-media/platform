@@ -655,3 +655,39 @@ func TestAFailedRefreshIsNotACheck(t *testing.T) {
 		t.Fatal("a failed refresh discarded the last good answer")
 	}
 }
+
+// A title already in the library gains its genres, which is the difference
+// between a facet that works on a fresh install and one that works at all.
+//
+// **Every module dedups before writing**, so a title the library already holds
+// is never re-added and never reaches `AddContentWork` again — the path that
+// carries genres. Without the enrichment pass backfilling them, every library
+// that predates the column stays permanently outside the feature, and silently:
+// an empty facet row is indistinguishable from a library nobody has tagged.
+func TestAnExistingWorkGainsItsGenres(t *testing.T) {
+	ctx := context.Background()
+	mod := &seriesModule{id: "tmdb", buildSeasons: 1, buildPerSeason: 1, episodes: episodesFor(1, 1)}
+	svc := newSeriesService(t, mod)
+	caller := v1.Caller{Session: "s-1"}
+
+	if _, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: seriesRef("tmdb")}); err != nil {
+		t.Fatalf("ImportContent: %v", err)
+	}
+
+	// The module writes no genres of its own here — seriesModule's Import does
+	// not set them — so this stands in for a work materialised before the column
+	// existed. The enrichment pass is what fills it, from the same provider
+	// answer it stores the document from.
+	library, err := svc.ListLibrary(ctx, app.ListLibraryQuery{
+		Caller: caller, Genres: []string{"Drama"}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListLibrary: %v", err)
+	}
+	if library.Total != 1 {
+		t.Fatalf("narrowing to Drama found %d works, want the enriched one", library.Total)
+	}
+	if len(library.Facets.Genres) != 1 || library.Facets.Genres[0].Value != "Drama" {
+		t.Fatalf("genre facets = %+v, want the one the provider named", library.Facets.Genres)
+	}
+}
