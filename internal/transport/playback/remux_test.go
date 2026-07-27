@@ -248,13 +248,6 @@ func seekablePlan() Plan {
 	return Plan{Duration: 2 * time.Hour, Reason: "audio codec eac3 is not decodable by this client"}
 }
 
-// The seekable component's tests call it directly, because the Handler does not
-// dispatch to it: restarting ffmpeg per range produced a stream the browser
-// could not decode, and the path is unwired until it is served from a single
-// file (see serveRemuxed). They are kept and kept passing because the mapping,
-// the flags and the range arithmetic are all reused by that design — what was
-// wrong was where the bytes came from, not how the offset was computed.
-
 // TestSeekableRemuxAdvertisesALength is what a media element checks before it
 // will let anyone drag the scrubber. Without a length and an Accept-Ranges it
 // treats the source as an unbounded stream and disables seeking entirely, which
@@ -271,8 +264,8 @@ func TestSeekableRemuxAdvertisesALength(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	serveSeekableRemux(rec, httptest.NewRequest(http.MethodHead, "/playback/"+raw, nil),
-		NewRemuxerAt(recordingFFmpeg(t, "frag", args)), ticket{URL: "https://cdn.example/movie.mkv", Plan: seekablePlan()}, seekablePlan())
+	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", args))).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/playback/"+raw, nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -312,8 +305,7 @@ func TestSeekableRemuxRestartsFFmpegAtTheMappedTime(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
 	req.Header.Set("Range", "bytes="+strconv.FormatInt(half, 10)+"-")
 	rec := httptest.NewRecorder()
-	serveSeekableRemux(rec, req, NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile)),
-		ticket{URL: "https://cdn.example/movie.mkv", Plan: plan}, plan)
+	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile))).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusPartialContent {
 		t.Fatalf("status = %d, want 206 — a seek that answers 200 is a seek the player ignores", rec.Code)
@@ -353,9 +345,8 @@ func TestUnseekedRemuxCarriesNoSeekFlags(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	serveSeekableRemux(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil),
-		NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile)),
-		ticket{URL: "https://cdn.example/movie.mkv", Plan: seekablePlan()}, seekablePlan())
+	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile))).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 for an unranged request", rec.Code)
@@ -382,8 +373,7 @@ func TestSeekPastTheEndIsRefused(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
 	req.Header.Set("Range", "bytes="+strconv.FormatInt(plan.contentLength()+1, 10)+"-")
 	rec := httptest.NewRecorder()
-	serveSeekableRemux(rec, req, NewRemuxerAt(fakeFFmpeg(t, "frag")),
-		ticket{URL: "https://cdn.example/movie.mkv", Plan: plan}, plan)
+	Handler(s, http.DefaultClient, NewRemuxerAt(fakeFFmpeg(t, "frag"))).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusRequestedRangeNotSatisfiable {
 		t.Errorf("status = %d, want 416", rec.Code)
@@ -419,5 +409,114 @@ func TestOffsetMappingIsProportionalAndClamped(t *testing.T) {
 	// the pipe rather than to a synthesised timeline.
 	if (Plan{}).seekable() {
 		t.Error("a plan with no duration reported itself seekable")
+	}
+}
+
+// TestOverlappingRangesComeFromOneTranscode is the test the live failure earned.
+//
+// The design this replaces answered each range with its own ffmpeg started at
+// the mapped timestamp. Every response was correct in isolation and six unit
+// tests passed, but a media element issues *overlapping* ranges, so the browser
+// concatenated bytes from two transcodes at different timestamps into what it
+// believed was one file — disjoint buffered slivers and MEDIA_ERR_DECODE. Only a
+// real decoder could show it, which is why this asserts the property directly:
+// count the processes, and compare the bytes.
+func TestOverlappingRangesComeFromOneTranscode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake is a shell script")
+	}
+	dir := t.TempDir()
+	countFile := filepath.Join(dir, "starts")
+	bin := filepath.Join(dir, "ffmpeg")
+	// Appends a line per launch and emits a recognisable, position-dependent
+	// stream, so a second transcode is visible both in the count and the bytes.
+	script := "#!/bin/sh\necho start >> " + strconv.Quote(countFile) +
+		"\nprintf 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatalf("writing the fake ffmpeg: %v", err)
+	}
+
+	plan := seekablePlan()
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", plan)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	h := Handler(s, http.DefaultClient, NewRemuxerAt(bin))
+
+	// Three overlapping reads, the shape a media element actually produces.
+	get := func(rangeHeader string) string {
+		req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
+		if rangeHeader != "" {
+			req.Header.Set("Range", rangeHeader)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Body.String()
+	}
+	whole := get("")
+	fromFour := get("bytes=4-")
+	alsoFromFour := get("bytes=4-")
+
+	starts, err := os.ReadFile(countFile)
+	if err != nil {
+		t.Fatalf("ffmpeg never started: %v", err)
+	}
+	if n := strings.Count(string(starts), "start"); n != 1 {
+		t.Errorf("ffmpeg started %d times for overlapping ranges of one playback; want 1 — this is the defect exactly", n)
+	}
+
+	// The same offset must yield the same bytes. Two transcodes would not
+	// guarantee that even when both are individually valid.
+	if fromFour != alsoFromFour {
+		t.Errorf("two reads of the same range disagree:\n %q\n %q", fromFour, alsoFromFour)
+	}
+	// And a ranged read must be the tail of the unranged one, which is what
+	// "one coherent byte stream" means.
+	if !strings.HasSuffix(whole, fromFour) {
+		t.Errorf("the range at 4 is not a tail of the whole stream:\n whole %q\n at4   %q", whole, fromFour)
+	}
+}
+
+// A genuine seek — far past what the transcode has produced — does restart, and
+// must, or the viewer waits for the encoder to reach the hour mark in real time.
+// That restart is affordable only because the upstream honours Range.
+func TestASeekBeyondTheFrontierRestarts(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake is a shell script")
+	}
+	dir := t.TempDir()
+	countFile := filepath.Join(dir, "starts")
+	bin := filepath.Join(dir, "ffmpeg")
+	script := "#!/bin/sh\necho start >> " + strconv.Quote(countFile) + "\nprintf 'frag'\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatalf("writing the fake ffmpeg: %v", err)
+	}
+
+	plan := seekablePlan()
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", plan)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	h := Handler(s, http.DefaultClient, NewRemuxerAt(bin))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
+	req.Header.Set("Range", "bytes="+strconv.FormatInt(plan.contentLength()/2, 10)+"-")
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req)
+
+	if rec2.Code != http.StatusPartialContent {
+		t.Fatalf("status = %d, want 206", rec2.Code)
+	}
+	starts, err := os.ReadFile(countFile)
+	if err != nil {
+		t.Fatalf("ffmpeg never started: %v", err)
+	}
+	if n := strings.Count(string(starts), "start"); n != 2 {
+		t.Errorf("ffmpeg started %d times; want 2 — a seek to the middle must restart rather than wait for the encoder to arrive", n)
 	}
 }

@@ -195,28 +195,14 @@ func ffmpegHeaderArg(headers map[string]string) string {
 // request cannot be honoured. Saying so with Accept-Ranges: none is the honest
 // signal — a player that asks for a byte range gets told the source does not do
 // them, rather than being handed a wrong answer.
-func serveRemuxed(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket, plan Plan) {
-	// **Deliberately not dispatching to serveSeekableRemux, which is wrong and is
-	// kept as the foundation of the design that replaces it.**
-	//
-	// Restarting ffmpeg per range request assumes the client reads the byte
-	// stream sequentially. A media element does not: it issues opportunistic,
-	// overlapping ranges, and under that design each one got a *fresh transcode
-	// from a different timestamp*. Live, one playback produced two ffmpeg
-	// processes at `-ss 0.156` and `-ss 6.031` whose output the browser
-	// concatenated into a single stream, giving disjoint buffered slivers and
-	// MEDIA_ERR_DECODE. The origin was answering every range correctly and the
-	// bytes still did not form one file.
-	//
-	// Every unit test passed throughout, because each request in isolation was
-	// right. Only the browser could show it.
-	//
-	// The fix is one transcode per session writing to a file, with ranges served
-	// out of that file so every reader sees the same bytes — which is what
-	// `seanime`'s non-local path does, and which this mistook for a fallback for
-	// upstreams that cannot range. It is not: it is required by the *client's*
-	// range behaviour whatever the upstream does. Until that lands, the honest
-	// pipe below is better than a seekable stream that will not decode.
+func serveRemuxed(w http.ResponseWriter, r *http.Request, rx *Remuxer, sessions *Sessions, t ticket, plan Plan, key string) {
+	// A seekable plan answers ranges out of a single transcode's file; one with
+	// no duration cannot map an offset to a time and falls back to the pipe
+	// below, honestly labelled.
+	if plan.seekable() && sessions.usable() {
+		serveSeekableRemux(w, r, rx, sessions, t, plan, key)
+		return
+	}
 
 	body, stop, err := rx.Stream(r.Context(), t.URL, t.Headers, plan)
 	if err != nil {
@@ -438,7 +424,7 @@ func parseByteRangeStart(header string) (int64, bool) {
 // the reference implementations keep a keyed session and kill the running
 // process on a new seek, and the same is owed here — but each request in
 // isolation is correct, which is the property this builds first.
-func serveSeekableRemux(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket, plan Plan) {
+func serveSeekableRemux(w http.ResponseWriter, r *http.Request, rx *Remuxer, sessions *Sessions, t ticket, plan Plan, key string) {
 	total := plan.contentLength()
 
 	w.Header().Set("Content-Type", rx.ContentType())
@@ -456,7 +442,7 @@ func serveSeekableRemux(w http.ResponseWriter, r *http.Request, rx *Remuxer, t t
 	start, ranged := int64(0), false
 	if h := r.Header.Get("Range"); h != "" {
 		n, ok := parseByteRangeStart(h)
-		if !ok {
+		if !ok || n >= total {
 			// An unsatisfiable or unsupported range gets the status that says so,
 			// with the length, rather than the whole stream from the beginning —
 			// which would silently ignore the seek.
@@ -464,24 +450,18 @@ func serveSeekableRemux(w http.ResponseWriter, r *http.Request, rx *Remuxer, t t
 			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 			return
 		}
-		if n >= total {
-			w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(total, 10))
-			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
-			return
-		}
 		start, ranged = n, true
 	}
 
-	body, stop, err := rx.StreamFrom(r.Context(), t.URL, t.Headers, plan, plan.offsetAt(start))
+	body, err := sessions.Open(r.Context(), rx, key, t.URL, t.Headers, plan, start)
 	if err != nil {
-		http.Error(w, "remux unavailable", http.StatusBadGateway)
+		http.Error(w, "the origin could not produce a playable stream for this release ("+plan.Reason+")", http.StatusBadGateway)
 		return
 	}
-	defer stop()
 	defer body.Close()
 
-	// The same probe-before-status rule the pipe path follows, and for the same
-	// reason: a dead ffmpeg must not read as a successful empty range.
+	// The same probe-before-status rule the pipe path follows: a transcode that
+	// produces nothing must not read as a successful empty range.
 	first := make([]byte, 64*1024)
 	n, readErr := io.ReadFull(body, first)
 	if n == 0 {

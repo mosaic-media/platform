@@ -164,6 +164,13 @@ var relayedResponseHeaders = []string{
 // Pass Client() in production; a test may pass a plain client to reach a
 // loopback fixture, exactly as the artwork proxy does.
 func Handler(sealer *Sealer, client *http.Client, remuxer *Remuxer) http.Handler {
+	return HandlerWithSessions(sealer, client, remuxer, NewSessions(DefaultSpool))
+}
+
+// HandlerWithSessions is Handler over an explicit session registry, so a caller
+// that needs to reap or shut down running transcodes can hold one. Handler
+// keeps its own, which is right for a Platform that never stops.
+func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, sessions *Sessions) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
@@ -191,7 +198,7 @@ func Handler(sealer *Sealer, client *http.Client, remuxer *Remuxer) http.Handler
 				http.Error(w, "this release needs re-encoding ("+t.Plan.Reason+") and ffmpeg is not installed", http.StatusNotImplemented)
 				return
 			}
-			serveRemuxed(w, r, remuxer, t, t.Plan)
+			serveRemuxed(w, r, remuxer, sessions, t, t.Plan, raw)
 			return
 		}
 
