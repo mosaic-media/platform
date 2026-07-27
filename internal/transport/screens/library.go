@@ -58,7 +58,6 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		page = 0
 	}
 	genre := stringParam(params, paramGenre)
-	service := stringParam(params, paramService)
 
 	// One read of everything loaded so far, rather than a read per page: the
 	// library is the install's own rows and can be windowed directly, where a
@@ -68,18 +67,16 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		window = libraryWindowCap
 	}
 	res, err := s.content.ListLibrary(ctx, app.ListLibraryQuery{
-		Caller:         caller,
-		Genres:         genreFilter(genre),
-		WatchProviders: genreFilter(service),
-		Limit:          window,
-		Offset:         0,
+		Caller: caller,
+		Genres: genreFilter(genre),
+		Limit:  window,
+		Offset: 0,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	narrowed := genre != "" || service != ""
-	if res.Total == 0 && !narrowed {
+	if res.Total == 0 && genre == "" {
 		// The genuinely empty library. It is worth a different sentence from
 		// "this page is past the end" below, because one is a new install and
 		// the other is a stale link, and telling somebody with an empty library
@@ -109,7 +106,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		).Build(), nil
 	}
 
-	if len(res.Works) == 0 && !narrowed {
+	if len(res.Works) == 0 && genre == "" {
 		// A window that landed past the end — a stale link, or a library that
 		// shrank. The count is still true, so the screen says it and offers the
 		// way back rather than looking like an empty library.
@@ -131,15 +128,13 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		// against it, because both are "no rows on this page" and only this one
 		// can offer the way out that actually helps: the facet rows themselves,
 		// which are still drawn.
-		what := narrowingLabel(genre, service)
 		return ui.Screen(
 			ui.Title("Library"),
-			ui.Subtitle("Nothing matches "+what),
-			libraryFacets(res.Facets, genre, service),
+			ui.Subtitle("Nothing matches "+genre),
+			libraryFacets(res.Facets, genre),
 			ui.EmptyState(emptyIconNotFound,
-				"Nothing in "+what,
-				ui.Message("The library holds nothing matching that. A streaming service in particular is a "+
-					"moving target — a title that was there last month may have left it."),
+				"No "+genre+" titles",
+				ui.Message("Nothing in the library carries that genre. It may have been the only title, and it may have left."),
 				ui.ActionSlot(ui.Button("Show everything", "primary",
 					ui.OnTap(ui.Navigate(screenLibrary, nil)))),
 			),
@@ -168,30 +163,15 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		if genre != "" {
 			next[paramGenre] = genre
 		}
-		if service != "" {
-			next[paramService] = service
-		}
 		grid = append(grid, ui.HasMore(true), ui.LoadMore(ui.Query(screenLibrary, next)))
 	}
 
 	return ui.Screen(
 		ui.Title("Library"),
-		ui.Subtitle(librarySubtitle(res, more, window, genre, service)),
-		libraryFacets(res.Facets, genre, service),
+		ui.Subtitle(librarySubtitle(res, more, window, genre)),
+		libraryFacets(res.Facets, genre),
 		ui.Grid(grid...),
 	).Build(), nil
-}
-
-// narrowingLabel names what is selected, for a sentence rather than a control.
-func narrowingLabel(genre, service string) string {
-	switch {
-	case genre != "" && service != "":
-		return genre + " on " + service
-	case service != "":
-		return service
-	default:
-		return genre
-	}
 }
 
 // genreFilter renders the screen's one selected genre as the store query's
@@ -215,48 +195,25 @@ const maxLibraryFacets = 14
 // libraryFacets is the row of narrowings, built from what is actually on the
 // shelf.
 //
-// **Every chip returns something**, because the values come from a read over the
-// library rather than from a vocabulary written down anywhere — which is the only
-// way to be right about a genre list assembled from several sources' words. The
-// selected chip toggles off rather than needing a separate clear, so the control
-// is reversible by the same press that set it.
-func libraryFacets(facets contracts.Facets, genre, service string) ui.El {
-	rows := make([]ui.El, 0, 2)
-	if row := facetRow(facets.Genres, paramGenre, genre, map[string]any{paramService: service}); row != nil {
-		rows = append(rows, row)
-	}
-	// **The service row is drawn only when something is actually recorded.**
-	// A library whose availability has never been fetched offers no chips rather
-	// than a row of nothing, which is the same rule as the genre row and matters
-	// more here: an empty streaming row would read as "nothing is on any
-	// service", where the truth is that nobody has asked yet.
-	if row := facetRow(facets.Services, paramService, service, map[string]any{paramGenre: genre}); row != nil {
-		rows = append(rows, row)
-	}
-	if len(rows) == 0 {
-		return nil
-	}
-	return ui.Stack("vertical", 2, ui.Group(rows...))
+// **Genre only, and the absence of a streaming-service row here is the
+// decision.** Availability is not a property of a shelf: the question it answers
+// is "what could I watch on this service", which spans what the library holds
+// *and* what it does not, and answering it over the library alone gives a user
+// the small half of it while looking like the whole. That surface belongs where
+// a source's catalogue is browsed with library items marked — the catalog
+// screen, where `module-tmdb` declares a `with_watch_providers` filter — and not
+// here. Genre is on both because a genre *is* a property of what you own, so
+// narrowing the shelf by one is a question with a complete answer.
+func libraryFacets(facets contracts.Facets, genre string) ui.El {
+	return facetRow(facets.Genres, paramGenre, genre)
 }
 
 // facetRow is one row of narrowings.
-//
-// `keep` carries the *other* facet's selection into every action, so the two
-// rows compose rather than each clearing the other — picking Netflix and then
-// Drama means both, which is what a user pressing two chips means.
-func facetRow(values []contracts.FacetValue, param, selected string, keep map[string]any) ui.El {
+func facetRow(values []contracts.FacetValue, param, selected string) ui.El {
 	if len(values) == 0 {
 		return nil
 	}
-	base := func() map[string]any {
-		p := map[string]any{}
-		for k, v := range keep {
-			if s, ok := v.(string); ok && s != "" {
-				p[k] = s
-			}
-		}
-		return p
-	}
+	base := func() map[string]any { return map[string]any{} }
 
 	chips := make([]ui.El, 0, maxLibraryFacets+1)
 	if selected != "" {
@@ -290,14 +247,14 @@ func facetRow(values []contracts.FacetValue, param, selected string, keep map[st
 //
 // While more is still loading it says the total alone: a number that ticks
 // upward as somebody scrolls is noise, and the total is the fact they came for.
-func librarySubtitle(res app.ListLibraryResult, more bool, window int, genre, service string) string {
+func librarySubtitle(res app.ListLibraryResult, more bool, window int, genre string) string {
 	count := libraryCountLabel(res.Total)
-	if what := narrowingLabel(genre, service); what != "" {
+	if genre != "" {
 		// The count is of the *narrowed* library, so it says what it counted.
 		// "81 titles" under a lit Drama chip would read as the whole library and
 		// be a smaller number than the one before it — which is the shape of a
 		// screen that has silently lost something.
-		count += " in " + what
+		count += " in " + genre
 	}
 	if more && window >= libraryWindowCap {
 		return fmt.Sprintf("%s · showing the first %d — search to narrow it down",

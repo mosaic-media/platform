@@ -61,14 +61,24 @@ type ListLibraryQuery struct {
 	// Genres narrows to works carrying every genre listed — the library facet
 	// (roadmap M2.4). Empty is everything.
 	Genres []string
-	// WatchProviders narrows to works available on every service listed — the
-	// streaming-service facet (roadmap M2.5). Empty is everything.
+	// WatchProviders narrows to works available on every service listed. Empty
+	// is everything.
 	//
 	// It reads the Platform's own projection of what a metadata provider said,
 	// kept current by the availability refresh, and **not** the module-owned
 	// attributes document `module-tmdb` writes at import. Both hold the same
 	// kind of fact; only one of them is refreshed, and only one of them is the
 	// Platform's to interpret.
+	//
+	// **No screen passes this.** The Library screen deliberately does not offer a
+	// streaming-service facet: availability answers "what could I watch on this
+	// service", which spans what the library holds and what it does not, and
+	// answering it over the shelf alone hands a user the small half while looking
+	// like the whole. That surface is a source's catalogue browsed with library
+	// items marked. This filter is what a *union* of the two would read the
+	// library half from without a provider round trip per title, and until
+	// something does, it is a capability with no client path — see the
+	// unreachable-capability register.
 	WatchProviders []string
 	// Limit and Offset page the result. Zero Limit takes the default.
 	Limit  int
