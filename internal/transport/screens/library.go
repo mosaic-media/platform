@@ -31,11 +31,23 @@ import (
 // nodes rather than re-derived from whichever source last answered, so a title
 // stays put when a provider is down.
 
-// libraryPageSize is how many works one page shows. It matches the application
-// service's default, which is the number that actually applies; naming it here
-// as well keeps the page label ("Page 2 of 7") arithmetically honest without the
-// screen having to guess.
+// libraryPageSize is how many works one lazy page adds.
+//
+// The screen scrolls rather than paging: a `query` action replaces the content
+// region, so each further page is the whole window re-rendered, and the client's
+// lazy-list observer asks for the next one as the end of the grid comes into
+// view (ADR 0093). That is why this is a page *increment* and not a page.
 const libraryPageSize = 60
+
+// libraryWindowCap is where the scroll stops.
+//
+// Every further page re-sends everything above it, so an unbounded scroll over
+// a large library is a payload that grows quadratically in the number of pages
+// somebody scrolls through. The screen stops offering more here and **says
+// so**, because a lazy list that silently stops loading is indistinguishable
+// from one that has reached the end — and the count above it would then be
+// visibly larger than what is on screen with nothing to explain the gap.
+const libraryWindowCap = 600
 
 // libraryScreen renders one page of what the install owns.
 func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
@@ -44,10 +56,17 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		page = 0
 	}
 
+	// One read of everything loaded so far, rather than a read per page: the
+	// library is the install's own rows and can be windowed directly, where a
+	// provider's catalog has to be walked a page at a time.
+	window := (page + 1) * libraryPageSize
+	if window > libraryWindowCap {
+		window = libraryWindowCap
+	}
 	res, err := s.content.ListLibrary(ctx, app.ListLibraryQuery{
 		Caller: caller,
-		Limit:  libraryPageSize,
-		Offset: page * libraryPageSize,
+		Limit:  window,
+		Offset: 0,
 	})
 	if err != nil {
 		return nil, err
@@ -76,16 +95,16 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 	}
 
 	if len(res.Works) == 0 {
-		// A page past the end — a bookmark from when the library was larger, or
-		// a hand-edited URL. The count is still true, so the screen says it and
-		// offers the way back rather than looking like an empty library.
+		// A window that landed past the end — a stale link, or a library that
+		// shrank. The count is still true, so the screen says it and offers the
+		// way back rather than looking like an empty library.
 		return ui.Screen(
 			ui.Title("Library"),
 			ui.Subtitle(libraryCountLabel(res.Total)),
 			ui.EmptyState(emptyIconNotFound,
-				"There is no page "+fmt.Sprint(page+1),
+				"There is nothing here",
 				ui.Message("The library has "+libraryCountLabel(res.Total)+"."),
-				ui.ActionSlot(ui.Button("Back to the first page", "primary",
+				ui.ActionSlot(ui.Button("Back to the start", "primary",
 					ui.OnTap(ui.Navigate(screenLibrary, nil)))),
 			),
 		).Build(), nil
@@ -96,18 +115,36 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		cards = append(cards, s.libraryCard(work))
 	}
 
-	els := []ui.El{
+	// The lazy list (ADR 0093). `hasMore` and `loadMore` are the server's
+	// statement that this is a page of something longer and what fetches the
+	// rest; the client observes the end of the grid coming into view and asks.
+	// A full page is deliberately not evidence of another — that is why this is
+	// computed from the total rather than from the number of cards.
+	grid := []ui.El{ui.MinColumnWidth(196), ui.Group(cards...)}
+	more := len(res.Works) < res.Total
+	if more && window < libraryWindowCap {
+		grid = append(grid, ui.HasMore(true),
+			ui.LoadMore(ui.Query(screenLibrary, map[string]any{paramPage: page + 1})))
+	}
+
+	return ui.Screen(
 		ui.Title("Library"),
-		// The live count, and where in it this page sits. Both, because one
-		// without the other is only half the question a person browsing a large
-		// library is asking.
-		ui.Subtitle(libraryCountLabel(res.Total) + " · " + libraryRangeLabel(res)),
-		ui.Grid(ui.MinColumnWidth(196), ui.Group(cards...)),
+		ui.Subtitle(librarySubtitle(res, more, window)),
+		ui.Grid(grid...),
+	).Build(), nil
+}
+
+// librarySubtitle is the live count, and — only when the scroll has stopped
+// short of the whole library — what is actually on screen.
+//
+// While more is still loading it says the total alone: a number that ticks
+// upward as somebody scrolls is noise, and the total is the fact they came for.
+func librarySubtitle(res app.ListLibraryResult, more bool, window int) string {
+	if more && window >= libraryWindowCap {
+		return fmt.Sprintf("%s · showing the first %d — search to narrow it down",
+			libraryCountLabel(res.Total), len(res.Works))
 	}
-	if pager := libraryPager(page, res); pager != nil {
-		els = append(els, pager)
-	}
-	return ui.Screen(els...).Build(), nil
+	return libraryCountLabel(res.Total)
 }
 
 // libraryCard is one work as the library holds it.
@@ -139,52 +176,4 @@ func libraryCountLabel(total int) string {
 		return "1 title"
 	}
 	return fmt.Sprintf("%d titles", total)
-}
-
-// libraryRangeLabel says which slice of the library is on screen.
-func libraryRangeLabel(res app.ListLibraryResult) string {
-	first := res.Offset + 1
-	last := res.Offset + len(res.Works)
-	if first == last {
-		return fmt.Sprintf("showing %d", first)
-	}
-	return fmt.Sprintf("showing %d–%d", first, last)
-}
-
-// libraryPager is the Previous/Next control under the grid, or nothing at all
-// when the whole library fits on one page.
-//
-// It is the vocabulary's `Pagination`, which had existed and been emitted by
-// nothing. The library is the first surface with a real total to page against —
-// everything else pages a provider's catalog by asking for more, which is what
-// `HasMore`/`LoadMore` express and is a different interaction from "page 3 of
-// 7".
-func libraryPager(page int, res app.ListLibraryResult) ui.El {
-	hasPrev := page > 0
-	hasNext := res.HasMore()
-	if !hasPrev && !hasNext {
-		return nil
-	}
-	pages := (res.Total + res.Limit - 1) / res.Limit
-	return ui.Pagination(
-		// FieldLabel, because `label` is the prop Pagination binds and that is
-		// the generated helper for it. Spelling it ui.Prop("label", …) would
-		// compile and render identically today and would not be checked against
-		// the contract tomorrow.
-		ui.FieldLabel(fmt.Sprintf("Page %d of %d", page+1, pages)),
-		ui.HasPrev(hasPrev),
-		ui.HasNext(hasNext),
-		ui.PrevAction(ui.Navigate(screenLibrary, libraryPageParams(page-1))),
-		ui.NextAction(ui.Navigate(screenLibrary, libraryPageParams(page+1))),
-	)
-}
-
-// libraryPageParams is a page navigation's params, omitting the first page's
-// index so the library's own route stays clean and a "back to the start" link
-// and the nav item lead to the same place.
-func libraryPageParams(page int) map[string]any {
-	if page <= 0 {
-		return nil
-	}
-	return map[string]any{paramPage: page}
 }

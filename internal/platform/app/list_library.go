@@ -40,7 +40,13 @@ const defaultLibraryPageSize = 60
 // maxLibraryPageSize caps what a caller may ask for, as search's limit does. A
 // browse is a user-facing read and an unbounded one is a denial of service
 // against a large library.
-const maxLibraryPageSize = 200
+//
+// It is a *window* rather than a page, because the Library screen scrolls
+// lazily: each further page re-renders the screen holding everything loaded so
+// far (a `query` action replaces the content region, it does not append), so
+// the read grows with the scroll. This is where that growth stops, and the
+// screen says so when it does rather than silently ending the scroll.
+const maxLibraryPageSize = 600
 
 // ListLibraryQuery is one page of the materialised library.
 type ListLibraryQuery struct {

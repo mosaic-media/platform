@@ -52,9 +52,6 @@ func TestTheLibraryScreenStatesARealTotal(t *testing.T) {
 	if strings.Contains(text, "140+") {
 		t.Error("the library hedged a total it can count")
 	}
-	if !strings.Contains(text, "showing 1–60") {
-		t.Errorf("the screen did not say which slice is on it; screen said: %s", text)
-	}
 }
 
 // A card must open something the install owns, by node id. A card built from a
@@ -79,37 +76,84 @@ func TestALibraryCardOpensTheNodeTheInstallOwns(t *testing.T) {
 	}
 }
 
-// Paging is the interaction the library has and a provider catalog does not:
-// a total to page against rather than an ask-for-more.
-func TestTheLibraryPages(t *testing.T) {
+// The library scrolls lazily rather than paging (ADR 0093): the grid says it is
+// a page of something longer and what fetches the rest, and the client asks as
+// the end comes into view.
+//
+// **`hasMore` is computed from the total, not from the page being full.** A full
+// page is not evidence of another, and a client that inferred one would ask for
+// a page that does not exist — which is the whole reason the server states it.
+func TestTheLibraryScrollsLazily(t *testing.T) {
 	fake := libraryService(libraryWorks(140))
 	svc := &Service{content: fake}
 
 	first := render(t, svc, "library", nil)
-	pager, ok := find(first, "Pagination")
+	grid, ok := find(first, "Grid")
 	if !ok {
-		t.Fatal("the first page of 140 titles offers no way to the second")
+		t.Fatal("the library rendered no grid")
 	}
-	if prop(pager, "hasPrev") != false || prop(pager, "hasNext") != true {
-		t.Fatalf("first page's pager = %v", pager.GetProps().AsMap())
+	if prop(grid, "hasMore") != true {
+		t.Fatalf("a grid of 60 over 140 titles does not offer the rest: %v", grid.GetProps().AsMap())
 	}
-	if got := prop(pager, "label"); got != "Page 1 of 3" {
-		t.Fatalf("pager label = %v, want the page and the count of pages", got)
+	load, _ := prop(grid, "loadMore").(map[string]any)
+	if load["kind"] != "query" {
+		t.Fatalf("loadMore = %v, want a query — a further page must not push a history entry", load)
+	}
+	params, _ := load["params"].(map[string]any)
+	if params["page"] != float64(1) {
+		t.Fatalf("loadMore asks for %v, want the next page", params)
+	}
+	if got := countCards(first); got != 60 {
+		t.Fatalf("the first window held %d cards, want 60", got)
 	}
 
+	// The next page is the whole window again, not just its tail: a query
+	// *replaces* the content region, so the screen must carry everything loaded
+	// so far or scrolling would throw away what is above.
 	second := render(t, svc, "library", map[string]any{"page": float64(1)})
-	if !strings.Contains(treeStrings(second), "showing 61–120") {
-		t.Errorf("the second page did not say where it is: %s", treeStrings(second))
+	if got := countCards(second); got != 120 {
+		t.Fatalf("the second window held %d cards, want 120", got)
 	}
 
+	// And the end of the library stops asking, which is what keeps the observer
+	// from requesting a page that does not exist.
 	last := render(t, svc, "library", map[string]any{"page": float64(2)})
-	pager, ok = find(last, "Pagination")
-	if !ok {
-		t.Fatal("the last page has no pager, so there is no way back")
+	grid, _ = find(last, "Grid")
+	if prop(grid, "hasMore") == true {
+		t.Error("the end of the library still offers more")
 	}
-	if prop(pager, "hasNext") != false {
-		t.Error("the last page offers a next page")
+	if got := countCards(last); got != 140 {
+		t.Fatalf("the last window held %d cards, want all 140", got)
 	}
+}
+
+// A lazy list that silently stops loading is indistinguishable from one that
+// reached the end — and the count above it would be visibly larger than what is
+// on screen, with nothing to explain the gap.
+func TestTheLibraryScrollStopsAndSaysSo(t *testing.T) {
+	fake := libraryService(libraryWorks(900))
+	node := render(t, &Service{content: fake}, "library", map[string]any{"page": float64(20)})
+
+	grid, _ := find(node, "Grid")
+	if prop(grid, "hasMore") == true {
+		t.Error("the scroll passed its cap and kept asking")
+	}
+	if got := countCards(node); got != 600 {
+		t.Fatalf("the capped window held %d cards, want the cap of 600", got)
+	}
+	text := treeStrings(node)
+	if !strings.Contains(text, "900 titles") {
+		t.Errorf("the capped screen stopped stating the real total: %s", text)
+	}
+	if !strings.Contains(text, "showing the first 600") {
+		t.Errorf("the scroll stopped without saying so: %s", text)
+	}
+}
+
+func countCards(n sdui.Node) int {
+	var cards []sdui.Node
+	findAll(n, "PosterCard", &cards)
+	return len(cards)
 }
 
 func TestTheLibraryScreenWhenThereIsNothingInIt(t *testing.T) {
@@ -128,21 +172,24 @@ func TestTheLibraryScreenWhenThereIsNothingInIt(t *testing.T) {
 	}
 }
 
-// A bookmark from when the library was larger is an ordinary thing to follow,
-// and it must not read as an empty library.
-func TestAPagePastTheEndSaysSo(t *testing.T) {
-	fake := libraryService(libraryWorks(10))
-	node := render(t, &Service{content: fake}, "library", map[string]any{"page": float64(9)})
+// A link into a library that has since shrunk must not read as an empty
+// library. The two states say different things because they are different
+// facts: one is a new install, the other is a stale link, and telling somebody
+// with an empty library to go back to the start would be nonsense.
+func TestAWindowThatCameBackEmptyIsNotAnEmptyLibrary(t *testing.T) {
+	fake := libraryService(nil)
+	fake.libraryTotal = 10
+	node := render(t, &Service{content: fake}, "library", nil)
 
 	text := treeStrings(node)
 	if strings.Contains(text, "Nothing in the library yet") {
-		t.Error("a page past the end rendered as an empty library")
+		t.Error("a window that came back empty rendered as an empty library")
 	}
 	if !strings.Contains(text, "10 titles") {
-		t.Errorf("the page past the end did not state the real total: %s", text)
+		t.Errorf("it stopped stating the real total: %s", text)
 	}
-	if _, ok := findButton(node, "Back to the first page"); !ok {
-		t.Error("no way back from a page that does not exist")
+	if _, ok := findButton(node, "Back to the start"); !ok {
+		t.Error("no way back")
 	}
 }
 

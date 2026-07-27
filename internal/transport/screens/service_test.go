@@ -69,6 +69,11 @@ type fakeQueries struct {
 	// the whole library the fake pages over — not one page — so the screen's
 	// paging is under test rather than assumed.
 	libraryWorks []v1.Node
+	// libraryTotal overrides the total the fake reports, so the one branch a
+	// window cannot otherwise reach is testable: a total that is real and a
+	// window that came back empty, which is a link into a library that has
+	// since shrunk.
+	libraryTotal int
 	libraryErr   error
 	libraryRules []app.LibraryRuleListing
 	preview      app.PreviewLibraryRuleResult
@@ -313,8 +318,12 @@ func (f *fakeQueries) ListLibrary(_ context.Context, q app.ListLibraryQuery) (ap
 			works = works[:limit]
 		}
 	}
+	total := f.libraryTotal
+	if total == 0 {
+		total = len(f.libraryWorks)
+	}
 	return app.ListLibraryResult{
-		Works: works, Total: len(f.libraryWorks), Offset: offset, Limit: limit,
+		Works: works, Total: total, Offset: offset, Limit: limit,
 	}, nil
 }
 
