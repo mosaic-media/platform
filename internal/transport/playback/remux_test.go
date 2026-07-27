@@ -7,6 +7,10 @@ package playback
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -68,6 +72,76 @@ func TestRemuxTicketWithoutFFmpegSaysSo(t *testing.T) {
 	}
 	if body := rec.Body.String(); !strings.Contains(body, "ffmpeg") {
 		t.Errorf("body %q does not name the missing piece", body)
+	}
+}
+
+// fakeFFmpeg writes fixed bytes to stdout and ignores every argument, which is
+// all this needs: what is under test is the *response shape* the origin puts
+// around a remux, not what ffmpeg produces.
+func fakeFFmpeg(t *testing.T, output string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake is a shell script")
+	}
+	bin := filepath.Join(t.TempDir(), "ffmpeg")
+	script := "#!/bin/sh\nprintf '%s' " + strconv.Quote(output) + "\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatalf("writing the fake ffmpeg: %v", err)
+	}
+	return bin
+}
+
+// TestRemuxedResponseIsNotSeekable pins the asymmetry M3 slice 4 exists to
+// remove, and it is pinned because the slice is *scoped* against it.
+//
+// The origin has two paths and only one of them is a pipe. The relayed path
+// forwards Range upstream and relays the 206 back, which
+// TestHandlerRelaysRangeRequests covers. This is the other one: fragmented MP4
+// off a pipe has no index and no length, so a Range request cannot be honoured
+// and the honest answer is to say the source does not do them.
+//
+// Asserting it matters more than it looks. Until now the difference between the
+// two paths was true only in the code and in a comment — a reading, not a test —
+// and the roadmap sentence built on it ("resume is exact only on a directly
+// relayed stream") was being read as a property of the *source* rather than of
+// this implementation. When the segmenter lands, this test is what has to change
+// to say so, rather than the change happening quietly.
+func TestRemuxedResponseIsNotSeekable(t *testing.T) {
+	const output = "fragmented-mp4-bytes"
+
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1",
+		Plan{Reason: "matroska cannot pass through MSE"})
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+
+	h := Handler(s, http.DefaultClient, NewRemuxerAt(fakeFFmpeg(t, output)))
+
+	// A Range request, because that is what a player sends the moment someone
+	// drags the scrubber. It must not be answered with a 206 over bytes that
+	// were never indexed.
+	req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
+	req.Header.Set("Range", "bytes=8-15")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d — a remuxed stream has no index to range over", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Accept-Ranges"); got != "none" {
+		t.Errorf("Accept-Ranges = %q, want %q — anything else promises seeking this path cannot do", got, "none")
+	}
+	if got := rec.Header().Get("Content-Range"); got != "" {
+		t.Errorf("Content-Range = %q, want it absent", got)
+	}
+	// The whole output, not the requested slice: the range was not honoured, and
+	// the response says so rather than quietly returning the wrong bytes.
+	if got := rec.Body.String(); got != output {
+		t.Errorf("body = %q, want the whole stream %q", got, output)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "video/mp4" {
+		t.Errorf("Content-Type = %q, want video/mp4", got)
 	}
 }
 
