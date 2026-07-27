@@ -248,6 +248,13 @@ func seekablePlan() Plan {
 	return Plan{Duration: 2 * time.Hour, Reason: "audio codec eac3 is not decodable by this client"}
 }
 
+// The seekable component's tests call it directly, because the Handler does not
+// dispatch to it: restarting ffmpeg per range produced a stream the browser
+// could not decode, and the path is unwired until it is served from a single
+// file (see serveRemuxed). They are kept and kept passing because the mapping,
+// the flags and the range arithmetic are all reused by that design — what was
+// wrong was where the bytes came from, not how the offset was computed.
+
 // TestSeekableRemuxAdvertisesALength is what a media element checks before it
 // will let anyone drag the scrubber. Without a length and an Accept-Ranges it
 // treats the source as an unbounded stream and disables seeking entirely, which
@@ -264,8 +271,8 @@ func TestSeekableRemuxAdvertisesALength(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", args))).
-		ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/playback/"+raw, nil))
+	serveSeekableRemux(rec, httptest.NewRequest(http.MethodHead, "/playback/"+raw, nil),
+		NewRemuxerAt(recordingFFmpeg(t, "frag", args)), ticket{URL: "https://cdn.example/movie.mkv", Plan: seekablePlan()}, seekablePlan())
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -305,7 +312,8 @@ func TestSeekableRemuxRestartsFFmpegAtTheMappedTime(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
 	req.Header.Set("Range", "bytes="+strconv.FormatInt(half, 10)+"-")
 	rec := httptest.NewRecorder()
-	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile))).ServeHTTP(rec, req)
+	serveSeekableRemux(rec, req, NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile)),
+		ticket{URL: "https://cdn.example/movie.mkv", Plan: plan}, plan)
 
 	if rec.Code != http.StatusPartialContent {
 		t.Fatalf("status = %d, want 206 — a seek that answers 200 is a seek the player ignores", rec.Code)
@@ -345,8 +353,9 @@ func TestUnseekedRemuxCarriesNoSeekFlags(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile))).
-		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil))
+	serveSeekableRemux(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil),
+		NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile)),
+		ticket{URL: "https://cdn.example/movie.mkv", Plan: seekablePlan()}, seekablePlan())
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 for an unranged request", rec.Code)
@@ -373,7 +382,8 @@ func TestSeekPastTheEndIsRefused(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
 	req.Header.Set("Range", "bytes="+strconv.FormatInt(plan.contentLength()+1, 10)+"-")
 	rec := httptest.NewRecorder()
-	Handler(s, http.DefaultClient, NewRemuxerAt(fakeFFmpeg(t, "frag"))).ServeHTTP(rec, req)
+	serveSeekableRemux(rec, req, NewRemuxerAt(fakeFFmpeg(t, "frag")),
+		ticket{URL: "https://cdn.example/movie.mkv", Plan: plan}, plan)
 
 	if rec.Code != http.StatusRequestedRangeNotSatisfiable {
 		t.Errorf("status = %d, want 416", rec.Code)

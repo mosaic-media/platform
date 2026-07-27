@@ -196,12 +196,27 @@ func ffmpegHeaderArg(headers map[string]string) string {
 // signal — a player that asks for a byte range gets told the source does not do
 // them, rather than being handed a wrong answer.
 func serveRemuxed(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket, plan Plan) {
-	// A seekable plan answers ranges; one with no duration falls back to the pipe
-	// below, unchanged and honestly labelled.
-	if plan.seekable() {
-		serveSeekableRemux(w, r, rx, t, plan)
-		return
-	}
+	// **Deliberately not dispatching to serveSeekableRemux, which is wrong and is
+	// kept as the foundation of the design that replaces it.**
+	//
+	// Restarting ffmpeg per range request assumes the client reads the byte
+	// stream sequentially. A media element does not: it issues opportunistic,
+	// overlapping ranges, and under that design each one got a *fresh transcode
+	// from a different timestamp*. Live, one playback produced two ffmpeg
+	// processes at `-ss 0.156` and `-ss 6.031` whose output the browser
+	// concatenated into a single stream, giving disjoint buffered slivers and
+	// MEDIA_ERR_DECODE. The origin was answering every range correctly and the
+	// bytes still did not form one file.
+	//
+	// Every unit test passed throughout, because each request in isolation was
+	// right. Only the browser could show it.
+	//
+	// The fix is one transcode per session writing to a file, with ranges served
+	// out of that file so every reader sees the same bytes — which is what
+	// `seanime`'s non-local path does, and which this mistook for a fallback for
+	// upstreams that cannot range. It is not: it is required by the *client's*
+	// range behaviour whatever the upstream does. Until that lands, the honest
+	// pipe below is better than a seekable stream that will not decode.
 
 	body, stop, err := rx.Stream(r.Context(), t.URL, t.Headers, plan)
 	if err != nil {
