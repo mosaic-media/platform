@@ -225,3 +225,52 @@ func TestLibraryCountLabel(t *testing.T) {
 		}
 	}
 }
+
+// A long-running series is read one season at a time (ADR 0107), and the screen
+// must still say what the *series* is rather than what the read was.
+//
+// This is the defect the worst case in a real library exposed: a programme with
+// seventy-five seasons announced itself as "Series · 1 season" over a selector
+// offering all seventy-five, because the count came from the episodes on hand.
+func TestASeriesCountsItsSeasonsNotTheOneItLoaded(t *testing.T) {
+	children := make([]v1.Node, 0, 40)
+	for n := 1; n <= 40; n++ {
+		children = append(children, v1.Node{
+			ID: v1.NodeID(fmt.Sprintf("s-%02d", n)), ParentID: nodeRef("n-1"),
+			Kind: v1.NodeContainer, ContainerType: v1.ContainerSeason,
+			MediaType: v1.MediaTVSeries, Title: fmt.Sprintf("Season %d", n),
+			NaturalOrder: float64(n),
+		})
+	}
+	fake := &fakeQueries{
+		allow: map[string]bool{},
+		node: v1.Node{
+			ID: "n-1", WorkID: "n-1", Kind: v1.NodeWork,
+			MediaType: v1.MediaTVSeries, Title: "Tagesschau",
+		},
+		hasStoredMetadata: true,
+		storedMetadata: v1.ContentMetadata{
+			Ref:   v1.ContentRef{Provider: "tmdb", NativeID: "94722", NativeType: "tv", MediaType: v1.MediaTVSeries},
+			Title: "Tagesschau", Year: 1952,
+		},
+		libraryChildren: children,
+		libraryEpisodes: map[int][]v1.Node{
+			1: {{ID: "e-1", ParentID: nodeRef("s-01"), Kind: v1.NodeItem,
+				ItemType: v1.ItemEpisode, Title: "One", NaturalOrder: 1}},
+		},
+	}
+	node := render(t, &Service{content: fake}, "detail", map[string]any{"nodeId": "n-1"})
+
+	hero, ok := find(node, "DetailHero")
+	if !ok {
+		t.Fatal("no hero")
+	}
+	if got, _ := prop(hero, "kicker").(string); !strings.Contains(got, "40 seasons") {
+		t.Errorf("kicker = %q, want the series 40 seasons and not the one season read", got)
+	}
+	// And the panel states the seasons rather than a count of the episodes it
+	// happens to hold.
+	if !strings.Contains(treeStrings(node), "Seasons") {
+		t.Errorf("the about panel does not state the season count: %s", treeStrings(node))
+	}
+}

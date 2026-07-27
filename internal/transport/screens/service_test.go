@@ -78,7 +78,8 @@ type fakeQueries struct {
 	libraryRules []app.LibraryRuleListing
 	// The stored detail (ADR 0107): the work's tree, and the document a provider
 	// last answered with.
-	libraryTree       []v1.Node
+	libraryChildren   []v1.Node
+	libraryEpisodes   map[int][]v1.Node
 	storedMetadata    v1.ContentMetadata
 	hasStoredMetadata bool
 	libraryDetailErr  error
@@ -352,8 +353,22 @@ func (f *fakeQueries) GetLibraryDetail(_ context.Context, q app.GetLibraryDetail
 	if node.ID == "" {
 		node = v1.Node{ID: q.NodeID, WorkID: q.NodeID, Kind: v1.NodeWork}
 	}
+	// The fake pages by season the way the real query does, so a screen test
+	// exercises the per-season read rather than a whole-tree one nothing makes.
+	season := app.SeasonNumbers(f.libraryChildren)
+	selected := q.Season
+	if selected == 0 && len(season) > 0 {
+		selected = season[0]
+		for _, n := range season {
+			if n >= 1 {
+				selected = n
+				break
+			}
+		}
+	}
 	return app.GetLibraryDetailResult{
-		Node: node, Tree: f.libraryTree,
+		Node: node, Children: f.libraryChildren,
+		Episodes: f.libraryEpisodes[selected], Season: selected,
 		Metadata: f.storedMetadata, HasMetadata: f.hasStoredMetadata,
 	}, nil
 }
@@ -1083,10 +1098,10 @@ func TestDetailScreenRendersTheGraphWhenNothingWasStored(t *testing.T) {
 			ID: "n-1", WorkID: "n-1", Kind: v1.NodeWork, MediaType: v1.MediaTVSeries,
 			Title: "Breaking Bad", Artwork: v1.Artwork{Poster: "https://cdn/bb.jpg"},
 		},
-		libraryTree: []v1.Node{
+		libraryChildren: []v1.Node{
 			{ID: "n-2", ParentID: nodeRef("n-1"), Kind: v1.NodeContainer,
 				ContainerType: v1.ContainerSeason, MediaType: v1.MediaTVSeries, Title: "Season 1",
-				Artwork: v1.Artwork{Poster: "https://cdn/s1.jpg"}},
+				NaturalOrder: 1, Artwork: v1.Artwork{Poster: "https://cdn/s1.jpg"}},
 		},
 	}
 	node := render(t, &Service{content: fake}, "detail", map[string]any{"nodeId": "n-1"})
@@ -1127,13 +1142,15 @@ func TestDetailScreenRendersStoredMetadataWithNoProviderCall(t *testing.T) {
 			Year:     2008, Rating: 8.9, Genres: []string{"Drama"},
 			Cast: []v1.Person{{Name: "Bryan Cranston", Role: "Walter White"}},
 		},
-		libraryTree: []v1.Node{
+		libraryChildren: []v1.Node{
 			{ID: "s-1", ParentID: nodeRef("n-1"), Kind: v1.NodeContainer,
 				ContainerType: v1.ContainerSeason, MediaType: v1.MediaTVSeries,
 				Title: "Season 1", NaturalOrder: 1},
-			{ID: "e-1", ParentID: nodeRef("s-1"), Kind: v1.NodeItem,
+		},
+		libraryEpisodes: map[int][]v1.Node{
+			1: {{ID: "e-1", ParentID: nodeRef("s-1"), Kind: v1.NodeItem,
 				ItemType: v1.ItemEpisode, MediaType: v1.MediaTVSeries,
-				Title: "Pilot", NaturalOrder: 1},
+				Title: "Pilot", NaturalOrder: 1}},
 		},
 	}
 	node := render(t, &Service{content: fake}, "detail", map[string]any{"nodeId": "n-1"})

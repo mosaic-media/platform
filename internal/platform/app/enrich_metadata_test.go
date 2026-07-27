@@ -144,6 +144,33 @@ func itoaTest(n int) string {
 	return string(rune('0'+n/10)) + string(rune('0'+n%10))
 }
 
+// allEpisodes reads every season of a work, one season at a time, and projects
+// the lot.
+//
+// It reads per season deliberately: that is how the detail screen reads, so a
+// test asserting the tree grew is asserting it through the same path a viewer
+// sees rather than through a whole-tree read nothing does any more.
+func allEpisodes(t *testing.T, svc *app.Service, caller v1.Caller, workID v1.NodeID) []v1.EpisodePreview {
+	t.Helper()
+	first, err := svc.GetLibraryDetail(context.Background(), app.GetLibraryDetailQuery{
+		Caller: caller, NodeID: workID,
+	})
+	if err != nil {
+		t.Fatalf("GetLibraryDetail: %v", err)
+	}
+	var out []v1.EpisodePreview
+	for _, season := range app.SeasonNumbers(first.Children) {
+		d, err := svc.GetLibraryDetail(context.Background(), app.GetLibraryDetailQuery{
+			Caller: caller, NodeID: workID, Season: season,
+		})
+		if err != nil {
+			t.Fatalf("GetLibraryDetail(season %d): %v", season, err)
+		}
+		out = append(out, app.EpisodesFromTree(season, d.Episodes)...)
+	}
+	return out
+}
+
 // newSeriesService wires a Service over the fakes with one series module
 // registered, and an administrator seeded as session "s-1".
 func newSeriesService(t *testing.T, mod *seriesModule) *app.Service {
@@ -193,7 +220,7 @@ func TestImportStoresWhatTheSourceSaid(t *testing.T) {
 		t.Fatalf("the stored document carries %d episodes; the tree is the authority", len(detail.Metadata.Episodes))
 	}
 	// And the tree is what the episode list is projected from.
-	if got := len(app.EpisodesFromTree(detail.Tree)); got != 2 {
+	if got := len(allEpisodes(t, svc, caller, res.WorkID)); got != 2 {
 		t.Fatalf("the tree projects %d episodes, want 2", got)
 	}
 }
@@ -212,11 +239,7 @@ func TestASeriesThatGainsASeasonGrows(t *testing.T) {
 	}
 	workID := res.WorkID
 
-	before, err := svc.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{Caller: caller, NodeID: workID})
-	if err != nil {
-		t.Fatalf("GetLibraryDetail: %v", err)
-	}
-	if got := len(app.EpisodesFromTree(before.Tree)); got != 2 {
+	if got := len(allEpisodes(t, svc, caller, workID)); got != 2 {
 		t.Fatalf("the first import produced %d episodes, want 2", got)
 	}
 
@@ -240,11 +263,7 @@ func TestASeriesThatGainsASeasonGrows(t *testing.T) {
 		t.Fatal("the module did not report AlreadyKnown, so this is not the case under test")
 	}
 
-	after, err := svc.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{Caller: caller, NodeID: workID})
-	if err != nil {
-		t.Fatalf("GetLibraryDetail: %v", err)
-	}
-	grown := app.EpisodesFromTree(after.Tree)
+	grown := allEpisodes(t, svc, caller, workID)
 	if len(grown) != 5 {
 		t.Fatalf("the tree holds %d episodes after the source gained a season, want 5: %+v", len(grown), grown)
 	}
@@ -262,11 +281,7 @@ func TestASeriesThatGainsASeasonGrows(t *testing.T) {
 	if _, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: seriesRef("tmdb")}); err != nil {
 		t.Fatalf("third ImportContent: %v", err)
 	}
-	third, err := svc.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{Caller: caller, NodeID: workID})
-	if err != nil {
-		t.Fatalf("GetLibraryDetail: %v", err)
-	}
-	if got := len(app.EpisodesFromTree(third.Tree)); got != 5 {
+	if got := len(allEpisodes(t, svc, caller, workID)); got != 5 {
 		t.Fatalf("a third run took the tree to %d episodes; it duplicated", got)
 	}
 }
@@ -289,11 +304,7 @@ func TestAnEpisodeThatLeavesTheSourceStays(t *testing.T) {
 		t.Fatalf("second ImportContent: %v", err)
 	}
 
-	after, err := svc.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{Caller: caller, NodeID: res.WorkID})
-	if err != nil {
-		t.Fatalf("GetLibraryDetail: %v", err)
-	}
-	if got := len(app.EpisodesFromTree(after.Tree)); got != 3 {
+	if got := len(allEpisodes(t, svc, caller, res.WorkID)); got != 3 {
 		t.Fatalf("the tree holds %d episodes after the source dropped two, want all 3 kept", got)
 	}
 }
@@ -315,19 +326,19 @@ func TestTheTreeTopUpFillsAMissingEpisodeStill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportContent: %v", err)
 	}
-	detail, err := svc.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{Caller: caller, NodeID: res.WorkID})
-	if err != nil {
-		t.Fatalf("GetLibraryDetail: %v", err)
-	}
-	for _, e := range app.EpisodesFromTree(detail.Tree) {
+	for _, e := range allEpisodes(t, svc, caller, res.WorkID) {
 		if e.Thumbnail == "" {
 			t.Fatalf("S%dE%d has no still, so its row draws a grey rectangle", e.Season, e.Episode)
 		}
 	}
 
 	// And a choice already made is left alone.
+	detail, err := svc.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{Caller: caller, NodeID: res.WorkID})
+	if err != nil {
+		t.Fatalf("GetLibraryDetail: %v", err)
+	}
 	var episode v1.Node
-	for _, n := range detail.Tree {
+	for _, n := range detail.Episodes {
 		if n.ItemType == v1.ItemEpisode {
 			episode = n
 			break
@@ -346,7 +357,7 @@ func TestTheTreeTopUpFillsAMissingEpisodeStill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLibraryDetail: %v", err)
 	}
-	for _, n := range after.Tree {
+	for _, n := range after.Episodes {
 		if n.ID == episode.ID && n.Artwork.Landscape != "https://cdn/chosen.jpg" {
 			t.Fatalf("the pass overruled a still that was already chosen: %q", n.Artwork.Landscape)
 		}
@@ -380,5 +391,80 @@ func TestAProviderThatFailsLeavesTheStoredDocumentAlone(t *testing.T) {
 	}
 	if detail.Metadata.Overview != "The first answer." {
 		t.Fatalf("stored overview = %q; a failed read overwrote the cache", detail.Metadata.Overview)
+	}
+}
+
+// A long-running series must not cost its whole tree to draw one season of it.
+//
+// This is the shape a daily programme takes in a real library: seventy-five
+// seasons and twenty thousand episodes. Reading it whole to render seven rows
+// took a second — not because PostgreSQL minds twenty thousand rows, but
+// because sorting and marshalling them per render is paid for nothing.
+func TestADetailReadsOneSeasonNotTheWholeSeries(t *testing.T) {
+	ctx := context.Background()
+	mod := &seriesModule{id: "tmdb", buildSeasons: 40, buildPerSeason: 50}
+	mod.episodes = episodesFor(40, 50)
+	svc := newSeriesService(t, mod)
+	caller := v1.Caller{Session: "s-1"}
+
+	res, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: seriesRef("tmdb")})
+	if err != nil {
+		t.Fatalf("ImportContent: %v", err)
+	}
+
+	detail, err := svc.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{
+		Caller: caller, NodeID: res.WorkID, Season: 7,
+	})
+	if err != nil {
+		t.Fatalf("GetLibraryDetail: %v", err)
+	}
+
+	// Every season is offered, so the selector is complete...
+	if got := len(app.SeasonNumbers(detail.Children)); got != 40 {
+		t.Fatalf("the selector offers %d seasons, want all 40", got)
+	}
+	// ...and only one season's episodes were read.
+	if len(detail.Episodes) != 50 {
+		t.Fatalf("the read returned %d episodes, want the one season's 50", len(detail.Episodes))
+	}
+	if detail.Season != 7 {
+		t.Fatalf("Season = %d, want the one that was asked for", detail.Season)
+	}
+	for _, e := range app.EpisodesFromTree(detail.Season, detail.Episodes) {
+		if e.Season != 7 {
+			t.Fatalf("an episode of season %d came back for a season-7 read", e.Season)
+		}
+	}
+}
+
+// Opening a season directly renders its series, because a season has no
+// description of its own and nobody navigating to one wants less than they came
+// from.
+func TestOpeningASeasonRendersItsSeries(t *testing.T) {
+	ctx := context.Background()
+	mod := &seriesModule{id: "tmdb", buildSeasons: 2, buildPerSeason: 2,
+		episodes: episodesFor(2, 2), overview: "Chemistry."}
+	svc := newSeriesService(t, mod)
+	caller := v1.Caller{Session: "s-1"}
+
+	res, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: seriesRef("tmdb")})
+	if err != nil {
+		t.Fatalf("ImportContent: %v", err)
+	}
+	work, err := svc.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{Caller: caller, NodeID: res.WorkID})
+	if err != nil {
+		t.Fatalf("GetLibraryDetail: %v", err)
+	}
+
+	season := work.Children[0]
+	opened, err := svc.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{Caller: caller, NodeID: season.ID})
+	if err != nil {
+		t.Fatalf("GetLibraryDetail(season): %v", err)
+	}
+	if opened.Node.ID != res.WorkID {
+		t.Fatalf("opening a season resolved to %q, want the series", opened.Node.ID)
+	}
+	if !opened.HasMetadata || opened.Metadata.Overview != "Chemistry." {
+		t.Fatal("opening a season lost the series' description")
 	}
 }

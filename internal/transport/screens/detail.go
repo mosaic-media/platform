@@ -52,7 +52,7 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 	if err != nil {
 		return nil, err
 	}
-	return s.renderDetail(ctx, caller, ref, res, params)
+	return s.renderDetail(ctx, caller, ref, res, nil, params)
 }
 
 // renderDetail is the detail tree itself, over metadata that has already been
@@ -63,7 +63,7 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 // live, and a **library** item reads the stored document and its own tree. A
 // second renderer for the second plane is how the library detail would quietly
 // become the poorer one.
-func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.ContentRef, res app.PreviewContentResult, params map[string]any) (sdui.Node, error) {
+func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.ContentRef, res app.PreviewContentResult, knownSeasons []int, params map[string]any) (sdui.Node, error) {
 	m := res.Metadata
 	title := m.Title
 	if title == "" {
@@ -74,7 +74,7 @@ func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.Con
 	// — computed once, because the hero's resume label, the panel's "up next"
 	// and the episode rows are three readings of the same answer. It comes first
 	// because it decides *which* release the hero is about to play.
-	season := s.seasonView(ctx, caller, res, m.Episodes, params)
+	season := s.seasonView(ctx, caller, res, m.Episodes, knownSeasons, params)
 
 	// The release behind the play button, and everything known about it. It is
 	// resolved once here and read by three surfaces — the meta pills, the
@@ -100,7 +100,7 @@ func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.Con
 		ui.When(m.Poster != "", ui.Poster(s.art(m.Poster))),
 		ui.When(m.Overview != "", ui.Overview(m.Overview)),
 	}
-	if k := kickerLabel(ref, m.Episodes); k != "" {
+	if k := kickerLabel(ref, season.order); k != "" {
 		heroEls = append(heroEls, ui.Kicker(k))
 	}
 	if pills := metaPills(m, facts); len(pills) > 0 {
@@ -166,14 +166,15 @@ func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.Con
 // the thing *is*, not a fact about it: a pill row reads as a list of attributes
 // and "2 Seasons · 19 Episodes" sitting among a rating and a certificate reads
 // as one more attribute rather than as the shape of the work.
-func kickerLabel(ref v1.ContentRef, episodes []v1.EpisodePreview) string {
+// It takes the resolved season *order* rather than an episode list. Counting
+// distinct seasons among the episodes on hand was correct while a detail always
+// held every episode of a series, and became wrong the moment a library detail
+// began reading one season at a time (ADR 0107): a seventy-five-season programme
+// announced itself as "Series · 1 season".
+func kickerLabel(ref v1.ContentRef, seasons []int) string {
 	kind := mediaTypeWord(string(ref.MediaType))
 	if kind == "" {
 		return ""
-	}
-	seasons := make(map[int]struct{}, 4)
-	for _, e := range episodes {
-		seasons[e.Season] = struct{}{}
 	}
 	if n := len(seasons); n > 0 {
 		return fmt.Sprintf("%s · %d %s", kind, n, plural(n, "season"))
@@ -458,8 +459,16 @@ func playbackPanel(m v1.ContentMetadata, ref v1.ContentRef, facts releaseFacts, 
 		row("Type", mt)
 	}
 	row("Year", yearLabel(m.Year))
-	if len(m.Episodes) > 0 {
-		row("Episodes", strconv.Itoa(len(m.Episodes)))
+	// Seasons rather than episodes, and read from the season *order* rather than
+	// from the episodes on hand.
+	//
+	// A library detail reads one season at a time (ADR 0107), so counting
+	// `m.Episodes` here said "Episodes 6" over a selector offering seventy-five
+	// seasons — a number that was true of the read and false of the series. The
+	// season count is the one this panel can state honestly without reading a
+	// tree it deliberately does not read.
+	if n := len(season.order); n > 0 {
+		row("Seasons", strconv.Itoa(n))
 	} else {
 		row("Runtime", m.Runtime)
 	}
@@ -640,11 +649,16 @@ func (s seasonView) nextUp() *v1.EpisodePreview {
 
 // seasonView resolves the season to show and reads this viewer's progress
 // through it. An error anywhere costs the progress, never the episodes.
+// knownSeasons, when given, is the complete season list read from the tree's
+// season *containers* — the library plane's way of listing seventy-five seasons
+// having read the episodes of only one. The virtual plane passes nil and the
+// order is derived from the provider's preview, which carries every season
+// because a provider answers with the whole series at once.
 func (s *Service) seasonView(ctx context.Context, caller v1.Caller, res app.PreviewContentResult,
-	episodes []v1.EpisodePreview, params map[string]any) seasonView {
+	episodes []v1.EpisodePreview, knownSeasons []int, params map[string]any) seasonView {
 
 	view := seasonView{all: episodes}
-	if len(episodes) == 0 {
+	if len(episodes) == 0 && len(knownSeasons) == 0 {
 		return view
 	}
 
@@ -654,6 +668,12 @@ func (s *Service) seasonView(ctx context.Context, caller v1.Caller, res app.Prev
 			view.order = append(view.order, e.Season)
 		}
 		bySeason[e.Season] = append(bySeason[e.Season], e)
+	}
+	if len(knownSeasons) > 0 {
+		view.order = knownSeasons
+	}
+	if len(view.order) == 0 {
+		return view
 	}
 	// Default to the first real season, skipping a season 0 of specials when a
 	// numbered season exists; the season param overrides.
@@ -851,8 +871,16 @@ func titleWords(s string) string {
 // of variable depth — ADR 0013). A film's child is its feature item; a series'
 // children are its seasons.
 func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID string, params map[string]any) (sdui.Node, error) {
+	// The season the screen is on, read here so the query fetches that season's
+	// episodes and no others.
+	season := 0
+	if sv := stringParam(params, paramSeason); sv != "" {
+		if n, err := strconv.Atoi(sv); err == nil {
+			season = n
+		}
+	}
 	res, err := s.content.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{
-		Caller: caller, NodeID: v1.NodeID(nodeID),
+		Caller: caller, NodeID: v1.NodeID(nodeID), Season: season,
 	})
 	if err != nil {
 		return nil, err
@@ -864,14 +892,14 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 		// has never been reachable since. It still has a title, artwork and a
 		// tree, so it renders as those rather than as an error or an apology;
 		// the next maintenance run fills the rest in.
-		return s.structuralDetail(n, res.Tree), nil
+		return s.structuralDetail(n, res.Children), nil
 	}
 
 	m := res.Metadata
 	// The tree is the authority on what episodes exist, and the stored document
 	// deliberately carries none (ADR 0107). Projecting them back here is what
 	// lets one renderer serve both planes.
-	m.Episodes = app.EpisodesFromTree(res.Tree)
+	m.Episodes = app.EpisodesFromTree(res.Season, res.Episodes)
 
 	// The node fills what the document does not. Artwork is the case that
 	// matters: it is stored on the node (ADR 0071) and re-ranked by the artwork
@@ -901,7 +929,7 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 
 	return s.renderDetail(ctx, caller, ref, app.PreviewContentResult{
 		Metadata: m, InLibrary: true, NodeID: n.ID,
-	}, params)
+	}, app.SeasonNumbers(res.Children), params)
 }
 
 // structuralDetail is what a node with no stored description renders as: what
@@ -910,7 +938,7 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 // It was the *only* library detail before ADR 0107 and is now the floor beneath
 // it. It draws the children's posters, which the version it replaces did not —
 // a grid of blank cards was the visible half of the same omission.
-func (s *Service) structuralDetail(n v1.Node, tree []v1.Node) sdui.Node {
+func (s *Service) structuralDetail(n v1.Node, children []v1.Node) sdui.Node {
 	heroEls := []ui.El{
 		ui.Title(n.Title),
 		ui.When(n.Artwork.Backdrop != "", ui.Backdrop(s.art(n.Artwork.Backdrop))),
@@ -922,13 +950,8 @@ func (s *Service) structuralDetail(n v1.Node, tree []v1.Node) sdui.Node {
 	}
 	body := []ui.El{ui.Slot("bleed", ui.Component("DetailHero", heroEls...))}
 
-	// Direct children only: the tree carries every descendant, and a series'
-	// contents are its seasons rather than every episode of every season.
-	cards := make([]ui.El, 0, len(tree))
-	for _, c := range tree {
-		if c.ParentID == nil || *c.ParentID != n.ID {
-			continue
-		}
+	cards := make([]ui.El, 0, len(children))
+	for _, c := range children {
 		cards = append(cards, ui.PosterCard(c.Title, string(c.MediaType),
 			ui.When(c.Artwork.Poster != "", ui.Poster(s.art(c.Artwork.Poster))),
 			ui.OnTap(ui.Navigate(screenDetail, map[string]any{paramNodeID: string(c.ID)}))))
