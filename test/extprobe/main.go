@@ -14,7 +14,7 @@
 //   - a manifest read back across the boundary
 //   - Import calling *back* into the Platform's ContentService, within the
 //     invocation, carrying the Caller handle it was given
-//   - one provider role, so role dispatch is exercised, and the seven it does
+//   - three provider roles, so role dispatch is exercised, and the five it does
 //     not fill, so the refusal path is too
 //
 // Its whole main is the line every module author writes. If that stops being
@@ -51,10 +51,15 @@ type probeSettings struct {
 	FetchURL string `json:"fetch_url"`
 }
 
-// probe fills RoleSearch and nothing else. The registry resolves roles from the
-// manifest rather than by type assertion — a proxy satisfies every provider
-// interface — so declaring one role and implementing one role is what makes
-// this a usable test of that.
+// probe fills three of the eight roles and no more. The registry resolves roles
+// from the manifest rather than by type assertion — a proxy satisfies every
+// provider interface — so declaring exactly what is implemented, and leaving
+// five unfilled, is what makes this a usable test of both directions.
+//
+// Search was the original and proves dispatch. Stream and subtitles are here
+// for a narrower reason: they are the two roles carrying fields that a
+// `module.proto` without them drops silently, and the only way to show a field
+// crossing for real is a role served by a real child process.
 type probe struct{}
 
 func (probe) Manifest() v1.Manifest {
@@ -62,7 +67,7 @@ func (probe) Manifest() v1.Manifest {
 		ID:       "extprobe",
 		Version:  "v0.1.0",
 		Name:     "Extension Probe",
-		Provides: []v1.Role{v1.RoleSearch},
+		Provides: []v1.Role{v1.RoleSearch, v1.RoleStream, v1.RoleSubtitles},
 	}
 }
 
@@ -148,6 +153,42 @@ func (probe) Search(_ context.Context, req v1.SearchRequest) (v1.SearchResponse,
 		},
 		Title: "probe result: " + req.Text,
 		Year:  2026,
+	}}}, nil
+}
+
+// Streams answers with one link whose every descriptive field is non-zero,
+// because a zero is what a dropped field looks like. The three technical fields
+// are the point: a StreamLink crossing this boundary with an empty Container is
+// indistinguishable from a source that parsed none, so nothing errors and the
+// Platform simply knows less than the module did.
+func (probe) Streams(_ context.Context, req v1.StreamRequest) (v1.StreamResponse, error) {
+	return v1.StreamResponse{Streams: []v1.StreamLink{{
+		Label:     "probe",
+		Title:     "probe release " + req.Ref.NativeID,
+		Quality:   "2160p",
+		SizeBytes: 21_474_836_480,
+		Seeders:   99,
+		Location: v1.MediaLocation{
+			Scheme: v1.RemoteLocation, Provider: "extprobe", Ref: "magnet:?xt=urn:btih:probe",
+		},
+		Container:  "mkv",
+		VideoCodec: "hevc",
+		AudioCodec: "eac3",
+	}}}, nil
+}
+
+// Subtitles echoes the coordinates it was handed back through the response,
+// which is the only way to observe the *outbound* leg from the Platform side:
+// nothing the caller can read reports what the child actually received, and a
+// request arriving with two zeroes resolves the wrong episode without erroring.
+//
+// The track's ID carries them because Subtitle has no numeric field and adding
+// one to the contract to serve a test would be the tail wagging the dog.
+func (probe) Subtitles(_ context.Context, req v1.SubtitlesRequest) (v1.SubtitlesResponse, error) {
+	return v1.SubtitlesResponse{Subtitles: []v1.Subtitle{{
+		Language: "eng",
+		URL:      "https://subs.invalid/probe.srt",
+		ID:       "s" + strconv.Itoa(req.Season) + "e" + strconv.Itoa(req.Episode),
 	}}}, nil
 }
 

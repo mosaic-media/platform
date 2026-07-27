@@ -89,8 +89,14 @@ func TestLaunchSpawnsAModuleAndReadsItsManifest(t *testing.T) {
 	if got.Name != "Extension Probe" {
 		t.Errorf("manifest name: got %q", got.Name)
 	}
-	if len(got.Provides) != 1 || got.Provides[0] != v1.RoleSearch {
-		t.Errorf("provides: got %v, want [search]", got.Provides)
+	want := []v1.Role{v1.RoleSearch, v1.RoleStream, v1.RoleSubtitles}
+	if len(got.Provides) != len(want) {
+		t.Fatalf("provides: got %v, want %v", got.Provides, want)
+	}
+	for i, r := range want {
+		if got.Provides[i] != r {
+			t.Errorf("provides[%d]: got %q, want %q", i, got.Provides[i], r)
+		}
 	}
 }
 
@@ -154,8 +160,8 @@ func TestSearchRoleWorksAcrossTheProcessBoundary(t *testing.T) {
 }
 
 // The registry must not be able to tell this from a compiled-in module, and it
-// must resolve the probe's roles from the manifest — the probe fills only
-// search, and the proxy satisfies every provider interface.
+// must resolve the probe's roles from the manifest — the probe fills three of
+// the eight, and the proxy satisfies every provider interface.
 func TestRegistryHoldsAnExtensionModuleLikeAnyOther(t *testing.T) {
 	m := launch(t, &recordingContent{})
 
@@ -171,17 +177,98 @@ func TestRegistryHoldsAnExtensionModuleLikeAnyOther(t *testing.T) {
 	if got := len(reg.SearchProviders()); got != 1 {
 		t.Errorf("SearchProviders: got %d, want 1", got)
 	}
-	// It declares no stream, artwork or playback role, and the manifest is what
-	// the registry reads — a bare type assertion against the proxy would have
-	// returned it for all three.
-	if got := len(reg.StreamProviders()); got != 0 {
-		t.Errorf("StreamProviders: got %d, want 0", got)
+	if got := len(reg.StreamProviders()); got != 1 {
+		t.Errorf("StreamProviders: got %d, want 1", got)
 	}
+	// It declares no artwork or playback role, and the manifest is what the
+	// registry reads — a bare type assertion against the proxy would have
+	// returned it for both.
 	if got := len(reg.ArtworkProviders()); got != 0 {
 		t.Errorf("ArtworkProviders: got %d, want 0", got)
 	}
 	if got := len(reg.PlaybackProviders()); got != 0 {
 		t.Errorf("PlaybackProviders: got %d, want 0", got)
+	}
+}
+
+// TestStreamAndSubtitleFieldsCrossTheProcessBoundary is the strongest form of
+// the claim SDK v0.26.0's five fields need: a real child process, a real Unix
+// socket, a real handshake, real protobuf on the way there and back.
+//
+// sdk/host has its own version of this over a real gRPC connection, and it is
+// not the same test. That one proves the converters and the dispatch with both
+// ends in one process. This one proves the fields survive everything between
+// two, which is the arrangement the failure has always hidden in: a field with
+// no `module.proto` counterpart compiles on both sides, converts to nothing, and
+// arrives as a zero — indistinguishable from a source that had nothing to say.
+// It has happened three times.
+//
+// The two directions are asserted separately and deliberately. The three
+// technical fields travel module-to-Platform and are read off what the caller
+// receives. The two subtitle coordinates travel Platform-to-module, and the only
+// witness is the child: it echoes them back in the track id, because nothing the
+// caller can otherwise read reports what the child was handed.
+func TestStreamAndSubtitleFieldsCrossTheProcessBoundary(t *testing.T) {
+	m := launch(t, &recordingContent{})
+
+	sp, ok := m.Capability.(v1.StreamProvider)
+	if !ok {
+		t.Fatal("the proxy is not a StreamProvider")
+	}
+	streams, err := sp.Streams(context.Background(), v1.StreamRequest{
+		Caller: v1.CallerFromSession("h"),
+		Ref:    v1.ContentRef{Provider: "extprobe", NativeID: "tt0083658", MediaType: v1.MediaMovie},
+	})
+	if err != nil {
+		t.Fatalf("streams: %v", err)
+	}
+	if len(streams.Streams) != 1 {
+		t.Fatalf("streams: got %d, want 1", len(streams.Streams))
+	}
+	link := streams.Streams[0]
+
+	if link.Container != "mkv" {
+		t.Errorf("StreamLink.Container did not cross the process boundary: got %q, want %q", link.Container, "mkv")
+	}
+	if link.VideoCodec != "hevc" {
+		t.Errorf("StreamLink.VideoCodec did not cross the process boundary: got %q, want %q", link.VideoCodec, "hevc")
+	}
+	if link.AudioCodec != "eac3" {
+		t.Errorf("StreamLink.AudioCodec did not cross the process boundary: got %q, want %q", link.AudioCodec, "eac3")
+	}
+	// The fields that already crossed, beside the new ones: three strings
+	// appended to one message is the shape a converter garbles by pairing the
+	// wrong field with the wrong value, and that reads as success unless
+	// something pins the originals too.
+	if link.Quality != "2160p" || link.Seeders != 99 || link.SizeBytes != 21_474_836_480 {
+		t.Errorf("existing StreamLink fields did not survive beside the new ones: got %+v", link)
+	}
+	if link.Location.Scheme != v1.RemoteLocation || link.Location.Ref != "magnet:?xt=urn:btih:probe" {
+		t.Errorf("Location did not survive: got %+v", link.Location)
+	}
+
+	sub, ok := m.Capability.(v1.SubtitlesProvider)
+	if !ok {
+		t.Fatal("the proxy is not a SubtitlesProvider")
+	}
+	subs, err := sub.Subtitles(context.Background(), v1.SubtitlesRequest{
+		Caller:  v1.CallerFromSession("h"),
+		Ref:     v1.ContentRef{ExternalScheme: "imdb", ExternalID: "tt0903747", MediaType: v1.MediaTVSeries},
+		Season:  1,
+		Episode: 2,
+	})
+	if err != nil {
+		t.Fatalf("subtitles: %v", err)
+	}
+	if len(subs.Subtitles) != 1 {
+		t.Fatalf("subtitles: got %d, want 1", len(subs.Subtitles))
+	}
+	// "s1e2" is the child's report of what arrived. "s0e0" is the failure this
+	// exists to catch, and it is the one that does not look like a failure:
+	// subtitles for the wrong episode are a track that does not match the
+	// dialogue, not an error anyone sees.
+	if got := subs.Subtitles[0].ID; got != "s1e2" {
+		t.Errorf("SubtitlesRequest coordinates did not cross the process boundary: the child saw %q, want %q", got, "s1e2")
 	}
 }
 
@@ -221,8 +308,8 @@ func TestManifestDeclaringAnUnservedRoleRefusesTheConnection(t *testing.T) {
 		Content:    &recordingContent{},
 		DeclaredManifest: v1.Manifest{
 			ID: "extprobe",
-			// The probe serves search only.
-			Provides: []v1.Role{v1.RoleSearch, v1.RoleStream},
+			// The probe serves search, stream and subtitles — not artwork.
+			Provides: []v1.Role{v1.RoleSearch, v1.RoleArtwork},
 		},
 	})
 	if err == nil {

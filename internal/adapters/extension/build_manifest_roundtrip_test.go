@@ -64,8 +64,19 @@ func TestBuildManifestFromAModuleThenLaunch(t *testing.T) {
 	if m.ID != "extprobe" {
 		t.Errorf("manifest id: got %q, want extprobe (the identity the module printed)", m.ID)
 	}
-	if len(m.Provides) != 1 || m.Provides[0] != v1.RoleSearch {
-		t.Errorf("provides did not survive: %v", m.Provides)
+	// Every role the binary printed, in the order it printed them. The list is
+	// read off the running binary rather than hand-maintained in a workflow,
+	// which is the property this asserts: a role added in Go appears in the
+	// published manifest with no second edit, and this test moving when the probe
+	// grows a role is that working rather than a breakage.
+	wantRoles := []v1.Role{v1.RoleSearch, v1.RoleStream, v1.RoleSubtitles}
+	if len(m.Provides) != len(wantRoles) {
+		t.Fatalf("provides did not survive: got %v, want %v", m.Provides, wantRoles)
+	}
+	for i, r := range wantRoles {
+		if m.Provides[i] != r {
+			t.Errorf("provides[%d]: got %q, want %q", i, m.Provides[i], r)
+		}
 	}
 	if len(m.Binaries) != 1 || m.Binaries[0].OS != runtime.GOOS {
 		t.Errorf("binaries: got %+v", m.Binaries)
