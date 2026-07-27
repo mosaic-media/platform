@@ -142,6 +142,33 @@ func TestEncodeHeightIsCappedForAnUncappedClient(t *testing.T) {
 	}
 }
 
+// TestEncodeHeightIsCappedForAnHonestlyTallClient is the same asymmetry in the
+// direction that shipped broken, and it is the common case rather than an edge
+// one: a Retina laptop reports 1200 CSS pixels at devicePixelRatio 2 and
+// correctly declares 2400.
+//
+// The cap was applied only to clients that declared *nothing*, so a client that
+// answered honestly got its panel's number used as the encoder's. Playing a 4K
+// HDR release then pinned currentTime at 0 while ffmpeg held two cores
+// tone-mapping and encoding 2160p h264 in real time, which no home server does.
+//
+// Selection is deliberately untouched: the declared height still ranks
+// candidates, so a 4K display is still offered 4K releases and still
+// direct-plays them at 4K when nothing needs doing. Only the encode is bounded,
+// and only when there is an encode.
+func TestEncodeHeightIsCappedForAnHonestlyTallClient(t *testing.T) {
+	retina := profileFrom(&sessionv1.ClientProfile{VideoCodecs: []string{"h264"}, MaxHeight: 2400})
+
+	if got := retina.codecs().MaxHeight; got != defaultEncodeHeight {
+		t.Errorf("encode height = %d, want it bounded to %d — the panel's capability is not the encoder's",
+			got, defaultEncodeHeight)
+	}
+	if got := retina.prefer.MaxHeight; got != 2400 {
+		t.Errorf("selection height = %d, want the declared 2400 — capping selection would hand a 4K display a 1080p release to upscale",
+			got)
+	}
+}
+
 // TestCodecsCarryTheDeclaredHDRAnswer ties the declaration to the per-stream
 // decision (ADR 0050). Selection and planning must read the same profile: a
 // client picked for its codecs and then planned against a different one gets a

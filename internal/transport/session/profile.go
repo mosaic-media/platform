@@ -77,8 +77,20 @@ func (c clientProfile) codecs() playback.ClientCodecs {
 	if !c.declared {
 		return playback.DefaultBrowserCodecs
 	}
+	// The encode ceiling binds whatever the client declared, and that is the same
+	// argument defaultEncodeHeight already makes for a client that declared
+	// nothing — it was simply not being applied to the ones that did.
+	//
+	// A declared height is a statement about the panel, in device pixels: a
+	// Retina laptop reports 1200 CSS pixels at 2× and correctly declares 2400. As
+	// a *selection* cap that is right and stays untouched, so a 4K release is
+	// still chosen and still direct-played at 4K when nothing needs doing. As an
+	// *encode* cap it asked this Platform to tone-map and encode 2160p h264 in
+	// real time, which it cannot do: playing a 4K HDR release pinned currentTime
+	// at 0 while ffmpeg held two cores. The panel's capability is not the
+	// encoder's.
 	height := c.prefer.MaxHeight
-	if height == 0 {
+	if height == 0 || height > defaultEncodeHeight {
 		height = defaultEncodeHeight
 	}
 	return playback.ClientCodecs{
