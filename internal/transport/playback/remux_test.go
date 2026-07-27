@@ -520,3 +520,32 @@ func TestASeekBeyondTheFrontierRestarts(t *testing.T) {
 		t.Errorf("ffmpeg started %d times; want 2 — a seek to the middle must restart rather than wait for the encoder to arrive", n)
 	}
 }
+
+// TestAdvertisedLengthTracksTheSource pins the agreement a seek depends on.
+//
+// The client computes byte-to-time from the length the origin advertises and
+// the duration it infers from the fragments; the origin computes the inverse
+// from the same length and the probed duration. If those disagree, a seek
+// resolves to a timestamp nobody asked for — live, a flat 2 MB/s guess against
+// a 4K release whose real rate was 45 MB/s put the two mappings a factor of
+// twenty-two apart.
+func TestAdvertisedLengthTracksTheSource(t *testing.T) {
+	const size = 21_474_836_480
+	withSource := Plan{Duration: 2 * time.Hour, SourceBytes: size}
+	if got := withSource.contentLength(); got != size {
+		t.Errorf("contentLength = %d, want the source's own %d — a guess disagrees with what the client infers", got, size)
+	}
+
+	// The flat rate survives only for a source that reported no size, where
+	// there is nothing better to say.
+	noSource := Plan{Duration: 100 * time.Second}
+	if got := noSource.contentLength(); got != 100*estimatedBitrate {
+		t.Errorf("contentLength = %d, want the fallback estimate", got)
+	}
+
+	// And the mapping stays proportional over whichever total is in use, since
+	// that is what the origin inverts on every range request.
+	if got := withSource.offsetAt(size / 4); got != 30*time.Minute {
+		t.Errorf("offsetAt(quarter) = %v, want 30m", got)
+	}
+}

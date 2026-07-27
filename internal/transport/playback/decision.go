@@ -67,6 +67,17 @@ type Plan struct {
 	// position that does not exist.
 	Duration time.Duration
 
+	// SourceBytes is the release's size on the wire, carried so the origin can
+	// advertise a length close to what the transcode will really produce.
+	//
+	// It matters more than it sounds. The client derives its own byte-to-time
+	// mapping from the length the origin advertises and the duration it infers
+	// from the fragments, and if that disagrees with the origin's mapping a seek
+	// resolves to the wrong timestamp. A flat bitrate guess disagreed by 22x on a
+	// 4K release — 2 MB/s assumed against 45 MB/s actual — and the seek landed
+	// nowhere near where it was asked for.
+	SourceBytes int64
+
 	// DirectPlay is true when nothing needs doing and the origin can simply
 	// relay the upstream bytes, keeping byte-range seeking for free.
 	DirectPlay bool
@@ -152,12 +163,13 @@ func Decide(info MediaInfo, codecs ClientCodecs, preferred []string) Plan {
 	}
 
 	plan := Plan{
-		Video:      ActionCopy,
-		VideoIndex: info.Video.Index,
-		Audio:      ActionDrop,
-		AudioIndex: -1,
-		MaxHeight:  codecs.MaxHeight,
-		Duration:   info.Duration,
+		Video:       ActionCopy,
+		VideoIndex:  info.Video.Index,
+		Audio:       ActionDrop,
+		AudioIndex:  -1,
+		MaxHeight:   codecs.MaxHeight,
+		Duration:    info.Duration,
+		SourceBytes: info.SizeBytes,
 	}
 
 	switch {

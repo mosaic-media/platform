@@ -362,8 +362,24 @@ const estimatedBitrate = 2 << 20
 // duration to map offsets onto. Without one the origin serves the honest pipe.
 func (p Plan) seekable() bool { return p.Duration > 0 }
 
-// contentLength is the synthetic total the origin advertises.
+// contentLength is the total the origin advertises.
+//
+// **The source's own size is used wherever it is known, and a flat rate only as
+// a last resort.** The client computes its byte-to-time mapping from this length
+// and the duration it reads out of the fragments; the origin computes the
+// inverse from this length and the probed duration. If the two disagree a seek
+// resolves to the wrong timestamp — and a flat 2 MB/s guess disagreed with a 4K
+// release by a factor of twenty-two.
+//
+// The source size is close because the video stream is copied in the case that
+// matters: a remux changes the container and re-encodes audio, so the output
+// tracks the input to within the audio delta. Where the video *is* re-encoded
+// the estimate is worse again, which is a known limit of byte-addressing a
+// transcode rather than something this arithmetic can fix.
 func (p Plan) contentLength() int64 {
+	if p.SourceBytes > 0 {
+		return p.SourceBytes
+	}
 	return int64(p.Duration.Seconds() * estimatedBitrate)
 }
 
