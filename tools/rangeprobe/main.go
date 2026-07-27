@@ -198,14 +198,19 @@ func probe(client *http.Client, target string) error {
 	if err != nil {
 		return err
 	}
-	size := head.length
+	// A server may refuse HEAD and still range perfectly well — a real debrid
+	// proxy answers 405 here — so a failed HEAD is reported and then ignored
+	// entirely. Its Content-Length in that case describes the *error body*, and
+	// treating 31 bytes of "method not allowed" as the file's size is how this
+	// tool once concluded a 48 GB film was too small to seek within.
+	size := head.total
+	if head.code >= 300 {
+		size = 0
+	}
 	fmt.Printf("HEAD            %s  Accept-Ranges: %s  Content-Length: %s\n",
 		head.status, orNone(head.acceptRanges), humanBytes(size))
-
-	// A server may refuse HEAD and still range perfectly well, so a failure here
-	// is reported and not fatal.
 	if size <= 0 {
-		fmt.Println("                no Content-Length from HEAD; falling back to the ranged responses")
+		fmt.Println("                no usable size from HEAD; taking it from the ranged response instead")
 	}
 
 	// 2. The first kilobyte. This is what a player asks for first, and what a
@@ -216,6 +221,13 @@ func probe(client *http.Client, target string) error {
 	}
 	fmt.Printf("GET 0-1023      %s  Content-Range: %s  (%d bytes)\n",
 		first.status, orNone(first.contentRange), len(first.body))
+
+	// The ranged response is the better authority on size anyway: its
+	// Content-Range carries the total, and it comes from the request path that
+	// actually matters rather than from a HEAD the server may treat differently.
+	if first.total > 0 {
+		size = first.total
+	}
 
 	// 3. A range from the middle of the file — the seek a player actually
 	// performs, and the request a non-compliant CDN answers from byte zero.
@@ -292,8 +304,13 @@ type result struct {
 	code         int
 	acceptRanges string
 	contentRange string
-	length       int64
-	body         []byte
+	// length is this response's own body length; total is the size of the whole
+	// resource. They differ on every 206 — a partial response is 1024 bytes long
+	// and describes a 48 GB file — and conflating them made this tool call a
+	// feature film too small to seek within.
+	length int64
+	total  int64
+	body   []byte
 }
 
 func request(client *http.Client, method, target, rng string) (result, error) {
@@ -328,10 +345,13 @@ func request(client *http.Client, method, target, rng string) (result, error) {
 			return out, err
 		}
 	}
-	if out.length <= 0 && out.contentRange != "" {
+	// Content-Range's total is the authority wherever it is present, because it
+	// is the only header that states the whole size on a partial response.
+	out.total = out.length
+	if out.contentRange != "" {
 		if i := strings.LastIndex(out.contentRange, "/"); i >= 0 {
 			if total, convErr := strconv.ParseInt(out.contentRange[i+1:], 10, 64); convErr == nil {
-				out.length = total
+				out.total = total
 			}
 		}
 	}
