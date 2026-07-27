@@ -5,6 +5,7 @@
 package playback
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestShouldRemuxPicksContainersMSECannotTake is the whole decision in one
@@ -91,21 +93,18 @@ func fakeFFmpeg(t *testing.T, output string) string {
 	return bin
 }
 
-// TestRemuxedResponseIsNotSeekable pins the asymmetry M3 slice 4 exists to
-// remove, and it is pinned because the slice is *scoped* against it.
+// TestRemuxedResponseIsNotSeekable now pins the **fallback**, which is what this
+// test became when the seekable path landed.
 //
-// The origin has two paths and only one of them is a pipe. The relayed path
-// forwards Range upstream and relays the 206 back, which
-// TestHandlerRelaysRangeRequests covers. This is the other one: fragmented MP4
-// off a pipe has no index and no length, so a Range request cannot be honoured
-// and the honest answer is to say the source does not do them.
+// A plan with no Duration cannot map a byte offset to a timestamp, so there is
+// nothing to restart ffmpeg at and the origin serves the old honest pipe:
+// Accept-Ranges: none, 200, the whole stream. That case is real — a source that
+// reports no duration — and saying so is better than synthesising a timeline and
+// sending a player to a position that does not exist.
 //
-// Asserting it matters more than it looks. Until now the difference between the
-// two paths was true only in the code and in a comment — a reading, not a test —
-// and the roadmap sentence built on it ("resume is exact only on a directly
-// relayed stream") was being read as a property of the *source* rather than of
-// this implementation. When the segmenter lands, this test is what has to change
-// to say so, rather than the change happening quietly.
+// It previously pinned the *only* remux behaviour, and its comment said this
+// test is what would have to change when the segmenter landed rather than the
+// behaviour changing quietly. That is what happened.
 func TestRemuxedResponseIsNotSeekable(t *testing.T) {
 	const output = "fragmented-mp4-bytes"
 
@@ -223,5 +222,192 @@ func TestRemuxSuccessStillStreamsFromTheFirstByte(t *testing.T) {
 	}
 	if got := rec.Body.String(); got != output {
 		t.Errorf("body = %q, want %q — the probed bytes must be written through, not dropped", got, output)
+	}
+}
+
+// recordingFFmpeg writes bytes to stdout and records the arguments it was given,
+// so a test can assert on what ffmpeg was actually asked to do. The seek is
+// invisible in the response — every seek returns the same kind of fMP4 — so the
+// argument list is the only place it can be observed.
+func recordingFFmpeg(t *testing.T, output, argsFile string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake is a shell script")
+	}
+	bin := filepath.Join(t.TempDir(), "ffmpeg")
+	script := "#!/bin/sh\necho \"$@\" > " + strconv.Quote(argsFile) + "\nprintf '%s' " + strconv.Quote(output) + "\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatalf("writing the fake ffmpeg: %v", err)
+	}
+	return bin
+}
+
+// seekablePlan is a two-hour release, which is the only thing that makes the
+// remux path answer ranges at all.
+func seekablePlan() Plan {
+	return Plan{Duration: 2 * time.Hour, Reason: "audio codec eac3 is not decodable by this client"}
+}
+
+// TestSeekableRemuxAdvertisesALength is what a media element checks before it
+// will let anyone drag the scrubber. Without a length and an Accept-Ranges it
+// treats the source as an unbounded stream and disables seeking entirely, which
+// is exactly the state slice 4 exists to leave.
+//
+// The HEAD must not start a transcode: it is asked once at load, and answering
+// it by spawning ffmpeg would burn a process per page view.
+func TestSeekableRemuxAdvertisesALength(t *testing.T) {
+	args := filepath.Join(t.TempDir(), "args")
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", seekablePlan())
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", args))).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/playback/"+raw, nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("Accept-Ranges"); got != "bytes" {
+		t.Errorf("Accept-Ranges = %q, want bytes — anything else disables the scrubber", got)
+	}
+	want := strconv.FormatInt(seekablePlan().contentLength(), 10)
+	if got := rec.Header().Get("Content-Length"); got != want {
+		t.Errorf("Content-Length = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(args); err == nil {
+		t.Error("a HEAD started ffmpeg; it must answer from the plan alone")
+	}
+}
+
+// TestSeekableRemuxRestartsFFmpegAtTheMappedTime is the mechanism itself.
+//
+// A byte offset means nothing to a live transcode, so it is converted to a
+// position in the release and ffmpeg is restarted there. Both flags are asserted
+// because both are load-bearing and neither is visible in the response: `-ss`
+// before `-i` makes ffmpeg range the source instead of decoding from zero, and
+// `-copyts` keeps the source's timestamps so the player's clock lands at the
+// seek point rather than jumping back to 0.
+func TestSeekableRemuxRestartsFFmpegAtTheMappedTime(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "args")
+	plan := seekablePlan()
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", plan)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+
+	total := plan.contentLength()
+	half := total / 2
+
+	req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
+	req.Header.Set("Range", "bytes="+strconv.FormatInt(half, 10)+"-")
+	rec := httptest.NewRecorder()
+	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile))).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusPartialContent {
+		t.Fatalf("status = %d, want 206 — a seek that answers 200 is a seek the player ignores", rec.Code)
+	}
+	wantRange := fmt.Sprintf("bytes %d-%d/%d", half, total-1, total)
+	if got := rec.Header().Get("Content-Range"); got != wantRange {
+		t.Errorf("Content-Range = %q, want %q", got, wantRange)
+	}
+
+	got, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("ffmpeg was never started: %v", err)
+	}
+	line := string(got)
+	// Half the advertised bytes is half the running time: one hour in.
+	if !strings.Contains(line, "-ss 3600.000") {
+		t.Errorf("ffmpeg args %q do not seek to the mapped time (3600s)", line)
+	}
+	if !strings.Contains(line, "-copyts") {
+		t.Errorf("ffmpeg args %q lack -copyts; without it the player's clock resets to zero on every seek", line)
+	}
+	// -ss must precede -i, or ffmpeg decodes from the start and discards, which
+	// turns a seek into a full read of everything before it.
+	if strings.Index(line, "-ss") > strings.Index(line, "-i ") {
+		t.Errorf("ffmpeg args %q put -ss after -i, which decodes from zero instead of ranging the source", line)
+	}
+}
+
+// A play from the start must not carry the seek flags, so the ordinary path is
+// exactly what it was before seeking existed.
+func TestUnseekedRemuxCarriesNoSeekFlags(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "args")
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", seekablePlan())
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile))).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 for an unranged request", rec.Code)
+	}
+	got, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("ffmpeg was never started: %v", err)
+	}
+	if strings.Contains(string(got), "-ss") || strings.Contains(string(got), "-copyts") {
+		t.Errorf("ffmpeg args %q carry seek flags for a play from the start", got)
+	}
+}
+
+// A range past the advertised end is refused rather than answered from the
+// beginning, which would silently ignore the seek and replay the film.
+func TestSeekPastTheEndIsRefused(t *testing.T) {
+	plan := seekablePlan()
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", plan)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
+	req.Header.Set("Range", "bytes="+strconv.FormatInt(plan.contentLength()+1, 10)+"-")
+	rec := httptest.NewRecorder()
+	Handler(s, http.DefaultClient, NewRemuxerAt(fakeFFmpeg(t, "frag"))).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestedRangeNotSatisfiable {
+		t.Errorf("status = %d, want 416", rec.Code)
+	}
+}
+
+// TestOffsetMappingIsProportionalAndClamped covers the arithmetic on its own,
+// including the two ends. Clamping matters: a player that asks past the end must
+// get the end rather than a timestamp beyond the film, which ffmpeg answers with
+// an empty stream that reads as a broken seek.
+func TestOffsetMappingIsProportionalAndClamped(t *testing.T) {
+	plan := Plan{Duration: 100 * time.Second}
+	total := plan.contentLength()
+
+	cases := []struct {
+		at   int64
+		want time.Duration
+	}{
+		{0, 0},
+		{total / 4, 25 * time.Second},
+		{total / 2, 50 * time.Second},
+		{total, 100 * time.Second},
+		{total * 2, 100 * time.Second},
+		{-1, 0},
+	}
+	for _, c := range cases {
+		if got := plan.offsetAt(c.at); got != c.want {
+			t.Errorf("offsetAt(%d) = %v, want %v", c.at, got, c.want)
+		}
+	}
+
+	// A plan with no duration is not seekable at all, which is what sends it to
+	// the pipe rather than to a synthesised timeline.
+	if (Plan{}).seekable() {
+		t.Error("a plan with no duration reported itself seekable")
 	}
 }

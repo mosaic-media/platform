@@ -12,7 +12,9 @@ import (
 	"net/http"
 	"os/exec"
 	"path"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Stream-copy remux (ADR 0048's named next step after selection).
@@ -110,6 +112,27 @@ func (r *Remuxer) ContentType() string { return "video/mp4" }
 // must be called to reap the process — a reader that goes away without it leaves
 // ffmpeg pulling bytes from the upstream forever.
 func (r *Remuxer) Stream(ctx context.Context, upstreamURL string, headers map[string]string, plan Plan) (io.ReadCloser, func(), error) {
+	return r.StreamFrom(ctx, upstreamURL, headers, plan, 0)
+}
+
+// StreamFrom is Stream starting at an offset into the release, which is what
+// makes a transcoded stream seekable (ADR 0108).
+//
+// Two flags carry the whole idea and both are load-bearing:
+//
+//   - **`-ss` before `-i`** seeks the *input*. ffmpeg then asks the upstream for
+//     a byte range rather than decoding and discarding everything before the
+//     offset, which is only affordable because the upstream honours Range — the
+//     measurement this design rests on. After `-i` it would decode from zero.
+//   - **`-copyts`** keeps the source's timestamps instead of rebasing them to
+//     zero. Without it every seek produces a stream that claims to start at 0,
+//     so the player's clock jumps back to the beginning and the scrubber fights
+//     the viewer. With it the fragments carry the real decode times and the
+//     player lands where the person asked to be.
+//
+// An offset of zero is an ordinary play from the start and adds neither flag,
+// so the un-seeked path is byte-for-byte what it was.
+func (r *Remuxer) StreamFrom(ctx context.Context, upstreamURL string, headers map[string]string, plan Plan, offset time.Duration) (io.ReadCloser, func(), error) {
 	if !r.Available() {
 		return nil, nil, ErrRemuxUnavailable
 	}
@@ -118,6 +141,9 @@ func (r *Remuxer) Stream(ctx context.Context, upstreamURL string, headers map[st
 	args := []string{"-hide_banner", "-loglevel", "error"}
 	if h := ffmpegHeaderArg(headers); h != "" {
 		args = append(args, "-headers", h)
+	}
+	if offset > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(offset.Seconds(), 'f', 3, 64), "-copyts")
 	}
 	args = append(args, "-i", upstreamURL)
 	args = append(args, plan.ffmpegArgs()...)
@@ -170,6 +196,13 @@ func ffmpegHeaderArg(headers map[string]string) string {
 // signal — a player that asks for a byte range gets told the source does not do
 // them, rather than being handed a wrong answer.
 func serveRemuxed(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket, plan Plan) {
+	// A seekable plan answers ranges; one with no duration falls back to the pipe
+	// below, unchanged and honestly labelled.
+	if plan.seekable() {
+		serveSeekableRemux(w, r, rx, t, plan)
+		return
+	}
+
 	body, stop, err := rx.Stream(r.Context(), t.URL, t.Headers, plan)
 	if err != nil {
 		http.Error(w, "remux unavailable", http.StatusBadGateway)
@@ -289,4 +322,175 @@ func (p Plan) videoFilter() string {
 	// chain leaves the frames in a float format nothing else accepts.
 	parts = append(parts, "format=yuv420p")
 	return strings.Join(parts, ",")
+}
+
+// Seekable transcoded output (ADR 0108).
+//
+// A bare <video> is the whole constraint. It has no MSE and no HLS library
+// (ADR 0070), so the only way it knows how to seek is to ask for a **byte**
+// range — and a live transcode has no byte index to answer one with. What it
+// does have, once the probe reports a duration, is a defensible *estimate*: the
+// output is roughly constant-bitrate over its length, so an offset is a
+// position in time.
+//
+// So the origin advertises a synthetic length, converts a requested offset into
+// a timestamp, and restarts ffmpeg there with -copyts so the fragments carry
+// real decode times. The player's clock then lands where the viewer asked, and
+// the estimate only ever affects where the *scrubber handle* sits — never which
+// frame is shown, because that comes from the timestamps rather than from this
+// arithmetic.
+//
+// **The estimate is honest about being one.** Its error is a variable-bitrate
+// release whose scrubber is slightly non-linear: dragging to the middle lands
+// near the middle rather than exactly on it. That is the cost of seeking at all
+// on a player that cannot be told anything else, and it is bounded — every seek
+// is served from a real keyframe, so nothing lands in the middle of a fragment.
+
+// estimatedBitrate is the assumed output rate for a transcoded stream, in bytes
+// per second, used only to synthesise a Content-Length.
+//
+// 2 MB/s ≈ 16 Mbps, which is a generous 1080p h264 with stereo AAC — the shape
+// this origin actually emits, since MaxHeight bounds the encode. Over-estimating
+// is the safe direction: the advertised length is longer than the real output,
+// so the player never asks for a byte past the end of what ffmpeg will produce.
+// Under-estimating would truncate the timeline and make the last minutes
+// unreachable.
+const estimatedBitrate = 2 << 20
+
+// seekable reports whether a plan can answer range requests, which needs a
+// duration to map offsets onto. Without one the origin serves the honest pipe.
+func (p Plan) seekable() bool { return p.Duration > 0 }
+
+// contentLength is the synthetic total the origin advertises.
+func (p Plan) contentLength() int64 {
+	return int64(p.Duration.Seconds() * estimatedBitrate)
+}
+
+// offsetAt converts a byte offset in the advertised stream to a position in the
+// release. It clamps rather than extrapolating: a player asking past the end
+// gets the end, not a negative seek or a timestamp beyond the film.
+func (p Plan) offsetAt(byteOffset int64) time.Duration {
+	total := p.contentLength()
+	if byteOffset <= 0 || total <= 0 {
+		return 0
+	}
+	if byteOffset >= total {
+		return p.Duration
+	}
+	return time.Duration(float64(p.Duration) * (float64(byteOffset) / float64(total)))
+}
+
+// parseByteRangeStart reads the first byte position out of a Range header.
+//
+// Only `bytes=N-` and `bytes=N-M` are understood, which is what a media element
+// sends. A suffix range (`bytes=-N`, "the last N bytes") is deliberately not
+// handled: it asks for the end of a stream whose real length is unknown, and
+// answering it with an estimate would seek to a position that may not exist.
+// Reporting "not satisfiable" for it is the honest answer.
+func parseByteRangeStart(header string) (int64, bool) {
+	const prefix = "bytes="
+	if !strings.HasPrefix(header, prefix) {
+		return 0, false
+	}
+	spec := strings.TrimPrefix(header, prefix)
+	// One range only. A multi-range request over a live transcode has no sane
+	// answer, and no media element sends one.
+	if strings.Contains(spec, ",") {
+		return 0, false
+	}
+	dash := strings.Index(spec, "-")
+	if dash <= 0 {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(spec[:dash]), 10, 64)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// serveSeekableRemux answers a transcoded stream as a byte-addressable resource.
+//
+// The shape is what a media element expects of any ordinary file: a length, an
+// Accept-Ranges, and a 206 carrying a Content-Range when it asks for an offset.
+// What differs is that the bytes are produced on demand from a timestamp rather
+// than read out of one — so a seek costs a fresh ffmpeg at the mapped position,
+// and the previous one is reaped when its reader goes away.
+//
+// **Every response is a fresh process, and that is the cost being accepted.** A
+// viewer dragging the scrubber across a film starts several transcodes in a few
+// seconds. Bounding that is a session concern rather than a correctness one —
+// the reference implementations keep a keyed session and kill the running
+// process on a new seek, and the same is owed here — but each request in
+// isolation is correct, which is the property this builds first.
+func serveSeekableRemux(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket, plan Plan) {
+	total := plan.contentLength()
+
+	w.Header().Set("Content-Type", rx.ContentType())
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Cache-Control", "no-store")
+
+	// A HEAD is how a media element learns the length before deciding it can
+	// seek at all, so it must answer without starting a transcode.
+	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Length", strconv.FormatInt(total, 10))
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	start, ranged := int64(0), false
+	if h := r.Header.Get("Range"); h != "" {
+		n, ok := parseByteRangeStart(h)
+		if !ok {
+			// An unsatisfiable or unsupported range gets the status that says so,
+			// with the length, rather than the whole stream from the beginning —
+			// which would silently ignore the seek.
+			w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(total, 10))
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		if n >= total {
+			w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(total, 10))
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		start, ranged = n, true
+	}
+
+	body, stop, err := rx.StreamFrom(r.Context(), t.URL, t.Headers, plan, plan.offsetAt(start))
+	if err != nil {
+		http.Error(w, "remux unavailable", http.StatusBadGateway)
+		return
+	}
+	defer stop()
+	defer body.Close()
+
+	// The same probe-before-status rule the pipe path follows, and for the same
+	// reason: a dead ffmpeg must not read as a successful empty range.
+	first := make([]byte, 64*1024)
+	n, readErr := io.ReadFull(body, first)
+	if n == 0 {
+		http.Error(w, "the origin could not produce a playable stream for this release ("+plan.Reason+")", http.StatusBadGateway)
+		return
+	}
+
+	// The advertised end is the estimate's end, not what ffmpeg will really
+	// produce. It has to be: the player needs a range that closes, and the true
+	// length is unknowable until the transcode finishes.
+	if ranged {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, total-1, total))
+		w.Header().Set("Content-Length", strconv.FormatInt(total-start, 10))
+		w.WriteHeader(http.StatusPartialContent)
+	} else {
+		w.Header().Set("Content-Length", strconv.FormatInt(total, 10))
+		w.WriteHeader(http.StatusOK)
+	}
+
+	if _, err := w.Write(first[:n]); err != nil {
+		return
+	}
+	if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
+		return
+	}
+	_, _ = io.Copy(w, body)
 }

@@ -7,6 +7,7 @@ package playback
 import (
 	"sort"
 	"strings"
+	"time"
 )
 
 // The per-stream playback decision (ADR 0050).
@@ -55,6 +56,16 @@ type Plan struct {
 	// MaxHeight caps the encoded height, carried so the origin renders the same
 	// decision the planner made.
 	MaxHeight int
+
+	// Duration is the release's running time, carried from the probe so the
+	// origin can map a byte offset to a timestamp without re-probing on every
+	// range request a scrubbing player makes.
+	//
+	// It is what makes a transcoded stream seekable at all. Zero means the source
+	// reported none, and the origin then falls back to the unseekable pipe —
+	// honestly, rather than by guessing a duration and sending a player to a
+	// position that does not exist.
+	Duration time.Duration
 
 	// DirectPlay is true when nothing needs doing and the origin can simply
 	// relay the upstream bytes, keeping byte-range seeking for free.
@@ -146,6 +157,7 @@ func Decide(info MediaInfo, codecs ClientCodecs, preferred []string) Plan {
 		Audio:      ActionDrop,
 		AudioIndex: -1,
 		MaxHeight:  codecs.MaxHeight,
+		Duration:   info.Duration,
 	}
 
 	switch {

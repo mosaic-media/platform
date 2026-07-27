@@ -41,6 +41,13 @@ type MediaInfo struct {
 	// meaningful for a decision.
 	Container string
 	SizeBytes int64
+	// Duration is the release's running time. It is what makes a transcoded
+	// stream addressable at all: the origin cannot map a byte offset to a
+	// timestamp without it, so a seek has nothing to restart ffmpeg at.
+	//
+	// Zero when the source did not report one, which is a real case for a live
+	// or malformed input and means the stream can only be played from the start.
+	Duration  time.Duration
 	Video     VideoTrack
 	Audio     []AudioTrack
 	Subtitles []SubtitleTrack
@@ -134,6 +141,8 @@ type ffprobeOutput struct {
 	Format struct {
 		FormatName string `json:"format_name"`
 		Size       string `json:"size"`
+		// Seconds, as a decimal string — ffprobe reports "8093.184000".
+		Duration string `json:"duration"`
 	} `json:"format"`
 	Streams []struct {
 		Index         int    `json:"index"`
@@ -167,6 +176,12 @@ func parseProbe(raw []byte) (MediaInfo, error) {
 	info := MediaInfo{Container: primaryFormat(out.Format.FormatName)}
 	if n, err := strconv.ParseInt(out.Format.Size, 10, 64); err == nil {
 		info.SizeBytes = n
+	}
+	// Parsed as a float and not a duration string: ffprobe reports fractional
+	// seconds, and a film that is 8093.184 seconds long truncated to 8093 would
+	// put the end of the scrubber a fifth of a second from the end of the film.
+	if f, err := strconv.ParseFloat(out.Format.Duration, 64); err == nil && f > 0 {
+		info.Duration = time.Duration(f * float64(time.Second))
 	}
 
 	for _, s := range out.Streams {
