@@ -58,6 +58,7 @@ type fakeDBSnapshot struct {
 	moduleSettings  map[string]domain.ModuleSettings
 	userPreferences map[string]domain.UserPreference
 	playbackStates  map[playbackKey]v1.PlaybackState
+	libraryRules    map[domain.LibraryRuleID]domain.LibraryRule
 }
 
 // fakeDB is the shared backing store behind every fake contract in this
@@ -93,6 +94,10 @@ type fakeDB struct {
 	// playbackStates is the first per-user content state (ADR 0046), so it is
 	// the first fake here keyed by a pair rather than by an id.
 	playbackStates map[playbackKey]v1.PlaybackState
+	// libraryRules is what the library should contain (ADR 0104) — the first
+	// fake here that is neither content nor identity, but a durable statement
+	// about content.
+	libraryRules map[domain.LibraryRuleID]domain.LibraryRule
 }
 
 // playbackKey is the (user, node) pair playback state is stored under.
@@ -119,6 +124,7 @@ func newFakeDB() *fakeDB {
 		moduleSettings:  make(map[string]domain.ModuleSettings),
 		userPreferences: make(map[string]domain.UserPreference),
 		playbackStates:  make(map[playbackKey]v1.PlaybackState),
+		libraryRules:    make(map[domain.LibraryRuleID]domain.LibraryRule),
 	}
 }
 
@@ -323,6 +329,10 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 	for k, v := range db.playbackStates {
 		playbackStates[k] = v
 	}
+	libraryRules := make(map[domain.LibraryRuleID]domain.LibraryRule, len(db.libraryRules))
+	for k, v := range db.libraryRules {
+		libraryRules[k] = v
+	}
 
 	return fakeDBSnapshot{
 		users:          users,
@@ -339,6 +349,7 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 
 		userPreferences: userPreferences,
 		playbackStates:  playbackStates,
+		libraryRules:    libraryRules,
 	}
 }
 
@@ -358,6 +369,7 @@ func (db *fakeDB) restore(snap fakeDBSnapshot) {
 	db.moduleSettings = snap.moduleSettings
 	db.userPreferences = snap.userPreferences
 	db.playbackStates = snap.playbackStates
+	db.libraryRules = snap.libraryRules
 }
 
 // fakeUserStore implements contracts.UserStore. It deliberately does not
@@ -922,6 +934,107 @@ func (tx *fakeTx) PlaybackStates() contracts.PlaybackStateStore {
 // through this fake exercises it. It exists to satisfy contracts.Tx.
 func (tx *fakeTx) InstalledExtensions() contracts.InstalledExtensionStore { return nil }
 
+func (tx *fakeTx) LibraryRules() contracts.LibraryRuleStore {
+	return &fakeLibraryRuleStore{db: tx.db, trace: tx.trace}
+}
+
+// fakeLibraryRuleStore implements contracts.LibraryRuleStore over fakeDB
+// (ADR 0104). It enforces the one thing the real schema enforces and the
+// application service does not — the case-insensitive uniqueness of a rule's
+// name — because "two rules called Trending" is a Conflict a test must be able
+// to see.
+type fakeLibraryRuleStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func (s *fakeLibraryRuleStore) Create(_ context.Context, rule domain.LibraryRule) (domain.LibraryRule, error) {
+	s.trace.record("library_rules.create")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for _, existing := range s.db.libraryRules {
+		if strings.EqualFold(existing.Name, rule.Name) {
+			return domain.LibraryRule{}, contracts.NewError(contracts.Conflict, "a library rule with that name already exists")
+		}
+	}
+	s.db.libraryRules[rule.ID] = rule
+	return rule, nil
+}
+
+func (s *fakeLibraryRuleStore) Update(_ context.Context, rule domain.LibraryRule) (domain.LibraryRule, error) {
+	s.trace.record("library_rules.update")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	existing, ok := s.db.libraryRules[rule.ID]
+	if !ok {
+		return domain.LibraryRule{}, contracts.NewError(contracts.NotFound, "library rule not found")
+	}
+	// The last run survives an edit, as it does in SQL: the update statement
+	// names the mutable columns and leaves the account of the last run alone.
+	rule.LastRun = existing.LastRun
+	s.db.libraryRules[rule.ID] = rule
+	return rule, nil
+}
+
+func (s *fakeLibraryRuleStore) FindByID(_ context.Context, id domain.LibraryRuleID) (domain.LibraryRule, error) {
+	s.trace.record("library_rules.find_by_id")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	rule, ok := s.db.libraryRules[id]
+	if !ok {
+		return domain.LibraryRule{}, contracts.NewError(contracts.NotFound, "library rule not found")
+	}
+	return rule, nil
+}
+
+func (s *fakeLibraryRuleStore) List(_ context.Context, filter domain.LibraryRuleFilter) ([]domain.LibraryRule, error) {
+	s.trace.record("library_rules.list")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	var out []domain.LibraryRule
+	for _, rule := range s.db.libraryRules {
+		if filter.EnabledOnly && !rule.Enabled {
+			continue
+		}
+		out = append(out, rule)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.Before(out[j].CreatedAt)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (s *fakeLibraryRuleStore) Delete(_ context.Context, id domain.LibraryRuleID) error {
+	s.trace.record("library_rules.delete")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	delete(s.db.libraryRules, id)
+	return nil
+}
+
+func (s *fakeLibraryRuleStore) RecordRun(_ context.Context, id domain.LibraryRuleID, run domain.LibraryRuleRun) error {
+	s.trace.record("library_rules.record_run")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	rule, ok := s.db.libraryRules[id]
+	if !ok {
+		// A rule withdrawn mid-run has nowhere to record, which is not an error.
+		return nil
+	}
+	rule.LastRun = run
+	s.db.libraryRules[id] = rule
+	return nil
+}
+
+func (db *fakeDB) seedLibraryRule(rule domain.LibraryRule) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.libraryRules[rule.ID] = rule
+}
+
 // fakeUserPreferenceStore implements contracts.UserPreferenceStore over
 // fakeDB, keyed the same way the real table is: one entry per (user, key).
 type fakeUserPreferenceStore struct {
@@ -1105,6 +1218,7 @@ func baseTestDeps(db *fakeDB, tr *trace, now time.Time) app.Deps {
 		PlaybackStates:   &fakePlaybackStateStore{db: db, trace: tr},
 		TelemetryQueries: fakeTelemetryQueryStore{},
 		Tokens:           &fakeTokenStore{db: db, trace: tr},
+		LibraryRules:     &fakeLibraryRuleStore{db: db, trace: tr},
 	}
 }
 
@@ -1174,10 +1288,42 @@ func (s *fakeNodeStore) Search(_ context.Context, query contracts.NodeQuery) ([]
 	if query.Limit <= 0 {
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
 	}
+	found := s.collect(nodeQueryMatch(query), byTitle)
+
+	// Offset then limit, over the same total order the real adapter's
+	// ORDER BY title, id produces — otherwise a paging test would pass here
+	// against a fake that pages differently from PostgreSQL.
+	offset := query.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= len(found) {
+		return nil, nil
+	}
+	found = found[offset:]
+	if len(found) > query.Limit {
+		found = found[:query.Limit]
+	}
+	return found, nil
+}
+
+// Count applies the same predicate as Search and ignores Limit and Offset.
+func (s *fakeNodeStore) Count(_ context.Context, query contracts.NodeQuery) (int, error) {
+	s.trace.record("nodes.count")
+	return len(s.collect(nodeQueryMatch(query), byTitle)), nil
+}
+
+// nodeQueryMatch is the one predicate Search and Count share, so the fake
+// cannot develop the defect the real adapter is written to avoid: a count that
+// filters differently from the page beneath it.
+func nodeQueryMatch(query contracts.NodeQuery) func(v1.Node) bool {
 	title := strings.ToLower(query.Title)
 	wantMedia := v1.NormaliseMediaType(string(query.MediaType))
-
-	found := s.collect(func(n v1.Node) bool {
+	var wantAttributes map[string]any
+	if len(query.AttributesContain) > 0 {
+		_ = json.Unmarshal(query.AttributesContain, &wantAttributes)
+	}
+	return func(n v1.Node) bool {
 		if title != "" && !strings.Contains(strings.ToLower(n.Title), title) {
 			return false
 		}
@@ -1187,13 +1333,34 @@ func (s *fakeNodeStore) Search(_ context.Context, query contracts.NodeQuery) ([]
 		if query.Kind != "" && n.Kind != query.Kind {
 			return false
 		}
-		return true
-	}, byTitle)
-
-	if len(found) > query.Limit {
-		found = found[:query.Limit]
+		return attributesContain(n.Attributes, wantAttributes)
 	}
-	return found, nil
+}
+
+// attributesContain is jsonb `@>` at the depth the Platform actually queries:
+// top-level keys whose values compare equal once re-encoded. Nothing asks a
+// deeper containment question, and a fake that implemented the whole operator
+// would be asserting behaviour no caller depends on.
+func attributesContain(document []byte, want map[string]any) bool {
+	if len(want) == 0 {
+		return true
+	}
+	var have map[string]any
+	if err := json.Unmarshal(document, &have); err != nil {
+		return false
+	}
+	for key, value := range want {
+		got, ok := have[key]
+		if !ok {
+			return false
+		}
+		a, errA := json.Marshal(got)
+		b, errB := json.Marshal(value)
+		if errA != nil || errB != nil || string(a) != string(b) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *fakeNodeStore) FindByExternalID(_ context.Context, scheme, value string) ([]v1.Node, error) {

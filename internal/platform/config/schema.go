@@ -118,6 +118,20 @@ func PlatformSchema() *Schema {
 		FieldSpec{Name: "telemetry.retention.traces_hours", ReloadClass: Hot},
 		FieldSpec{Name: "telemetry.retention.metrics_days", ReloadClass: Hot},
 		FieldSpec{Name: "telemetry.retention.audit_days", ReloadClass: Hot},
+		// The library maintenance pass (ADR 0104). Its schedule is
+		// configuration because rules turn a household's upstream load from
+		// bursty and human-triggered into continuous.
+		//
+		// The two fields have different classes and the difference is real
+		// rather than cautious. The interval is handed to the scheduler once,
+		// at composition, so changing it takes a restart — a scheduler that
+		// re-read its own period every tick would be a second mechanism to get
+		// wrong for a value nobody changes twice a day. The budget is read at
+		// the top of every run, so lowering it takes effect on the next one:
+		// that is the knob somebody reaches for while an API is complaining,
+		// and making them restart to use it would be the wrong way round.
+		FieldSpec{Name: "library.maintenance.interval_hours", ReloadClass: Restart},
+		FieldSpec{Name: "library.maintenance.items_per_run", ReloadClass: Hot},
 	)
 	if err != nil {
 		// Unreachable: the field list above is a fixed, valid literal.

@@ -122,3 +122,9 @@ func (t *tx) ModuleSettings() contracts.ModuleSettingsStore {
 func (t *tx) InstalledExtensions() contracts.InstalledExtensionStore {
 	return &installedExtensionStore{q: t.q}
 }
+
+// LibraryRules joins the set (ADR 0104) so writing what the library should
+// contain and the event announcing it share the one transaction.
+func (t *tx) LibraryRules() contracts.LibraryRuleStore {
+	return &libraryRuleStore{q: t.q}
+}

@@ -53,6 +53,11 @@ const (
 	screenCatalog     = "catalog"
 	screenDetail      = "detail"
 	screenSettings    = "settings"
+	// screenLibrary is what the install owns (roadmap M2.1) — the first screen
+	// over the object graph rather than over a provider. It sits beside
+	// `collections` in the nav and is deliberately not the same screen: one is
+	// this household's shelf, the other is a source's catalogue.
+	screenLibrary = "library"
 	// screenHistory is what this viewer has watched (ADR 0103). It is its own
 	// screen rather than a settings panel because it is content — a grid of
 	// things you can open — and the settings side of the app is a working
@@ -164,6 +169,15 @@ const setWatchedAction = "setWatched"
 // standing up a full Service. *app.Service satisfies it.
 type contentQueries interface {
 	SearchAvailableContent(context.Context, app.SearchAvailableContentQuery) (app.SearchAvailableContentResult, error)
+	// ListLibrary is one page of what the install owns, with the real total
+	// (roadmap M2.1). It is the first read on this surface that goes to the
+	// object graph rather than through a provider.
+	ListLibrary(context.Context, app.ListLibraryQuery) (app.ListLibraryResult, error)
+	// The library rules and their maintenance (ADR 0104). Reading and previewing
+	// are what the settings panel is built from; the pass itself is triggered by
+	// an action, not by rendering.
+	ListLibraryRules(context.Context, app.ListLibraryRulesQuery) (app.ListLibraryRulesResult, error)
+	PreviewLibraryRule(context.Context, app.PreviewLibraryRuleQuery) (app.PreviewLibraryRuleResult, error)
 	ListModuleCatalogs(context.Context, app.ListModuleCatalogsQuery) (app.ListModuleCatalogsResult, error)
 	ListCatalogItems(context.Context, app.ListCatalogItemsQuery) (app.ListCatalogItemsResult, error)
 	GetContentNode(context.Context, v1.GetContentNodeQuery) (v1.GetContentNodeResult, error)
@@ -291,6 +305,8 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.homeScreen(ctx, caller)
 	case screenSearch:
 		return s.searchScreen(ctx, caller, params)
+	case screenLibrary:
+		return s.libraryScreen(ctx, caller, params)
 	case screenCollections:
 		return s.collectionsScreen(ctx, caller)
 	case screenCatalog:

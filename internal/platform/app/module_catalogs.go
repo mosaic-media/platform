@@ -108,7 +108,18 @@ func (s *Service) ListCatalogItems(ctx context.Context, q ListCatalogItemsQuery)
 	if err != nil {
 		return ListCatalogItemsResult{}, err
 	}
+	return s.catalogItemsPage(ctx, az, q)
+}
 
+// catalogItemsPage is ListCatalogItems with the boundary already cleared.
+//
+// It exists because a library rule pages a catalog several times in one
+// evaluation (ADR 0104), and calling the entry point per page would
+// re-authenticate and re-authorise for every page of one rule of one run —
+// the exact shape that made a ten-result search cost ten boundary cycles.
+// Requiring an authorized is what says "already inside" in a signature rather
+// than in a comment (ADR 0066).
+func (s *Service) catalogItemsPage(ctx context.Context, az authorized, q ListCatalogItemsQuery) (ListCatalogItemsResult, error) {
 	provider, ok := s.capabilityCatalogProvider(q.ModuleID)
 	if !ok {
 		return ListCatalogItemsResult{}, contracts.NewError(contracts.NotFound, "no catalog provider registered under id "+q.ModuleID)

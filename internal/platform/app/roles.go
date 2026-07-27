@@ -84,6 +84,12 @@ func administratorActions() []policy.Action {
 		ActionConfigDraft, ActionConfigValidate, ActionConfigActivate, ActionConfigRead,
 		ActionContentCreate, ActionContentRelate, ActionContentBind, ActionContentImport,
 		ActionModuleConfigure, ActionModuleRead, ActionExtensionManage,
+		// What the library should contain (ADR 0104). Administrator rather
+		// than superuser: a rule is curation, which is the thing running a
+		// household install mostly *is*. Reading is separated from managing
+		// because they are different disclosures — one says what the install
+		// decided, the other changes it — even though the preset confers both.
+		ActionLibraryRuleRead, ActionLibraryRuleManage,
 	)
 }
 

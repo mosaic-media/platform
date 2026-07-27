@@ -89,6 +89,12 @@ func (s *Service) shellScreen(ctx context.Context, caller v1.Caller, screen stri
 		ui.Slot("nav",
 			navItem("Home", "home", screenHome),
 			navItem("Search", "search", screenSearch),
+			// The install's own shelf, above the sources it was filled from.
+			// Library and Collections are adjacent and are not the same room:
+			// one is what this household owns, the other is what a module
+			// offers — and until this row existed there was no way at all to
+			// look at the first.
+			navItem("Library", "grid", screenLibrary),
 			navItem("Collections", "list", screenCollections),
 			navItem("Settings", "settings", screenSettings),
 		),

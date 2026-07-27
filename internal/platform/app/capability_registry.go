@@ -261,6 +261,28 @@ func (r *CapabilityRegistry) SearchProviders() []SearchProviderEntry {
 	return out
 }
 
+// SearchProvider returns the search provider registered under id, if that
+// capability fills RoleSearch.
+//
+// The singular form exists for a saved provider search (ADR 0104): a query rule
+// is a durable statement addressed to *one* source, not a fan-out. Fanning a
+// saved rule across every installed search provider would silently change what
+// the rule means whenever somebody installed an extension, which is the one
+// thing a durable statement must not do.
+func (r *CapabilityRegistry) SearchProvider(id string) (v1.SearchProvider, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	c, ok := r.byID[id]
+	if !ok {
+		return nil, false
+	}
+	if !fills(c, v1.RoleSearch) {
+		return nil, false
+	}
+	p, ok := c.(v1.SearchProvider)
+	return p, ok
+}
+
 // StreamProviderEntry pairs a stream-capable module's id with its provider, so a
 // caller can read the module's settings before invoking it.
 type StreamProviderEntry struct {

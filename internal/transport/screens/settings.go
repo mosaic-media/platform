@@ -116,6 +116,8 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 		return s.accountPanel(ctx, caller, nav)
 	case sectionPeople:
 		return s.peoplePanel(ctx, caller, nav, params)
+	case sectionLibraryRules:
+		return s.libraryRulesPanel(ctx, caller, nav, params)
 	}
 	return settingsFrame(nav, active, "", "", noSectionPanel(nav.groups)), nil
 }
@@ -143,17 +145,35 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 		panel:  true,
 	}}})
 
-	// Server — the install and who reaches it. Only for a caller who may read
-	// the user list; for anyone else the group does not exist rather than
-	// existing and refusing.
+	// Server — the install and who reaches it. Each row is gated on its own
+	// permission, so a caller granted one and not the other sees exactly the
+	// rows they can open, and the group appears only if there is something in
+	// it.
+	var server []settingsNavEntry
 	if s.content.CallerCan(ctx, caller, app.ActionUserRead, "user") {
-		groups = append(groups, settingsNavGroup{label: "Server", entries: []settingsNavEntry{{
+		server = append(server, settingsNavEntry{
 			key:    sectionPeople,
 			label:  "People",
 			icon:   "home",
 			action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionPeople}),
 			panel:  true,
-		}}})
+		})
+	}
+	// What the library should contain (ADR 0104). It is in Server rather than
+	// Preferences because a rule is the install's policy and not a person's
+	// taste: everybody sees the same library, and one person decides what goes
+	// in it.
+	if s.content.CallerCan(ctx, caller, app.ActionLibraryRuleRead, "library_rule") {
+		server = append(server, settingsNavEntry{
+			key:    sectionLibraryRules,
+			label:  "Library",
+			icon:   "grid",
+			action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionLibraryRules}),
+			panel:  true,
+		})
+	}
+	if len(server) > 0 {
+		groups = append(groups, settingsNavGroup{label: "Server", entries: server})
 	}
 
 	// Extensions — the store, then the installed ones nested beneath it, as the

@@ -590,6 +590,9 @@ func run() error {
 		// service never names a PostgreSQL type.
 		TelemetryMaintenance: set.TelemetryMaintenance,
 		Jobs:                 set.Jobs,
+		// What the library should contain (ADR 0104). The rules are read here
+		// and written through the UnitOfWork above, like every other state.
+		LibraryRules: set.LibraryRules,
 
 		PlaybackResolutions: set.PlaybackResolutions,
 		PlaybackStates:      set.PlaybackStates,
@@ -731,17 +734,24 @@ func run() error {
 	// and the scheduler enqueues each recurring kind's current occurrence under
 	// an idempotency key, so starting it at boot is also how a restart resumes:
 	// there is no state held here to recover.
+	// The library pass's schedule is configuration (ADR 0104) and its field is
+	// Restart-class, so it is read once, here, where there is a boot context to
+	// read it with. The budget is not read here: it is Hot, and the run reads it
+	// for itself every time.
+	libraryMaintenance := svc.LibraryMaintenance(serveCtx)
 	jobRuntime := compositionjobs.New(compositionjobs.Deps{
-		Service: svc,
-		Store:   set.Jobs,
-		Clock:   set.Clock,
-		IDs:     set.IDs,
-		Owner:   resource.BootID,
+		Service:            svc,
+		Store:              set.Jobs,
+		Clock:              set.Clock,
+		IDs:                set.IDs,
+		Owner:              resource.BootID,
+		LibraryMaintenance: libraryMaintenance,
 	})
 	jobRuntime.Start(serveCtx)
 	boot.Info("jobs runner started",
 		telemetry.String("owner", resource.BootID),
-		telemetry.String("kinds", fmt.Sprint(jobRuntime.Runner.Kinds())))
+		telemetry.String("kinds", fmt.Sprint(jobRuntime.Runner.Kinds())),
+		telemetry.Duration("library_maintenance_every", libraryMaintenance.Interval))
 
 	handoff := &health.Handoff{
 		Metadata:    generationMetadata,

@@ -68,4 +68,10 @@ type Tx interface {
 	// its outbox event commit in one transaction, like every other write; the
 	// Platform reads it at boot to re-adopt what the user last installed.
 	InstalledExtensions() InstalledExtensionStore
+
+	// LibraryRules persists what the library should contain (ADR 0104). It
+	// joins the set for the same reason the others did: writing a rule emits an
+	// outbox event, and a rule that existed without its event — or an event
+	// about a rule that did not — is a statement half-made.
+	LibraryRules() LibraryRuleStore
 }

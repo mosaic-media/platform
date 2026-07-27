@@ -37,6 +37,11 @@ type Deps struct {
 	Relations      contracts.RelationStore
 	SourceBindings contracts.SourceBindingStore
 
+	// LibraryRules is what the library should contain (ADR 0104). Optional:
+	// when nil the rule subtests skip, so an implementation that has not built
+	// it yet is not made to fail the whole suite.
+	LibraryRules contracts.LibraryRuleStore
+
 	// SeedRoleGrant seeds a role carrying perms and grants it to userID, so
 	// the read-only PermissionStore can be exercised. Optional: when nil, the
 	// permission-read contract subtest is skipped. Implementations provide it
@@ -68,6 +73,9 @@ func RunAll(t *testing.T, newDeps Factory) {
 	t.Run("SourceBindingStore", func(t *testing.T) { RunSourceBindingStoreContract(t, newDeps) })
 	t.Run("ContentNonUniformity", func(t *testing.T) { RunContentNonUniformityContract(t, newDeps) })
 	t.Run("ContentAtomicity", func(t *testing.T) { RunContentAtomicityContract(t, newDeps) })
+
+	t.Run("LibraryRuleStore", func(t *testing.T) { RunLibraryRuleStoreContract(t, newDeps) })
+	t.Run("LibraryBrowse", func(t *testing.T) { RunLibraryBrowseContract(t, newDeps) })
 }
 
 func ctx(t *testing.T) context.Context {

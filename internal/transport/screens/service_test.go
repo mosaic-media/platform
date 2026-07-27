@@ -64,6 +64,15 @@ type fakeQueries struct {
 	// watchHistory is what ListWatchHistory reports — the history screen's
 	// input (ADR 0103).
 	watchHistory []app.WatchedItem
+
+	// The library and its rules (ADR 0104, roadmap M2.1–2.2). libraryWorks is
+	// the whole library the fake pages over — not one page — so the screen's
+	// paging is under test rather than assumed.
+	libraryWorks []v1.Node
+	libraryErr   error
+	libraryRules []app.LibraryRuleListing
+	preview      app.PreviewLibraryRuleResult
+	previewErr   error
 	// childrenByNode, when set for a node id, is what GetContentNode returns as
 	// that node's children — so a tree walk (series → seasons → episodes) can be
 	// exercised. Absent an entry, GetContentNode falls back to the flat children.
@@ -278,6 +287,46 @@ func (f *fakeQueries) SearchAvailableContent(_ context.Context, q app.SearchAvai
 
 func (f *fakeQueries) ListModuleCatalogs(_ context.Context, _ app.ListModuleCatalogsQuery) (app.ListModuleCatalogsResult, error) {
 	return app.ListModuleCatalogsResult{Catalogs: f.catalogs}, nil
+}
+
+// ListLibrary pages the seeded works the way the real service does, so a screen
+// test exercises the paging arithmetic rather than a fake that hands back
+// everything and lets the assertions agree with it.
+func (f *fakeQueries) ListLibrary(_ context.Context, q app.ListLibraryQuery) (app.ListLibraryResult, error) {
+	if f.libraryErr != nil {
+		return app.ListLibraryResult{}, f.libraryErr
+	}
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 60
+	}
+	offset := q.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	works := f.libraryWorks
+	if offset >= len(works) {
+		works = nil
+	} else {
+		works = works[offset:]
+		if len(works) > limit {
+			works = works[:limit]
+		}
+	}
+	return app.ListLibraryResult{
+		Works: works, Total: len(f.libraryWorks), Offset: offset, Limit: limit,
+	}, nil
+}
+
+func (f *fakeQueries) ListLibraryRules(_ context.Context, _ app.ListLibraryRulesQuery) (app.ListLibraryRulesResult, error) {
+	return app.ListLibraryRulesResult{Rules: f.libraryRules}, nil
+}
+
+func (f *fakeQueries) PreviewLibraryRule(_ context.Context, _ app.PreviewLibraryRuleQuery) (app.PreviewLibraryRuleResult, error) {
+	if f.previewErr != nil {
+		return app.PreviewLibraryRuleResult{}, f.previewErr
+	}
+	return f.preview, nil
 }
 
 func (f *fakeQueries) ListCatalogItems(_ context.Context, q app.ListCatalogItemsQuery) (app.ListCatalogItemsResult, error) {

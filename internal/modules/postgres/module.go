@@ -114,6 +114,10 @@ type ContractSet struct {
 	// Jobs is the background-work queue (ADR 0017). Pool-backed rather than
 	// transaction-scoped: a claim is its own transaction.
 	Jobs contracts.JobStore
+	// LibraryRules is the direct read handle for what the library should
+	// contain (ADR 0104). Writes go through the UnitOfWork, where a rule and
+	// the event announcing it commit together.
+	LibraryRules contracts.LibraryRuleStore
 	// Tokens is the direct read handle for a session's bearer pair (ADR 0102):
 	// an access token is validated on every call, so it must not open one.
 	Tokens contracts.TokenStore
@@ -182,6 +186,7 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		TelemetryQueries:     NewTelemetryQueryStore(pool),
 		TelemetryMaintenance: NewTelemetryStore(pool),
 		Jobs:                 NewJobStore(pool),
+		LibraryRules:         NewLibraryRuleStore(pool),
 		Tokens:               NewTokenStore(pool),
 
 		Clock:          NewClock(),

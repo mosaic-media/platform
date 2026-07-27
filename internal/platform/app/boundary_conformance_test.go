@@ -438,6 +438,46 @@ func boundaryCases() []boundaryCase {
 		{"GetActiveConfigVersion", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetActiveConfigVersion(ctx, app.GetActiveConfigVersionQuery{CallerSessionID: sid}))
 		}},
+
+		// --- the library and its rules (ADR 0104) ---
+		//
+		// RunLibraryMaintenance is the row worth reading twice. It *acts* as the
+		// system principal whoever triggers it, and that must not weaken the
+		// gate on triggering it: an unknown session and an ungranted caller are
+		// refused before anything acts as anybody. A pass that authorised itself
+		// because it was going to act as the install would be a way to run
+		// unbounded authority from an unauthenticated request.
+		{"ListLibrary", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListLibrary(ctx, app.ListLibraryQuery{Caller: caller(sid)}))
+		}},
+		{"ListLibraryRules", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListLibraryRules(ctx, app.ListLibraryRulesQuery{Caller: caller(sid)}))
+		}},
+		{"CreateLibraryRule", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.CreateLibraryRule(ctx, app.CreateLibraryRuleCommand{
+				Caller: caller(sid), Name: "Trending", Kind: domain.LibraryRuleCollection,
+				ModuleID: "tmdb", CatalogID: "trending", NativeType: "movie",
+			}))
+		}},
+		{"SetLibraryRuleEnabled", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.SetLibraryRuleEnabled(ctx, app.SetLibraryRuleEnabledCommand{
+				Caller: caller(sid), RuleID: "rule-1", Enabled: false,
+			}))
+		}},
+		{"DeleteLibraryRule", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return s.DeleteLibraryRule(ctx, app.DeleteLibraryRuleCommand{
+				Caller: caller(sid), RuleID: "rule-1",
+			})
+		}},
+		{"PreviewLibraryRule", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.PreviewLibraryRule(ctx, app.PreviewLibraryRuleQuery{
+				Caller: caller(sid), Name: "Trending", Kind: domain.LibraryRuleCollection,
+				ModuleID: "tmdb", CatalogID: "trending", NativeType: "movie",
+			}))
+		}},
+		{"RunLibraryMaintenance", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.RunLibraryMaintenance(ctx, app.RunLibraryMaintenanceCommand{Caller: caller(sid)}))
+		}},
 	}
 }
 

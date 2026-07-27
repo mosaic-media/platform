@@ -49,6 +49,11 @@ const (
 	// schema — one row per client per ten minutes, forever — and nothing else
 	// would ever remove them.
 	KindSessionTokenSweep = "session.tokens.sweep"
+	// KindLibraryMaintenance evaluates the library rules and reconciles
+	// (ADR 0104). It is the third of the six callers this runner was built for,
+	// and the first that does work a person would otherwise have to do by hand
+	// rather than housekeeping nobody would miss.
+	KindLibraryMaintenance = "library.maintenance"
 )
 
 // TelemetryRetentionInterval is how often the retention sweep runs.
@@ -75,6 +80,13 @@ type Deps struct {
 	// id is what belongs here: it says which run of the Platform held a claim,
 	// which is exactly the question asked of a job abandoned across a restart.
 	Owner string
+	// LibraryMaintenance is the configured schedule for the library pass
+	// (ADR 0104). The composition root reads it from the Active configuration
+	// and passes it in, rather than this package reading configuration itself:
+	// a schedule is fixed for the life of the process (its field is
+	// Restart-class), so the read belongs at the one point that has a boot
+	// context. A zero value takes the Platform default.
+	LibraryMaintenance app.LibraryMaintenanceSettings
 }
 
 // Runtime is the pair a caller starts and stops together.
@@ -94,6 +106,12 @@ func New(deps Deps) Runtime {
 	})
 	runner.Register(KindTelemetryRetention, telemetryRetention(deps.Service))
 	runner.Register(KindSessionTokenSweep, sessionTokenSweep(deps.Service))
+	runner.Register(KindLibraryMaintenance, libraryMaintenance(deps.Service))
+
+	libraryEvery := deps.LibraryMaintenance.Interval
+	if libraryEvery <= 0 {
+		libraryEvery = app.DefaultLibraryMaintenance.Interval
+	}
 
 	scheduler := jobs.NewScheduler(jobs.SchedulerDeps{
 		Store: deps.Store,
@@ -102,6 +120,17 @@ func New(deps Deps) Runtime {
 		Schedules: []jobs.Schedule{
 			{Kind: KindTelemetryRetention, Every: TelemetryRetentionInterval},
 			{Kind: KindSessionTokenSweep, Every: SessionTokenSweepInterval},
+			{
+				Kind:  KindLibraryMaintenance,
+				Every: libraryEvery,
+				// Fewer attempts than the default, because a retry here is not
+				// free: the pass is idempotent, so re-running is safe, but each
+				// attempt costs a source a round trip per item. A pass that
+				// failed is better left to its next occurrence than hammered
+				// four more times — the occurrence after it is hours away and
+				// will do exactly the same work.
+				MaxAttempts: 2,
+			},
 		},
 	})
 
@@ -124,6 +153,35 @@ func sessionTokenSweep(svc *app.Service) jobs.Handler {
 			return err
 		}
 		telemetry.From(ctx).Info("expired session tokens swept", telemetry.Int("rows", res.Deleted))
+		return nil
+	}
+}
+
+// libraryMaintenance is the handler for KindLibraryMaintenance (ADR 0104).
+//
+// It is idempotent in the way the runner requires and the way that matters
+// here: materialising a title the library already holds is the no-op import the
+// source binding already made it, and the enrichment pass fills only items with
+// no Parts. A job reclaimed after a crash therefore repeats without adding a
+// duplicate of anything.
+//
+// The job's id is forwarded so the pass can write a line per rule beside it.
+// That is what makes the background-work screen an account of *why something is
+// in the library* rather than a row saying a job succeeded.
+func libraryMaintenance(svc *app.Service) jobs.Handler {
+	return func(ctx context.Context, job domain.Job) error {
+		res, err := svc.RunLibraryMaintenance(ctx, app.RunLibraryMaintenanceCommand{
+			Caller: svc.SystemCaller(), JobID: job.ID,
+		})
+		if err != nil {
+			return err
+		}
+		telemetry.From(ctx).Info("library maintenance swept",
+			telemetry.Int("rules", res.Rules),
+			telemetry.Int("created", res.Created),
+			telemetry.Int("refreshed", res.Refreshed),
+			telemetry.Int("skipped", res.Skipped),
+			telemetry.Int("failed", res.Failed))
 		return nil
 	}
 }

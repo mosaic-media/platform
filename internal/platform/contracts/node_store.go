@@ -46,8 +46,20 @@ type NodeStore interface {
 
 	// Search finds nodes matching a set of optional criteria. It is the read
 	// behind "do I already have this?" — the question a capability asks
-	// before sourcing anything.
+	// before sourcing anything — and, with Offset, the read behind browsing
+	// the library a page at a time.
 	Search(ctx context.Context, query NodeQuery) ([]v1.Node, error)
+
+	// Count is how many nodes Search would match, ignoring Limit and Offset.
+	//
+	// It exists because a browse surface over the library can state a *real*
+	// total, which no other surface in Mosaic can. A provider's catalog is
+	// paged by the provider and its size is unknown, so the catalog screen says
+	// "128+"; the library is the install's own rows, and a screen that showed
+	// "128+" over them would be understating something it can count. That
+	// difference is the whole reason this method is here rather than the caller
+	// measuring the page it happens to hold.
+	Count(ctx context.Context, query NodeQuery) (int, error)
 
 	// FindByExternalID looks nodes up by a provider's own identifier — the
 	// strongest form of "do I already have this", and the one that does not
@@ -103,4 +115,13 @@ type NodeQuery struct {
 	// user-facing read and an unbounded one is a denial of service against
 	// a large library.
 	Limit int
+	// Offset skips the first N matches, for paging a browse surface. Zero is
+	// the first page, and a negative value is the same as zero rather than an
+	// error — a page number arriving from a client is arithmetic, and refusing
+	// page -1 would turn a stale link into a broken screen.
+	//
+	// The order Search returns is total and stable (title, then id), which is
+	// what makes offset paging correct here: an unordered offset would show and
+	// hide rows at random as pages were turned. Count is ignored by both.
+	Offset int
 }

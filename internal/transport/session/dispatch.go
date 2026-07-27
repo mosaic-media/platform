@@ -151,6 +151,18 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		// answer; a table filled first and queried never is a retention
 		// liability rather than an analytics capability.
 		return nil, h.recordImpression(ctx, s, input)
+	case "createLibraryRule":
+		// What the library should contain (ADR 0104). The four library-rule
+		// cases each return their own surface — the rules list — because the
+		// panel they are invoked from has stopped describing anything true the
+		// moment they succeed.
+		return h.createLibraryRule(ctx, s, caller, input)
+	case "setLibraryRuleEnabled":
+		return h.setLibraryRuleEnabled(ctx, s, caller, input)
+	case "deleteLibraryRule":
+		return h.deleteLibraryRule(ctx, s, caller, input)
+	case "runLibraryMaintenance":
+		return h.runLibraryMaintenance(ctx, s, caller)
 	case "setWatched":
 		cmd, err := setWatchedFromInput(input)
 		if err != nil {

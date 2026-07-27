@@ -153,9 +153,19 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1
 		attributes = query.AttributesContain
 	}
 
+	offset := query.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
 	// `@>` over the nodes_attributes_gin index, exactly as FindByExternalID
 	// reads the neighbouring external_ids document. The NULL check is what makes
 	// the filter optional without building the SQL by concatenation.
+	//
+	// ORDER BY title, id is a *total* order and that is what makes OFFSET
+	// paging correct: title alone ties for a household holding two cuts of one
+	// film, and a tie under LIMIT/OFFSET is how a row appears on two pages
+	// while another appears on none.
 	rows, err := s.q.Query(ctx,
 		`SELECT `+nodeColumns+` FROM nodes
 		 WHERE ($1 = '' OR title ILIKE $2 ESCAPE '\')
@@ -163,17 +173,55 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1
 		   AND ($4 = '' OR node_kind = $4)
 		   AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)
 		 ORDER BY title, id
-		 LIMIT $6`,
+		 LIMIT $6 OFFSET $7`,
 		query.Title, likeContains(query.Title),
 		string(v1.NormaliseMediaType(string(query.MediaType))),
 		string(query.Kind),
 		attributes,
-		query.Limit,
+		query.Limit, offset,
 	)
 	if err != nil {
 		return nil, mapError("search nodes", err)
 	}
 	return collectNodes(rows, "search nodes")
+}
+
+// Count answers how many rows Search would match, with the same predicate and
+// without Limit or Offset.
+//
+// The predicate is repeated rather than shared with Search through a
+// concatenated fragment, because the two statements are read together and a
+// helper that built the WHERE clause for both would hide the one property that
+// matters — that they filter identically. A count that disagrees with the page
+// beneath it is worse than no count at all.
+//
+// It does not validate Limit: counting is not paging, so a query with no limit
+// is a legitimate thing to count.
+func (s *nodeStore) Count(ctx context.Context, query contracts.NodeQuery) (int, error) {
+	var attributes any
+	if len(query.AttributesContain) > 0 {
+		if !json.Valid(query.AttributesContain) {
+			return 0, contracts.NewError(contracts.InvalidArgument, "attributes filter must be a valid JSON document")
+		}
+		attributes = query.AttributesContain
+	}
+
+	row := s.q.QueryRow(ctx,
+		`SELECT count(*) FROM nodes
+		 WHERE ($1 = '' OR title ILIKE $2 ESCAPE '\')
+		   AND ($3 = '' OR media_type = $3)
+		   AND ($4 = '' OR node_kind = $4)
+		   AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)`,
+		query.Title, likeContains(query.Title),
+		string(v1.NormaliseMediaType(string(query.MediaType))),
+		string(query.Kind),
+		attributes,
+	)
+	var total int
+	if err := row.Scan(&total); err != nil {
+		return 0, mapError("count nodes", err)
+	}
+	return total, nil
 }
 
 // FindByExternalID uses jsonb containment, which is what nodes_external_ids_gin
