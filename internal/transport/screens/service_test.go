@@ -39,9 +39,20 @@ type fakeQueries struct {
 	users       []domain.User
 	rolesByUser map[domain.UserID][]domain.Role
 
-	results          []v1.SearchResult
-	catalogs         []app.ModuleCatalog
-	items            []v1.CatalogItem
+	results  []v1.SearchResult
+	catalogs []app.ModuleCatalog
+	items    []v1.CatalogItem
+	// The provenance the cache-first browse reads report back (ADR 0052), and
+	// whether the render asked for a refresh. Zero values are a live answer,
+	// which is what every screen test that does not care about staleness wants.
+	catalogAnswer app.BrowseAnswer
+	itemAnswer    app.BrowseAnswer
+	catalogsErr   error
+	gotRefresh    bool
+	// compositions is how each viewer arranged their home (ADR 0103), keyed by
+	// the session the caller presents.
+	compositions map[string]app.HomeComposition
+
 	node             v1.Node
 	children         []v1.Node
 	previewMeta      v1.ContentMetadata
@@ -196,6 +207,15 @@ func (f *fakeQueries) ExpertModeEnabled(context.Context, v1.Caller) bool {
 	return f.expertModeOn
 }
 
+// HomeCompositionFor answers per caller, because the whole point of ADR 0103 is
+// that two viewers of one install get two different answers — a fake returning
+// one composition for everybody would let a screen that ignored the caller pass.
+func (f *fakeQueries) HomeCompositionFor(_ context.Context, caller v1.Caller) app.HomeComposition {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.compositions[caller.Session]
+}
+
 func (f *fakeQueries) CallerCan(_ context.Context, _ v1.Caller, action policy.Action, _ string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -304,6 +324,26 @@ func (f *fakeQueries) SearchAvailableContent(_ context.Context, q app.SearchAvai
 
 func (f *fakeQueries) ListModuleCatalogs(_ context.Context, _ app.ListModuleCatalogsQuery) (app.ListModuleCatalogsResult, error) {
 	return app.ListModuleCatalogsResult{Catalogs: f.catalogs}, nil
+}
+
+// The cache-first browse reads (ADR 0052). The fake answers live by default and
+// carries the provenance a test sets, so a home-screen test can drive the stale
+// and failed-source paths without a snapshot store behind it.
+func (f *fakeQueries) BrowseCatalogs(_ context.Context, q app.BrowseCatalogsQuery) (app.BrowseCatalogsResult, error) {
+	f.mu.Lock()
+	f.gotRefresh = q.Refresh
+	f.mu.Unlock()
+	if f.catalogsErr != nil {
+		return app.BrowseCatalogsResult{}, f.catalogsErr
+	}
+	return app.BrowseCatalogsResult{Catalogs: f.catalogs, Answer: f.catalogAnswer}, nil
+}
+
+func (f *fakeQueries) BrowseCatalogItems(_ context.Context, q app.BrowseCatalogItemsQuery) (app.BrowseCatalogItemsResult, error) {
+	f.mu.Lock()
+	f.gotCatalogID = q.CatalogID
+	f.mu.Unlock()
+	return app.BrowseCatalogItemsResult{Items: f.items, Answer: f.itemAnswer}, nil
 }
 
 // ListLibrary pages the seeded works the way the real service does, so a screen
@@ -712,8 +752,210 @@ func TestHomeScreenRendersHeroAndCatalogRows(t *testing.T) {
 
 func TestHomeScreenEmptyWithoutCatalogs(t *testing.T) {
 	node := render(t, &Service{content: &fakeQueries{}}, "home", nil)
-	if _, ok := find(node, sdui.TypeEmptyState); !ok {
+	empty, ok := find(node, sdui.TypeEmptyState)
+	if !ok {
 		t.Fatal("home with no catalogs must render an EmptyState")
+	}
+	// Nothing configured is *advice*: this install has no source and being
+	// pointed at Settings is the one thing that fixes it.
+	if msg, _ := prop(empty, "title").(string); !strings.Contains(msg, "add an addon in Settings") {
+		t.Fatalf("message = %q, want the configure-an-addon prompt", msg)
+	}
+}
+
+// TestHomeScreenDistinguishesADownSourceFromAnEmptyOne is the defect ADR 0052
+// was written about, at the surface it was seen on. A source that did not answer
+// must never render as an install with nothing configured: the first is a
+// report, the second is advice, and giving the advice sends somebody to fix
+// something that is not broken.
+func TestHomeScreenDistinguishesADownSourceFromAnEmptyOne(t *testing.T) {
+	fake := &fakeQueries{catalogAnswer: app.BrowseAnswer{From: app.AnswerLive, Failed: []string{"tmdb"}}}
+	node := render(t, &Service{content: fake}, "home", nil)
+	empty, ok := find(node, sdui.TypeEmptyState)
+	if !ok {
+		t.Fatal("home with unreachable sources must still render an EmptyState")
+	}
+	msg, _ := prop(empty, "title").(string)
+	if strings.Contains(msg, "Settings") {
+		t.Fatalf("message = %q, want no configuration advice: nothing here is misconfigured", msg)
+	}
+	if !strings.Contains(msg, "not answering") {
+		t.Fatalf("message = %q, want it to say the sources are not answering", msg)
+	}
+}
+
+// TestHomeScreenSaysWhenItIsShowingAStoredAnswer covers the other half of
+// staleness: rows drawn from a snapshot while the source is down are shown, and
+// shown with their age. A two-day-old home beats an empty one, but only if
+// nobody is being told it is live.
+func TestHomeScreenSaysWhenItIsShowingAStoredAnswer(t *testing.T) {
+	taken := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	fake := &fakeQueries{
+		catalogs: []app.ModuleCatalog{
+			{ModuleID: "tmdb", Catalog: v1.Catalog{ID: "top", NativeType: "movie", Name: "Popular Movies"}},
+		},
+		items: []v1.CatalogItem{
+			{Ref: v1.ContentRef{Provider: "tmdb", NativeID: "tt1", NativeType: "movie", MediaType: v1.MediaMovie}, Title: "A Movie"},
+		},
+		itemAnswer: app.BrowseAnswer{From: app.AnswerSnapshot, TakenAt: taken, Failed: []string{"tmdb"}},
+	}
+	svc := &Service{content: fake, clock: func() time.Time { return taken.Add(90 * time.Minute) }}
+	ctx, report := WithReport(context.Background())
+	node, err := svc.Render(ctx, "home", v1.CallerFromSession("s-1"), nil)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	if _, ok := find(node, sdui.TypeEmptyState); ok {
+		t.Fatal("home served from a snapshot must render its rows, not an empty state")
+	}
+	banner, ok := find(node, sdui.TypeBanner)
+	if !ok {
+		t.Fatal("a screen served from a snapshot because its source failed must say so")
+	}
+	msg, _ := prop(banner, "message").(string)
+	if !strings.Contains(msg, "1 hour ago") {
+		t.Fatalf("banner = %q, want the age of what is being shown", msg)
+	}
+	if !report.FromSnapshot() || len(report.Failed()) != 1 {
+		t.Fatalf("report = snapshot:%v failed:%v, want the transport told which source is down",
+			report.FromSnapshot(), report.Failed())
+	}
+}
+
+// TestHomeScreenSchedulesRevalidationWhenStale proves the report carries what
+// the transport acts on: a stale snapshot asks to be revalidated, and a fresh
+// one does not — otherwise every navigation to home would cost a full provider
+// fan-out and a pushed region.
+func TestHomeScreenSchedulesRevalidationWhenStale(t *testing.T) {
+	// Built per case rather than copied: fakeQueries holds a mutex, and copying
+	// one is the shape `go vet` refuses.
+	newFake := func(answer app.BrowseAnswer) *fakeQueries {
+		return &fakeQueries{
+			catalogs: []app.ModuleCatalog{
+				{ModuleID: "tmdb", Catalog: v1.Catalog{ID: "top", NativeType: "movie", Name: "Popular Movies"}},
+			},
+			items: []v1.CatalogItem{
+				{Ref: v1.ContentRef{Provider: "tmdb", NativeID: "tt1", NativeType: "movie", MediaType: v1.MediaMovie}, Title: "A Movie"},
+			},
+			itemAnswer: answer,
+		}
+	}
+	for _, tc := range []struct {
+		name      string
+		answer    app.BrowseAnswer
+		wantStale bool
+	}{
+		{"fresh snapshot", app.BrowseAnswer{From: app.AnswerSnapshot}, false},
+		{"stale snapshot", app.BrowseAnswer{From: app.AnswerSnapshot, Stale: true}, true},
+		{"live", app.BrowseAnswer{From: app.AnswerLive}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, report := WithReport(context.Background())
+			if _, err := (&Service{content: newFake(tc.answer)}).Render(ctx, "home", v1.CallerFromSession("s-1"), nil); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if report.Stale() != tc.wantStale {
+				t.Fatalf("report.Stale() = %v, want %v", report.Stale(), tc.wantStale)
+			}
+		})
+	}
+}
+
+// TestTwoViewersGetTwoDifferentHomes is ADR 0103's exit, at the surface. One
+// shared library, and everything about how a person experiences it is theirs
+// alone: the same install, the same catalogs, two arrangements.
+func TestTwoViewersGetTwoDifferentHomes(t *testing.T) {
+	popular := app.ModuleCatalog{ModuleID: "tmdb", Catalog: v1.Catalog{ID: "popular", NativeType: "movie", Name: "Popular Movies"}}
+	trending := app.ModuleCatalog{ModuleID: "tmdb", Catalog: v1.Catalog{ID: "trending", NativeType: "movie", Name: "Trending Films"}}
+	fake := &fakeQueries{
+		catalogs: []app.ModuleCatalog{popular, trending},
+		items: []v1.CatalogItem{
+			{Ref: v1.ContentRef{Provider: "tmdb", NativeID: "tt1", NativeType: "movie", MediaType: v1.MediaMovie}, Title: "A Movie"},
+		},
+		compositions: map[string]app.HomeComposition{
+			// One viewer hid Trending Films; the other put it first.
+			"hider":    {Hidden: []string{"catalog:tmdb:movie:trending"}},
+			"arranger": {Order: []string{"catalog:tmdb:movie:trending", "catalog:tmdb:movie:popular"}},
+		},
+	}
+	svc := &Service{content: fake}
+
+	headings := func(session string) []string {
+		node, err := svc.Render(context.Background(), "home", v1.CallerFromSession(session), nil)
+		if err != nil {
+			t.Fatalf("Render(%s): %v", session, err)
+		}
+		var sections []sdui.Node
+		findAll(node, sdui.TypeSection, &sections)
+		var out []string
+		for _, sec := range sections {
+			if title, _ := prop(sec, "title").(string); title != "" {
+				out = append(out, title)
+			}
+		}
+		return out
+	}
+
+	hider := headings("hider")
+	if strings.Contains(strings.Join(hider, "|"), "Trending Films") {
+		t.Fatalf("hider's home = %v, want the row they hid absent", hider)
+	}
+	if !strings.Contains(strings.Join(hider, "|"), "Popular Movies") {
+		t.Fatalf("hider's home = %v, want the rows they kept", hider)
+	}
+
+	arranger := headings("arranger")
+	joined := strings.Join(arranger, "|")
+	if strings.Index(joined, "Trending Films") > strings.Index(joined, "Popular Movies") {
+		t.Fatalf("arranger's home = %v, want the row they moved up first", arranger)
+	}
+
+	// And a viewer who has decided nothing takes the server's order.
+	if got := headings("undecided"); strings.Index(strings.Join(got, "|"), "Popular Movies") >
+		strings.Index(strings.Join(got, "|"), "Trending Films") {
+		t.Fatalf("undecided home = %v, want the server's own order", got)
+	}
+}
+
+// TestAHiddenRowCostsNoRoundTrip is the reason the arrangement is applied before
+// the items are fetched rather than while the tree is assembled: a row this
+// viewer turned off must not send the Platform to a provider to draw nothing
+// with.
+func TestAHiddenRowCostsNoRoundTrip(t *testing.T) {
+	fake := &fakeQueries{
+		catalogs: []app.ModuleCatalog{
+			{ModuleID: "tmdb", Catalog: v1.Catalog{ID: "popular", NativeType: "movie", Name: "Popular Movies"}},
+		},
+		compositions: map[string]app.HomeComposition{
+			"hider": {Hidden: []string{"catalog:tmdb:movie:popular"}},
+		},
+	}
+	if _, err := (&Service{content: fake}).Render(context.Background(), "home",
+		v1.CallerFromSession("hider"), nil); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if fake.gotCatalogID != "" {
+		t.Fatalf("asked catalog %q, want no items read for a row nobody is going to see", fake.gotCatalogID)
+	}
+}
+
+// TestHomeScreenRefreshReachesTheReads proves a revalidation is actually a
+// revalidation: the refresh marker on the context has to reach every
+// source-backed read, or the background pass re-serves the same snapshot and
+// nothing ever gets fresher.
+func TestHomeScreenRefreshReachesTheReads(t *testing.T) {
+	fake := &fakeQueries{
+		catalogs: []app.ModuleCatalog{
+			{ModuleID: "tmdb", Catalog: v1.Catalog{ID: "top", NativeType: "movie", Name: "Popular Movies"}},
+		},
+	}
+	if _, err := (&Service{content: fake}).Render(WithRefresh(context.Background()),
+		"home", v1.CallerFromSession("s-1"), nil); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !fake.gotRefresh {
+		t.Fatal("a refresh render must ask the sources rather than re-reading the snapshot")
 	}
 }
 

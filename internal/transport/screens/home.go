@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	sdui "github.com/mosaic-media/contracts/sdui"
 	"github.com/mosaic-media/contracts/ui"
@@ -41,38 +42,67 @@ const (
 // each of the first few catalogs, enriched with its backdrop and logo. Browsing
 // is a read, so nothing here writes.
 func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, error) {
-	cats, err := s.content.ListModuleCatalogs(ctx, app.ListModuleCatalogsQuery{Caller: caller})
+	report := reportFrom(ctx)
+	refresh := refreshing(ctx)
+
+	cats, err := s.content.BrowseCatalogs(ctx, app.BrowseCatalogsQuery{Caller: caller, Refresh: refresh})
 	if err != nil {
 		return nil, err
 	}
+	report.note(cats.Answer.From == app.AnswerSnapshot, cats.Answer.Stale, cats.Answer.TakenAt, cats.Answer.Failed)
 	if len(cats.Catalogs) == 0 {
-		return ui.Screen(ui.EmptyState(emptyIconCollections,
-			"Nothing here yet — add an addon in Settings to browse content")).Build(), nil
+		// Two empty states, and keeping them apart is the point of this whole
+		// slice: an install with nothing configured is being told what to do, and
+		// an install whose sources are down is being told what is wrong. Only the
+		// first is the user's to act on, and rendering the second as the first
+		// sends somebody to fix something that is not broken.
+		return ui.Screen(s.sourcesEmptyState(cats.Answer)).Build(), nil
 	}
 
-	// Render at most homeMaxRows rows. Each row's items are a remote round-trip,
-	// so fetch them concurrently rather than serially — the landing page pays one
-	// round-trip instead of a sum. We fetch only the catalogs we render (the first
-	// homeMaxRows), bounding remote load to the visible rows; a catalog beyond that
-	// is not fetched, and one that errors simply drops its row.
-	catalogs := cats.Catalogs
+	// How this viewer arranged their home (ADR 0103). **One read, here**, in the
+	// same pass that builds the screen — the alternative is asking per row, which
+	// is a round trip per row on the surface every session lands on.
+	//
+	// It is applied *before* the items are fetched, which is the point of doing
+	// it here rather than while assembling: a row this viewer hid must not cost a
+	// provider round trip to draw nothing with.
+	composition := s.content.HomeCompositionFor(ctx, caller)
+	catalogs := arrangeCatalogs(cats.Catalogs, composition)
+
+	// Render at most homeMaxRows rows. Each row's items are a remote round-trip
+	// when they are not already stored, so fetch them concurrently rather than
+	// serially — the landing page pays one round-trip instead of a sum. We fetch
+	// only the catalogs we render (the first homeMaxRows), bounding remote load
+	// to the visible rows.
+	//
+	// A catalog that neither answers nor has a stored answer still drops its row,
+	// which is unchanged — what changed is that the drop is counted and named
+	// rather than discarded, so a screen that lost every row can say why.
 	if len(catalogs) > homeMaxRows {
 		catalogs = catalogs[:homeMaxRows]
 	}
-	itemsByCatalog := make([]app.ListCatalogItemsResult, len(catalogs))
+	itemsByCatalog := make([]app.BrowseCatalogItemsResult, len(catalogs))
 	var wg sync.WaitGroup
 	for i, c := range catalogs {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// A downed catalog leaves its slot empty, which the assembly below skips
-			// — the same effect as the serial code's continue-on-error.
-			items, err := s.content.ListCatalogItems(ctx, app.ListCatalogItemsQuery{
+			items, err := s.content.BrowseCatalogItems(ctx, app.BrowseCatalogItemsQuery{
 				Caller: caller, ModuleID: c.ModuleID, CatalogID: c.Catalog.ID, NativeType: c.Catalog.NativeType,
+				Refresh: refresh,
 			})
-			if err == nil {
-				itemsByCatalog[i] = items
+			if err != nil {
+				// A read that failed at the boundary rather than at the source —
+				// the provider was deregistered between listing the catalogs and
+				// asking one for its items. Its row drops.
+				telemetry.From(ctx).For("screens").Warn("home could not read a catalog",
+					telemetry.String("module", c.ModuleID),
+					telemetry.String("catalog", c.Catalog.ID), telemetry.Err(err))
+				return
 			}
+			itemsByCatalog[i] = items
+			report.note(items.Answer.From == app.AnswerSnapshot, items.Answer.Stale,
+				items.Answer.TakenAt, items.Answer.Failed)
 		}()
 	}
 	wg.Wait()
@@ -138,8 +168,11 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 			ui.Carousel(cards...)))
 	}
 	if len(rows) == 0 {
-		return ui.Screen(ui.EmptyState(emptyIconCollections,
-			"Nothing to show yet — try adding an addon in Settings")).Build(), nil
+		// The state ADR 0052 was written about. Every catalog answered emptily or
+		// not at all; whether that is a library with nothing in it or a set of
+		// sources that are down is a distinction only the answers can make, and
+		// the screen must not guess.
+		return ui.Screen(s.sourcesEmptyState(mergedItemAnswer(itemsByCatalog))).Build(), nil
 	}
 
 	// Enrich the featured picks concurrently — each is a further metadata
@@ -190,21 +223,47 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	// in the Screen's edge-to-edge `bleed` slot (the rails own their gutter), so
 	// the padded body collapses ($childCount 0). When enrichment failed for every
 	// pick there is no hero and the rails stand alone.
-	sheetEls := make([]ui.El, 0, len(rows)+2)
-	sheetEls = append(sheetEls, ui.Prop("style", map[string]any{
+	//
+	// **The overlap only applies when there is a hero to overlap.** It is a
+	// negative offset into the artwork above, so with no hero it pulls the first
+	// rail up under the brand bar and crops its cards — which nobody had seen,
+	// because the no-hero branch used to be unreachable in practice: every
+	// catalog failing short-circuited to the empty state before it. Cache-first
+	// rendering makes that branch the ordinary degraded screen, and it was
+	// broken. Found by looking at it.
+	heroed := len(heroSlides) > 0
+	sheetStyle := map[string]any{
 		"direction": "column", "gap": 7,
 		"px": "gutter", "pb": 9,
 		"position": "relative", "z": "raised",
-		"overlap": 7,
-	}))
+	}
+	if heroed {
+		sheetStyle["overlap"] = 7
+	} else {
+		sheetStyle["pt"] = 9
+	}
+	sheetEls := make([]ui.El, 0, len(rows)+3)
+	sheetEls = append(sheetEls, ui.Prop("style", sheetStyle))
+	// Staleness is shown, not hidden. A screen served from stored answers while
+	// its sources are unreachable says so, with its age — a two-day-old home
+	// beats an empty one, but only if nobody is being told it is live. It is
+	// drawn only when a source actually failed: a snapshot served while
+	// revalidation is quietly in flight is about to be replaced, and announcing
+	// every one of those would make the banner mean nothing.
+	if b := s.stalenessBanner(report); b != nil {
+		sheetEls = append(sheetEls, b)
+	}
 	// Continue watching leads the sheet: the most personal rail, above the
 	// browse rows below it. It is gated by having something in progress — an
 	// install with no playback consumer has nothing here and shows nothing
-	// (ADR 0036). (When the metadata addons are down the catalogs are empty and
-	// this whole screen short-circuits above; surfacing the rail there is
-	// cache-first rendering, ADR 0052, slice 4.)
-	if cw := s.continueWatchingSection(ctx, caller); cw != nil {
-		sheetEls = append(sheetEls, cw)
+	// (ADR 0036) — and then by whether this viewer wants it, which is the order
+	// ADR 0103 requires: **capability omission composes ahead of preference**, so
+	// a viewer cannot un-hide something they were never able to use, and a hidden
+	// row is not evidence of a permission.
+	if !composition.Hides(homeRowContinue) {
+		if cw := s.continueWatchingSection(ctx, caller); cw != nil {
+			sheetEls = append(sheetEls, cw)
+		}
 	}
 	if upNext != nil {
 		sheetEls = append(sheetEls, upNext)
@@ -213,7 +272,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	sheet := ui.Component("Box", sheetEls...)
 
 	bleed := make([]ui.El, 0, 2)
-	if len(heroSlides) > 0 {
+	if heroed {
 		rotEls := make([]ui.El, 0, len(heroSlides)+1)
 		rotEls = append(rotEls, ui.Prop("interval", 6000))
 		rotEls = append(rotEls, heroSlides...)
@@ -221,6 +280,120 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	}
 	bleed = append(bleed, sheet)
 	return ui.Screen(ui.Slot("bleed", bleed...)).Build(), nil
+}
+
+// homeRowContinue is the continue-watching rail's key in a viewer's
+// composition. It is not a catalog, so it is named rather than derived.
+const homeRowContinue = "continue"
+
+// homeRowKey identifies one catalog row across renders, restarts and reorderings.
+//
+// The module, the native type and the catalog id together, because a catalog id
+// is only unique within a type within a module — and because a stable key is
+// what makes this a *decision* rather than a position: a viewer who hid
+// "Trending Films" has hidden that catalog, not the third row.
+func homeRowKey(c app.ModuleCatalog) string {
+	return "catalog:" + c.ModuleID + ":" + c.Catalog.NativeType + ":" + c.Catalog.ID
+}
+
+// arrangeCatalogs puts the catalogs into this viewer's order and drops the ones
+// they hid.
+//
+// The hero and the "Trending now" rail follow from the result rather than being
+// arranged separately: both are drawn from the first catalog that has items, so
+// a viewer who moves a row to the top gets its top title on the hero. One
+// decision, not three.
+func arrangeCatalogs(catalogs []app.ModuleCatalog, composition app.HomeComposition) []app.ModuleCatalog {
+	byKey := make(map[string]app.ModuleCatalog, len(catalogs))
+	keys := make([]string, 0, len(catalogs))
+	for _, c := range catalogs {
+		key := homeRowKey(c)
+		if _, seen := byKey[key]; seen {
+			continue
+		}
+		byKey[key] = c
+		keys = append(keys, key)
+	}
+	out := make([]app.ModuleCatalog, 0, len(catalogs))
+	for _, key := range composition.Arrange(keys) {
+		if composition.Hides(key) {
+			continue
+		}
+		out = append(out, byKey[key])
+	}
+	return out
+}
+
+// sourcesEmptyState is what home draws when it has no rows: two different
+// states that must never render the same (ADR 0052).
+//
+// **"Nothing configured" is advice** — an install with no source installed is
+// being told the one thing that will fix it. **"The sources are unreachable" is
+// a report** — an install with a source that is not answering is being told what
+// is wrong, and pointing it at Settings would send somebody to reconfigure a
+// working addon. The bug this replaces rendered the first for the second, which
+// is why the distinction is drawn from the answers rather than from the count.
+func (s *Service) sourcesEmptyState(answer app.BrowseAnswer) ui.El {
+	if len(answer.Failed) == 0 {
+		return ui.EmptyState(emptyIconCollections,
+			"Nothing here yet — add an addon in Settings to browse content")
+	}
+	return ui.EmptyState(emptyIconNotFound,
+		"Your sources are not answering right now. Nothing is wrong with your setup — "+
+			"this screen will fill in as soon as they come back.")
+}
+
+// mergedItemAnswer folds the per-catalog answers back into one, for the empty
+// state that has to decide between advice and a report.
+func mergedItemAnswer(results []app.BrowseCatalogItemsResult) app.BrowseAnswer {
+	out := app.BrowseAnswer{From: app.AnswerLive}
+	for _, r := range results {
+		for _, f := range r.Answer.Failed {
+			if !contains(out.Failed, f) {
+				out.Failed = append(out.Failed, f)
+			}
+		}
+	}
+	return out
+}
+
+// stalenessBanner is the screen saying out loud that it is showing stored
+// answers because its sources are not answering, and how old they are.
+//
+// It is nil unless a source actually failed. A snapshot served while a
+// revalidation is in flight is about to be replaced by the live result, and a
+// banner on every one of those would be a permanent fixture that nobody reads —
+// which is how a warning stops being a warning.
+func (s *Service) stalenessBanner(report *Report) ui.El {
+	if !report.FromSnapshot() || len(report.Failed()) == 0 {
+		return nil
+	}
+	return ui.Banner("Showing what was saved "+ageLabel(s.now().Sub(report.TakenAt()))+
+		". Your sources are not answering, so this may be out of date.", "warning")
+}
+
+// ageLabel is how long ago something was, in the words a sentence about a stale
+// screen wants: "just now", "12 minutes ago", "2 days ago".
+//
+// Rounded down to the unit, because a screen claiming to be an hour old when it
+// is 61 minutes old is a smaller lie than one claiming two hours.
+func ageLabel(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return counted(int(d.Minutes()), "minute") + " ago"
+	case d < 24*time.Hour:
+		return counted(int(d.Hours()), "hour") + " ago"
+	default:
+		return counted(int(d.Hours()/24), "day") + " ago"
+	}
+}
+
+// counted renders a number with its unit, pluralised. Distinct from `plural`
+// beside it, which pluralises a word and does not carry the count.
+func counted(n int, unit string) string {
+	return strconv.Itoa(n) + " " + plural(n, unit)
 }
 
 // heroPick is a catalog item chosen to lead the home, with the catalog name it

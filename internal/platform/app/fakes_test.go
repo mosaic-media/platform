@@ -105,6 +105,15 @@ type fakeDB struct {
 	// (ADR 0107).
 	nodeMetadata map[v1.NodeID]contracts.NodeMetadata
 	watchAvail   map[v1.NodeID]contracts.WatchAvailability
+	// snapshots is the last good answer per source and question (ADR 0052),
+	// keyed by the pair the store is keyed by.
+	snapshots map[snapshotKey]contracts.SourceSnapshot
+}
+
+// snapshotKey is the (source, key) pair a stored answer lives under.
+type snapshotKey struct {
+	source string
+	key    string
 }
 
 // playbackKey is the (user, node) pair playback state is stored under.
@@ -134,6 +143,7 @@ func newFakeDB() *fakeDB {
 		libraryRules:    make(map[domain.LibraryRuleID]domain.LibraryRule),
 		nodeMetadata:    make(map[v1.NodeID]contracts.NodeMetadata),
 		watchAvail:      make(map[v1.NodeID]contracts.WatchAvailability),
+		snapshots:       make(map[snapshotKey]contracts.SourceSnapshot),
 	}
 }
 
@@ -990,6 +1000,32 @@ func (s *fakeNodeMetadataStore) Get(_ context.Context, nodeID v1.NodeID) (contra
 	return m, nil
 }
 
+// fakeSourceSnapshotStore implements contracts.SourceSnapshotStore over fakeDB
+// (ADR 0052) — the last good answer a source gave to one question.
+type fakeSourceSnapshotStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func (s *fakeSourceSnapshotStore) Put(_ context.Context, snap contracts.SourceSnapshot) error {
+	s.trace.record("source_snapshot.put")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.snapshots[snapshotKey{snap.Source, snap.Key}] = snap
+	return nil
+}
+
+func (s *fakeSourceSnapshotStore) Get(_ context.Context, source, key string) (contracts.SourceSnapshot, error) {
+	s.trace.record("source_snapshot.get")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	snap, ok := s.db.snapshots[snapshotKey{source, key}]
+	if !ok {
+		return contracts.SourceSnapshot{}, contracts.NewError(contracts.NotFound, "no snapshot for this source and key")
+	}
+	return snap, nil
+}
+
 // fakeWatchAvailabilityStore implements contracts.WatchAvailabilityStore over
 // fakeDB (roadmap M2.5).
 type fakeWatchAvailabilityStore struct {
@@ -1328,6 +1364,7 @@ func baseTestDeps(db *fakeDB, tr *trace, now time.Time) app.Deps {
 		Tokens:            &fakeTokenStore{db: db, trace: tr},
 		LibraryRules:      &fakeLibraryRuleStore{db: db, trace: tr},
 		NodeMetadata:      &fakeNodeMetadataStore{db: db, trace: tr},
+		Snapshots:         &fakeSourceSnapshotStore{db: db, trace: tr},
 		WatchAvailability: &fakeWatchAvailabilityStore{db: db, trace: tr},
 	}
 }

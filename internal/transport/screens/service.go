@@ -191,6 +191,13 @@ type contentQueries interface {
 	PreviewLibraryRule(context.Context, app.PreviewLibraryRuleQuery) (app.PreviewLibraryRuleResult, error)
 	ListModuleCatalogs(context.Context, app.ListModuleCatalogsQuery) (app.ListModuleCatalogsResult, error)
 	ListCatalogItems(context.Context, app.ListCatalogItemsQuery) (app.ListCatalogItemsResult, error)
+	// The cache-first browse reads (ADR 0052): the same two questions with a
+	// durable snapshot in front of them, and the provenance of the answer so the
+	// screen can say whether it is looking at a live source or the last thing
+	// one said. Home reads these; a drill-down that pages or narrows still asks
+	// live, because a snapshot exists for the screen a session lands on.
+	BrowseCatalogs(context.Context, app.BrowseCatalogsQuery) (app.BrowseCatalogsResult, error)
+	BrowseCatalogItems(context.Context, app.BrowseCatalogItemsQuery) (app.BrowseCatalogItemsResult, error)
 	GetContentNode(context.Context, v1.GetContentNodeQuery) (v1.GetContentNodeResult, error)
 	PreviewContent(context.Context, app.PreviewContentQuery) (app.PreviewContentResult, error)
 	ModuleSettingsUI(context.Context, app.ModuleSettingsUIQuery) (app.ModuleSettingsUIResult, error)
@@ -271,6 +278,13 @@ type contentQueries interface {
 	// other is taste, and collapsing them is how a toggle becomes an access
 	// control (ADR 0058).
 	ExpertModeEnabled(context.Context, v1.Caller) bool
+	// HomeCompositionFor reads how this viewer arranged their home (ADR 0103) —
+	// which rows they hid and which they ordered. Like the toggle above it is
+	// taste rather than authority, and it cannot fail: an unreadable preference
+	// yields the server's default arrangement rather than an error, because a
+	// setting that only decides what to show must never be able to fail a
+	// render.
+	HomeCompositionFor(context.Context, v1.Caller) app.HomeComposition
 }
 
 // Service renders named screens. It holds the query surface the builders read

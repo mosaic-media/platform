@@ -96,6 +96,20 @@ type liveSession struct {
 	inputTimer *time.Timer
 	pendingIn  string
 
+	// The standing notices this session is currently showing, and whether a
+	// background revalidation is already running for it (ADR 0052).
+	//
+	// Per session rather than per process, because a source's health is global
+	// and "has this viewer been told" is not: diffing a failure against a
+	// process-wide counter would raise the notice on whichever session rendered
+	// first and on none of the others. The revalidation flag is here for the
+	// opposite reason — it bounds work, and one fan-out per session at a time is
+	// what stops a viewer tapping between two stale screens from stacking one
+	// per tap.
+	noticeMu    sync.Mutex
+	notices     map[string]bool
+	revalidmark bool
+
 	// progress-coalescing state (ADR 0046). Separate from the input lock
 	// because the two coalesce independently: someone can be typing in the
 	// search field while a player behind the overlay reports its position, and
@@ -122,6 +136,72 @@ func newLiveSession(ref string, now time.Time) *liveSession {
 	s := &liveSession{ref: ref, lastSeen: now}
 	s.cond = sync.NewCond(&s.mu)
 	return s
+}
+
+// markNotice records that this session is showing the notice named by id, and
+// reports whether that is new. A repeat returns false, so a source that fails on
+// every render raises one notice rather than a fifth copy of it.
+func (s *liveSession) markNotice(id string) bool {
+	s.noticeMu.Lock()
+	defer s.noticeMu.Unlock()
+	if s.notices[id] {
+		return false
+	}
+	if s.notices == nil {
+		s.notices = make(map[string]bool)
+	}
+	s.notices[id] = true
+	return true
+}
+
+// clearNotice forgets a notice this session was showing.
+func (s *liveSession) clearNotice(id string) {
+	s.noticeMu.Lock()
+	defer s.noticeMu.Unlock()
+	delete(s.notices, id)
+}
+
+// noticesExcept lists the standing notices under prefix that are *not* justified
+// by the given set of still-failing names — the ones to retract.
+func (s *liveSession) noticesExcept(prefix string, keep []string) []string {
+	s.noticeMu.Lock()
+	defer s.noticeMu.Unlock()
+	var out []string
+	for id := range s.notices {
+		if len(id) <= len(prefix) || id[:len(prefix)] != prefix {
+			continue
+		}
+		name := id[len(prefix):]
+		found := false
+		for _, k := range keep {
+			if k == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// beginRevalidation claims the session's one revalidation slot, reporting
+// whether it was free. endRevalidation releases it.
+func (s *liveSession) beginRevalidation() bool {
+	s.noticeMu.Lock()
+	defer s.noticeMu.Unlock()
+	if s.revalidmark {
+		return false
+	}
+	s.revalidmark = true
+	return true
+}
+
+func (s *liveSession) endRevalidation() {
+	s.noticeMu.Lock()
+	s.revalidmark = false
+	s.noticeMu.Unlock()
 }
 
 // setCaller records the credential this connection is currently presenting, so

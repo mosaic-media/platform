@@ -25,7 +25,9 @@ import (
 // Module keys are namespaced because a module id is user-supplied vocabulary: a
 // module called "extensions" must not light up the Extensions nav item.
 const (
-	sectionAccount    = "account"
+	sectionAccount = "account"
+	// sectionHomeRows is where a viewer arranges their own home (ADR 0103).
+	sectionHomeRows   = "home"
 	sectionPeople     = "people"
 	sectionExtensions = "extensions"
 	sectionTraces     = "traces"
@@ -114,6 +116,8 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 	switch active {
 	case sectionAccount:
 		return s.accountPanel(ctx, caller, nav)
+	case sectionHomeRows:
+		return s.homeRowsPanel(ctx, caller, nav)
 	case sectionPeople:
 		return s.peoplePanel(ctx, caller, nav, params)
 	case sectionLibraryRules:
@@ -137,11 +141,22 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 	// Account is always here: everyone signed in has a name, and a settings
 	// screen whose first section a viewer cannot open is a settings screen that
 	// opens on an error.
+	//
+	// Home is here beside it, and deliberately not under Server: the library is
+	// one shared graph and this decides nothing about it, only about how one
+	// person sees it (ADR 0103). It needs no permission gate for the same
+	// reason — a viewer arranging their own screen has authority over nobody.
 	groups = append(groups, settingsNavGroup{label: "Preferences", entries: []settingsNavEntry{{
 		key:    sectionAccount,
 		label:  "Account",
 		icon:   "info",
 		action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionAccount}),
+		panel:  true,
+	}, {
+		key:    sectionHomeRows,
+		label:  "Home",
+		icon:   "home",
+		action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionHomeRows}),
 		panel:  true,
 	}}})
 

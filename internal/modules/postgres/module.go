@@ -69,6 +69,7 @@ func (Module) Manifest() builtin.Manifest {
 			// what this module provides.
 			"LibraryRuleStore",
 			"NodeMetadataStore",
+			"SourceSnapshotStore",
 			"WatchAvailabilityStore",
 			"TokenStore",
 			"Clock",
@@ -129,6 +130,12 @@ type ContractSet struct {
 	// NodeMetadata is the direct read handle for a stored provider answer
 	// (ADR 0107) — what a library detail renders from.
 	NodeMetadata contracts.NodeMetadataStore
+	// Snapshots is the last good answer per source and question (ADR 0052) —
+	// what a source-backed browse screen renders from while its sources are
+	// cold, slow or down. Pool-backed rather than transaction-scoped, like the
+	// playback resolution cache: it is written on a read path and commits with
+	// nothing.
+	Snapshots contracts.SourceSnapshotStore
 	// WatchAvailability is the queryable projection of where a work can be
 	// watched (roadmap M2.5) — what the streaming-service facet filters on and
 	// what the refresh keeps current.
@@ -203,6 +210,7 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		Jobs:                 NewJobStore(pool),
 		LibraryRules:         NewLibraryRuleStore(pool),
 		NodeMetadata:         NewNodeMetadataStore(pool),
+		Snapshots:            NewSourceSnapshotStore(pool),
 		WatchAvailability:    NewWatchAvailabilityStore(pool),
 		Tokens:               NewTokenStore(pool),
 

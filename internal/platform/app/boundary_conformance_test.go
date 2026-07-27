@@ -86,6 +86,16 @@ var boundaryExempt = map[string]string{
 	// own — the affordance it feeds is separately gated on telemetry.read, and
 	// a test asserts a stored preference cannot surface it without the grant.
 	"ExpertModeEnabled": "display preference; authenticates but does not authorize, returns a bool, and reveals nothing the permission has not already allowed",
+	// HomeCompositionFor reads how the caller arranged their own home screen
+	// (ADR 0103). Exempt on exactly the terms above, and the reasoning matters
+	// more here than for a toggle: this is a *preference, not a scope*
+	// (ADR 0067). It returns which rows one person chose to hide, it discloses
+	// no content, and every row it decides the visibility of is separately
+	// reachable by search and by link. Requiring a permission to read your own
+	// taste would make the home screen fail for anyone who lacks it — and
+	// treating the answer as authority is precisely the confusion ADR 0103
+	// forbids, because a hidden row is not evidence of a permission.
+	"HomeCompositionFor": "display preference; authenticates but does not authorize, returns no content, and hides nothing that is not reachable by other means",
 	// SessionForCaller answers "which session is this credential" (ADR 0102).
 	// It authenticates — an unknown credential is Unauthenticated, like
 	// everywhere else — and deliberately does not authorize, because there is
@@ -222,6 +232,19 @@ func boundaryCases() []boundaryCase {
 		}},
 		{"ListCatalogItems", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListCatalogItems(ctx, app.ListCatalogItemsQuery{
+				Caller: caller(sid), ModuleID: "stremio", CatalogID: "top",
+			}))
+		}},
+		// The cache-first browse reads (ADR 0052). They are on this table for a
+		// sharper reason than the two above: they can answer from storage without
+		// asking a source at all, so an unauthorised caller would be served a
+		// stored answer rather than refused — the boundary is the only thing
+		// standing between a snapshot and anybody who asks for it.
+		{"BrowseCatalogs", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.BrowseCatalogs(ctx, app.BrowseCatalogsQuery{Caller: caller(sid)}))
+		}},
+		{"BrowseCatalogItems", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.BrowseCatalogItems(ctx, app.BrowseCatalogItemsQuery{
 				Caller: caller(sid), ModuleID: "stremio", CatalogID: "top",
 			}))
 		}},

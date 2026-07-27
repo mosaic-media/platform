@@ -70,6 +70,13 @@ type Service struct {
 	// renders a library detail from the node alone, which is what every detail
 	// did before the store existed.
 	nodeMetadata contracts.NodeMetadataStore
+	// snapshots is the direct handle for the last good answer a source gave
+	// (ADR 0052) — what a source-backed screen renders from when the source is
+	// slow, cold or down. Optional: a Service built without one asks its
+	// providers on every render and shows an empty screen when they all fail,
+	// which is what every build did before the store existed and is the
+	// behaviour the store was added to stop.
+	snapshots contracts.SourceSnapshotStore
 	// watchAvailability is the direct handle for the queryable projection of
 	// where a work can be watched (roadmap M2.5). Optional, on the same terms as
 	// nodeMetadata: a Service built without one stores no availability and
@@ -157,7 +164,11 @@ type Deps struct {
 	// NodeMetadata is the direct read handle for stored descriptive metadata
 	// (ADR 0107). Optional: without it nothing is stored and nothing is read,
 	// and a detail falls back to what the node itself carries.
-	NodeMetadata      contracts.NodeMetadataStore
+	NodeMetadata contracts.NodeMetadataStore
+	// Snapshots is the direct handle for the last good answer a source gave
+	// (ADR 0052). Optional: without it every source-backed screen asks its
+	// providers live and renders nothing when they all fail.
+	Snapshots         contracts.SourceSnapshotStore
 	WatchAvailability contracts.WatchAvailabilityStore
 	// Instance is the durable identity file (ADR 0098) — the one store that is
 	// deliberately not PostgreSQL, so a server's name outlives its database.
@@ -199,6 +210,7 @@ func NewService(d Deps) *Service {
 		jobs:                 d.Jobs,
 		libraryRules:         d.LibraryRules,
 		nodeMetadata:         d.NodeMetadata,
+		snapshots:            d.Snapshots,
 		watchAvailability:    d.WatchAvailability,
 		instance:             d.Instance,
 		systemSession:        newSystemSessionRef(),

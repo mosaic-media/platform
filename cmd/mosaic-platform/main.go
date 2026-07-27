@@ -595,7 +595,11 @@ func run() error {
 		LibraryRules: set.LibraryRules,
 		// What a provider said about a materialised title (ADR 0107), so a
 		// library detail renders from the graph rather than from a live call.
-		NodeMetadata:      set.NodeMetadata,
+		NodeMetadata: set.NodeMetadata,
+		// The last good answer each source gave (ADR 0052), so a restart under a
+		// live client renders the library it had rather than an empty state
+		// telling a configured install to configure itself.
+		Snapshots:         set.Snapshots,
 		WatchAvailability: set.WatchAvailability,
 
 		PlaybackResolutions: set.PlaybackResolutions,

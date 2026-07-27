@@ -35,3 +35,18 @@ type UserPreference struct {
 // be a toggle that silently never takes effect, which is close to the worst
 // shape a bug can have in a preference.
 const PreferenceExpertMode = "ui.expert_mode"
+
+// PreferenceHomeRows is how one viewer arranged their home screen (ADR 0103):
+// which rows they hid, and which they put in an order of their own.
+//
+// **It holds decisions, never a picture of the screen.** A row nobody has
+// decided about is absent from the document, so it appears — which is the trap
+// role presets fell into, where an account created before an action existed
+// never gained it. Freezing each user's home at the shape it had when they
+// first touched it would be the same mistake in a second place.
+//
+// It is a *preference*, not a scope: a hidden row stays reachable by search and
+// by link, and nothing about hiding it is an access control. Anything that
+// genuinely must not be reachable is the content scope, which is a different
+// mechanism and is unbuilt.
+const PreferenceHomeRows = "ui.home.rows"

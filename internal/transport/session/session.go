@@ -329,12 +329,18 @@ func (h *Handler) pushRender(ctx context.Context, s *liveSession, screen string,
 	// rather than play one (ADR 0049). Set here because this is where the live
 	// session is in hand; every screen that does not want it ignores it.
 	ctx = screens.WithClientCodecs(ctx, s.clientProfile().codecs())
+	// What the render learns about its sources comes back beside the tree
+	// (ADR 0052): whether it was built from stored answers, how old they are,
+	// and which sources did not answer. Nothing outside the source-backed
+	// screens writes into it.
+	ctx, report := screens.WithReport(ctx)
 	node, err := h.screens.Render(ctx, screen, s.currentCaller(), params)
 	if err != nil {
 		s.enqueue(regionMsg(ctx, s, contentRegion, sessionv1.RegionUpdate_REPLACE, errorNode(err.Error())))
 		return
 	}
 	s.enqueue(regionMsg(ctx, s, contentRegion, sessionv1.RegionUpdate_REPLACE, node))
+	h.applyReport(ctx, s, report, route{screen: screen, params: params})
 }
 
 // onInput records the latest search text and (re)arms the debounce timer, so a
