@@ -39,7 +39,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
-	github.com/mosaic-media/module-cinemeta v0.3.0
+	github.com/mosaic-media/module-cinemeta v0.4.0
 	github.com/mosaic-media/module-remote-playback v0.4.0
 	github.com/mosaic-media/module-tmdb v0.11.0
 	github.com/mosaic-media/sdk v0.25.0
