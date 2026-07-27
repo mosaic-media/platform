@@ -89,6 +89,7 @@ type transcodeSession struct {
 	stop     func()
 	readers  int
 	idleFrom time.Time
+	used     time.Time
 	dead     bool
 }
 
@@ -97,9 +98,25 @@ type transcodeSession struct {
 // One session per ticket is also what bounds the process fleet: before this, a
 // viewer dragging the scrubber left an ffmpeg running per range request with
 // nothing reaping the previous one.
+// maxPerTicket bounds how many transcodes one playback may have running.
+//
+// **More than one is necessary, which the obvious design gets wrong.** A media
+// element reads several regions of a file at once — the head for the header and,
+// for a progressive MP4, the tail where a moov would normally live. Keeping a
+// single session and killing it whenever a request falls outside it means the
+// client's second region destroys the first, then the first destroys the second:
+// live, one playback wrote 7.4 GB across two spools and the player never reached
+// readyState 1, because nothing it had asked for survived long enough to be
+// read.
+//
+// Three is enough for a head, a tail and a seek in flight, and small enough that
+// a scrubbing viewer cannot accumulate processes — the least recently used is
+// evicted, which is the bound that was owed.
+const maxPerTicket = 3
+
 type Sessions struct {
 	mu    sync.Mutex
-	by    map[string]*transcodeSession
+	by    map[string][]*transcodeSession
 	spool NewSpool
 }
 
@@ -107,7 +124,7 @@ type Sessions struct {
 // registry that reports itself unusable, so a Platform assembled without one
 // serves the pipe rather than failing a playback.
 func NewSessions(spool NewSpool) *Sessions {
-	return &Sessions{by: map[string]*transcodeSession{}, spool: spool}
+	return &Sessions{by: map[string][]*transcodeSession{}, spool: spool}
 }
 
 // usable reports whether this registry can back a seekable stream.
@@ -122,19 +139,40 @@ func (s *Sessions) usable() bool { return s != nil && s.spool != nil }
 // transcode's.
 func (s *Sessions) Open(ctx context.Context, rx *Remuxer, key, url string, headers map[string]string, plan Plan, offset int64) (io.ReadCloser, error) {
 	s.mu.Lock()
-	sess := s.by[key]
-	if sess == nil || !sess.covers(offset) {
-		if sess != nil {
-			sess.kill()
-		}
-		var err error
-		sess, err = startSession(ctx, rx, s.spool, url, headers, plan, offset)
-		if err != nil {
+	live := s.by[key]
+
+	// An existing session that already covers this offset is reused, whichever
+	// region of the file it was started for. That is the whole point: two reads
+	// of overlapping bytes must come from the same transcode.
+	for _, sess := range live {
+		if sess.covers(offset) {
+			sess.touch()
 			s.mu.Unlock()
-			return nil, err
+			return sess.reader(offset)
 		}
-		s.by[key] = sess
 	}
+
+	sess, err := startSession(ctx, rx, s.spool, url, headers, plan, offset)
+	if err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	live = append(live, sess)
+
+	// Evict the least recently used rather than the one just displaced: the
+	// client is reading several regions and the oldest is the one it has
+	// finished with.
+	for len(live) > maxPerTicket {
+		oldest, at := live[0], 0
+		for i, c := range live[1:] {
+			if c.lastUsed().Before(oldest.lastUsed()) {
+				oldest, at = c, i+1
+			}
+		}
+		oldest.kill()
+		live = append(live[:at], live[at+1:]...)
+	}
+	s.by[key] = live
 	s.mu.Unlock()
 
 	return sess.reader(offset)
@@ -145,8 +183,10 @@ func (s *Sessions) Open(ctx context.Context, rx *Remuxer, key, url string, heade
 func (s *Sessions) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for k, sess := range s.by {
-		sess.kill()
+	for k, live := range s.by {
+		for _, sess := range live {
+			sess.kill()
+		}
 		delete(s.by, k)
 	}
 }
@@ -158,12 +198,21 @@ func (s *Sessions) Reap(now time.Time) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	reaped := 0
-	for k, sess := range s.by {
-		if sess.idle(now) {
-			sess.kill()
-			delete(s.by, k)
-			reaped++
+	for k, live := range s.by {
+		kept := live[:0]
+		for _, sess := range live {
+			if sess.idle(now) {
+				sess.kill()
+				reaped++
+				continue
+			}
+			kept = append(kept, sess)
 		}
+		if len(kept) == 0 {
+			delete(s.by, k)
+			continue
+		}
+		s.by[k] = kept
 	}
 	return reaped
 }
@@ -183,6 +232,23 @@ func (t *transcodeSession) covers(offset int64) bool {
 		return offset <= t.origin+t.written
 	}
 	return offset <= t.origin+t.written+readAheadSlack
+}
+
+// touch and lastUsed order sessions for eviction. A session being read from is
+// not a candidate however long ago it started.
+func (t *transcodeSession) touch() {
+	t.mu.Lock()
+	t.used = time.Now()
+	t.mu.Unlock()
+}
+
+func (t *transcodeSession) lastUsed() time.Time {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.readers > 0 {
+		return time.Now()
+	}
+	return t.used
 }
 
 func (t *transcodeSession) idle(now time.Time) bool {
@@ -227,7 +293,7 @@ func startSession(ctx context.Context, rx *Remuxer, newSpool NewSpool, url strin
 		return nil, err
 	}
 
-	t := &transcodeSession{origin: offset, spool: sp, stop: stop, idleFrom: time.Now()}
+	t := &transcodeSession{origin: offset, spool: sp, stop: stop, idleFrom: time.Now(), used: time.Now()}
 	t.cond = sync.NewCond(&t.mu)
 
 	go t.fill(body)

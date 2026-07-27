@@ -549,3 +549,66 @@ func TestAdvertisedLengthTracksTheSource(t *testing.T) {
 		t.Errorf("offsetAt(quarter) = %v, want 30m", got)
 	}
 }
+
+// TestReadingTwoRegionsDoesNotDestroyEither is the second live failure written
+// down as a test.
+//
+// A media element reads more than one region of a file at once — the head for
+// the header, and for a progressive MP4 the tail, where a moov would normally
+// live. Keeping one session per playback and killing it whenever a request fell
+// outside it meant the client's second region destroyed the first and the first
+// destroyed the second: one playback wrote 7.4 GB across two spools and the
+// player never reached readyState 1, because nothing it asked for survived long
+// enough to be read.
+func TestReadingTwoRegionsDoesNotDestroyEither(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake is a shell script")
+	}
+	dir := t.TempDir()
+	countFile := filepath.Join(dir, "starts")
+	bin := filepath.Join(dir, "ffmpeg")
+	script := "#!/bin/sh\necho start >> " + strconv.Quote(countFile) + "\nprintf 'ABCDEFGHIJ'\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatalf("writing the fake ffmpeg: %v", err)
+	}
+
+	plan := seekablePlan()
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", plan)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	h := Handler(s, http.DefaultClient, NewRemuxerAt(bin))
+
+	get := func(rangeHeader string) (int, string) {
+		req := httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil)
+		if rangeHeader != "" {
+			req.Header.Set("Range", rangeHeader)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+
+	total := plan.contentLength()
+	// The head, then a region far away, then the head again — the interleaving a
+	// browser actually performs.
+	_, head1 := get("bytes=0-")
+	if code, _ := get("bytes=" + strconv.FormatInt(total/2, 10) + "-"); code != http.StatusPartialContent {
+		t.Fatalf("far region status = %d, want 206", code)
+	}
+	_, head2 := get("bytes=0-")
+
+	if head1 != head2 {
+		t.Errorf("the head changed after another region was read:\n first  %q\n second %q", head1, head2)
+	}
+	// Two regions, two transcodes — and the head must not have been restarted a
+	// third time, which is what the destroy-and-rebuild loop did.
+	starts, err := os.ReadFile(countFile)
+	if err != nil {
+		t.Fatalf("ffmpeg never started: %v", err)
+	}
+	if n := strings.Count(string(starts), "start"); n != 2 {
+		t.Errorf("ffmpeg started %d times for two regions read twice; want 2 — a third means the sessions are evicting each other", n)
+	}
+}
