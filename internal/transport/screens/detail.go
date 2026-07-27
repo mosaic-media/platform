@@ -27,8 +27,9 @@ import (
 // and what to watch next (ADR 0034). It is ref-based and serves both planes: a
 // virtual item and an in-library one render from the same metadata, differing in
 // the primary action and in how much they can say about bytes they may not have.
-// A nodeId-only navigation (no ref) falls back to the structural library view,
-// since metadata is fetched by ref.
+// A nodeId navigation renders the same tree from the object graph instead
+// (ADR 0107): the stored document, the node's own artwork and the materialised
+// tree, with no provider call at all.
 func (s *Service) detailScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
 	if refMap, ok := params[paramRef].(map[string]any); ok {
 		return s.richDetail(ctx, caller, refFromParam(refMap), params)
@@ -37,7 +38,7 @@ func (s *Service) detailScreen(ctx context.Context, caller v1.Caller, params map
 	if nodeID == "" {
 		return nil, contracts.NewError(contracts.InvalidArgument, "detail screen needs a nodeId or ref param")
 	}
-	return s.libraryDetail(ctx, caller, nodeID)
+	return s.libraryDetail(ctx, caller, nodeID, params)
 }
 
 // richDetail builds the full detail for a ref, in the order the design states
@@ -51,6 +52,18 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 	if err != nil {
 		return nil, err
 	}
+	return s.renderDetail(ctx, caller, ref, res, params)
+}
+
+// renderDetail is the detail tree itself, over metadata that has already been
+// resolved.
+//
+// It is split from the fetch because the two planes now resolve differently and
+// must still render identically (ADR 0107): a **virtual** item asks its provider
+// live, and a **library** item reads the stored document and its own tree. A
+// second renderer for the second plane is how the library detail would quietly
+// become the poorer one.
+func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.ContentRef, res app.PreviewContentResult, params map[string]any) (sdui.Node, error) {
 	m := res.Metadata
 	title := m.Title
 	if title == "" {
@@ -837,25 +850,94 @@ func titleWords(s string) string {
 // as cards that open their own detail (one level per screen, since the tree is
 // of variable depth — ADR 0013). A film's child is its feature item; a series'
 // children are its seasons.
-func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID string) (sdui.Node, error) {
-	res, err := s.content.GetContentNode(ctx, v1.GetContentNodeQuery{
-		Caller: caller, NodeID: v1.NodeID(nodeID), WithChildren: true,
+func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID string, params map[string]any) (sdui.Node, error) {
+	res, err := s.content.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{
+		Caller: caller, NodeID: v1.NodeID(nodeID),
 	})
 	if err != nil {
 		return nil, err
 	}
 	n := res.Node
 
-	body := []ui.El{ui.DetailHeader(n.Title, ui.Meta(string(n.MediaType), string(n.Kind)))}
-	if len(res.Children) > 0 {
-		cards := make([]ui.El, 0, len(res.Children))
-		for _, c := range res.Children {
-			cards = append(cards, ui.PosterCard(c.Title, string(c.MediaType),
-				ui.OnTap(ui.Navigate(screenDetail, map[string]any{paramNodeID: string(c.ID)}))))
-		}
-		body = append(body, ui.Section("Contents", ui.Grid(cards...)))
+	if !res.HasMetadata {
+		// Never enriched — materialised before ADR 0107, or by a provider that
+		// has never been reachable since. It still has a title, artwork and a
+		// tree, so it renders as those rather than as an error or an apology;
+		// the next maintenance run fills the rest in.
+		return s.structuralDetail(n, res.Tree), nil
 	}
-	return ui.Screen(ui.Title(n.Title), ui.Group(body...)).Build(), nil
+
+	m := res.Metadata
+	// The tree is the authority on what episodes exist, and the stored document
+	// deliberately carries none (ADR 0107). Projecting them back here is what
+	// lets one renderer serve both planes.
+	m.Episodes = app.EpisodesFromTree(res.Tree)
+
+	// The node fills what the document does not. Artwork is the case that
+	// matters: it is stored on the node (ADR 0071) and re-ranked by the artwork
+	// pass (ADR 0074), so the node's copy is the *better* one and the document's
+	// is what its metadata provider happened to carry.
+	if p := n.Artwork.Poster; p != "" {
+		m.Poster = p
+	}
+	if b := n.Artwork.Backdrop; b != "" {
+		m.Backdrop = b
+	}
+	if l := n.Artwork.Logo; l != "" {
+		m.Logo = l
+	}
+	if m.Title == "" {
+		m.Title = n.Title
+	}
+
+	// The ref the document was fetched under, so the actions that need one — a
+	// franchise rail, a trailer — still work. Its media type comes from the node
+	// when the document has none, because the graph's is the canonical one
+	// (ADR 0015) and the kicker reads it.
+	ref := m.Ref
+	if ref.MediaType == "" {
+		ref.MediaType = n.MediaType
+	}
+
+	return s.renderDetail(ctx, caller, ref, app.PreviewContentResult{
+		Metadata: m, InLibrary: true, NodeID: n.ID,
+	}, params)
+}
+
+// structuralDetail is what a node with no stored description renders as: what
+// the graph itself holds, which is a title, its artwork and its contents.
+//
+// It was the *only* library detail before ADR 0107 and is now the floor beneath
+// it. It draws the children's posters, which the version it replaces did not —
+// a grid of blank cards was the visible half of the same omission.
+func (s *Service) structuralDetail(n v1.Node, tree []v1.Node) sdui.Node {
+	heroEls := []ui.El{
+		ui.Title(n.Title),
+		ui.When(n.Artwork.Backdrop != "", ui.Backdrop(s.art(n.Artwork.Backdrop))),
+		ui.When(n.Artwork.Logo != "", ui.Logo(s.art(n.Artwork.Logo))),
+		ui.When(n.Artwork.Poster != "", ui.Poster(s.art(n.Artwork.Poster))),
+	}
+	if k := mediaTypeWord(string(n.MediaType)); k != "" {
+		heroEls = append(heroEls, ui.Kicker(k))
+	}
+	body := []ui.El{ui.Slot("bleed", ui.Component("DetailHero", heroEls...))}
+
+	// Direct children only: the tree carries every descendant, and a series'
+	// contents are its seasons rather than every episode of every season.
+	cards := make([]ui.El, 0, len(tree))
+	for _, c := range tree {
+		if c.ParentID == nil || *c.ParentID != n.ID {
+			continue
+		}
+		cards = append(cards, ui.PosterCard(c.Title, string(c.MediaType),
+			ui.When(c.Artwork.Poster != "", ui.Poster(s.art(c.Artwork.Poster))),
+			ui.OnTap(ui.Navigate(screenDetail, map[string]any{paramNodeID: string(c.ID)}))))
+	}
+	if len(cards) > 0 {
+		body = append(body, ui.Section("Contents",
+			ui.Grid(ui.MinColumnWidth(196), ui.Group(cards...))))
+	}
+	return ui.Screen(ui.Title(n.Title), ui.Group(body...)).Build()
 }
 
 // positionLabel renders a resume offset the way a viewer reads a clock.

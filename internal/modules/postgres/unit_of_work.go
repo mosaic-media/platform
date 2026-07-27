@@ -128,3 +128,9 @@ func (t *tx) InstalledExtensions() contracts.InstalledExtensionStore {
 func (t *tx) LibraryRules() contracts.LibraryRuleStore {
 	return &libraryRuleStore{q: t.q}
 }
+
+// NodeMetadata joins the set (ADR 0107) so a stored provider answer commits
+// with the node it describes.
+func (t *tx) NodeMetadata() contracts.NodeMetadataStore {
+	return &nodeMetadataStore{q: t.q}
+}

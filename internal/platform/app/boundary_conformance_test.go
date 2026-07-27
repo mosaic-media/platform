@@ -450,6 +450,15 @@ func boundaryCases() []boundaryCase {
 		{"ListLibrary", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListLibrary(ctx, app.ListLibraryQuery{Caller: caller(sid)}))
 		}},
+		// Reading a title out of the graph rather than from its provider
+		// (ADR 0107). It is a content read like any other and gated as one: the
+		// library is shared, so everybody who may see it may see all of it, and
+		// nobody who may not gets a description of it either.
+		{"GetLibraryDetail", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{
+				Caller: caller(sid), NodeID: "node-1",
+			}))
+		}},
 		{"ListLibraryRules", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListLibraryRules(ctx, app.ListLibraryRulesQuery{Caller: caller(sid)}))
 		}},

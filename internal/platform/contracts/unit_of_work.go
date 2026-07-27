@@ -74,4 +74,11 @@ type Tx interface {
 	// outbox event, and a rule that existed without its event — or an event
 	// about a rule that did not — is a statement half-made.
 	LibraryRules() LibraryRuleStore
+
+	// NodeMetadata persists what a provider said about a materialised title
+	// (ADR 0107). It joins the set so a document and the node it describes can
+	// be written together — an enrichment that stored a description of a node
+	// the same transaction then rolled back would be a cache entry for content
+	// that does not exist.
+	NodeMetadata() NodeMetadataStore
 }

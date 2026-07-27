@@ -37,6 +37,10 @@ type Deps struct {
 	Relations      contracts.RelationStore
 	SourceBindings contracts.SourceBindingStore
 
+	// NodeMetadata is what a provider said about a materialised title
+	// (ADR 0107). Optional, like the rules below.
+	NodeMetadata contracts.NodeMetadataStore
+
 	// LibraryRules is what the library should contain (ADR 0104). Optional:
 	// when nil the rule subtests skip, so an implementation that has not built
 	// it yet is not made to fail the whole suite.
@@ -76,6 +80,7 @@ func RunAll(t *testing.T, newDeps Factory) {
 
 	t.Run("LibraryRuleStore", func(t *testing.T) { RunLibraryRuleStoreContract(t, newDeps) })
 	t.Run("LibraryBrowse", func(t *testing.T) { RunLibraryBrowseContract(t, newDeps) })
+	t.Run("NodeMetadataStore", func(t *testing.T) { RunNodeMetadataStoreContract(t, newDeps) })
 }
 
 func ctx(t *testing.T) context.Context {

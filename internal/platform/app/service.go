@@ -65,6 +65,11 @@ type Service struct {
 	// and it is what makes the maintenance handler a no-op rather than a panic
 	// in a build with no store.
 	libraryRules contracts.LibraryRuleStore
+	// nodeMetadata is the direct read handle for what a provider said about a
+	// materialised title (ADR 0107). Optional: a Service built without one
+	// renders a library detail from the node alone, which is what every detail
+	// did before the store existed.
+	nodeMetadata contracts.NodeMetadataStore
 	// instance is what this install calls itself, held outside PostgreSQL
 	// (ADR 0098). Optional: a Service built without one has no name to report
 	// and records none when a server is claimed, which is what a test service
@@ -143,6 +148,10 @@ type Deps struct {
 	// LibraryRules is the direct read handle for what the library should
 	// contain (ADR 0104). Optional, like Jobs, and for the same reason.
 	LibraryRules contracts.LibraryRuleStore
+	// NodeMetadata is the direct read handle for stored descriptive metadata
+	// (ADR 0107). Optional: without it nothing is stored and nothing is read,
+	// and a detail falls back to what the node itself carries.
+	NodeMetadata contracts.NodeMetadataStore
 	// Instance is the durable identity file (ADR 0098) — the one store that is
 	// deliberately not PostgreSQL, so a server's name outlives its database.
 	// Optional, and an absent one is a Platform with no name rather than a
@@ -182,6 +191,7 @@ func NewService(d Deps) *Service {
 		telemetryMaintenance: d.TelemetryMaintenance,
 		jobs:                 d.Jobs,
 		libraryRules:         d.LibraryRules,
+		nodeMetadata:         d.NodeMetadata,
 		instance:             d.Instance,
 		systemSession:        newSystemSessionRef(),
 	}

@@ -59,6 +59,7 @@ type fakeDBSnapshot struct {
 	userPreferences map[string]domain.UserPreference
 	playbackStates  map[playbackKey]v1.PlaybackState
 	libraryRules    map[domain.LibraryRuleID]domain.LibraryRule
+	nodeMetadata    map[v1.NodeID]contracts.NodeMetadata
 }
 
 // fakeDB is the shared backing store behind every fake contract in this
@@ -98,6 +99,9 @@ type fakeDB struct {
 	// fake here that is neither content nor identity, but a durable statement
 	// about content.
 	libraryRules map[domain.LibraryRuleID]domain.LibraryRule
+	// nodeMetadata is what a provider said about a materialised title
+	// (ADR 0107).
+	nodeMetadata map[v1.NodeID]contracts.NodeMetadata
 }
 
 // playbackKey is the (user, node) pair playback state is stored under.
@@ -125,6 +129,7 @@ func newFakeDB() *fakeDB {
 		userPreferences: make(map[string]domain.UserPreference),
 		playbackStates:  make(map[playbackKey]v1.PlaybackState),
 		libraryRules:    make(map[domain.LibraryRuleID]domain.LibraryRule),
+		nodeMetadata:    make(map[v1.NodeID]contracts.NodeMetadata),
 	}
 }
 
@@ -333,6 +338,10 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 	for k, v := range db.libraryRules {
 		libraryRules[k] = v
 	}
+	nodeMetadata := make(map[v1.NodeID]contracts.NodeMetadata, len(db.nodeMetadata))
+	for k, v := range db.nodeMetadata {
+		nodeMetadata[k] = v
+	}
 
 	return fakeDBSnapshot{
 		users:          users,
@@ -350,6 +359,7 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 		userPreferences: userPreferences,
 		playbackStates:  playbackStates,
 		libraryRules:    libraryRules,
+		nodeMetadata:    nodeMetadata,
 	}
 }
 
@@ -370,6 +380,7 @@ func (db *fakeDB) restore(snap fakeDBSnapshot) {
 	db.userPreferences = snap.userPreferences
 	db.playbackStates = snap.playbackStates
 	db.libraryRules = snap.libraryRules
+	db.nodeMetadata = snap.nodeMetadata
 }
 
 // fakeUserStore implements contracts.UserStore. It deliberately does not
@@ -938,6 +949,37 @@ func (tx *fakeTx) LibraryRules() contracts.LibraryRuleStore {
 	return &fakeLibraryRuleStore{db: tx.db, trace: tx.trace}
 }
 
+func (tx *fakeTx) NodeMetadata() contracts.NodeMetadataStore {
+	return &fakeNodeMetadataStore{db: tx.db, trace: tx.trace}
+}
+
+// fakeNodeMetadataStore implements contracts.NodeMetadataStore over fakeDB
+// (ADR 0107). Get on a node that was never enriched is NotFound, which is the
+// distinction the real store draws and the one a caller renders around.
+type fakeNodeMetadataStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func (s *fakeNodeMetadataStore) Upsert(_ context.Context, m contracts.NodeMetadata) (contracts.NodeMetadata, error) {
+	s.trace.record("node_metadata.upsert")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.nodeMetadata[m.NodeID] = m
+	return m, nil
+}
+
+func (s *fakeNodeMetadataStore) Get(_ context.Context, nodeID v1.NodeID) (contracts.NodeMetadata, error) {
+	s.trace.record("node_metadata.get")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	m, ok := s.db.nodeMetadata[nodeID]
+	if !ok {
+		return contracts.NodeMetadata{}, contracts.NewError(contracts.NotFound, "no stored metadata for this node")
+	}
+	return m, nil
+}
+
 // fakeLibraryRuleStore implements contracts.LibraryRuleStore over fakeDB
 // (ADR 0104). It enforces the one thing the real schema enforces and the
 // application service does not — the case-insensitive uniqueness of a rule's
@@ -1219,6 +1261,7 @@ func baseTestDeps(db *fakeDB, tr *trace, now time.Time) app.Deps {
 		TelemetryQueries: fakeTelemetryQueryStore{},
 		Tokens:           &fakeTokenStore{db: db, trace: tr},
 		LibraryRules:     &fakeLibraryRuleStore{db: db, trace: tr},
+		NodeMetadata:     &fakeNodeMetadataStore{db: db, trace: tr},
 	}
 }
 

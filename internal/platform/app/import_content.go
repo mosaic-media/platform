@@ -104,6 +104,18 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 	// path: it is best-effort, and an import that produced a tree has succeeded
 	// whether or not anything could be found to play.
 	if result.WorkID != "" {
+		// 6b0. fill in what it *is*, and what shape it is (ADR 0107). It runs
+		// first of the three because both of the others read the tree: the
+		// stream pass fills items with no Parts, so an episode this adds is
+		// enriched in the same import rather than waiting a whole run, and the
+		// artwork pass walks the seasons this may have just created.
+		//
+		// It is also what makes a re-import worth anything. Every module dedups
+		// before writing and returns AlreadyKnown, so without this the second
+		// import of a title refreshed everything about it except its shape and
+		// its description — which is the failure ADR 0107 was written for.
+		s.enrichMetadata(ctx, cmd.Caller, cmd.Ref, result.WorkID)
+
 		s.enrichStreams(ctx, cmd.Caller, result.WorkID, &result)
 
 		// 6c. fill in what it looks like (ADR 0075). Same shape and same reasons

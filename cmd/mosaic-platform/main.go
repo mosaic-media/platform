@@ -593,6 +593,9 @@ func run() error {
 		// What the library should contain (ADR 0104). The rules are read here
 		// and written through the UnitOfWork above, like every other state.
 		LibraryRules: set.LibraryRules,
+		// What a provider said about a materialised title (ADR 0107), so a
+		// library detail renders from the graph rather than from a live call.
+		NodeMetadata: set.NodeMetadata,
 
 		PlaybackResolutions: set.PlaybackResolutions,
 		PlaybackStates:      set.PlaybackStates,

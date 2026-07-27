@@ -177,6 +177,11 @@ type contentQueries interface {
 	// are what the settings panel is built from; the pass itself is triggered by
 	// an action, not by rendering.
 	ListLibraryRules(context.Context, app.ListLibraryRulesQuery) (app.ListLibraryRulesResult, error)
+	// GetLibraryDetail is one work, its tree and what a provider last said about
+	// it (ADR 0107) — the read that lets a library detail render with no
+	// provider call, which is what a screen over the object graph has to be able
+	// to do.
+	GetLibraryDetail(context.Context, app.GetLibraryDetailQuery) (app.GetLibraryDetailResult, error)
 	PreviewLibraryRule(context.Context, app.PreviewLibraryRuleQuery) (app.PreviewLibraryRuleResult, error)
 	ListModuleCatalogs(context.Context, app.ListModuleCatalogsQuery) (app.ListModuleCatalogsResult, error)
 	ListCatalogItems(context.Context, app.ListCatalogItemsQuery) (app.ListCatalogItemsResult, error)

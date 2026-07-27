@@ -76,6 +76,15 @@ type fakeQueries struct {
 	libraryTotal int
 	libraryErr   error
 	libraryRules []app.LibraryRuleListing
+	// The stored detail (ADR 0107): the work's tree, and the document a provider
+	// last answered with.
+	libraryTree       []v1.Node
+	storedMetadata    v1.ContentMetadata
+	hasStoredMetadata bool
+	libraryDetailErr  error
+	// previewCalls counts provider metadata reads, so "a library detail makes
+	// none" is an assertion rather than a claim.
+	previewCalls int
 	preview      app.PreviewLibraryRuleResult
 	previewErr   error
 	// childrenByNode, when set for a node id, is what GetContentNode returns as
@@ -331,6 +340,24 @@ func (f *fakeQueries) ListLibraryRules(_ context.Context, _ app.ListLibraryRules
 	return app.ListLibraryRulesResult{Rules: f.libraryRules}, nil
 }
 
+// GetLibraryDetail answers from the seeded node, its tree and whatever document
+// a test stored (ADR 0107). HasMetadata is driven separately from the document
+// so the "never enriched" branch — a node materialised before the store existed
+// — is reachable, which is the one a fake returning a zero struct would hide.
+func (f *fakeQueries) GetLibraryDetail(_ context.Context, q app.GetLibraryDetailQuery) (app.GetLibraryDetailResult, error) {
+	if f.libraryDetailErr != nil {
+		return app.GetLibraryDetailResult{}, f.libraryDetailErr
+	}
+	node := f.node
+	if node.ID == "" {
+		node = v1.Node{ID: q.NodeID, WorkID: q.NodeID, Kind: v1.NodeWork}
+	}
+	return app.GetLibraryDetailResult{
+		Node: node, Tree: f.libraryTree,
+		Metadata: f.storedMetadata, HasMetadata: f.hasStoredMetadata,
+	}, nil
+}
+
 func (f *fakeQueries) PreviewLibraryRule(_ context.Context, _ app.PreviewLibraryRuleQuery) (app.PreviewLibraryRuleResult, error) {
 	if f.previewErr != nil {
 		return app.PreviewLibraryRuleResult{}, f.previewErr
@@ -409,6 +436,9 @@ func (f *fakeQueries) ListPlaybackStates(_ context.Context, _ v1.ListPlaybackSta
 }
 
 func (f *fakeQueries) PreviewContent(_ context.Context, q app.PreviewContentQuery) (app.PreviewContentResult, error) {
+	f.mu.Lock()
+	f.previewCalls++
+	f.mu.Unlock()
 	f.mu.Lock()
 	f.gotPreviewRef = q.Ref
 	f.mu.Unlock()
@@ -1043,31 +1073,95 @@ func TestCatalogScreenRequiresParams(t *testing.T) {
 	}
 }
 
-func TestDetailScreenRendersHeaderAndChildren(t *testing.T) {
+// A node with no stored document renders what the graph holds — its own title,
+// artwork and contents (ADR 0107's floor). It is what a title materialised
+// before the store existed, or by a provider that has never answered since,
+// falls back to.
+func TestDetailScreenRendersTheGraphWhenNothingWasStored(t *testing.T) {
 	fake := &fakeQueries{
-		node: v1.Node{ID: "n-1", WorkID: "n-1", Kind: v1.NodeWork, MediaType: v1.MediaTVSeries, Title: "Breaking Bad"},
-		children: []v1.Node{
-			{ID: "n-2", Kind: v1.NodeContainer, MediaType: v1.MediaTVSeries, Title: "Season 1"},
+		node: v1.Node{
+			ID: "n-1", WorkID: "n-1", Kind: v1.NodeWork, MediaType: v1.MediaTVSeries,
+			Title: "Breaking Bad", Artwork: v1.Artwork{Poster: "https://cdn/bb.jpg"},
+		},
+		libraryTree: []v1.Node{
+			{ID: "n-2", ParentID: nodeRef("n-1"), Kind: v1.NodeContainer,
+				ContainerType: v1.ContainerSeason, MediaType: v1.MediaTVSeries, Title: "Season 1",
+				Artwork: v1.Artwork{Poster: "https://cdn/s1.jpg"}},
 		},
 	}
 	node := render(t, &Service{content: fake}, "detail", map[string]any{"nodeId": "n-1"})
-	if fake.gotNodeID != "n-1" {
-		t.Fatalf("backend saw node %q, want n-1", fake.gotNodeID)
-	}
-	header, ok := find(node, sdui.TypeDetailHeader)
-	if !ok || prop(header, "title") != "Breaking Bad" {
-		t.Fatalf("detail header = %+v, want the node title", header.Props)
+
+	hero, ok := find(node, "DetailHero")
+	if !ok || prop(hero, "title") != "Breaking Bad" {
+		t.Fatalf("detail hero = %+v, want the node title", hero)
 	}
 	var cards []sdui.Node
 	findAll(node, sdui.TypePosterCard, &cards)
 	if len(cards) != 1 {
 		t.Fatalf("child cards = %d, want 1 per child", len(cards))
 	}
+	// The child's poster, which the version this replaces did not draw — a grid
+	// of blank cards was the visible half of the same omission.
+	if prop(cards[0], "poster") == nil {
+		t.Error("a child card carries no poster, so the contents grid is blank")
+	}
 	act := actionOf(cards[0])
 	if act["kind"] != sdui.KindNavigate || mapAt(act, "params")["nodeId"] != "n-2" {
 		t.Fatalf("child card action = %+v, want Navigate to the child's detail", act)
 	}
 }
+
+// The whole point of ADR 0107: a library detail renders the rich tree from the
+// stored document and the materialised tree, with **no provider call**.
+func TestDetailScreenRendersStoredMetadataWithNoProviderCall(t *testing.T) {
+	fake := &fakeQueries{
+		node: v1.Node{
+			ID: "n-1", WorkID: "n-1", Kind: v1.NodeWork, MediaType: v1.MediaTVSeries,
+			Title: "Breaking Bad", Artwork: v1.Artwork{Poster: "https://cdn/bb.jpg"},
+		},
+		hasStoredMetadata: true,
+		storedMetadata: v1.ContentMetadata{
+			Ref:      v1.ContentRef{Provider: "tmdb", NativeID: "1396", NativeType: "tv", MediaType: v1.MediaTVSeries},
+			Title:    "Breaking Bad",
+			Overview: "A chemistry teacher diagnosed with cancer turns to making meth.",
+			Year:     2008, Rating: 8.9, Genres: []string{"Drama"},
+			Cast: []v1.Person{{Name: "Bryan Cranston", Role: "Walter White"}},
+		},
+		libraryTree: []v1.Node{
+			{ID: "s-1", ParentID: nodeRef("n-1"), Kind: v1.NodeContainer,
+				ContainerType: v1.ContainerSeason, MediaType: v1.MediaTVSeries,
+				Title: "Season 1", NaturalOrder: 1},
+			{ID: "e-1", ParentID: nodeRef("s-1"), Kind: v1.NodeItem,
+				ItemType: v1.ItemEpisode, MediaType: v1.MediaTVSeries,
+				Title: "Pilot", NaturalOrder: 1},
+		},
+	}
+	node := render(t, &Service{content: fake}, "detail", map[string]any{"nodeId": "n-1"})
+	text := treeStrings(node)
+
+	if fake.previewCalls != 0 {
+		t.Errorf("a library detail made %d provider calls, want none", fake.previewCalls)
+	}
+	if !strings.Contains(text, "chemistry teacher") {
+		t.Errorf("the stored overview is not on the screen: %s", text)
+	}
+	if !strings.Contains(text, "Bryan Cranston") {
+		t.Errorf("the stored cast is not on the screen: %s", text)
+	}
+	// The episode came from the tree, not from the document — the document
+	// deliberately carries none.
+	if !strings.Contains(text, "Pilot") {
+		t.Errorf("the tree's episode is not on the screen: %s", text)
+	}
+	// And the kicker counts the seasons the tree holds.
+	hero, _ := find(node, "DetailHero")
+	if got, _ := prop(hero, "kicker").(string); !strings.Contains(got, "1 season") {
+		t.Errorf("kicker = %q, want the season count from the tree", got)
+	}
+}
+
+// nodeRef is a pointer to a node id, for the parent links a tree fixture needs.
+func nodeRef(id v1.NodeID) *v1.NodeID { return &id }
 
 func TestSettingsScreenHostsModuleUI(t *testing.T) {
 	// The Platform hosts the module's contributed settings UINode verbatim (ADR

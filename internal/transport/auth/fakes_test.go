@@ -461,6 +461,7 @@ func (fakeTx) PlaybackStates() contracts.PlaybackStateStore   { return nil }
 
 func (fakeTx) InstalledExtensions() contracts.InstalledExtensionStore { return nil }
 func (fakeTx) LibraryRules() contracts.LibraryRuleStore               { return nil }
+func (fakeTx) NodeMetadata() contracts.NodeMetadataStore              { return nil }
 
 type fakeUnitOfWork struct{ db *fakeDB }
 

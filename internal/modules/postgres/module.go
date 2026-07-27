@@ -62,6 +62,13 @@ func (Module) Manifest() builtin.Manifest {
 			"TelemetryQueryStore",
 			"TelemetryMaintenanceStore",
 			"JobStore",
+			// What the library should contain (ADR 0104) and what a provider
+			// said about it (ADR 0107). Declared for the reason the two above
+			// were added late: the manifest is what a Supervisor would check a
+			// build against, so a store missing from it is a quiet lie about
+			// what this module provides.
+			"LibraryRuleStore",
+			"NodeMetadataStore",
 			"TokenStore",
 			"Clock",
 			"IDGenerator",
@@ -118,6 +125,9 @@ type ContractSet struct {
 	// contain (ADR 0104). Writes go through the UnitOfWork, where a rule and
 	// the event announcing it commit together.
 	LibraryRules contracts.LibraryRuleStore
+	// NodeMetadata is the direct read handle for a stored provider answer
+	// (ADR 0107) — what a library detail renders from.
+	NodeMetadata contracts.NodeMetadataStore
 	// Tokens is the direct read handle for a session's bearer pair (ADR 0102):
 	// an access token is validated on every call, so it must not open one.
 	Tokens contracts.TokenStore
@@ -187,6 +197,7 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		TelemetryMaintenance: NewTelemetryStore(pool),
 		Jobs:                 NewJobStore(pool),
 		LibraryRules:         NewLibraryRuleStore(pool),
+		NodeMetadata:         NewNodeMetadataStore(pool),
 		Tokens:               NewTokenStore(pool),
 
 		Clock:          NewClock(),

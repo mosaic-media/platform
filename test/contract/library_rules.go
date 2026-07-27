@@ -5,6 +5,7 @@
 package contract
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -341,6 +342,97 @@ func RunLibraryBrowseContract(t *testing.T, newDeps Factory) {
 		}
 		if total != 2 {
 			t.Fatalf("Count(title~blade) = %d, want 2", total)
+		}
+	})
+}
+
+// RunNodeMetadataStoreContract exercises the stored provider answer (ADR 0107).
+func RunNodeMetadataStoreContract(t *testing.T, newDeps Factory) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	t.Run("store and read back a document", func(t *testing.T) {
+		d := newDeps(t)
+		if d.NodeMetadata == nil {
+			t.Skip("no node metadata store wired")
+		}
+		c := ctx(t)
+		work := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		if _, err := d.Nodes.Create(c, work); err != nil {
+			t.Fatalf("Create work: %v", err)
+		}
+
+		if _, err := d.NodeMetadata.Upsert(c, contracts.NodeMetadata{
+			NodeID: work.ID, Document: []byte(`{"title":"Arrival","year":2016}`),
+			Source: "tmdb", FetchedAt: now,
+		}); err != nil {
+			t.Fatalf("Upsert: %v", err)
+		}
+		got, err := d.NodeMetadata.Get(c, work.ID)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if got.Source != "tmdb" {
+			t.Fatalf("Source = %q, want the module that answered", got.Source)
+		}
+		if got.FetchedAt.IsZero() {
+			t.Fatal("the fetched-at did not survive, so nothing can say how stale this is")
+		}
+
+		// **The document round-trips semantically, not byte for byte.** A store
+		// is free to normalise it — PostgreSQL's jsonb reorders keys and drops
+		// insignificant whitespace — and a caller that compared bytes would be
+		// asserting an implementation detail of one adapter. What the contract
+		// owes is that unmarshalling gives back what was put in.
+		var decoded map[string]any
+		if err := json.Unmarshal(got.Document, &decoded); err != nil {
+			t.Fatalf("the stored document did not come back as JSON: %v", err)
+		}
+		if decoded["title"] != "Arrival" {
+			t.Fatalf("decoded document = %v, want the title that was stored", decoded)
+		}
+	})
+
+	// Never enriched and enriched-with-nothing are different facts, and only the
+	// first is worth running the pass for.
+	t.Run("a node that was never enriched is not found", func(t *testing.T) {
+		d := newDeps(t)
+		if d.NodeMetadata == nil {
+			t.Skip("no node metadata store wired")
+		}
+		c := ctx(t)
+		work := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		if _, err := d.Nodes.Create(c, work); err != nil {
+			t.Fatalf("Create work: %v", err)
+		}
+		_, err := d.NodeMetadata.Get(c, work.ID)
+		requireCategory(t, err, contracts.NotFound)
+	})
+
+	// Replacing rather than merging: a document is one provider's whole answer
+	// at one moment, and merging two would describe a title no source did.
+	t.Run("a second answer replaces the first", func(t *testing.T) {
+		d := newDeps(t)
+		if d.NodeMetadata == nil {
+			t.Skip("no node metadata store wired")
+		}
+		c := ctx(t)
+		work := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		if _, err := d.Nodes.Create(c, work); err != nil {
+			t.Fatalf("Create work: %v", err)
+		}
+		for _, doc := range []string{`{"title":"Arival"}`, `{"title":"Arrival"}`} {
+			if _, err := d.NodeMetadata.Upsert(c, contracts.NodeMetadata{
+				NodeID: work.ID, Document: []byte(doc), Source: "tmdb", FetchedAt: now,
+			}); err != nil {
+				t.Fatalf("Upsert %s: %v", doc, err)
+			}
+		}
+		got, err := d.NodeMetadata.Get(c, work.ID)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if !strings.Contains(string(got.Document), "Arrival") {
+			t.Fatalf("the second answer did not replace the first: %s", got.Document)
 		}
 	})
 }
