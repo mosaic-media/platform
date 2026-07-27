@@ -105,6 +105,30 @@ var DefaultBrowserCodecs = ClientCodecs{
 	MaxHeight: 1080,
 }
 
+// mp4Audio is the audio the origin's output container can actually carry.
+//
+// **It is a second constraint, and forgetting it is a real bug rather than a
+// theoretical one.** The client profile answers "can this be decoded"; this
+// answers "can it be muxed into what we are sending", and the two disagree in
+// at least one common case. Chrome decodes FLAC, so a FLAC track was chosen and
+// copied — into fragmented MP4, whose muxer refuses FLAC as experimental. ffmpeg
+// exited immediately with "Could not write header for output file", and a real
+// 4K release was unplayable with no error anyone could see.
+//
+// Anything absent here is re-encoded rather than refused: the audio encode is
+// cheap and already the path for a codec the client cannot decode, so an
+// unmuxable one costs nothing new. Opus and ALAC are present because the MP4
+// muxer takes both without -strict; FLAC, Vorbis, PCM and the lossless
+// passthrough formats are not.
+var mp4Audio = map[string]bool{
+	"aac":  true,
+	"mp3":  true,
+	"ac3":  true,
+	"eac3": true,
+	"opus": true,
+	"alac": true,
+}
+
 // PreferredLanguages is the order audio tracks are chosen in, most wanted first.
 // It is a placeholder for a real user preference: language belongs to a person,
 // not to an install, and this is the shape that preference will slot into.
@@ -139,9 +163,10 @@ func Decide(info MediaInfo, codecs ClientCodecs, preferred []string) Plan {
 	}
 
 	if track, ok := chooseAudio(info.Audio, preferred); ok {
+		codec := strings.ToLower(track.Codec)
 		plan.AudioIndex = track.Index
 		plan.AudioLanguage = track.Language
-		if codecs.Audio[strings.ToLower(track.Codec)] {
+		if codecs.Audio[codec] {
 			plan.Audio = ActionCopy
 		} else {
 			plan.Audio = ActionEncode
@@ -150,6 +175,23 @@ func Decide(info MediaInfo, codecs ClientCodecs, preferred []string) Plan {
 			} else {
 				plan.Reason += "; audio codec " + track.Codec + " is not either"
 			}
+		}
+
+		// The output container's constraint, and it applies **only once ffmpeg is
+		// already involved**. While the stream is relayed untouched the container
+		// is the source's own, and Matroska carries FLAC perfectly well — forcing
+		// an encode there would take a release that direct-plays today and push
+		// it through a transcode for nothing.
+		//
+		// The moment anything else forces a remux, the output is fragmented MP4
+		// and the question changes from "can the client decode it" to "can this
+		// container carry it". FLAC answers yes to the first and no to the
+		// second, which is how a 4K release with an 8-channel FLAC track met a
+		// tone-map it needed, went to ffmpeg, and died on "flac in MP4 support is
+		// experimental" before writing a single byte.
+		if plan.Audio == ActionCopy && plan.Video == ActionEncode && !mp4Audio[codec] {
+			plan.Audio = ActionEncode
+			plan.Reason += "; audio codec " + track.Codec + " cannot be carried by the MP4 output"
 		}
 	}
 

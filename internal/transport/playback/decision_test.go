@@ -243,3 +243,67 @@ func TestNoFilterWhenCopying(t *testing.T) {
 		t.Errorf("videoFilter() = %q, want empty for a copy", vf)
 	}
 }
+
+// TestUnmuxableAudioIsEncodedOnlyWhenRemuxing pins the two-constraint rule that
+// made a real 4K release unplayable.
+//
+// The client profile answers "can this be decoded"; the output container answers
+// "can this be carried". Chrome decodes FLAC, so a FLAC track was chosen and
+// copied — into fragmented MP4, whose muxer refuses FLAC as experimental. ffmpeg
+// exited before writing a byte.
+//
+// The second half of the name is the part that is easy to get wrong, and the
+// first attempt at this fix did: the container constraint must apply *only* when
+// ffmpeg is already involved. While the stream is relayed the container is the
+// source's own, and Matroska carries FLAC perfectly well — forcing an encode
+// there would push a release that direct-plays today through a transcode for
+// nothing.
+func TestUnmuxableAudioIsEncodedOnlyWhenRemuxing(t *testing.T) {
+	flac := []AudioTrack{{Index: 1, Codec: "flac", Language: "eng"}}
+
+	// Relayed: nothing forces ffmpeg, so FLAC rides along in the source's own
+	// container and the whole thing direct-plays.
+	relayed := Decide(
+		MediaInfo{Video: VideoTrack{Index: 0, Codec: "h264"}, Audio: flac},
+		DefaultBrowserCodecs, nil)
+	if relayed.Audio != ActionCopy {
+		t.Errorf("Audio = %q, want %q — a relayed stream keeps the source container, which carries FLAC",
+			relayed.Audio, ActionCopy)
+	}
+	if !relayed.DirectPlay {
+		t.Errorf("DirectPlay = false; forcing a transcode here costs a working direct play for nothing")
+	}
+
+	// Remuxing: the tone-map forces ffmpeg, the output becomes MP4, and FLAC
+	// cannot go in it.
+	remuxed := Decide(
+		MediaInfo{Video: VideoTrack{Index: 0, Codec: "hevc", HDRFormat: "HDR10"}, Audio: flac},
+		DefaultBrowserCodecs, nil)
+	if remuxed.Video != ActionEncode {
+		t.Fatalf("Video = %q, want %q — HDR10 to a non-HDR client needs tone-mapping", remuxed.Video, ActionEncode)
+	}
+	if remuxed.Audio != ActionEncode {
+		t.Errorf("Audio = %q, want %q — MP4 cannot carry FLAC, and copying it kills ffmpeg at header-write",
+			remuxed.Audio, ActionEncode)
+	}
+	// The reason has to name the container, not the client: "not decodable by
+	// this client" would be false here and would send someone to the wrong place.
+	if !strings.Contains(remuxed.Reason, "MP4") {
+		t.Errorf("Reason = %q, want it to name the output container as the constraint", remuxed.Reason)
+	}
+}
+
+// AC3 is the mirror case and guards the rule from being written as "encode
+// anything unusual": the client cannot decode it, so it is encoded — but for the
+// client's reason, since MP4 carries AC3 perfectly well.
+func TestUndecodableAudioReasonNamesTheClientNotTheContainer(t *testing.T) {
+	plan := Decide(
+		MediaInfo{Video: VideoTrack{Index: 0, Codec: "h264"}, Audio: []AudioTrack{{Index: 1, Codec: "ac3", Language: "eng"}}},
+		DefaultBrowserCodecs, nil)
+	if plan.Audio != ActionEncode {
+		t.Fatalf("Audio = %q, want %q", plan.Audio, ActionEncode)
+	}
+	if strings.Contains(plan.Reason, "MP4") {
+		t.Errorf("Reason = %q, but MP4 carries AC3 — the constraint here is the client's decoder", plan.Reason)
+	}
+}

@@ -157,3 +157,71 @@ func TestFFmpegHeaderArgUsesCRLF(t *testing.T) {
 		t.Errorf("header arg = %q, want CRLF-terminated", got)
 	}
 }
+
+// TestRemuxFailureIsNotASuccessfulEmptyStream pins the honest failure, and it is
+// pinned because the dishonest one shipped.
+//
+// serveRemuxed used to write 200 before reading a byte, so an ffmpeg that died
+// on its own arguments produced a successful response with an empty body. The
+// player reported only "format not supported", the access log said status=200,
+// and ffmpeg's stderr — the one place that knew — was the one place nobody
+// looked. A FLAC track the MP4 muxer refuses presented as a broken file.
+func TestRemuxFailureIsNotASuccessfulEmptyStream(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake is a shell script")
+	}
+	// A fake that fails exactly as ffmpeg does: a diagnostic on stderr, nothing
+	// on stdout, non-zero exit.
+	bin := filepath.Join(t.TempDir(), "ffmpeg")
+	script := "#!/bin/sh\necho 'flac in MP4 support is experimental' >&2\nexit 1\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatalf("writing the fake ffmpeg: %v", err)
+	}
+
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1",
+		Plan{Reason: "HDR10 needs tone-mapping for this client"})
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	Handler(s, http.DefaultClient, NewRemuxerAt(bin)).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil))
+
+	if rec.Code == http.StatusOK {
+		t.Fatalf("status = 200 with %d bytes — a failed remux must not read as success",
+			rec.Body.Len())
+	}
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadGateway)
+	}
+	// The plan's reason travels with the failure: "playback failed" sends
+	// somebody to the wrong place, and this is the only signal a user gets.
+	if body := rec.Body.String(); !strings.Contains(body, "tone-mapping") {
+		t.Errorf("body %q does not carry the reason the remux was attempted", body)
+	}
+}
+
+// The success path still streams, so the probe-before-status change did not turn
+// a working remux into a buffered one or lose the leading bytes.
+func TestRemuxSuccessStillStreamsFromTheFirstByte(t *testing.T) {
+	const output = "fragmented-mp4-bytes"
+
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", Plan{})
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	Handler(s, http.DefaultClient, NewRemuxerAt(fakeFFmpeg(t, output))).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := rec.Body.String(); got != output {
+		t.Errorf("body = %q, want %q — the probed bytes must be written through, not dropped", got, output)
+	}
+}

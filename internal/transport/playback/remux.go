@@ -178,11 +178,39 @@ func serveRemuxed(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket,
 	defer stop()
 	defer body.Close()
 
+	// **The first bytes are read before the status is written**, and that
+	// ordering is the whole point of this block.
+	//
+	// Writing 200 first means an ffmpeg that dies on its own arguments still
+	// produces a successful response with an empty body. The player then reports
+	// only "format not supported" and the access log says status=200, so the one
+	// place that knows what went wrong — ffmpeg's stderr — is the one place
+	// nobody is looking. That is exactly how a FLAC track the MP4 muxer refuses
+	// presented as a broken file for a whole session.
+	//
+	// A remux that has produced its first bytes has written a valid fMP4 header,
+	// so this is a real signal rather than a delay: past it, failures are
+	// mid-stream ones a status code could not have described anyway.
+	first := make([]byte, 64*1024)
+	n, readErr := io.ReadFull(body, first)
+	if n == 0 {
+		http.Error(w, "the origin could not produce a playable stream for this release ("+plan.Reason+")", http.StatusBadGateway)
+		return
+	}
+
 	w.Header().Set("Content-Type", rx.ContentType())
 	w.Header().Set("Accept-Ranges", "none")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodHead {
+		return
+	}
+	if _, err := w.Write(first[:n]); err != nil {
+		return
+	}
+	// ErrUnexpectedEOF means the whole stream was shorter than the probe buffer,
+	// which is legitimate for a very short output and is already fully written.
+	if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
 		return
 	}
 	_, _ = io.Copy(w, body)
