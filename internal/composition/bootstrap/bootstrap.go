@@ -95,9 +95,28 @@ func EnsureAdmin(
 			return err
 		}
 
-		role, err := tx.Permissions().CreateRole(ctx, domain.Role{
-			ID: domain.RoleID(ids.NewID()), Name: superuserRoleName, Permissions: seed.Permissions,
-		})
+		// **Find the role before creating it**, because the role name is unique
+		// and an install claimed through the setup wizard already has one.
+		//
+		// Creating it unconditionally worked for the case this bootstrap was
+		// written for — an unclaimed server, seeded by environment variables
+		// before anybody has touched it — and failed the whole boot with a
+		// duplicate-key error on the case that turns out to matter more: adding
+		// an administrator to an install that already has one. That is the way
+		// back into a deployment whose only login has been lost, and it is worth
+		// having precisely when nothing else is available.
+		//
+		// The existing role's permissions are left exactly as they are.
+		// ReconcileOwnerRole below is what maintains them, on every boot and
+		// however the owner was created; widening them from here would let a
+		// bootstrap silently re-grant authority an administrator had deliberately
+		// narrowed.
+		role, err := tx.Permissions().FindRoleByName(ctx, superuserRoleName)
+		if contracts.CategoryOf(err) == contracts.NotFound {
+			role, err = tx.Permissions().CreateRole(ctx, domain.Role{
+				ID: domain.RoleID(ids.NewID()), Name: superuserRoleName, Permissions: seed.Permissions,
+			})
+		}
 		if err != nil {
 			return err
 		}
