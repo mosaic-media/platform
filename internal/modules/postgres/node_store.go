@@ -29,7 +29,7 @@ func NewNodeStore(pool *pgxpool.Pool) contracts.NodeStore {
 }
 
 const nodeColumns = `id, work_id, parent_id, node_kind, media_type, container_type, item_type,
-	title, natural_order, status, external_ids, attributes, artwork, created_at, updated_at`
+	title, natural_order, status, external_ids, attributes, artwork, genres, created_at, updated_at`
 
 func (s *nodeStore) Create(ctx context.Context, node v1.Node) (v1.Node, error) {
 	// Canonicalise on write rather than trusting callers, so the open
@@ -38,13 +38,14 @@ func (s *nodeStore) Create(ctx context.Context, node v1.Node) (v1.Node, error) {
 	node = node.Canonical()
 	_, err := s.q.Exec(ctx,
 		`INSERT INTO nodes (id, work_id, parent_id, node_kind, media_type, container_type, item_type,
-		                    title, natural_order, status, external_ids, attributes, artwork, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		                    title, natural_order, status, external_ids, attributes, artwork, genres, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		string(node.ID), string(node.WorkID), nodeIDParam(node.ParentID),
 		string(node.Kind), string(node.MediaType),
 		nullableText(string(node.ContainerType)), nullableText(string(node.ItemType)),
 		node.Title, node.NaturalOrder, string(node.Status),
 		jsonDocument(node.ExternalIDs), jsonDocument(node.Attributes), artworkDocument(node.Artwork),
+		genreArray(node.Genres),
 		node.CreatedAt, node.UpdatedAt,
 	)
 	if err != nil {
@@ -70,13 +71,15 @@ func (s *nodeStore) Update(ctx context.Context, node v1.Node) (v1.Node, error) {
 	tag, err := s.q.Exec(ctx,
 		`UPDATE nodes SET work_id = $2, parent_id = $3, node_kind = $4, media_type = $5,
 		                  container_type = $6, item_type = $7, title = $8, natural_order = $9,
-		                  status = $10, external_ids = $11, attributes = $12, artwork = $13, updated_at = $14
+		                  status = $10, external_ids = $11, attributes = $12, artwork = $13,
+		                  genres = $14, updated_at = $15
 		 WHERE id = $1`,
 		string(node.ID), string(node.WorkID), nodeIDParam(node.ParentID),
 		string(node.Kind), string(node.MediaType),
 		nullableText(string(node.ContainerType)), nullableText(string(node.ItemType)),
 		node.Title, node.NaturalOrder, string(node.Status),
 		jsonDocument(node.ExternalIDs), jsonDocument(node.Attributes), artworkDocument(node.Artwork),
+		genreArray(node.Genres),
 		node.UpdatedAt,
 	)
 	if err != nil {
@@ -152,6 +155,7 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1
 		}
 		attributes = query.AttributesContain
 	}
+	genres := genreFilter(query.Genres)
 
 	offset := query.Offset
 	if offset < 0 {
@@ -172,12 +176,13 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1
 		   AND ($3 = '' OR media_type = $3)
 		   AND ($4 = '' OR node_kind = $4)
 		   AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)
+		   AND ($6::text[] IS NULL OR genres @> $6::text[])
 		 ORDER BY title, id
-		 LIMIT $6 OFFSET $7`,
+		 LIMIT $7 OFFSET $8`,
 		query.Title, likeContains(query.Title),
 		string(v1.NormaliseMediaType(string(query.MediaType))),
 		string(query.Kind),
-		attributes,
+		attributes, genres,
 		query.Limit, offset,
 	)
 	if err != nil {
@@ -205,23 +210,80 @@ func (s *nodeStore) Count(ctx context.Context, query contracts.NodeQuery) (int, 
 		}
 		attributes = query.AttributesContain
 	}
+	genres := genreFilter(query.Genres)
 
 	row := s.q.QueryRow(ctx,
 		`SELECT count(*) FROM nodes
 		 WHERE ($1 = '' OR title ILIKE $2 ESCAPE '\')
 		   AND ($3 = '' OR media_type = $3)
 		   AND ($4 = '' OR node_kind = $4)
-		   AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)`,
+		   AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)
+		   AND ($6::text[] IS NULL OR genres @> $6::text[])`,
 		query.Title, likeContains(query.Title),
 		string(v1.NormaliseMediaType(string(query.MediaType))),
 		string(query.Kind),
-		attributes,
+		attributes, genres,
 	)
 	var total int
 	if err := row.Scan(&total); err != nil {
 		return 0, mapError("count nodes", err)
 	}
 	return total, nil
+}
+
+// Facets enumerates the genres present in what the rest of the query matches.
+//
+// `unnest` over the array column rather than a second table: the set is small
+// (tens of values over hundreds of works), it is read once per screen render,
+// and a normalised genre table would be a join and a write path for a value
+// nothing updates independently of the node it hangs off.
+//
+// **The query's own Genres are deliberately not applied**, so selecting a chip
+// does not empty the row that offered it. Every other criterion is, so the
+// values offered are the ones that would actually return something — which is
+// what makes an empty result unreachable by pressing.
+func (s *nodeStore) Facets(ctx context.Context, query contracts.NodeQuery) (contracts.Facets, error) {
+	var attributes any
+	if len(query.AttributesContain) > 0 {
+		if !json.Valid(query.AttributesContain) {
+			return contracts.Facets{}, contracts.NewError(contracts.InvalidArgument, "attributes filter must be a valid JSON document")
+		}
+		attributes = query.AttributesContain
+	}
+
+	rows, err := s.q.Query(ctx,
+		`SELECT genre, count(*) FROM (
+		   SELECT unnest(genres) AS genre FROM nodes
+		   WHERE ($1 = '' OR title ILIKE $2 ESCAPE '\')
+		     AND ($3 = '' OR media_type = $3)
+		     AND ($4 = '' OR node_kind = $4)
+		     AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)
+		 ) g
+		 WHERE genre <> ''
+		 GROUP BY genre
+		 ORDER BY count(*) DESC, genre`,
+		query.Title, likeContains(query.Title),
+		string(v1.NormaliseMediaType(string(query.MediaType))),
+		string(query.Kind),
+		attributes,
+	)
+	if err != nil {
+		return contracts.Facets{}, mapError("read node facets", err)
+	}
+	defer rows.Close()
+
+	var out contracts.Facets
+	for rows.Next() {
+		var value contracts.FacetValue
+		if err := rows.Scan(&value.Value, &value.Count); err != nil {
+			return contracts.Facets{}, mapError("read node facets", err)
+		}
+		out.Genres = append(out.Genres, value)
+	}
+	if err := rows.Err(); err != nil {
+		return contracts.Facets{}, mapError("read node facets", err)
+	}
+	return out, nil
 }
 
 // FindByExternalID uses jsonb containment, which is what nodes_external_ids_gin
@@ -289,7 +351,7 @@ func scanNode(row pgx.Row) (v1.Node, error) {
 	if err := row.Scan(
 		&id, &workID, &parentID, &kind, &mediaType, &containerType, &itemType,
 		&node.Title, &node.NaturalOrder, &status,
-		&node.ExternalIDs, &node.Attributes, &artwork, &node.CreatedAt, &node.UpdatedAt,
+		&node.ExternalIDs, &node.Attributes, &artwork, &node.Genres, &node.CreatedAt, &node.UpdatedAt,
 	); err != nil {
 		return v1.Node{}, err
 	}
@@ -359,6 +421,34 @@ func jsonDocument(doc []byte) []byte {
 		return []byte(`{}`)
 	}
 	return doc
+}
+
+// genreArray renders a node's genres as its text[] column value. The column is
+// NOT NULL, so nil becomes the empty array rather than a NULL — "no genres are
+// known" is one fact and it has one representation.
+func genreArray(genres []string) []string {
+	if genres == nil {
+		return []string{}
+	}
+	return genres
+}
+
+// genreFilter renders a query's genre narrowing as a nullable text[] parameter.
+//
+// nil rather than an empty array when nothing is selected, because the
+// predicate is `$n IS NULL OR genres @> $n` and `genres @> '{}'` is *true for
+// every row*: an empty array would read as "no filter" by accident rather than
+// by intent, and would go on reading that way if the predicate were ever
+// tightened.
+//
+// `@>` and not `&&`: containment is the conjunctive reading — a row must carry
+// every genre asked for — which is what two lit chips on a facet control mean.
+// `&&` is the union, and it would widen a selection a user made to narrow.
+func genreFilter(genres []string) any {
+	if len(genres) == 0 {
+		return nil
+	}
+	return genres
 }
 
 // artworkDocument renders stored artwork as its jsonb column value. Artwork is a

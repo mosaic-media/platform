@@ -172,9 +172,33 @@ for repo in "${present[@]}"; do
   version="local-$described"
 
   binary="$cmd-$GOOS_LOCAL-$GOARCH_LOCAL"
+  # A module carrying a project credential (ADR 0105) has it linked in by the
+  # workflow that builds the artefact shipping it — which for an extension is
+  # that module's own `release.yml`, not platform's. This loop is the local
+  # counterpart of that build, so it applies the same `-X` from the same
+  # bring-your-own value the dev stack uses for TMDB: `platform/.env` or the
+  # shell, never a GitHub secret, which reaches only CI runners.
+  #
+  # Empty is a supported configuration and the interesting one to be able to
+  # reach: it is what a build with no secret set produces, so the fallback chain
+  # ADR 0105 names — personal key, project key, zero-configuration floor — can
+  # be exercised locally rather than assumed. The symbol path here is the same
+  # string the module's own linkercheck gate asserts against a canary.
+  ldflags=""
+  case $repo in
+    module-fanart-tv)
+      ldflags="-X github.com/mosaic-media/module-fanart-tv.defaultAPIKey=${FANART_PROJECT_KEY:-}"
+      if [ -n "${FANART_PROJECT_KEY:-}" ]; then
+        echo "linking a fanart.tv project key into this build"
+      else
+        echo "no fanart.tv project key (set FANART_PROJECT_KEY in platform/.env, or add a key in Settings)"
+      fi
+      ;;
+  esac
+
   echo "building $version"
   (cd "$src" && CGO_ENABLED=0 GOOS=$GOOS_LOCAL GOARCH=$GOARCH_LOCAL \
-    go build -trimpath -o "$WORK/out/$binary" "./cmd/$cmd")
+    go build -trimpath -ldflags "$ldflags" -o "$WORK/out/$binary" "./cmd/$cmd")
 
   # The module tells the manifest what it is — id, name, roles, its own sentence
   # about itself — so the identity has one source of truth, the Go code, and the

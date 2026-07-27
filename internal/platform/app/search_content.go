@@ -68,6 +68,7 @@ func (s *Service) SearchContent(ctx context.Context, query v1.SearchContentQuery
 		MediaType:         query.MediaType,
 		Kind:              query.Kind,
 		AttributesContain: query.AttributesContain,
+		Genres:            query.Genres,
 		Limit:             clampSearchLimit(query.Limit),
 	})
 	if err != nil {

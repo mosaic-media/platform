@@ -24,6 +24,13 @@ type ModuleCatalog struct {
 // the admin collection browser.
 type ListModuleCatalogsQuery struct {
 	Caller v1.Caller
+	// ModuleID optionally narrows to one module's catalogs. Empty fans out to
+	// every registered provider, which is what the collections browser wants;
+	// naming one is what a catalog screen wants, because it needs that
+	// catalog's *declaration* — the filters it accepts — and asking every
+	// installed provider for their whole list to find one row is a round trip
+	// per module on every render of one screen.
+	ModuleID string
 }
 
 // ListModuleCatalogsResult carries every module's catalogs.
@@ -50,7 +57,22 @@ func (s *Service) ListModuleCatalogs(ctx context.Context, q ListModuleCatalogsQu
 	// fallback tier is consulted only when the ordinary providers between them
 	// offered no catalog at all — a home screen should show one source's rows,
 	// not the same films twice under two names (see RegisterFallback).
-	catalogs, err := fanOutPreferred(ctx, s.capabilities.CatalogProviders(),
+	providers := s.capabilities.CatalogProviders()
+	if q.ModuleID != "" {
+		narrowed := make([]CatalogProviderEntry, 0, 1)
+		for _, e := range providers {
+			if e.ModuleID == q.ModuleID {
+				narrowed = append(narrowed, e)
+			}
+		}
+		// A named module that is not registered yields no catalogs rather than
+		// an error: an extension can be uninstalled between a screen linking to
+		// its catalog and somebody following that link, and a stale link is an
+		// ordinary thing to follow.
+		providers = narrowed
+	}
+
+	catalogs, err := fanOutPreferred(ctx, providers,
 		func(e CatalogProviderEntry) bool { return e.Fallback },
 		func(ctx context.Context, e CatalogProviderEntry) ([]ModuleCatalog, error) {
 			settings, err := s.readModuleSettings(ctx, e.ModuleID)
@@ -81,6 +103,16 @@ type ListCatalogItemsQuery struct {
 	CatalogID  string
 	NativeType string
 	Skip       int
+	// Filters are the narrowings the caller selected, keyed by the filter's
+	// source-native name and holding one of the option values that filter
+	// declared (SDK v0.25.0). Nil is no narrowing.
+	//
+	// The Platform validates nothing here and interprets nothing: the names and
+	// values are the provider's own vocabulary, and the module refuses one it
+	// did not declare. That is deliberate — a Platform that checked would need
+	// to hold a second copy of every source's filter list, and the copy would be
+	// the one that went stale.
+	Filters map[string]string
 }
 
 // ListCatalogItemsResult carries one page of virtual items, each marked
@@ -129,7 +161,8 @@ func (s *Service) catalogItemsPage(ctx context.Context, az authorized, q ListCat
 		return ListCatalogItemsResult{}, err
 	}
 	resp, err := provider.CatalogItems(ctx, v1.CatalogItemsRequest{
-		Caller: q.Caller, Settings: settings, CatalogID: q.CatalogID, NativeType: q.NativeType, Skip: q.Skip,
+		Caller: q.Caller, Settings: settings, CatalogID: q.CatalogID, NativeType: q.NativeType,
+		Skip: q.Skip, Filters: q.Filters,
 	})
 	if err != nil {
 		return ListCatalogItemsResult{}, contracts.WrapError(contracts.Unavailable, "list catalog items", err)

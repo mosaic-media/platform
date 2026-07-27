@@ -274,3 +274,111 @@ func TestASeriesCountsItsSeasonsNotTheOneItLoaded(t *testing.T) {
 		t.Errorf("the about panel does not state the season count: %s", treeStrings(node))
 	}
 }
+
+// The genre facet (roadmap M2.4).
+//
+// What these assert is the property that makes a facet honest rather than
+// decorative: the chips come from what is on the shelf, so pressing one always
+// leaves something, and the narrowing survives everything the screen does
+// afterwards.
+
+func genreWorks() []v1.Node {
+	works := libraryWorks(6)
+	// Two sources' words for one idea, unreconciled — which is what a real
+	// library fed by TMDB and Cinemeta holds.
+	works[0].Genres = []string{"Science Fiction", "Drama"}
+	works[1].Genres = []string{"Science Fiction"}
+	works[2].Genres = []string{"Science Fiction"}
+	works[3].Genres = []string{"Sci-Fi"}
+	works[4].Genres = []string{"Drama"}
+	return works
+}
+
+func TestTheLibraryOffersTheGenresItActuallyHolds(t *testing.T) {
+	svc := libraryService(genreWorks())
+	tree := render(t, &Service{content: svc}, "library", nil)
+
+	// Ordered by how many works carry them, so the row leads with the chips
+	// worth pressing. "Sci-Fi" and "Science Fiction" are both offered because
+	// both are in the library: the Platform reconciles no vocabularies.
+	chips := chipLabels(tree)
+	want := []string{"Science Fiction", "Drama", "Sci-Fi"}
+	if len(chips) != len(want) {
+		t.Fatalf("facet chips = %v, want %v", chips, want)
+	}
+	for i, label := range want {
+		if chips[i] != label {
+			t.Fatalf("facet chips = %v, want %v", chips, want)
+		}
+	}
+	// A work carrying no genre contributes no chip, and does not become one.
+	for _, c := range chips {
+		if c == "" {
+			t.Fatal("an empty genre was offered as a chip")
+		}
+	}
+}
+
+func TestSelectingAGenreNarrowsTheLibraryAndSaysSo(t *testing.T) {
+	svc := libraryService(genreWorks())
+	tree := render(t, &Service{content: svc}, "library", map[string]any{paramGenre: "Drama"})
+
+	// The count is of the narrowed library and names the narrowing. "6 titles"
+	// under a lit Drama chip would read as the whole library while being a
+	// smaller number than the screen showed a moment ago.
+	if text := treeStrings(tree); !strings.Contains(text, "in Drama") {
+		t.Fatalf("screen said %q, want the count to name the narrowing", text)
+	}
+	if got := countCards(tree); got != 2 {
+		t.Fatalf("cards = %d, want the 2 Drama works", got)
+	}
+
+	// **The row that offered the chip is still the whole row.** A facet computed
+	// over the narrowed set would leave one chip lit and no way back to the
+	// others, which is a control that consumes itself.
+	chips := chipLabels(tree)
+	if len(chips) != 4 {
+		t.Fatalf("chips = %v, want All plus the three genres", chips)
+	}
+	if chips[0] != "All" {
+		t.Fatalf("first chip = %q, want the All escape only when something is selected", chips[0])
+	}
+}
+
+func TestAnUnselectedLibraryHasNoAllChip(t *testing.T) {
+	svc := libraryService(genreWorks())
+	tree := render(t, &Service{content: svc}, "library", nil)
+	for _, c := range chipLabels(tree) {
+		if c == "All" {
+			t.Fatal("an All chip was drawn with nothing selected; a row whose first chip is always lit reads as a filter that is always on")
+		}
+	}
+}
+
+// A stale link naming a genre nothing carries must not say the library is
+// empty. It holds six titles, and telling somebody otherwise because they
+// followed an old link is the screen lying about the library.
+func TestANarrowingThatMatchesNothingIsNotAnEmptyLibrary(t *testing.T) {
+	svc := libraryService(genreWorks())
+	tree := render(t, &Service{content: svc}, "library", map[string]any{paramGenre: "Westerns"})
+
+	rendered := treeStrings(tree)
+	if strings.Contains(rendered, "Nothing in the library yet") {
+		t.Fatal("a narrowed browse that matched nothing rendered the empty-library state")
+	}
+	if !strings.Contains(rendered, "Westerns") {
+		t.Fatal("the empty result does not name what was narrowed to")
+	}
+}
+
+// chipLabels reads the facet row's labels in the order they are drawn.
+func chipLabels(n sdui.Node) []string {
+	var chips []sdui.Node
+	findAll(n, "FilterChip", &chips)
+	out := make([]string, 0, len(chips))
+	for _, c := range chips {
+		label, _ := c.GetProps().AsMap()["label"].(string)
+		out = append(out, label)
+	}
+	return out
+}

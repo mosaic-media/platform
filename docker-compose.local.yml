@@ -257,6 +257,14 @@ services:
       - mosaic-dev-local-registry-work:/work
       - mosaic-dev-gomod:/go/pkg/mod
       - mosaic-dev-gobuild:/root/.cache/go-build
+    environment:
+      # An extension module's project credential is linked by the build that
+      # produces the artefact shipping it (ADR 0105 rule 2), and this loop is
+      # the local counterpart of that build. Bring-your-own from `.env` or the
+      # shell, like TMDB_RAC on the platform service: a GitHub secret reaches
+      # only CI runners. Unset links an empty key, which is the shape a release
+      # with no secret has and is worth being able to run.
+      FANART_PROJECT_KEY: "${FANART_PROJECT_KEY:-}"
     # Runs to completion and exits; `registry` waits for that exit to be a
     # success. A failure here therefore stops the stack coming up with an empty
     # or stale index, rather than surfacing as an extensions list that is

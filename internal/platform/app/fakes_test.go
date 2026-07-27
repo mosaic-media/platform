@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1356,6 +1357,38 @@ func (s *fakeNodeStore) Count(_ context.Context, query contracts.NodeQuery) (int
 	return len(s.collect(nodeQueryMatch(query), byTitle)), nil
 }
 
+// Facets counts the distinct genres of what the rest of the query matches,
+// ignoring the query's own genre narrowing exactly as the real adapter does —
+// otherwise selecting a chip would empty the row that offered it, and a fake
+// that behaved differently would let that ship.
+func (s *fakeNodeStore) Facets(_ context.Context, query contracts.NodeQuery) (contracts.Facets, error) {
+	s.trace.record("nodes.facets")
+	unnarrowed := query
+	unnarrowed.Genres = nil
+	counts := map[string]int{}
+	for _, n := range s.collect(nodeQueryMatch(unnarrowed), byTitle) {
+		for _, g := range n.Genres {
+			if g != "" {
+				counts[g]++
+			}
+		}
+	}
+	out := contracts.Facets{}
+	for value, count := range counts {
+		out.Genres = append(out.Genres, contracts.FacetValue{Value: value, Count: count})
+	}
+	// Count descending then alphabetical, the order the adapter's ORDER BY
+	// produces, so a test asserting the row's order is asserting the same thing
+	// against both.
+	sort.SliceStable(out.Genres, func(i, j int) bool {
+		if out.Genres[i].Count != out.Genres[j].Count {
+			return out.Genres[i].Count > out.Genres[j].Count
+		}
+		return out.Genres[i].Value < out.Genres[j].Value
+	})
+	return out, nil
+}
+
 // nodeQueryMatch is the one predicate Search and Count share, so the fake
 // cannot develop the defect the real adapter is written to avoid: a count that
 // filters differently from the page beneath it.
@@ -1375,6 +1408,12 @@ func nodeQueryMatch(query contracts.NodeQuery) func(v1.Node) bool {
 		}
 		if query.Kind != "" && n.Kind != query.Kind {
 			return false
+		}
+		// Conjunctive: every genre asked for must be present, which is `@>`.
+		for _, want := range query.Genres {
+			if !slices.Contains(n.Genres, want) {
+				return false
+			}
 		}
 		return attributesContain(n.Attributes, wantAttributes)
 	}

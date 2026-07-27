@@ -55,12 +55,21 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 		page = 0
 	}
 	nativeType := stringParam(params, paramNativeType)
+
+	// The catalog's own declaration — what it says it can be narrowed by — read
+	// from the one module that serves it rather than from a fan-out to all of
+	// them. It is also what validates nothing: the Platform draws the control
+	// the provider described and sends back a value the provider named, and the
+	// provider refuses anything else (SDK v0.25.0).
+	declared := s.catalogFilters(ctx, caller, moduleID, catalogID, nativeType)
+	selected := selectedFilters(declared, params)
+
 	var items []v1.CatalogItem
 	hasMore := false
 	for p := 0; p <= page; p++ {
 		res, err := s.content.ListCatalogItems(ctx, app.ListCatalogItemsQuery{
 			Caller: caller, ModuleID: moduleID, CatalogID: catalogID,
-			NativeType: nativeType, Skip: len(items),
+			NativeType: nativeType, Skip: len(items), Filters: selected,
 		})
 		if err != nil {
 			return nil, err
@@ -94,10 +103,20 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 	}
 	grid := []ui.El{ui.Group(cards...)}
 	if hasMore {
-		grid = append(grid, ui.HasMore(true), ui.LoadMore(ui.Query(screenCatalog, map[string]any{
+		// The narrowing travels with the page, for the same reason it does on
+		// the library screen: a `query` re-renders the whole window, and a
+		// next-page action that dropped the filters would widen the browse
+		// mid-scroll with nothing to show for it.
+		next := map[string]any{
 			paramModuleID: moduleID, paramCatalogID: catalogID,
 			paramNativeType: nativeType, paramTitle: name, paramPage: page + 1,
-		})))
+		}
+		for _, f := range declared {
+			if v := selected[f.Name]; v != "" {
+				next[filterParam(f.Name)] = v
+			}
+		}
+		grid = append(grid, ui.HasMore(true), ui.LoadMore(ui.Query(screenCatalog, next)))
 	}
 
 	// The spotlight: the catalog's leading item as a wide banner over the grid,
@@ -111,8 +130,123 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 			els = append(els, ui.Slot("bleed", spot))
 		}
 	}
+	for _, row := range catalogFacetRows(declared, selected, moduleID, catalogID, nativeType, name) {
+		els = append(els, row)
+	}
 	els = append(els, ui.Grid(grid...))
 	return ui.Screen(els...).Build(), nil
+}
+
+// filterParam is the screen param a provider's filter is carried in.
+//
+// Namespaced, because a filter's name is a *source's* own parameter — TMDB's is
+// literally `with_genres` — and the screen's params are a Platform namespace
+// holding `page`, `moduleId` and the rest. A source that happened to name a
+// filter `page` would otherwise silently take over the paging.
+func filterParam(name string) string { return "filter." + name }
+
+// catalogFilters reads the declaration for the catalog being rendered.
+//
+// A failure yields no filters rather than an error: the grid is the screen's
+// job and a facet row is an affordance on top of it, so a provider that cannot
+// describe its own catalog costs the control and not the page.
+func (s *Service) catalogFilters(ctx context.Context, caller v1.Caller, moduleID, catalogID, nativeType string) []v1.CatalogFilter {
+	res, err := s.content.ListModuleCatalogs(ctx, app.ListModuleCatalogsQuery{
+		Caller: caller, ModuleID: moduleID,
+	})
+	if err != nil {
+		return nil
+	}
+	for _, c := range res.Catalogs {
+		if c.Catalog.ID == catalogID && c.Catalog.NativeType == nativeType {
+			return c.Catalog.Filters
+		}
+	}
+	return nil
+}
+
+// selectedFilters reads the params back into the selection, keeping only values
+// the catalog actually declared.
+//
+// **A value that is not on the declared list is dropped here rather than sent**,
+// because a provider is required to *refuse* one — which is right, and which
+// would turn a stale link into an error screen instead of a browse. The module's
+// refusal is the guarantee; this is the screen not asking a question it can see
+// is stale.
+func selectedFilters(declared []v1.CatalogFilter, params map[string]any) map[string]string {
+	var out map[string]string
+	for _, f := range declared {
+		value := stringParam(params, filterParam(f.Name))
+		if value == "" {
+			continue
+		}
+		for _, o := range f.Options {
+			if o.Value == value {
+				if out == nil {
+					out = map[string]string{}
+				}
+				out[f.Name] = value
+				break
+			}
+		}
+	}
+	return out
+}
+
+// maxCatalogFacets is how many chips one filter row offers.
+//
+// A source's genre list is a couple of dozen and its streaming-service list can
+// be a hundred. The declaration is ordered by the provider — TMDB sorts services
+// by its own regional display priority — so the cut takes the tail the source
+// itself ranked last.
+const maxCatalogFacets = 14
+
+// catalogFacetRows draws one row per declared filter.
+func catalogFacetRows(declared []v1.CatalogFilter, selected map[string]string, moduleID, catalogID, nativeType, name string) []ui.El {
+	rows := make([]ui.El, 0, len(declared))
+	for _, f := range declared {
+		if len(f.Options) == 0 {
+			continue
+		}
+		base := func() map[string]any {
+			p := map[string]any{
+				paramModuleID: moduleID, paramCatalogID: catalogID,
+				paramNativeType: nativeType, paramTitle: name,
+			}
+			// Every *other* filter's selection is preserved, so two rows compose
+			// rather than each clearing the other.
+			for _, other := range declared {
+				if other.Name != f.Name {
+					if v := selected[other.Name]; v != "" {
+						p[filterParam(other.Name)] = v
+					}
+				}
+			}
+			return p
+		}
+
+		chips := make([]ui.El, 0, maxCatalogFacets+1)
+		if selected[f.Name] != "" {
+			chips = append(chips, ui.FilterChip("All", false,
+				ui.OnTap(ui.Query(screenCatalog, base()))))
+		}
+		for i, o := range f.Options {
+			if i >= maxCatalogFacets && o.Value != selected[f.Name] {
+				continue
+			}
+			params := base()
+			if o.Value != selected[f.Name] {
+				params[filterParam(f.Name)] = o.Value
+			}
+			// When it *is* the selection, the param is simply absent, so pressing
+			// the lit chip clears it — the control is reversible by the press
+			// that set it rather than needing somewhere separate to go.
+			chips = append(chips, ui.FilterChip(o.Label, o.Value == selected[f.Name],
+				ui.OnTap(ui.Query(screenCatalog, params))))
+		}
+		rows = append(rows, ui.Stack("horizontal", 2, ui.Wrap(true), ui.Group(chips...)))
+	}
+	return rows
 }
 
 // countLabel is the "128 titles" beside a collection's heading. It says "128+"

@@ -61,6 +61,21 @@ type NodeStore interface {
 	// measuring the page it happens to hold.
 	Count(ctx context.Context, query NodeQuery) (int, error)
 
+	// Facets returns the distinct values a browse surface can offer as
+	// narrowings, over the works the query already matches.
+	//
+	// **It reads the library rather than a vocabulary, and that is the whole
+	// point.** A facet built from a fixed list offers chips that match nothing
+	// and omits the ones that would — and this library's genres are several
+	// sources' words, unreconciled, so no list written anywhere could be right.
+	// What a user is offered is exactly what is on the shelf.
+	//
+	// The query's own genre narrowing is ignored when computing the genre set,
+	// so the chips do not disappear as one is selected; every other criterion
+	// applies, so the offered values are the ones that would actually return
+	// something.
+	Facets(ctx context.Context, query NodeQuery) (Facets, error)
+
 	// FindByExternalID looks nodes up by a provider's own identifier — the
 	// strongest form of "do I already have this", and the one that does not
 	// depend on titles matching.
@@ -77,6 +92,33 @@ type NodeStore interface {
 	// confirms, never a silent cascade, so the store refuses rather than
 	// taking a subtree with it. Callers delete depth-first.
 	Delete(ctx context.Context, id v1.NodeID) error
+}
+
+// Facets are the values a browse surface can narrow by, counted over what the
+// rest of the query already matches.
+//
+// Only genres today. The streaming-service facet is not here and is not an
+// omission: availability lives in a module's own attributes document, which the
+// Platform stores uninterpreted (ADR 0013), so the Platform cannot enumerate the
+// services in it without learning a module's key. That set is built from what
+// the Platform *does* model — see the availability index — rather than by
+// reaching into somebody else's document.
+type Facets struct {
+	// Genres are the distinct genres present, ordered by how many works carry
+	// them and then alphabetically, so a facet row leads with the ones worth
+	// pressing. A genre no work carries does not appear.
+	Genres []FacetValue
+}
+
+// FacetValue is one offerable narrowing and how many works it would leave.
+//
+// The count travels with the value because a chip that says how many titles are
+// behind it is the difference between a control a user can aim and one they have
+// to try. It is also what makes an empty result impossible to reach by pressing:
+// nothing offered here can return nothing.
+type FacetValue struct {
+	Value string
+	Count int
 }
 
 // NodeQuery narrows a content search. Every field is optional except Limit,
@@ -111,6 +153,19 @@ type NodeQuery struct {
 	// a driver error, which crosses the boundary as Internal rather than as
 	// the InvalidArgument it is.
 	AttributesContain []byte
+	// Genres narrows to nodes carrying **every** genre listed. Empty means no
+	// filter.
+	//
+	// Conjunctive rather than disjunctive, because that is what a facet control
+	// means when two chips are lit: "crime *and* comedy", not "either". One chip
+	// reads the same under both rules, so the choice only shows itself when a
+	// user has asked to narrow and the union would have widened instead.
+	//
+	// A store answers it against the stored strings, which are the source's own
+	// words. The Platform reconciles no vocabularies here: "Sci-Fi" and "Science
+	// Fiction" are two genres because two sources say so, and a synonym table
+	// would be the Platform inventing a fact about somebody else's data.
+	Genres []string
 	// Limit caps the result set and must be positive. Search is a
 	// user-facing read and an unbounded one is a denial of service against
 	// a large library.

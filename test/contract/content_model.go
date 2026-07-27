@@ -506,6 +506,146 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		}
 	})
 
+	// The genre filter and the facet read. Both are storage-engine obligations
+	// for the same reason attribute containment is: the SDK promises any
+	// StorageAdapter answers them, because the browse surface that asks is the
+	// Platform's and not Postgres'.
+	t.Run("search filters conjunctively on genres", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+
+		both := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		both.Genres = []string{"Drama", "Science Fiction"}
+		one := newWork(nodeID(2), v1.MediaMovie, "Dune", now)
+		one.Genres = []string{"Science Fiction"}
+		// Two sources' words for one idea, unreconciled on purpose: the Platform
+		// stores what it was given and a facet offers both, which is true about
+		// the library where a synonym table would be tidy and invented.
+		other := newWork(nodeID(3), v1.MediaMovie, "Solaris", now)
+		other.Genres = []string{"Sci-Fi"}
+		untagged := newWork(nodeID(4), v1.MediaMovie, "Stalker", now)
+		for _, node := range []v1.Node{both, one, other, untagged} {
+			if _, err := d.Nodes.Create(c, node); err != nil {
+				t.Fatalf("Create %s: %v", node.Title, err)
+			}
+		}
+
+		// Round trip: a genre written is a genre read back, in order.
+		stored, err := d.Nodes.FindByID(c, both.ID)
+		if err != nil {
+			t.Fatalf("FindByID: %v", err)
+		}
+		if len(stored.Genres) != 2 || stored.Genres[0] != "Drama" {
+			t.Fatalf("stored genres = %v, want [Drama Science Fiction]", stored.Genres)
+		}
+		// And a work with none reads as the empty set rather than as a NULL to
+		// special-case.
+		if plain, err := d.Nodes.FindByID(c, untagged.ID); err != nil {
+			t.Fatalf("FindByID: %v", err)
+		} else if len(plain.Genres) != 0 {
+			t.Fatalf("a work with no genres = %v, want empty", plain.Genres)
+		}
+
+		sf, err := d.Nodes.Search(c, contracts.NodeQuery{Genres: []string{"Science Fiction"}, Limit: 10})
+		if err != nil {
+			t.Fatalf("Search by genre: %v", err)
+		}
+		if len(sf) != 2 {
+			t.Fatalf("genre search = %v, want Arrival and Dune", titles(sf))
+		}
+
+		// **Conjunctive, not disjunctive.** Two chips lit mean "both", and a
+		// union would widen a selection a user made to narrow.
+		conjunction, err := d.Nodes.Search(c, contracts.NodeQuery{
+			Genres: []string{"Science Fiction", "Drama"}, Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("Search by two genres: %v", err)
+		}
+		if len(conjunction) != 1 || conjunction[0].Title != "Arrival" {
+			t.Fatalf("two-genre search = %v, want only Arrival", titles(conjunction))
+		}
+
+		// The count filters identically to the page beneath it.
+		total, err := d.Nodes.Count(c, contracts.NodeQuery{Genres: []string{"Science Fiction"}})
+		if err != nil {
+			t.Fatalf("Count by genre: %v", err)
+		}
+		if total != 2 {
+			t.Fatalf("genre count = %d, want 2", total)
+		}
+
+		// An empty list is no filter at all, and must not read as "carries every
+		// genre in the empty set", which is every row — the same answer by
+		// accident rather than by intent.
+		all, err := d.Nodes.Search(c, contracts.NodeQuery{Genres: []string{}, Limit: 10})
+		if err != nil {
+			t.Fatalf("Search with an empty genre list: %v", err)
+		}
+		if len(all) != 4 {
+			t.Fatalf("empty genre filter = %v, want all four", titles(all))
+		}
+	})
+
+	t.Run("facets offer what the library actually carries", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+
+		for i, spec := range []struct {
+			title  string
+			genres []string
+		}{
+			{"Arrival", []string{"Drama", "Science Fiction"}},
+			{"Dune", []string{"Science Fiction"}},
+			{"Solaris", []string{"Science Fiction"}},
+			{"Stalker", nil},
+		} {
+			node := newWork(nodeID(i+1), v1.MediaMovie, spec.title, now)
+			node.Genres = spec.genres
+			if _, err := d.Nodes.Create(c, node); err != nil {
+				t.Fatalf("Create %s: %v", spec.title, err)
+			}
+		}
+
+		facets, err := d.Nodes.Facets(c, contracts.NodeQuery{Kind: v1.NodeWork})
+		if err != nil {
+			t.Fatalf("Facets: %v", err)
+		}
+		if len(facets.Genres) != 2 {
+			t.Fatalf("facets = %+v, want two genres", facets.Genres)
+		}
+		// Ordered by how many works carry them, so a chip row leads with the
+		// ones worth pressing.
+		if facets.Genres[0].Value != "Science Fiction" || facets.Genres[0].Count != 3 {
+			t.Fatalf("leading facet = %+v, want Science Fiction × 3", facets.Genres[0])
+		}
+		if facets.Genres[1].Value != "Drama" || facets.Genres[1].Count != 1 {
+			t.Fatalf("second facet = %+v, want Drama × 1", facets.Genres[1])
+		}
+
+		// **The query's own genre narrowing is ignored**, so pressing a chip does
+		// not empty the row that offered it.
+		narrowed, err := d.Nodes.Facets(c, contracts.NodeQuery{
+			Kind: v1.NodeWork, Genres: []string{"Drama"},
+		})
+		if err != nil {
+			t.Fatalf("Facets narrowed: %v", err)
+		}
+		if len(narrowed.Genres) != 2 {
+			t.Fatalf("narrowed facets = %+v, want the same two", narrowed.Genres)
+		}
+
+		// Every other criterion does apply, which is what makes an offered chip
+		// one that returns something.
+		byTitle, err := d.Nodes.Facets(c, contracts.NodeQuery{Kind: v1.NodeWork, Title: "arrival"})
+		if err != nil {
+			t.Fatalf("Facets by title: %v", err)
+		}
+		if len(byTitle.Genres) != 2 || byTitle.Genres[0].Count != 1 {
+			t.Fatalf("title-narrowed facets = %+v, want both of Arrival's, once each", byTitle.Genres)
+		}
+	})
+
 	// A malformed filter is the caller's mistake. Handed to the engine it would
 	// surface as a driver error and cross the boundary as Internal, which says
 	// nothing useful; an empty result would be worse still, reading as "you have

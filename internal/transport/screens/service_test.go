@@ -7,6 +7,8 @@ package screens
 import (
 	"context"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -320,6 +322,15 @@ func (f *fakeQueries) ListLibrary(_ context.Context, q app.ListLibraryQuery) (ap
 		offset = 0
 	}
 	works := f.libraryWorks
+	if len(q.Genres) > 0 {
+		narrowed := make([]v1.Node, 0, len(works))
+		for _, w := range works {
+			if slices.Contains(w.Genres, q.Genres[0]) {
+				narrowed = append(narrowed, w)
+			}
+		}
+		works = narrowed
+	}
 	if offset >= len(works) {
 		works = nil
 	} else {
@@ -332,8 +343,28 @@ func (f *fakeQueries) ListLibrary(_ context.Context, q app.ListLibraryQuery) (ap
 	if total == 0 {
 		total = len(f.libraryWorks)
 	}
+	// The facet row is built from the seeded works and, like the real store,
+	// ignores the query's own genre narrowing so pressing a chip does not empty
+	// the row that offered it.
+	counts := map[string]int{}
+	for _, w := range f.libraryWorks {
+		for _, g := range w.Genres {
+			counts[g]++
+		}
+	}
+	var facets contracts.Facets
+	for value, count := range counts {
+		facets.Genres = append(facets.Genres, contracts.FacetValue{Value: value, Count: count})
+	}
+	sort.SliceStable(facets.Genres, func(i, j int) bool {
+		if facets.Genres[i].Count != facets.Genres[j].Count {
+			return facets.Genres[i].Count > facets.Genres[j].Count
+		}
+		return facets.Genres[i].Value < facets.Genres[j].Value
+	})
+
 	return app.ListLibraryResult{
-		Works: works, Total: total, Offset: offset, Limit: limit,
+		Works: works, Total: total, Offset: offset, Limit: limit, Facets: facets,
 	}, nil
 }
 

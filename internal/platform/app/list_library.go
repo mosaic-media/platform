@@ -58,6 +58,19 @@ type ListLibraryQuery struct {
 	// read carries it and a browse over a large library wants it, not because
 	// any surface passes it yet.
 	Title string
+	// Genres narrows to works carrying every genre listed — the library facet
+	// (roadmap M2.4). Empty is everything.
+	Genres []string
+	// AttributesContain narrows to works whose module-owned attributes document
+	// contains this JSON document — the streaming-service facet (roadmap M2.5).
+	//
+	// It is the *same* filter `SearchContent` has carried since SDK v0.19.0,
+	// reached from a browse instead of from a capability. The register is
+	// explicit that this half worked and had no client path; this is the client
+	// path, and it is on the browse query rather than on `SearchContent` for the
+	// reason M2.1 gave — a browse needs an offset and a total, which nothing
+	// sourcing content has ever asked for.
+	AttributesContain []byte
 	// Limit and Offset page the result. Zero Limit takes the default.
 	Limit  int
 	Offset int
@@ -82,6 +95,11 @@ type ListLibraryResult struct {
 	// silently.
 	Offset int
 	Limit  int
+	// Facets are the narrowings this browse can offer, over what the rest of
+	// the query already matches — see contracts.Facets. They are read from the
+	// library rather than from a vocabulary, so a chip that is offered always
+	// returns something and a genre nothing carries is never drawn.
+	Facets contracts.Facets
 }
 
 // HasMore reports whether another page follows this one.
@@ -124,11 +142,13 @@ func (s *Service) ListLibrary(ctx context.Context, q ListLibraryQuery) (ListLibr
 	// rather than sixty-four episodes of it. The tree below a work is what the
 	// detail screen is for.
 	query := contracts.NodeQuery{
-		Title:     q.Title,
-		MediaType: q.MediaType,
-		Kind:      v1.NodeWork,
-		Limit:     limit,
-		Offset:    offset,
+		Title:             q.Title,
+		MediaType:         q.MediaType,
+		Kind:              v1.NodeWork,
+		Genres:            q.Genres,
+		AttributesContain: q.AttributesContain,
+		Limit:             limit,
+		Offset:            offset,
 	}
 
 	// The count first, so that a page beyond the end can still be reported
@@ -144,6 +164,12 @@ func (s *Service) ListLibrary(ctx context.Context, q ListLibraryQuery) (ListLibr
 	if err != nil {
 		return ListLibraryResult{}, err
 	}
+	facets, err := s.nodes.Facets(ctx, query)
+	if err != nil {
+		return ListLibraryResult{}, err
+	}
 
-	return ListLibraryResult{Works: works, Total: total, Offset: offset, Limit: limit}, nil
+	return ListLibraryResult{
+		Works: works, Total: total, Offset: offset, Limit: limit, Facets: facets,
+	}, nil
 }
