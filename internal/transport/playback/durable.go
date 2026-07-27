@@ -4,7 +4,10 @@
 
 package playback
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // The durable form of a probe (ADR 0050).
 //
@@ -29,18 +32,26 @@ import "encoding/json"
 // a misread. An unrecognised version decodes as "not probed", which costs one
 // ffprobe run and cannot produce a wrong plan — the opposite trade from
 // attempting a best-effort read of a shape this build does not know.
-const probeDocVersion = 1
+// Bumped to 2 when Duration was added. A version 1 document decodes as "not
+// probed" and costs one ffprobe run; read back as version 2 it would decode
+// with a zero duration, which is indistinguishable from a source that has none
+// and would leave every already-probed release permanently unseekable. That is
+// exactly the misread this version exists to prevent.
+const probeDocVersion = 2
 
 // probeDoc is MediaInfo as it is stored. It is a separate type from MediaInfo on
 // purpose: MediaInfo is free to change shape with the code that uses it, and
 // this one is a persisted format that may only change with its version.
 type probeDoc struct {
-	Version   int            `json:"v"`
-	Container string         `json:"container,omitempty"`
-	SizeBytes int64          `json:"sizeBytes,omitempty"`
-	Video     videoDoc       `json:"video"`
-	Audio     []audioDoc     `json:"audio,omitempty"`
-	Subtitles []subtitlesDoc `json:"subtitles,omitempty"`
+	Version   int    `json:"v"`
+	Container string `json:"container,omitempty"`
+	SizeBytes int64  `json:"sizeBytes,omitempty"`
+	// Nanoseconds. Stored because the origin needs it on every range request a
+	// seeking player makes, and re-probing per request is not affordable.
+	DurationNS int64          `json:"durationNs,omitempty"`
+	Video      videoDoc       `json:"video"`
+	Audio      []audioDoc     `json:"audio,omitempty"`
+	Subtitles  []subtitlesDoc `json:"subtitles,omitempty"`
 }
 
 type videoDoc struct {
@@ -72,9 +83,10 @@ type subtitlesDoc struct {
 // Encode renders a probe result for storage on the Part.
 func Encode(info MediaInfo) ([]byte, error) {
 	doc := probeDoc{
-		Version:   probeDocVersion,
-		Container: info.Container,
-		SizeBytes: info.SizeBytes,
+		Version:    probeDocVersion,
+		Container:  info.Container,
+		SizeBytes:  info.SizeBytes,
+		DurationNS: int64(info.Duration),
 		Video: videoDoc{
 			Index: info.Video.Index, Codec: info.Video.Codec,
 			Width: info.Video.Width, Height: info.Video.Height,
@@ -114,6 +126,7 @@ func Decode(raw []byte) (MediaInfo, bool) {
 	info := MediaInfo{
 		Container: doc.Container,
 		SizeBytes: doc.SizeBytes,
+		Duration:  time.Duration(doc.DurationNS),
 		Video: VideoTrack{
 			Index: doc.Video.Index, Codec: doc.Video.Codec,
 			Width: doc.Video.Width, Height: doc.Video.Height,

@@ -7,6 +7,7 @@ package playback
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 // theHindiFirstRelease is the fixture ADR 0050 was written around: a 4K HEVC
@@ -128,5 +129,53 @@ func TestEncodeOmitsNothingLoadBearing(t *testing.T) {
 	// An SDR release must come back SDR rather than absent-and-therefore-unknown.
 	if got.Video.HDRFormat != "" {
 		t.Errorf("HDRFormat = %q, want empty", got.Video.HDRFormat)
+	}
+}
+
+// TestDurationSurvivesTheStoredProbe is the third time in this codebase that a
+// field was added to a struct whose serialised counterpart did not grow with it,
+// and the first two were the module wire. Here the loss would be quieter still:
+// a stored probe decodes cleanly, the plan gets a zero duration, and the release
+// is silently unseekable forever — with the probe cache working exactly as
+// designed, so nothing looks wrong.
+func TestDurationSurvivesTheStoredProbe(t *testing.T) {
+	want := MediaInfo{
+		Container: "matroska",
+		SizeBytes: 21_474_836_480,
+		Duration:  2*time.Hour + 17*time.Minute + 33*time.Second,
+		Video:     VideoTrack{Index: 0, Codec: "hevc", Width: 3840, Height: 2160, HDRFormat: "HDR10"},
+		Audio:     []AudioTrack{{Index: 1, Codec: "eac3", Channels: 6, Language: "eng"}},
+	}
+
+	raw, err := Encode(want)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, ok := Decode(raw)
+	if !ok {
+		t.Fatal("a document this build wrote did not decode")
+	}
+	if got.Duration != want.Duration {
+		t.Errorf("Duration = %v, want %v — a zero here reads as a source with no duration and disables seeking", got.Duration, want.Duration)
+	}
+	// The fields that already round-tripped, so a struct-literal reshuffle that
+	// paired the wrong value with the wrong field fails here too.
+	if got.Container != want.Container || got.SizeBytes != want.SizeBytes {
+		t.Errorf("format fields garbled: got %+v", got)
+	}
+	if got.Video.HDRFormat != "HDR10" || got.Video.Codec != "hevc" {
+		t.Errorf("video garbled: got %+v", got.Video)
+	}
+}
+
+// A document written before Duration existed must re-probe rather than decode
+// with a zero. Reading it back as current would leave every release probed
+// before this change permanently unseekable, which is the failure the version
+// field exists to prevent — and it only works if the version was actually
+// bumped, which is what this asserts.
+func TestAProbeFromBeforeDurationIsRejected(t *testing.T) {
+	old := []byte(`{"v":1,"container":"matroska","sizeBytes":100,"video":{"index":0,"codec":"h264"}}`)
+	if _, ok := Decode(old); ok {
+		t.Error("a version 1 document decoded as current; it carries no duration and would read as unseekable")
 	}
 }
