@@ -132,6 +132,16 @@ func PlatformSchema() *Schema {
 		// and making them restart to use it would be the wrong way round.
 		FieldSpec{Name: "library.maintenance.interval_hours", ReloadClass: Restart},
 		FieldSpec{Name: "library.maintenance.items_per_run", ReloadClass: Hot},
+		// The watch-availability refresh (roadmap M2.5), with the same two
+		// classes for the same two reasons: the interval reaches the scheduler
+		// once at composition, and the budget is read at the top of every run.
+		//
+		// This is the pass that keeps a streaming-service group from lying, so
+		// its budget is the knob that decides how long a full sweep takes rather
+		// than merely how hard an API is pushed — a budget set too low is a
+		// library whose oldest answers are older than the churn they track.
+		FieldSpec{Name: "library.availability.interval_hours", ReloadClass: Restart},
+		FieldSpec{Name: "library.availability.items_per_run", ReloadClass: Hot},
 	)
 	if err != nil {
 		// Unreachable: the field list above is a fixed, valid literal.

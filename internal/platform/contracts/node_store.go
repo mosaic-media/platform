@@ -70,10 +70,12 @@ type NodeStore interface {
 	// sources' words, unreconciled, so no list written anywhere could be right.
 	// What a user is offered is exactly what is on the shelf.
 	//
-	// The query's own genre narrowing is ignored when computing the genre set,
-	// so the chips do not disappear as one is selected; every other criterion
-	// applies, so the offered values are the ones that would actually return
-	// something.
+	// A facet's own narrowing is ignored when computing that facet's set, so the
+	// chips do not disappear as one is selected; every other criterion applies,
+	// so the offered values are the ones that would actually return something.
+	// The two facets narrow each other: selecting a genre reshapes the service
+	// counts and the other way round, which is what makes two rows compose
+	// rather than contradict.
 	Facets(ctx context.Context, query NodeQuery) (Facets, error)
 
 	// FindByExternalID looks nodes up by a provider's own identifier — the
@@ -108,6 +110,15 @@ type Facets struct {
 	// them and then alphabetically, so a facet row leads with the ones worth
 	// pressing. A genre no work carries does not appear.
 	Genres []FacetValue
+	// Services are the distinct streaming services present, on the same terms,
+	// from the Platform's stored availability.
+	//
+	// **The count is of works whose availability was fetched at all**, which is
+	// smaller than the library and says so on the screen. A service is offered
+	// only when something is currently recorded on it, so a service every title
+	// has left disappears from the row at the next refresh rather than standing
+	// there returning nothing.
+	Services []FacetValue
 }
 
 // FacetValue is one offerable narrowing and how many works it would leave.
@@ -166,6 +177,16 @@ type NodeQuery struct {
 	// Fiction" are two genres because two sources say so, and a synonym table
 	// would be the Platform inventing a fact about somebody else's data.
 	Genres []string
+	// WatchProviders narrows to works recorded as available on **every** service
+	// listed, in the stored region. Empty means no filter.
+	//
+	// It reads the Platform's own projection of `ContentMetadata.Watch` (see
+	// WatchAvailabilityStore) and not any module's attributes document, so any
+	// metadata provider that answers with availability populates it and no
+	// module's key reaches the Platform. A work whose availability has never
+	// been fetched does not match, which is correct: nothing is known about it,
+	// and a facet that guessed would be the thing this whole slice avoids.
+	WatchProviders []string
 	// Limit caps the result set and must be positive. Search is a
 	// user-facing read and an unbounded one is a denial of service against
 	// a large library.

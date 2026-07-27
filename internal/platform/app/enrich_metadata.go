@@ -7,6 +7,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strconv"
 
 	"github.com/mosaic-media/platform/internal/platform/contracts"
@@ -45,21 +46,35 @@ const maxTopUpEpisodes = 400
 // the work id because that is what the result is stored against — the two are
 // the same title and neither substitutes for the other.
 func (s *Service) enrichMetadata(ctx context.Context, caller v1.Caller, ref v1.ContentRef, workID v1.NodeID) {
+	// An import's enrichment is best-effort and says so by discarding the error:
+	// a title that materialised has succeeded whether or not anything could be
+	// said about it.
+	_ = s.enrichMetadataErr(ctx, caller, ref, workID)
+}
+
+// enrichMetadataErr is enrichMetadata with the failure reported.
+//
+// The refresh needs the distinction its caller above throws away. A pass that
+// counted an unreachable provider as a successful check would move the row to
+// the back of the queue with a fresh timestamp and a stale answer — which is
+// precisely the "confidently wrong" the whole slice is arranged to prevent,
+// arriving through the mechanism built to prevent it.
+func (s *Service) enrichMetadataErr(ctx context.Context, caller v1.Caller, ref v1.ContentRef, workID v1.NodeID) error {
 	if s.nodeMetadata == nil || workID == "" {
 		// No store is the pre-ADR-0107 behaviour: nothing is kept, and a detail
 		// renders from the node alone. A Service built without one is a test
 		// service, and it should not silently start writing.
-		return
+		return nil
 	}
 	provider, ok := s.capabilityMetadataProvider(ref.Provider)
 	if !ok {
-		return
+		return contracts.NewError(contracts.NotFound, "no metadata provider registered under id "+ref.Provider)
 	}
 	settings, err := s.readModuleSettings(ctx, ref.Provider)
 	if err != nil {
 		telemetry.From(ctx).Warn("metadata enrichment could not read module settings",
 			telemetry.String("module", ref.Provider), telemetry.Err(err))
-		return
+		return err
 	}
 
 	mctx, span := moduleSpan(ctx, ref.Provider, "metadata")
@@ -69,11 +84,49 @@ func (s *Service) enrichMetadata(ctx context.Context, caller v1.Caller, ref v1.C
 	if err != nil {
 		telemetry.From(ctx).Warn("metadata provider failed during enrichment",
 			telemetry.String("module", ref.Provider), telemetry.Err(err))
-		return
+		return err
 	}
 
 	s.storeMetadata(ctx, ref.Provider, workID, meta)
+	s.storeAvailability(ctx, workID, meta.Watch)
 	s.topUpTree(ctx, caller, workID, meta.Episodes)
+	return nil
+}
+
+// storeAvailability writes the queryable projection of where a work can be
+// watched (roadmap M2.5).
+//
+// **It is written from `ContentMetadata.Watch`, a typed value the SDK carries,
+// and never from a module's attributes document.** That is what keeps the facet
+// free of any module's vocabulary: `module-tmdb` records its own `tmdbWatch`
+// document at import and that stays its business, while any metadata provider
+// that fills `Watch` populates this.
+//
+// **A provider that answered with nothing still writes a row**, and that is the
+// half that makes the refresh mean anything. A title that has left every service
+// must stop matching the facet, and the only way it can is for the empty answer
+// to overwrite the old one. Skipping it — the tempting reading of "no data" —
+// would freeze the last positive answer forever, which is the exact failure the
+// surface was withheld over.
+func (s *Service) storeAvailability(ctx context.Context, workID v1.NodeID, watch *v1.WatchAvailability) {
+	if s.watchAvailability == nil {
+		return
+	}
+	record := contracts.WatchAvailability{NodeID: workID, CheckedAt: s.clock.Now()}
+	if watch != nil {
+		record.Region = watch.Region
+		for _, offer := range watch.Offers {
+			if offer.Provider != "" && !slices.Contains(record.Providers, offer.Provider) {
+				// Flattened and de-duplicated: one service offering a title to
+				// subscribe *and* to buy is one chip, not two.
+				record.Providers = append(record.Providers, offer.Provider)
+			}
+		}
+	}
+	if _, err := s.watchAvailability.Upsert(ctx, record); err != nil {
+		telemetry.From(ctx).Warn("metadata enrichment could not store availability",
+			telemetry.String("node_id", string(workID)), telemetry.Err(err))
+	}
 }
 
 // storeMetadata writes the provider's answer against the work.

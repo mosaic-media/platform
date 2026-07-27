@@ -70,6 +70,12 @@ type Service struct {
 	// renders a library detail from the node alone, which is what every detail
 	// did before the store existed.
 	nodeMetadata contracts.NodeMetadataStore
+	// watchAvailability is the direct handle for the queryable projection of
+	// where a work can be watched (roadmap M2.5). Optional, on the same terms as
+	// nodeMetadata: a Service built without one stores no availability and
+	// offers no streaming-service facet, which is what every build did before
+	// the store existed.
+	watchAvailability contracts.WatchAvailabilityStore
 	// instance is what this install calls itself, held outside PostgreSQL
 	// (ADR 0098). Optional: a Service built without one has no name to report
 	// and records none when a server is claimed, which is what a test service
@@ -151,7 +157,8 @@ type Deps struct {
 	// NodeMetadata is the direct read handle for stored descriptive metadata
 	// (ADR 0107). Optional: without it nothing is stored and nothing is read,
 	// and a detail falls back to what the node itself carries.
-	NodeMetadata contracts.NodeMetadataStore
+	NodeMetadata      contracts.NodeMetadataStore
+	WatchAvailability contracts.WatchAvailabilityStore
 	// Instance is the durable identity file (ADR 0098) — the one store that is
 	// deliberately not PostgreSQL, so a server's name outlives its database.
 	// Optional, and an absent one is a Platform with no name rather than a
@@ -192,6 +199,7 @@ func NewService(d Deps) *Service {
 		jobs:                 d.Jobs,
 		libraryRules:         d.LibraryRules,
 		nodeMetadata:         d.NodeMetadata,
+		watchAvailability:    d.WatchAvailability,
 		instance:             d.Instance,
 		systemSession:        newSystemSessionRef(),
 	}

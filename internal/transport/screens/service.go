@@ -115,7 +115,11 @@ const (
 	// chips that can be combined needs a way to say which are lit *and* a way to
 	// take one back — which is a control, not a param. One genre at a time is the
 	// honest shape of what a chip row can express today.
-	paramGenre     = "genre"
+	paramGenre = "genre"
+	// paramService carries the streaming-service facet's selection — a service
+	// name as a metadata provider reported it, matched against the Platform's
+	// stored availability rather than against any module's document.
+	paramService   = "service"
 	paramLevel     = "level"
 	paramComponent = "component"
 	paramTrace     = "trace"

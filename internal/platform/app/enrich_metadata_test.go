@@ -28,7 +28,11 @@ import (
 // two runs — which is the thing that was broken and could not be seen from
 // inside the Platform.
 type seriesModule struct {
-	id string
+	// watch is where this title can be streamed, as a provider reports it. nil
+	// is a provider that answered with nothing, which is a real answer and the
+	// one the refresh turns on.
+	watch *v1.WatchAvailability
+	id    string
 	// episodes is what the metadata role reports, and it is deliberately *not*
 	// what Import builds: a real module builds the tree it knew about when the
 	// title was first materialised and never revisits it.
@@ -104,6 +108,7 @@ func (m *seriesModule) Metadata(_ context.Context, req v1.MetadataRequest) (v1.C
 		Year: 2008, Rating: 8.9, Genres: []string{"Drama"},
 		Cast:     []v1.Person{{Name: "Bryan Cranston", Role: "Walter White"}},
 		Episodes: m.episodes,
+		Watch:    m.watch,
 	}, nil
 }
 
@@ -466,5 +471,187 @@ func TestOpeningASeasonRendersItsSeries(t *testing.T) {
 	}
 	if !opened.HasMetadata || opened.Metadata.Overview != "Chemistry." {
 		t.Fatal("opening a season lost the series' description")
+	}
+}
+
+// The watch-availability refresh (roadmap M2.5).
+//
+// **The surface this feeds was withheld on purpose until this existed.** Both
+// halves of the grouping worked long before: a provider answers with
+// availability and the store filters on it. What did not exist was anything that
+// re-asked — and availability churns monthly, so a group saying "on Netflix"
+// about a title that left in March is worse than an absent group.
+
+func TestImportProjectsAvailabilityForTheFacet(t *testing.T) {
+	ctx := context.Background()
+	mod := &seriesModule{
+		id: "tmdb", buildSeasons: 1, buildPerSeason: 1, episodes: episodesFor(1, 1),
+		watch: &v1.WatchAvailability{
+			Region: "GB",
+			Offers: []v1.WatchOffer{
+				{Provider: "Netflix", Type: v1.WatchSubscription},
+				// The same service twice under two terms: one chip, not two.
+				{Provider: "Netflix", Type: v1.WatchBuy},
+				{Provider: "Prime Video", Type: v1.WatchRent},
+			},
+		},
+	}
+	svc := newSeriesService(t, mod)
+	caller := v1.Caller{Session: "s-1"}
+
+	if _, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: seriesRef("tmdb")}); err != nil {
+		t.Fatalf("ImportContent: %v", err)
+	}
+
+	// Reached the way the screen reaches it, rather than by reading the store:
+	// what matters is that the browse can be narrowed, not that a row exists.
+	on, err := svc.ListLibrary(ctx, app.ListLibraryQuery{
+		Caller: caller, WatchProviders: []string{"Netflix"}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListLibrary: %v", err)
+	}
+	if on.Total != 1 {
+		t.Fatalf("narrowing to Netflix found %d works, want 1", on.Total)
+	}
+
+	// And the facet offers each service once, most-carried first.
+	all, err := svc.ListLibrary(ctx, app.ListLibraryQuery{Caller: caller, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListLibrary: %v", err)
+	}
+	if len(all.Facets.Services) != 2 {
+		t.Fatalf("service facets = %+v, want each service once", all.Facets.Services)
+	}
+}
+
+// A provider that answers with nothing still writes a row, and that is the half
+// that makes the refresh mean anything: a title that has left every service must
+// stop matching, and the only way it can is for the empty answer to land.
+func TestATitleThatLeavesEveryServiceStopsMatching(t *testing.T) {
+	ctx := context.Background()
+	mod := &seriesModule{
+		id: "tmdb", buildSeasons: 1, buildPerSeason: 1, episodes: episodesFor(1, 1),
+		watch: &v1.WatchAvailability{
+			Region: "GB", Offers: []v1.WatchOffer{{Provider: "Netflix"}},
+		},
+	}
+	svc := newSeriesService(t, mod)
+	caller := v1.Caller{Session: "s-1"}
+
+	if _, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: seriesRef("tmdb")}); err != nil {
+		t.Fatalf("ImportContent: %v", err)
+	}
+	before, err := svc.ListLibrary(ctx, app.ListLibraryQuery{
+		Caller: caller, WatchProviders: []string{"Netflix"}, Limit: 10,
+	})
+	if err != nil || before.Total != 1 {
+		t.Fatalf("the first answer did not land: total=%d err=%v", before.Total, err)
+	}
+
+	// The title leaves every service, and the refresh re-asks.
+	mod.watch = nil
+	res, err := svc.RefreshAvailability(ctx, app.RefreshAvailabilityCommand{Caller: caller})
+	if err != nil {
+		t.Fatalf("RefreshAvailability: %v", err)
+	}
+	if res.Checked != 1 {
+		t.Fatalf("refresh checked %d works (skipped %d, failed %d), want 1", res.Checked, res.Skipped, res.Failed)
+	}
+
+	after, err := svc.ListLibrary(ctx, app.ListLibraryQuery{
+		Caller: caller, WatchProviders: []string{"Netflix"}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListLibrary: %v", err)
+	}
+	if after.Total != 0 {
+		t.Fatal("a title recorded as on no service still matched Netflix; " +
+			"a frozen positive answer is exactly what this slice exists to prevent")
+	}
+	// And the chip goes with it, rather than standing there returning nothing.
+	all, err := svc.ListLibrary(ctx, app.ListLibraryQuery{Caller: caller, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListLibrary: %v", err)
+	}
+	if len(all.Facets.Services) != 0 {
+		t.Fatalf("service facets = %+v, want none offered", all.Facets.Services)
+	}
+}
+
+// The refresh recovers the ref from the stored document, which is what makes it
+// able to re-ask about a node at all — ADR 0071 records that a materialised node
+// cannot be turned back into a provider-bearing ref, and ADR 0107 storing the
+// provider's whole answer is what changed that.
+func TestTheRefreshReAsksUsingTheStoredRef(t *testing.T) {
+	ctx := context.Background()
+	mod := &seriesModule{
+		id: "tmdb", buildSeasons: 1, buildPerSeason: 1, episodes: episodesFor(1, 1),
+		watch: &v1.WatchAvailability{Region: "GB", Offers: []v1.WatchOffer{{Provider: "Netflix"}}},
+	}
+	svc := newSeriesService(t, mod)
+	caller := v1.Caller{Session: "s-1"}
+
+	if _, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: seriesRef("tmdb")}); err != nil {
+		t.Fatalf("ImportContent: %v", err)
+	}
+
+	mod.watch = &v1.WatchAvailability{Region: "GB", Offers: []v1.WatchOffer{{Provider: "Prime Video"}}}
+	res, err := svc.RefreshAvailability(ctx, app.RefreshAvailabilityCommand{Caller: caller})
+	if err != nil {
+		t.Fatalf("RefreshAvailability: %v", err)
+	}
+	if res.Checked != 1 || res.Skipped != 0 {
+		t.Fatalf("refresh = %+v, want one checked and nothing skipped", res)
+	}
+
+	moved, err := svc.ListLibrary(ctx, app.ListLibraryQuery{
+		Caller: caller, WatchProviders: []string{"Prime Video"}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListLibrary: %v", err)
+	}
+	if moved.Total != 1 {
+		t.Fatal("the refreshed answer did not replace the old one")
+	}
+}
+
+// An unreachable provider must not be counted as a successful check. Counting it
+// would stamp the row with a fresh timestamp and a stale answer, moving it to
+// the back of the queue — the "confidently wrong" this slice is arranged
+// against, arriving through the machinery built to prevent it.
+func TestAFailedRefreshIsNotACheck(t *testing.T) {
+	ctx := context.Background()
+	mod := &seriesModule{
+		id: "tmdb", buildSeasons: 1, buildPerSeason: 1, episodes: episodesFor(1, 1),
+		watch: &v1.WatchAvailability{Region: "GB", Offers: []v1.WatchOffer{{Provider: "Netflix"}}},
+	}
+	svc := newSeriesService(t, mod)
+	caller := v1.Caller{Session: "s-1"}
+
+	if _, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: seriesRef("tmdb")}); err != nil {
+		t.Fatalf("ImportContent: %v", err)
+	}
+
+	mod.failMetadata = true
+	res, err := svc.RefreshAvailability(ctx, app.RefreshAvailabilityCommand{Caller: caller})
+	if err != nil {
+		t.Fatalf("RefreshAvailability: %v", err)
+	}
+	if res.Failed != 1 || res.Checked != 0 {
+		t.Fatalf("refresh = %+v, want one failed and nothing checked", res)
+	}
+
+	// The old answer stands rather than being cleared: an unreachable provider
+	// says nothing about where a title is, and treating silence as "gone" would
+	// empty the facet every time an API had a bad day.
+	still, err := svc.ListLibrary(ctx, app.ListLibraryQuery{
+		Caller: caller, WatchProviders: []string{"Netflix"}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListLibrary: %v", err)
+	}
+	if still.Total != 1 {
+		t.Fatal("a failed refresh discarded the last good answer")
 	}
 }

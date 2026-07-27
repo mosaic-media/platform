@@ -69,6 +69,7 @@ func (Module) Manifest() builtin.Manifest {
 			// what this module provides.
 			"LibraryRuleStore",
 			"NodeMetadataStore",
+			"WatchAvailabilityStore",
 			"TokenStore",
 			"Clock",
 			"IDGenerator",
@@ -128,6 +129,10 @@ type ContractSet struct {
 	// NodeMetadata is the direct read handle for a stored provider answer
 	// (ADR 0107) — what a library detail renders from.
 	NodeMetadata contracts.NodeMetadataStore
+	// WatchAvailability is the queryable projection of where a work can be
+	// watched (roadmap M2.5) — what the streaming-service facet filters on and
+	// what the refresh keeps current.
+	WatchAvailability contracts.WatchAvailabilityStore
 	// Tokens is the direct read handle for a session's bearer pair (ADR 0102):
 	// an access token is validated on every call, so it must not open one.
 	Tokens contracts.TokenStore
@@ -198,6 +203,7 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		Jobs:                 NewJobStore(pool),
 		LibraryRules:         NewLibraryRuleStore(pool),
 		NodeMetadata:         NewNodeMetadataStore(pool),
+		WatchAvailability:    NewWatchAvailabilityStore(pool),
 		Tokens:               NewTokenStore(pool),
 
 		Clock:          NewClock(),

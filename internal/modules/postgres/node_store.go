@@ -156,6 +156,7 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1
 		attributes = query.AttributesContain
 	}
 	genres := genreFilter(query.Genres)
+	services := genreFilter(query.WatchProviders)
 
 	offset := query.Offset
 	if offset < 0 {
@@ -177,12 +178,15 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1
 		   AND ($4 = '' OR node_kind = $4)
 		   AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)
 		   AND ($6::text[] IS NULL OR genres @> $6::text[])
+		   AND ($7::text[] IS NULL OR EXISTS (
+		         SELECT 1 FROM node_watch_availability w
+		         WHERE w.node_id = nodes.id AND w.providers @> $7::text[]))
 		 ORDER BY title, id
-		 LIMIT $7 OFFSET $8`,
+		 LIMIT $8 OFFSET $9`,
 		query.Title, likeContains(query.Title),
 		string(v1.NormaliseMediaType(string(query.MediaType))),
 		string(query.Kind),
-		attributes, genres,
+		attributes, genres, services,
 		query.Limit, offset,
 	)
 	if err != nil {
@@ -211,6 +215,7 @@ func (s *nodeStore) Count(ctx context.Context, query contracts.NodeQuery) (int, 
 		attributes = query.AttributesContain
 	}
 	genres := genreFilter(query.Genres)
+	services := genreFilter(query.WatchProviders)
 
 	row := s.q.QueryRow(ctx,
 		`SELECT count(*) FROM nodes
@@ -218,11 +223,14 @@ func (s *nodeStore) Count(ctx context.Context, query contracts.NodeQuery) (int, 
 		   AND ($3 = '' OR media_type = $3)
 		   AND ($4 = '' OR node_kind = $4)
 		   AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)
-		   AND ($6::text[] IS NULL OR genres @> $6::text[])`,
+		   AND ($6::text[] IS NULL OR genres @> $6::text[])
+		   AND ($7::text[] IS NULL OR EXISTS (
+		         SELECT 1 FROM node_watch_availability w
+		         WHERE w.node_id = nodes.id AND w.providers @> $7::text[]))`,
 		query.Title, likeContains(query.Title),
 		string(v1.NormaliseMediaType(string(query.MediaType))),
 		string(query.Kind),
-		attributes, genres,
+		attributes, genres, services,
 	)
 	var total int
 	if err := row.Scan(&total); err != nil {
@@ -231,17 +239,20 @@ func (s *nodeStore) Count(ctx context.Context, query contracts.NodeQuery) (int, 
 	return total, nil
 }
 
-// Facets enumerates the genres present in what the rest of the query matches.
+// Facets enumerates the narrowings present in what the rest of the query
+// matches — the genres carried on the nodes, and the services in the Platform's
+// stored availability.
 //
-// `unnest` over the array column rather than a second table: the set is small
-// (tens of values over hundreds of works), it is read once per screen render,
-// and a normalised genre table would be a join and a write path for a value
-// nothing updates independently of the node it hangs off.
+// `unnest` rather than a normalised table on either side: both sets are small
+// (tens of values over hundreds of works), both are read once per screen render,
+// and a lookup table would be a join and a write path for values nothing updates
+// independently of the rows they hang off.
 //
-// **The query's own Genres are deliberately not applied**, so selecting a chip
-// does not empty the row that offered it. Every other criterion is, so the
-// values offered are the ones that would actually return something — which is
-// what makes an empty result unreachable by pressing.
+// **A facet's own narrowing is not applied to that facet**, so selecting a chip
+// does not empty the row that offered it — but the *other* facet's is, so the
+// two rows compose: picking a service reshapes the genre counts and the other
+// way round. Every remaining criterion applies to both, which is what makes an
+// empty result unreachable by pressing.
 func (s *nodeStore) Facets(ctx context.Context, query contracts.NodeQuery) (contracts.Facets, error) {
 	var attributes any
 	if len(query.AttributesContain) > 0 {
@@ -250,14 +261,24 @@ func (s *nodeStore) Facets(ctx context.Context, query contracts.NodeQuery) (cont
 		}
 		attributes = query.AttributesContain
 	}
+	genres := genreFilter(query.Genres)
+	services := genreFilter(query.WatchProviders)
 
-	rows, err := s.q.Query(ctx,
+	var out contracts.Facets
+
+	// The genre set honours the *service* narrowing and ignores its own, so the
+	// two rows compose: picking Netflix reshapes the genre counts, and picking a
+	// genre does not empty the row that offered it.
+	genreRows, err := s.q.Query(ctx,
 		`SELECT genre, count(*) FROM (
 		   SELECT unnest(genres) AS genre FROM nodes
 		   WHERE ($1 = '' OR title ILIKE $2 ESCAPE '\')
 		     AND ($3 = '' OR media_type = $3)
 		     AND ($4 = '' OR node_kind = $4)
 		     AND ($5::jsonb IS NULL OR attributes @> $5::jsonb)
+		     AND ($6::text[] IS NULL OR EXISTS (
+		           SELECT 1 FROM node_watch_availability w
+		           WHERE w.node_id = nodes.id AND w.providers @> $6::text[]))
 		 ) g
 		 WHERE genre <> ''
 		 GROUP BY genre
@@ -265,23 +286,58 @@ func (s *nodeStore) Facets(ctx context.Context, query contracts.NodeQuery) (cont
 		query.Title, likeContains(query.Title),
 		string(v1.NormaliseMediaType(string(query.MediaType))),
 		string(query.Kind),
-		attributes,
+		attributes, services,
 	)
 	if err != nil {
 		return contracts.Facets{}, mapError("read node facets", err)
 	}
-	defer rows.Close()
+	out.Genres, err = collectFacetValues(genreRows)
+	if err != nil {
+		return contracts.Facets{}, err
+	}
 
-	var out contracts.Facets
+	// And the service set the other way round.
+	serviceRows, err := s.q.Query(ctx,
+		`SELECT service, count(*) FROM (
+		   SELECT unnest(w.providers) AS service
+		   FROM nodes JOIN node_watch_availability w ON w.node_id = nodes.id
+		   WHERE ($1 = '' OR nodes.title ILIKE $2 ESCAPE '\')
+		     AND ($3 = '' OR nodes.media_type = $3)
+		     AND ($4 = '' OR nodes.node_kind = $4)
+		     AND ($5::jsonb IS NULL OR nodes.attributes @> $5::jsonb)
+		     AND ($6::text[] IS NULL OR nodes.genres @> $6::text[])
+		 ) g
+		 WHERE service <> ''
+		 GROUP BY service
+		 ORDER BY count(*) DESC, service`,
+		query.Title, likeContains(query.Title),
+		string(v1.NormaliseMediaType(string(query.MediaType))),
+		string(query.Kind),
+		attributes, genres,
+	)
+	if err != nil {
+		return contracts.Facets{}, mapError("read node facets", err)
+	}
+	out.Services, err = collectFacetValues(serviceRows)
+	if err != nil {
+		return contracts.Facets{}, err
+	}
+	return out, nil
+}
+
+// collectFacetValues drains one facet query into its values.
+func collectFacetValues(rows pgx.Rows) ([]contracts.FacetValue, error) {
+	defer rows.Close()
+	var out []contracts.FacetValue
 	for rows.Next() {
 		var value contracts.FacetValue
 		if err := rows.Scan(&value.Value, &value.Count); err != nil {
-			return contracts.Facets{}, mapError("read node facets", err)
+			return nil, mapError("read node facets", err)
 		}
-		out.Genres = append(out.Genres, value)
+		out = append(out, value)
 	}
 	if err := rows.Err(); err != nil {
-		return contracts.Facets{}, mapError("read node facets", err)
+		return nil, mapError("read node facets", err)
 	}
 	return out, nil
 }

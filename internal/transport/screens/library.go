@@ -58,6 +58,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		page = 0
 	}
 	genre := stringParam(params, paramGenre)
+	service := stringParam(params, paramService)
 
 	// One read of everything loaded so far, rather than a read per page: the
 	// library is the install's own rows and can be windowed directly, where a
@@ -67,16 +68,18 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		window = libraryWindowCap
 	}
 	res, err := s.content.ListLibrary(ctx, app.ListLibraryQuery{
-		Caller: caller,
-		Genres: genreFilter(genre),
-		Limit:  window,
-		Offset: 0,
+		Caller:         caller,
+		Genres:         genreFilter(genre),
+		WatchProviders: genreFilter(service),
+		Limit:          window,
+		Offset:         0,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	if res.Total == 0 && genre == "" {
+	narrowed := genre != "" || service != ""
+	if res.Total == 0 && !narrowed {
 		// The genuinely empty library. It is worth a different sentence from
 		// "this page is past the end" below, because one is a new install and
 		// the other is a stale link, and telling somebody with an empty library
@@ -106,7 +109,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		).Build(), nil
 	}
 
-	if len(res.Works) == 0 && genre == "" {
+	if len(res.Works) == 0 && !narrowed {
 		// A window that landed past the end — a stale link, or a library that
 		// shrank. The count is still true, so the screen says it and offers the
 		// way back rather than looking like an empty library.
@@ -123,18 +126,20 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 	}
 
 	if len(res.Works) == 0 {
-		// Narrowed to nothing — a stale link naming a genre no work carries any
-		// more. It has to come *after* the past-the-end case and be guarded
+		// Narrowed to nothing — a stale link, or a combination that holds
+		// nothing. It has to come *after* the past-the-end case and be guarded
 		// against it, because both are "no rows on this page" and only this one
-		// can offer the way out that actually helps: the facet row itself, which
-		// is still drawn.
+		// can offer the way out that actually helps: the facet rows themselves,
+		// which are still drawn.
+		what := narrowingLabel(genre, service)
 		return ui.Screen(
 			ui.Title("Library"),
-			ui.Subtitle("Nothing matches "+genre),
-			libraryFacets(res.Facets, genre),
+			ui.Subtitle("Nothing matches "+what),
+			libraryFacets(res.Facets, genre, service),
 			ui.EmptyState(emptyIconNotFound,
-				"No "+genre+" titles",
-				ui.Message("Nothing in the library carries that genre. It may have been the only title, and it may have left."),
+				"Nothing in "+what,
+				ui.Message("The library holds nothing matching that. A streaming service in particular is a "+
+					"moving target — a title that was there last month may have left it."),
 				ui.ActionSlot(ui.Button("Show everything", "primary",
 					ui.OnTap(ui.Navigate(screenLibrary, nil)))),
 			),
@@ -163,15 +168,30 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		if genre != "" {
 			next[paramGenre] = genre
 		}
+		if service != "" {
+			next[paramService] = service
+		}
 		grid = append(grid, ui.HasMore(true), ui.LoadMore(ui.Query(screenLibrary, next)))
 	}
 
 	return ui.Screen(
 		ui.Title("Library"),
-		ui.Subtitle(librarySubtitle(res, more, window, genre)),
-		libraryFacets(res.Facets, genre),
+		ui.Subtitle(librarySubtitle(res, more, window, genre, service)),
+		libraryFacets(res.Facets, genre, service),
 		ui.Grid(grid...),
 	).Build(), nil
+}
+
+// narrowingLabel names what is selected, for a sentence rather than a control.
+func narrowingLabel(genre, service string) string {
+	switch {
+	case genre != "" && service != "":
+		return genre + " on " + service
+	case service != "":
+		return service
+	default:
+		return genre
+	}
 }
 
 // genreFilter renders the screen's one selected genre as the store query's
@@ -200,34 +220,66 @@ const maxLibraryFacets = 14
 // way to be right about a genre list assembled from several sources' words. The
 // selected chip toggles off rather than needing a separate clear, so the control
 // is reversible by the same press that set it.
-func libraryFacets(facets contracts.Facets, selected string) ui.El {
-	if len(facets.Genres) == 0 {
-		// Nothing carries a genre — a library imported before genres were stored,
-		// or from a source that names none. An empty row is drawn as nothing at
-		// all rather than as a heading over a gap.
+func libraryFacets(facets contracts.Facets, genre, service string) ui.El {
+	rows := make([]ui.El, 0, 2)
+	if row := facetRow(facets.Genres, paramGenre, genre, map[string]any{paramService: service}); row != nil {
+		rows = append(rows, row)
+	}
+	// **The service row is drawn only when something is actually recorded.**
+	// A library whose availability has never been fetched offers no chips rather
+	// than a row of nothing, which is the same rule as the genre row and matters
+	// more here: an empty streaming row would read as "nothing is on any
+	// service", where the truth is that nobody has asked yet.
+	if row := facetRow(facets.Services, paramService, service, map[string]any{paramGenre: genre}); row != nil {
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
 		return nil
+	}
+	return ui.Stack("vertical", 2, ui.Group(rows...))
+}
+
+// facetRow is one row of narrowings.
+//
+// `keep` carries the *other* facet's selection into every action, so the two
+// rows compose rather than each clearing the other — picking Netflix and then
+// Drama means both, which is what a user pressing two chips means.
+func facetRow(values []contracts.FacetValue, param, selected string, keep map[string]any) ui.El {
+	if len(values) == 0 {
+		return nil
+	}
+	base := func() map[string]any {
+		p := map[string]any{}
+		for k, v := range keep {
+			if s, ok := v.(string); ok && s != "" {
+				p[k] = s
+			}
+		}
+		return p
 	}
 
 	chips := make([]ui.El, 0, maxLibraryFacets+1)
 	if selected != "" {
 		// "All" leads, and only when something is selected: a row whose first
-		// chip is always lit reads as a filter that is always on.
+		// chip is always lit reads as a filter that is always on. It clears this
+		// row and keeps the other.
 		chips = append(chips, ui.FilterChip("All", false,
-			ui.OnTap(ui.Query(screenLibrary, nil))))
+			ui.OnTap(ui.Query(screenLibrary, base()))))
 	}
-	for i, g := range facets.Genres {
-		if i >= maxLibraryFacets && g.Value != selected {
+	for i, v := range values {
+		if i >= maxLibraryFacets && v.Value != selected {
 			// The selection is kept whatever its rank, so a chip a user pressed
 			// cannot fall off the row it was pressed on.
 			continue
 		}
-		params := map[string]any{paramGenre: g.Value}
-		if g.Value == selected {
-			// Pressing the lit chip clears it.
-			params = nil
+		params := base()
+		if v.Value != selected {
+			params[param] = v.Value
 		}
-		chips = append(chips, ui.FilterChip(g.Value, g.Value == selected,
-			ui.FacetCount(strconv.Itoa(g.Count)),
+		// When it *is* the selection the param is simply absent, so pressing the
+		// lit chip clears it — reversible by the press that set it.
+		chips = append(chips, ui.FilterChip(v.Value, v.Value == selected,
+			ui.FacetCount(strconv.Itoa(v.Count)),
 			ui.OnTap(ui.Query(screenLibrary, params))))
 	}
 	return ui.Stack("horizontal", 2, ui.Wrap(true), ui.Group(chips...))
@@ -238,14 +290,14 @@ func libraryFacets(facets contracts.Facets, selected string) ui.El {
 //
 // While more is still loading it says the total alone: a number that ticks
 // upward as somebody scrolls is noise, and the total is the fact they came for.
-func librarySubtitle(res app.ListLibraryResult, more bool, window int, genre string) string {
+func librarySubtitle(res app.ListLibraryResult, more bool, window int, genre, service string) string {
 	count := libraryCountLabel(res.Total)
-	if genre != "" {
+	if what := narrowingLabel(genre, service); what != "" {
 		// The count is of the *narrowed* library, so it says what it counted.
 		// "81 titles" under a lit Drama chip would read as the whole library and
 		// be a smaller number than the one before it — which is the shape of a
 		// screen that has silently lost something.
-		count += " in " + genre
+		count += " in " + what
 	}
 	if more && window >= libraryWindowCap {
 		return fmt.Sprintf("%s · showing the first %d — search to narrow it down",

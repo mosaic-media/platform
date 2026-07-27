@@ -75,7 +75,21 @@ services:
       # was the one screen nobody here could see. First boot now shows the
       # doorway, exactly as a household's would (ADR 0098). The env-var
       # bootstrap is untouched and still there for an automated deployment that
-      # never puts a human in front of it; set the pair here to use it.
+      # never puts a human in front of it, and it is now reachable from `.env`
+      # or the shell rather than by editing this file.
+      #
+      # **Unset is the default and changes nothing**: no pair, no seed, first
+      # boot shows the doorway exactly as a household's does. Setting the pair
+      # seeds one administrator and is idempotent — an existing username has its
+      # authority reconciled and nothing else, and no other account, rule or node
+      # is touched.
+      #
+      # That is what makes it the way back into a dev box whose login has been
+      # lost, which is otherwise `down -v` and a library rebuilt from scratch.
+      # A username that does not exist yet adds an account beside the ones that
+      # do; the old one keeps working if it is ever remembered.
+      MOSAIC_BOOTSTRAP_ADMIN_USERNAME: "${MOSAIC_BOOTSTRAP_ADMIN_USERNAME:-}"
+      MOSAIC_BOOTSTRAP_ADMIN_PASSWORD: "${MOSAIC_BOOTSTRAP_ADMIN_PASSWORD:-}"
       # The TMDB read token (ADR 0072), from ./.env or your shell — never a
       # GitHub secret, which reaches only CI, not a local build. Empty is fine.
       TMDB_RAC: "${TMDB_RAC:-}"

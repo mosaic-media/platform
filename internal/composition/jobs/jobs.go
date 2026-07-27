@@ -54,6 +54,16 @@ const (
 	// and the first that does work a person would otherwise have to do by hand
 	// rather than housekeeping nobody would miss.
 	KindLibraryMaintenance = "library.maintenance"
+	// KindLibraryAvailability re-asks the metadata providers where the library's
+	// works can be watched, oldest answer first (roadmap M2.5).
+	//
+	// **It is the reason the streaming-service facet may exist at all.** Both
+	// halves of that grouping worked long before this: a provider answers with
+	// availability and the store filters on it. The surface was withheld because
+	// nothing refreshed a fact that churns monthly, and a group saying "on
+	// Netflix" about a title that left in March is worse than an absent group —
+	// a user can see a missing feature and cannot see a lying one.
+	KindLibraryAvailability = "library.availability"
 )
 
 // TelemetryRetentionInterval is how often the retention sweep runs.
@@ -87,6 +97,9 @@ type Deps struct {
 	// Restart-class), so the read belongs at the one point that has a boot
 	// context. A zero value takes the Platform default.
 	LibraryMaintenance app.LibraryMaintenanceSettings
+	// Availability is the configured schedule for the watch-availability refresh
+	// (roadmap M2.5), read at boot for the same reason and on the same terms.
+	Availability app.AvailabilitySettings
 }
 
 // Runtime is the pair a caller starts and stops together.
@@ -107,10 +120,15 @@ func New(deps Deps) Runtime {
 	runner.Register(KindTelemetryRetention, telemetryRetention(deps.Service))
 	runner.Register(KindSessionTokenSweep, sessionTokenSweep(deps.Service))
 	runner.Register(KindLibraryMaintenance, libraryMaintenance(deps.Service))
+	runner.Register(KindLibraryAvailability, libraryAvailability(deps.Service))
 
 	libraryEvery := deps.LibraryMaintenance.Interval
 	if libraryEvery <= 0 {
 		libraryEvery = app.DefaultLibraryMaintenance.Interval
+	}
+	availabilityEvery := deps.Availability.Interval
+	if availabilityEvery <= 0 {
+		availabilityEvery = app.DefaultAvailability.Interval
 	}
 
 	scheduler := jobs.NewScheduler(jobs.SchedulerDeps{
@@ -129,6 +147,16 @@ func New(deps Deps) Runtime {
 				// failed is better left to its next occurrence than hammered
 				// four more times — the occurrence after it is hours away and
 				// will do exactly the same work.
+				MaxAttempts: 2,
+			},
+			{
+				Kind:  KindLibraryAvailability,
+				Every: availabilityEvery,
+				// Two, for the maintenance pass's reason and one of its own: a
+				// retry costs a provider a round trip per work, and a run that
+				// failed loses nothing by waiting — the rows it did not reach
+				// keep their old timestamps, so they are still at the head of
+				// the queue when the next occurrence comes round.
 				MaxAttempts: 2,
 			},
 		},
@@ -180,6 +208,32 @@ func libraryMaintenance(svc *app.Service) jobs.Handler {
 			telemetry.Int("rules", res.Rules),
 			telemetry.Int("created", res.Created),
 			telemetry.Int("refreshed", res.Refreshed),
+			telemetry.Int("skipped", res.Skipped),
+			telemetry.Int("failed", res.Failed))
+		return nil
+	}
+}
+
+// libraryAvailability is the handler for KindLibraryAvailability.
+//
+// Idempotent, and in the way that matters here rather than only in the way the
+// runner requires: re-asking a provider about a title and storing the answer
+// again is the same answer again. A job reclaimed after a crash repeats a
+// bounded number of provider calls and changes nothing else.
+func libraryAvailability(svc *app.Service) jobs.Handler {
+	return func(ctx context.Context, _ domain.Job) error {
+		res, err := svc.RefreshAvailability(ctx, app.RefreshAvailabilityCommand{
+			Caller: svc.SystemCaller(),
+		})
+		if err != nil {
+			return err
+		}
+		// Every work the run took is in exactly one of these. A run that reports
+		// forty checked out of a budget of sixty, with nothing accounting for
+		// the other twenty, is a log that raises a question instead of answering
+		// one — the same accounting the maintenance pass keeps.
+		telemetry.From(ctx).Info("watch availability refreshed",
+			telemetry.Int("checked", res.Checked),
 			telemetry.Int("skipped", res.Skipped),
 			telemetry.Int("failed", res.Failed))
 		return nil

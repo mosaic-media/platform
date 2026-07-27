@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -1735,3 +1736,171 @@ func RunContentAtomicityContract(t *testing.T, newDeps Factory) {
 
 // mustErr discards a store method's value so its error can be asserted inline.
 func mustErr[T any](_ T, err error) error { return err }
+
+// WatchAvailabilityContract exercises the projection the streaming-service facet
+// filters on and the refresh keeps current (roadmap M2.5).
+//
+// **The assertions worth reading are the two about an empty answer**, because
+// they are the whole reason this store exists rather than the facet reading the
+// module's own attributes document. A title that has left every service must
+// stop matching, and the refresh must be able to tell "asked, nothing there"
+// from "never asked".
+func RunWatchAvailabilityContract(t *testing.T, newDeps Factory) {
+	t.Helper()
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+
+	t.Run("availability round trips and is filtered on", func(t *testing.T) {
+		d := newDeps(t)
+		if d.WatchAvailability == nil {
+			t.Skip("no WatchAvailabilityStore in this implementation")
+		}
+		c := ctx(t)
+
+		onBoth := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		onOne := newWork(nodeID(2), v1.MediaMovie, "Dune", now)
+		unchecked := newWork(nodeID(3), v1.MediaMovie, "Solaris", now)
+		for _, node := range []v1.Node{onBoth, onOne, unchecked} {
+			if _, err := d.Nodes.Create(c, node); err != nil {
+				t.Fatalf("Create %s: %v", node.Title, err)
+			}
+		}
+		for _, a := range []contracts.WatchAvailability{
+			{NodeID: onBoth.ID, Region: "GB", Providers: []string{"Netflix", "Prime Video"}, CheckedAt: now},
+			{NodeID: onOne.ID, Region: "GB", Providers: []string{"Prime Video"}, CheckedAt: now.Add(-time.Hour)},
+		} {
+			if _, err := d.WatchAvailability.Upsert(c, a); err != nil {
+				t.Fatalf("Upsert: %v", err)
+			}
+		}
+
+		netflix, err := d.Nodes.Search(c, contracts.NodeQuery{
+			WatchProviders: []string{"Netflix"}, Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("Search by service: %v", err)
+		}
+		if len(netflix) != 1 || netflix[0].Title != "Arrival" {
+			t.Fatalf("service search = %v, want only Arrival", titles(netflix))
+		}
+
+		// **A work whose availability was never fetched does not match.** It is
+		// not known to be absent from a service; nothing has been asked. A store
+		// that returned it would be guessing, which is the failure this whole
+		// slice is arranged against.
+		all, err := d.Nodes.Search(c, contracts.NodeQuery{Limit: 10})
+		if err != nil {
+			t.Fatalf("Search all: %v", err)
+		}
+		if len(all) != 3 {
+			t.Fatalf("unfiltered search = %v, want all three including the unchecked one", titles(all))
+		}
+
+		// Conjunctive, like genres: two services lit means both.
+		both, err := d.Nodes.Search(c, contracts.NodeQuery{
+			WatchProviders: []string{"Netflix", "Prime Video"}, Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("Search by two services: %v", err)
+		}
+		if len(both) != 1 || both[0].Title != "Arrival" {
+			t.Fatalf("two-service search = %v, want only Arrival", titles(both))
+		}
+
+		count, err := d.Nodes.Count(c, contracts.NodeQuery{WatchProviders: []string{"Prime Video"}})
+		if err != nil {
+			t.Fatalf("Count by service: %v", err)
+		}
+		if count != 2 {
+			t.Fatalf("service count = %d, want 2", count)
+		}
+
+		// The facet offers what is recorded, most-carried first.
+		facets, err := d.Nodes.Facets(c, contracts.NodeQuery{Kind: v1.NodeWork})
+		if err != nil {
+			t.Fatalf("Facets: %v", err)
+		}
+		if len(facets.Services) != 2 || facets.Services[0].Value != "Prime Video" || facets.Services[0].Count != 2 {
+			t.Fatalf("service facets = %+v, want Prime Video × 2 leading", facets.Services)
+		}
+	})
+
+	// **The refresh's whole point.** A title that has left every service is
+	// recorded as being on none, and must stop matching — a store that treated
+	// an empty answer as "nothing to write" would freeze the last positive
+	// answer forever, which is a group that says "on Netflix" about something
+	// that left in March.
+	t.Run("an empty answer clears a previous one", func(t *testing.T) {
+		d := newDeps(t)
+		if d.WatchAvailability == nil {
+			t.Skip("no WatchAvailabilityStore in this implementation")
+		}
+		c := ctx(t)
+
+		work := newWork(nodeID(1), v1.MediaMovie, "Arrival", now)
+		if _, err := d.Nodes.Create(c, work); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if _, err := d.WatchAvailability.Upsert(c, contracts.WatchAvailability{
+			NodeID: work.ID, Region: "GB", Providers: []string{"Netflix"}, CheckedAt: now.Add(-30 * 24 * time.Hour),
+		}); err != nil {
+			t.Fatalf("Upsert: %v", err)
+		}
+
+		later := now
+		if _, err := d.WatchAvailability.Upsert(c, contracts.WatchAvailability{
+			NodeID: work.ID, Region: "GB", Providers: nil, CheckedAt: later,
+		}); err != nil {
+			t.Fatalf("Upsert the empty answer: %v", err)
+		}
+
+		found, err := d.Nodes.Search(c, contracts.NodeQuery{WatchProviders: []string{"Netflix"}, Limit: 10})
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if len(found) != 0 {
+			t.Fatalf("a title recorded as on no service still matched Netflix: %v", titles(found))
+		}
+		// And it leaves the facet row rather than standing there returning
+		// nothing.
+		facets, err := d.Nodes.Facets(c, contracts.NodeQuery{Kind: v1.NodeWork})
+		if err != nil {
+			t.Fatalf("Facets: %v", err)
+		}
+		if len(facets.Services) != 0 {
+			t.Fatalf("service facets = %+v, want none offered", facets.Services)
+		}
+	})
+
+	// The refresh works oldest-first, which is what makes a bounded run reach
+	// every title eventually instead of the same ones every time.
+	t.Run("stale rows come back oldest first", func(t *testing.T) {
+		d := newDeps(t)
+		if d.WatchAvailability == nil {
+			t.Skip("no WatchAvailabilityStore in this implementation")
+		}
+		c := ctx(t)
+
+		for i, age := range []time.Duration{time.Hour, 72 * time.Hour, 24 * time.Hour} {
+			work := newWork(nodeID(i+1), v1.MediaMovie, "Film "+strconv.Itoa(i), now)
+			if _, err := d.Nodes.Create(c, work); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+			if _, err := d.WatchAvailability.Upsert(c, contracts.WatchAvailability{
+				NodeID: work.ID, Region: "GB", CheckedAt: now.Add(-age),
+			}); err != nil {
+				t.Fatalf("Upsert: %v", err)
+			}
+		}
+
+		stale, err := d.WatchAvailability.ListStale(c, 2)
+		if err != nil {
+			t.Fatalf("ListStale: %v", err)
+		}
+		if len(stale) != 2 {
+			t.Fatalf("stale = %v, want the budget of 2", stale)
+		}
+		if stale[0] != nodeID(2) || stale[1] != nodeID(3) {
+			t.Fatalf("stale = %v, want the 72h then the 24h row", stale)
+		}
+	})
+}

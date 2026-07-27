@@ -214,6 +214,9 @@ func boundaryCases() []boundaryCase {
 				Ref:    v1.ContentRef{Provider: "stremio", NativeID: "tt1", NativeType: "movie"},
 			}))
 		}},
+		{"RefreshAvailability", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.RefreshAvailability(ctx, app.RefreshAvailabilityCommand{Caller: caller(sid)}))
+		}},
 		{"ListModuleCatalogs", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListModuleCatalogs(ctx, app.ListModuleCatalogsQuery{Caller: caller(sid)}))
 		}},

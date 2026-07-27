@@ -61,16 +61,15 @@ type ListLibraryQuery struct {
 	// Genres narrows to works carrying every genre listed — the library facet
 	// (roadmap M2.4). Empty is everything.
 	Genres []string
-	// AttributesContain narrows to works whose module-owned attributes document
-	// contains this JSON document — the streaming-service facet (roadmap M2.5).
+	// WatchProviders narrows to works available on every service listed — the
+	// streaming-service facet (roadmap M2.5). Empty is everything.
 	//
-	// It is the *same* filter `SearchContent` has carried since SDK v0.19.0,
-	// reached from a browse instead of from a capability. The register is
-	// explicit that this half worked and had no client path; this is the client
-	// path, and it is on the browse query rather than on `SearchContent` for the
-	// reason M2.1 gave — a browse needs an offset and a total, which nothing
-	// sourcing content has ever asked for.
-	AttributesContain []byte
+	// It reads the Platform's own projection of what a metadata provider said,
+	// kept current by the availability refresh, and **not** the module-owned
+	// attributes document `module-tmdb` writes at import. Both hold the same
+	// kind of fact; only one of them is refreshed, and only one of them is the
+	// Platform's to interpret.
+	WatchProviders []string
 	// Limit and Offset page the result. Zero Limit takes the default.
 	Limit  int
 	Offset int
@@ -142,13 +141,13 @@ func (s *Service) ListLibrary(ctx context.Context, q ListLibraryQuery) (ListLibr
 	// rather than sixty-four episodes of it. The tree below a work is what the
 	// detail screen is for.
 	query := contracts.NodeQuery{
-		Title:             q.Title,
-		MediaType:         q.MediaType,
-		Kind:              v1.NodeWork,
-		Genres:            q.Genres,
-		AttributesContain: q.AttributesContain,
-		Limit:             limit,
-		Offset:            offset,
+		Title:          q.Title,
+		MediaType:      q.MediaType,
+		Kind:           v1.NodeWork,
+		Genres:         q.Genres,
+		WatchProviders: q.WatchProviders,
+		Limit:          limit,
+		Offset:         offset,
 	}
 
 	// The count first, so that a page beyond the end can still be reported

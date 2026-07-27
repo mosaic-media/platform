@@ -61,6 +61,7 @@ type fakeDBSnapshot struct {
 	playbackStates  map[playbackKey]v1.PlaybackState
 	libraryRules    map[domain.LibraryRuleID]domain.LibraryRule
 	nodeMetadata    map[v1.NodeID]contracts.NodeMetadata
+	watchAvail      map[v1.NodeID]contracts.WatchAvailability
 }
 
 // fakeDB is the shared backing store behind every fake contract in this
@@ -103,6 +104,7 @@ type fakeDB struct {
 	// nodeMetadata is what a provider said about a materialised title
 	// (ADR 0107).
 	nodeMetadata map[v1.NodeID]contracts.NodeMetadata
+	watchAvail   map[v1.NodeID]contracts.WatchAvailability
 }
 
 // playbackKey is the (user, node) pair playback state is stored under.
@@ -131,6 +133,7 @@ func newFakeDB() *fakeDB {
 		playbackStates:  make(map[playbackKey]v1.PlaybackState),
 		libraryRules:    make(map[domain.LibraryRuleID]domain.LibraryRule),
 		nodeMetadata:    make(map[v1.NodeID]contracts.NodeMetadata),
+		watchAvail:      make(map[v1.NodeID]contracts.WatchAvailability),
 	}
 }
 
@@ -343,6 +346,10 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 	for k, v := range db.nodeMetadata {
 		nodeMetadata[k] = v
 	}
+	watchAvail := make(map[v1.NodeID]contracts.WatchAvailability, len(db.watchAvail))
+	for k, v := range db.watchAvail {
+		watchAvail[k] = v
+	}
 
 	return fakeDBSnapshot{
 		users:          users,
@@ -361,6 +368,7 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 		playbackStates:  playbackStates,
 		libraryRules:    libraryRules,
 		nodeMetadata:    nodeMetadata,
+		watchAvail:      watchAvail,
 	}
 }
 
@@ -382,6 +390,7 @@ func (db *fakeDB) restore(snap fakeDBSnapshot) {
 	db.playbackStates = snap.playbackStates
 	db.libraryRules = snap.libraryRules
 	db.nodeMetadata = snap.nodeMetadata
+	db.watchAvail = snap.watchAvail
 }
 
 // fakeUserStore implements contracts.UserStore. It deliberately does not
@@ -981,6 +990,56 @@ func (s *fakeNodeMetadataStore) Get(_ context.Context, nodeID v1.NodeID) (contra
 	return m, nil
 }
 
+// fakeWatchAvailabilityStore implements contracts.WatchAvailabilityStore over
+// fakeDB (roadmap M2.5).
+type fakeWatchAvailabilityStore struct {
+	db    *fakeDB
+	trace *trace
+}
+
+func (s *fakeWatchAvailabilityStore) Upsert(_ context.Context, a contracts.WatchAvailability) (contracts.WatchAvailability, error) {
+	s.trace.record("watch_availability.upsert")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if a.Providers == nil {
+		// The real column is NOT NULL, and "asked, nothing there" is a real
+		// answer this fake must be able to hold — it is what makes a title that
+		// left every service stop matching.
+		a.Providers = []string{}
+	}
+	s.db.watchAvail[a.NodeID] = a
+	return a, nil
+}
+
+func (s *fakeWatchAvailabilityStore) ListStale(_ context.Context, limit int) ([]v1.NodeID, error) {
+	s.trace.record("watch_availability.list_stale")
+	if limit <= 0 {
+		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
+	}
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	out := make([]contracts.WatchAvailability, 0, len(s.db.watchAvail))
+	for _, a := range s.db.watchAvail {
+		out = append(out, a)
+	}
+	// Oldest first, id breaking the tie — the real store's total order, so a
+	// test asserting the rotation asserts the same thing against both.
+	sort.SliceStable(out, func(i, j int) bool {
+		if !out[i].CheckedAt.Equal(out[j].CheckedAt) {
+			return out[i].CheckedAt.Before(out[j].CheckedAt)
+		}
+		return out[i].NodeID < out[j].NodeID
+	})
+	ids := make([]v1.NodeID, 0, limit)
+	for _, a := range out {
+		if len(ids) == limit {
+			break
+		}
+		ids = append(ids, a.NodeID)
+	}
+	return ids, nil
+}
+
 // fakeLibraryRuleStore implements contracts.LibraryRuleStore over fakeDB
 // (ADR 0104). It enforces the one thing the real schema enforces and the
 // application service does not — the case-insensitive uniqueness of a rule's
@@ -1242,27 +1301,28 @@ func newTestServiceWithExtensions(db *fakeDB, tr *trace, now time.Time, ext app.
 // dependency is added in one place rather than copied per helper.
 func baseTestDeps(db *fakeDB, tr *trace, now time.Time) app.Deps {
 	return app.Deps{
-		UnitOfWork:       &fakeUnitOfWork{db: db, trace: tr},
-		Sessions:         &fakeSessionStore{db: db, trace: tr},
-		Users:            &fakeUserStore{db: db, trace: tr},
-		Credentials:      &fakeCredentialStore{db: db, trace: tr},
-		Config:           &fakeConfigStore{db: db, trace: tr},
-		Permissions:      fakePermissionStore{db: db, trace: tr},
-		Nodes:            &fakeNodeStore{db: db, trace: tr},
-		Parts:            &fakePartStore{db: db, trace: tr},
-		Clock:            fakeClock{now: now},
-		IDs:              &fakeIDGenerator{},
-		ContentIDs:       &fakeIDGenerator{},
-		Policy:           policy.NewEngine(fakePermissionStore{db: db, trace: tr}),
-		Events:           &fakeEventPublisher{trace: tr},
-		PasswordVerifier: fakePasswordVerifier{},
-		ModuleSettings:   &fakeModuleSettingsStore{db: db, trace: tr},
-		UserPreferences:  &fakeUserPreferenceStore{db: db, trace: tr},
-		PlaybackStates:   &fakePlaybackStateStore{db: db, trace: tr},
-		TelemetryQueries: fakeTelemetryQueryStore{},
-		Tokens:           &fakeTokenStore{db: db, trace: tr},
-		LibraryRules:     &fakeLibraryRuleStore{db: db, trace: tr},
-		NodeMetadata:     &fakeNodeMetadataStore{db: db, trace: tr},
+		UnitOfWork:        &fakeUnitOfWork{db: db, trace: tr},
+		Sessions:          &fakeSessionStore{db: db, trace: tr},
+		Users:             &fakeUserStore{db: db, trace: tr},
+		Credentials:       &fakeCredentialStore{db: db, trace: tr},
+		Config:            &fakeConfigStore{db: db, trace: tr},
+		Permissions:       fakePermissionStore{db: db, trace: tr},
+		Nodes:             &fakeNodeStore{db: db, trace: tr},
+		Parts:             &fakePartStore{db: db, trace: tr},
+		Clock:             fakeClock{now: now},
+		IDs:               &fakeIDGenerator{},
+		ContentIDs:        &fakeIDGenerator{},
+		Policy:            policy.NewEngine(fakePermissionStore{db: db, trace: tr}),
+		Events:            &fakeEventPublisher{trace: tr},
+		PasswordVerifier:  fakePasswordVerifier{},
+		ModuleSettings:    &fakeModuleSettingsStore{db: db, trace: tr},
+		UserPreferences:   &fakeUserPreferenceStore{db: db, trace: tr},
+		PlaybackStates:    &fakePlaybackStateStore{db: db, trace: tr},
+		TelemetryQueries:  fakeTelemetryQueryStore{},
+		Tokens:            &fakeTokenStore{db: db, trace: tr},
+		LibraryRules:      &fakeLibraryRuleStore{db: db, trace: tr},
+		NodeMetadata:      &fakeNodeMetadataStore{db: db, trace: tr},
+		WatchAvailability: &fakeWatchAvailabilityStore{db: db, trace: tr},
 	}
 }
 
@@ -1332,7 +1392,7 @@ func (s *fakeNodeStore) Search(_ context.Context, query contracts.NodeQuery) ([]
 	if query.Limit <= 0 {
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
 	}
-	found := s.collect(nodeQueryMatch(query), byTitle)
+	found := s.collect(s.matches(query), byTitle)
 
 	// Offset then limit, over the same total order the real adapter's
 	// ORDER BY title, id produces — otherwise a paging test would pass here
@@ -1354,7 +1414,36 @@ func (s *fakeNodeStore) Search(_ context.Context, query contracts.NodeQuery) ([]
 // Count applies the same predicate as Search and ignores Limit and Offset.
 func (s *fakeNodeStore) Count(_ context.Context, query contracts.NodeQuery) (int, error) {
 	s.trace.record("nodes.count")
-	return len(s.collect(nodeQueryMatch(query), byTitle)), nil
+	return len(s.collect(s.matches(query), byTitle)), nil
+}
+
+// matches is nodeQueryMatch plus the availability predicate, which lives here
+// rather than in the shared helper because it reads a second table — the real
+// adapter answers it with an EXISTS subquery for the same reason.
+//
+// **A work with no availability row does not match a service filter.** Nothing
+// is known about it; it is not known to be absent. A fake that matched it would
+// let a guess ship.
+func (s *fakeNodeStore) matches(query contracts.NodeQuery) func(v1.Node) bool {
+	base := nodeQueryMatch(query)
+	if len(query.WatchProviders) == 0 {
+		return base
+	}
+	return func(n v1.Node) bool {
+		if !base(n) {
+			return false
+		}
+		a, ok := s.db.watchAvail[n.ID]
+		if !ok {
+			return false
+		}
+		for _, want := range query.WatchProviders {
+			if !slices.Contains(a.Providers, want) {
+				return false
+			}
+		}
+		return true
+	}
 }
 
 // Facets counts the distinct genres of what the rest of the query matches,
@@ -1363,30 +1452,52 @@ func (s *fakeNodeStore) Count(_ context.Context, query contracts.NodeQuery) (int
 // that behaved differently would let that ship.
 func (s *fakeNodeStore) Facets(_ context.Context, query contracts.NodeQuery) (contracts.Facets, error) {
 	s.trace.record("nodes.facets")
-	unnarrowed := query
-	unnarrowed.Genres = nil
-	counts := map[string]int{}
-	for _, n := range s.collect(nodeQueryMatch(unnarrowed), byTitle) {
+	out := contracts.Facets{}
+
+	// Each facet ignores its own narrowing and honours the other's, so the two
+	// rows compose — the adapter does the same and a fake that did not would let
+	// a self-emptying control ship.
+	forGenres := query
+	forGenres.Genres = nil
+	genreCounts := map[string]int{}
+	for _, n := range s.collect(s.matches(forGenres), byTitle) {
 		for _, g := range n.Genres {
 			if g != "" {
-				counts[g]++
+				genreCounts[g]++
 			}
 		}
 	}
-	out := contracts.Facets{}
-	for value, count := range counts {
-		out.Genres = append(out.Genres, contracts.FacetValue{Value: value, Count: count})
-	}
-	// Count descending then alphabetical, the order the adapter's ORDER BY
-	// produces, so a test asserting the row's order is asserting the same thing
-	// against both.
-	sort.SliceStable(out.Genres, func(i, j int) bool {
-		if out.Genres[i].Count != out.Genres[j].Count {
-			return out.Genres[i].Count > out.Genres[j].Count
+	out.Genres = rankFacets(genreCounts)
+
+	forServices := query
+	forServices.WatchProviders = nil
+	serviceCounts := map[string]int{}
+	for _, n := range s.collect(s.matches(forServices), byTitle) {
+		for _, p := range s.db.watchAvail[n.ID].Providers {
+			if p != "" {
+				serviceCounts[p]++
+			}
 		}
-		return out.Genres[i].Value < out.Genres[j].Value
-	})
+	}
+	out.Services = rankFacets(serviceCounts)
 	return out, nil
+}
+
+// rankFacets orders values count-descending then alphabetically, the order the
+// adapter's ORDER BY produces, so a test asserting a row's order asserts the
+// same thing against both.
+func rankFacets(counts map[string]int) []contracts.FacetValue {
+	var out []contracts.FacetValue
+	for value, count := range counts {
+		out = append(out, contracts.FacetValue{Value: value, Count: count})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Value < out[j].Value
+	})
+	return out
 }
 
 // nodeQueryMatch is the one predicate Search and Count share, so the fake

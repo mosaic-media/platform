@@ -595,7 +595,8 @@ func run() error {
 		LibraryRules: set.LibraryRules,
 		// What a provider said about a materialised title (ADR 0107), so a
 		// library detail renders from the graph rather than from a live call.
-		NodeMetadata: set.NodeMetadata,
+		NodeMetadata:      set.NodeMetadata,
+		WatchAvailability: set.WatchAvailability,
 
 		PlaybackResolutions: set.PlaybackResolutions,
 		PlaybackStates:      set.PlaybackStates,
@@ -742,6 +743,7 @@ func run() error {
 	// read it with. The budget is not read here: it is Hot, and the run reads it
 	// for itself every time.
 	libraryMaintenance := svc.LibraryMaintenance(serveCtx)
+	availability := svc.Availability(serveCtx)
 	jobRuntime := compositionjobs.New(compositionjobs.Deps{
 		Service:            svc,
 		Store:              set.Jobs,
@@ -749,12 +751,14 @@ func run() error {
 		IDs:                set.IDs,
 		Owner:              resource.BootID,
 		LibraryMaintenance: libraryMaintenance,
+		Availability:       availability,
 	})
 	jobRuntime.Start(serveCtx)
 	boot.Info("jobs runner started",
 		telemetry.String("owner", resource.BootID),
 		telemetry.String("kinds", fmt.Sprint(jobRuntime.Runner.Kinds())),
-		telemetry.Duration("library_maintenance_every", libraryMaintenance.Interval))
+		telemetry.Duration("library_maintenance_every", libraryMaintenance.Interval),
+		telemetry.Duration("library_availability_every", availability.Interval))
 
 	handoff := &health.Handoff{
 		Metadata:    generationMetadata,
