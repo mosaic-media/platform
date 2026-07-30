@@ -666,8 +666,9 @@ func run() error {
 	}
 	// The running transcodes, held here rather than inside the handler, because
 	// a transcode deliberately outlives the request that started it and
-	// something has to end it. Reaped on a ticker below and stopped on shutdown.
-	playbackSessions := playback.NewSessions(playback.DefaultSpool)
+	// something has to end it. Reaped on a ticker below and stopped on shutdown,
+	// which is also what removes their segment directories.
+	playbackSessions := playback.NewSegmentSessions(playback.DefaultSegmentDir)
 
 	// Keep the install owner's authority current (ADR 0069).
 	//

@@ -45,7 +45,7 @@ func TestTheServingCompositionOwnsItsTranscodes(t *testing.T) {
 		return true
 	})
 	if sessionsIdent == "" {
-		t.Fatalf("%s never calls playback.NewSessions, so it holds no registry and can reap nothing", path)
+		t.Fatalf("%s never calls playback.NewSegmentSessions, so it holds no registry and can reap nothing", path)
 	}
 
 	// Which playback.X the composition calls. Handler must not be among them: it
@@ -87,7 +87,7 @@ func TestTheServingCompositionOwnsItsTranscodes(t *testing.T) {
 }
 
 // boundToNewSessions reports the identifier an assignment binds
-// playback.NewSessions(...) to.
+// playback.NewSegmentSessions(...) to.
 func boundToNewSessions(assign *ast.AssignStmt) (string, bool) {
 	if len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
 		return "", false
@@ -97,7 +97,7 @@ func boundToNewSessions(assign *ast.AssignStmt) (string, bool) {
 		return "", false
 	}
 	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != "NewSessions" {
+	if !ok || sel.Sel.Name != "NewSegmentSessions" {
 		return "", false
 	}
 	if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "playback" {

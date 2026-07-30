@@ -44,36 +44,6 @@ import (
 // whole contract keeps away from it — and would put an ffmpeg dependency behind
 // the SDK boundary.
 
-// remuxContainers are the container extensions MSE cannot accept and stream
-// copy can rescue. It is matched on the upstream path, which is a heuristic:
-// a URL need not carry a truthful extension. It is the cheap signal available
-// before ADR 0048's probe exists, and it fails safe — a mislabelled file is
-// relayed unchanged, exactly as today.
-var remuxContainers = map[string]bool{
-	".mkv":  true,
-	".avi":  true,
-	".ts":   true,
-	".m2ts": true,
-	".wmv":  true,
-	".flv":  true,
-	".mov":  false, // QuickTime is already an MP4 family container; MSE takes it.
-}
-
-// ShouldRemux reports whether an upstream location needs its container
-// rewritten before a browser can play it.
-//
-// The decision is made when the ticket is minted, not when bytes are fetched,
-// so it sits with the server-side knowledge that will grow into ADR 0048's
-// profile-driven selection rather than being re-derived per range request.
-func ShouldRemux(upstreamURL string) bool {
-	i := strings.IndexAny(upstreamURL, "?#")
-	clean := upstreamURL
-	if i >= 0 {
-		clean = upstreamURL[:i]
-	}
-	return remuxContainers[strings.ToLower(path.Ext(clean))]
-}
-
 // ErrRemuxUnavailable reports that a remux was asked for and ffmpeg is not
 // installed. It is a distinct error because the answer for a user is specific —
 // install ffmpeg, or pick a different release — rather than "playback failed".
@@ -211,6 +181,86 @@ func reconnectArgs(upstreamURL string) []string {
 	}
 }
 
+// Segment starts a transcode that writes HLS segments into dir, beginning at
+// segment index n (ADR 0109, ADR 0111).
+//
+// It returns handles to stop the process and to pause and resume it. The last
+// two are what the throttle needs: an audio-only remux runs at near-copy speed,
+// so without a way to hold it back one playback writes the whole release to
+// disk as fast as the upstream serves it.
+//
+// Three flags carry the design and each is load-bearing:
+//
+//   - **`-ss` before `-i`, with `-copyts`** — ADR 0108's arithmetic, re-keyed
+//     from a byte offset to a segment index. Together they make segment n begin
+//     at the timestamp its nominal position implies rather than at zero, which
+//     is what lets a client seek into a stream nothing has produced yet.
+//   - **`-start_number n`** names the output for its position in the *release*
+//     rather than its position in this run, so a restart mid-film writes the
+//     segment the client actually asked for.
+//   - **`-hls_flags temp_file`** writes each segment under a temporary name and
+//     renames it, so a file appearing at its final name means a finished
+//     segment. Presence is the readiness signal, and without this flag it would
+//     be a race — verified: a run leaves no `.tmp` behind.
+func (r *Remuxer) Segment(ctx context.Context, upstreamURL string, headers map[string]string, plan Plan, dir string, length time.Duration, n int) (stop, pause, resume func(), err error) {
+	if !r.Available() {
+		return nil, nil, nil, ErrRemuxUnavailable
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	args := []string{"-hide_banner", "-loglevel", "error"}
+	args = append(args, reconnectArgs(upstreamURL)...)
+	if h := ffmpegHeaderArg(headers); h != "" {
+		args = append(args, "-headers", h)
+	}
+	if offset := segmentStart(n, length); offset > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(offset.Seconds(), 'f', 3, 64))
+	}
+	// -copyts unconditionally, unlike the pipe path, because here it is what
+	// makes a restarted segment carry the timestamps its index promises. Segment
+	// zero of a restart at zero is unaffected.
+	args = append(args, "-copyts", "-i", upstreamURL)
+	args = append(args, plan.ffmpegArgs()...)
+	// Where the video is re-encoded the origin places the keyframes, so the
+	// boundaries are exactly the nominal grid. Where it is copied this does
+	// nothing and the source's own keyframes decide — which the nominal grid
+	// tolerates, because a seek restarts rather than accumulating the difference.
+	if plan.Video == ActionEncode {
+		args = append(args, "-force_key_frames",
+			"expr:gte(t,n_forced*"+strconv.FormatFloat(length.Seconds(), 'f', 3, 64)+")")
+	}
+	args = append(args,
+		"-f", "hls",
+		"-hls_time", strconv.FormatFloat(length.Seconds(), 'f', 3, 64),
+		"-hls_flags", "temp_file",
+		"-hls_segment_type", "fmp4",
+		"-hls_fmp4_init_filename", segmentName(initSegment),
+		"-hls_segment_filename", path.Join(dir, "%d.m4s"),
+		"-start_number", strconv.Itoa(n),
+		"-hls_playlist_type", "vod",
+		"-hls_list_size", "0",
+		// ffmpeg's own playlist is written and never served: the origin computes
+		// its own from the probed duration, because ffmpeg's describes only what
+		// this run emitted and a client needs the whole release up front.
+		path.Join(dir, "ffmpeg.m3u8"),
+	)
+
+	cmd := exec.CommandContext(ctx, r.binary, args...)
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return nil, nil, nil, err
+	}
+
+	proc := cmd.Process
+	stop = func() {
+		cancel()
+		_ = cmd.Wait()
+	}
+	pause = func() { signalProcess(proc, pauseSignal) }
+	resume = func() { signalProcess(proc, resumeSignal) }
+	return stop, pause, resume, nil
+}
+
 // ffmpegHeaderArg renders request headers in the CRLF-delimited form ffmpeg's
 // -headers flag expects, so a credentialed upstream is reachable by the remux
 // path on the same terms as the relay path.
@@ -234,15 +284,7 @@ func ffmpegHeaderArg(headers map[string]string) string {
 // request cannot be honoured. Saying so with Accept-Ranges: none is the honest
 // signal — a player that asks for a byte range gets told the source does not do
 // them, rather than being handed a wrong answer.
-func serveRemuxed(w http.ResponseWriter, r *http.Request, rx *Remuxer, sessions *Sessions, t ticket, plan Plan, key string) {
-	// A seekable plan answers ranges out of a single transcode's file; one with
-	// no duration cannot map an offset to a time and falls back to the pipe
-	// below, honestly labelled.
-	if plan.seekable() && sessions.usable() {
-		serveSeekableRemux(w, r, rx, sessions, t, plan, key)
-		return
-	}
-
+func serveRemuxed(w http.ResponseWriter, r *http.Request, t ticket, plan Plan, rx *Remuxer) {
 	body, stop, err := rx.Stream(r.Context(), t.URL, t.Headers, plan)
 	if err != nil {
 		http.Error(w, "remux unavailable", http.StatusBadGateway)
@@ -364,182 +406,117 @@ func (p Plan) videoFilter() string {
 	return strings.Join(parts, ",")
 }
 
-// Seekable transcoded output (ADR 0108).
+// serveSegmented answers the HLS surface for a release that must go through
+// ffmpeg (ADR 0109, ADR 0111).
 //
-// A bare <video> is the whole constraint. It has no MSE and no HLS library
-// (ADR 0070), so the only way it knows how to seek is to ask for a **byte**
-// range — and a live transcode has no byte index to answer one with. What it
-// does have, once the probe reports a duration, is a defensible *estimate*: the
-// output is roughly constant-bitrate over its length, so an offset is a
-// position in time.
-//
-// So the origin advertises a synthetic length, converts a requested offset into
-// a timestamp, and restarts ffmpeg there with -copyts so the fragments carry
-// real decode times. The player's clock then lands where the viewer asked, and
-// the estimate only ever affects where the *scrubber handle* sits — never which
-// frame is shown, because that comes from the timestamps rather than from this
-// arithmetic.
-//
-// **The estimate is honest about being one.** Its error is a variable-bitrate
-// release whose scrubber is slightly non-linear: dragging to the middle lands
-// near the middle rather than exactly on it. That is the cost of seeking at all
-// on a player that cannot be told anything else, and it is bounded — every seek
-// is served from a real keyframe, so nothing lands in the middle of a fragment.
-
-// estimatedBitrate is the assumed output rate for a transcoded stream, in bytes
-// per second, used only to synthesise a Content-Length.
-//
-// 2 MB/s ≈ 16 Mbps, which is a generous 1080p h264 with stereo AAC — the shape
-// this origin actually emits, since MaxHeight bounds the encode. Over-estimating
-// is the safe direction: the advertised length is longer than the real output,
-// so the player never asks for a byte past the end of what ffmpeg will produce.
-// Under-estimating would truncate the timeline and make the last minutes
-// unreachable.
-const estimatedBitrate = 2 << 20
-
-// seekable reports whether a plan can answer range requests, which needs a
-// duration to map offsets onto. Without one the origin serves the honest pipe.
-func (p Plan) seekable() bool { return p.Duration > 0 }
-
-// contentLength is the total the origin advertises.
-//
-// **The source's own size is used wherever it is known, and a flat rate only as
-// a last resort.** The client computes its byte-to-time mapping from this length
-// and the duration it reads out of the fragments; the origin computes the
-// inverse from this length and the probed duration. If the two disagree a seek
-// resolves to the wrong timestamp — and a flat 2 MB/s guess disagreed with a 4K
-// release by a factor of twenty-two.
-//
-// The source size is close because the video stream is copied in the case that
-// matters: a remux changes the container and re-encodes audio, so the output
-// tracks the input to within the audio delta. Where the video *is* re-encoded
-// the estimate is worse again, which is a known limit of byte-addressing a
-// transcode rather than something this arithmetic can fix.
-func (p Plan) contentLength() int64 {
-	if p.SourceBytes > 0 {
-		return p.SourceBytes
+// Three resources and a closed set: the playlist, the initialisation segment,
+// and a numbered segment. The resource is matched rather than used as a
+// filename — it arrives in a URL, and the one thing a path from a URL must never
+// be is a path.
+func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, sessions *SegmentSessions, t ticket, key, resource string) {
+	// Without a duration there is nothing to divide into segments, so the origin
+	// serves the old unseekable pipe and says so. That case is real — a source
+	// that reports no running time — and it is better than synthesising a
+	// timeline and sending a player to a position that does not exist.
+	if t.Plan.Duration <= 0 || !sessions.usable() {
+		serveRemuxed(w, r, t, t.Plan, rx)
+		return
 	}
-	return int64(p.Duration.Seconds() * estimatedBitrate)
+
+	length := segmentLengthFor(t.Plan)
+
+	switch {
+	case resource == "" || resource == PlaylistName:
+		w.Header().Set("Content-Type", mediaPlaylistType)
+		// The playlist is derived from the probed duration and nothing else, so
+		// it is identical on every request for this ticket and costs nothing to
+		// re-render. It is still not cached: the ticket behind it expires.
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodHead {
+			return
+		}
+		_, _ = io.WriteString(w, mediaPlaylist(t.Plan.Duration, length, func(n int) string {
+			return segmentName(n)
+		}))
+
+	case resource == segmentName(initSegment):
+		body, size, err := sessions.OpenInit(r.Context(), rx, key, t.URL, t.Headers, t.Plan, length)
+		if err != nil {
+			http.Error(w, "the origin could not produce a playable stream for this release ("+t.Plan.Reason+")", http.StatusBadGateway)
+			return
+		}
+		defer body.Close()
+		writeSegment(w, r, "video/mp4", size, body)
+
+	default:
+		n, ok := segmentIndexOf(resource)
+		if !ok {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if n >= segmentCount(t.Plan.Duration, length) {
+			// Past the end of the release. A player should never ask, since the
+			// playlist it was given closes with ENDLIST, so this is a malformed
+			// request rather than a race.
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		body, size, err := sessions.Open(r.Context(), rx, key, t.URL, t.Headers, t.Plan, length, n)
+		if err != nil {
+			http.Error(w, "the origin could not produce a playable stream for this release ("+t.Plan.Reason+")", http.StatusBadGateway)
+			return
+		}
+		defer body.Close()
+		writeSegment(w, r, "video/iso.segment", size, body)
+	}
 }
 
-// offsetAt converts a byte offset in the advertised stream to a position in the
-// release. It clamps rather than extrapolating: a player asking past the end
-// gets the end, not a negative seek or a timestamp beyond the film.
-func (p Plan) offsetAt(byteOffset int64) time.Duration {
-	total := p.contentLength()
-	if byteOffset <= 0 || total <= 0 {
-		return 0
-	}
-	if byteOffset >= total {
-		return p.Duration
-	}
-	return time.Duration(float64(p.Duration) * (float64(byteOffset) / float64(total)))
-}
-
-// parseByteRangeStart reads the first byte position out of a Range header.
+// PlaylistName is the one playlist the origin serves. There is no master: one
+// rendition means a master would add a round trip and a CODECS string the origin
+// can only guess at before the transcode runs.
 //
-// Only `bytes=N-` and `bytes=N-M` are understood, which is what a media element
-// sends. A suffix range (`bytes=-N`, "the last N bytes") is deliberately not
-// handled: it asks for the end of a stream whose real length is unknown, and
-// answering it with an estimate would seek to a position that may not exist.
-// Reporting "not satisfiable" for it is the honest answer.
-func parseByteRangeStart(header string) (int64, bool) {
-	const prefix = "bytes="
-	if !strings.HasPrefix(header, prefix) {
+// Exported because the transport that mints a ticket has to point the client at
+// it, and a second spelling of the same path is exactly the drift this avoids.
+const PlaylistName = "index.m3u8"
+
+// segmentLengthFor is how long a segment runs for this plan.
+//
+// The same value either way, and the reason differs. Where the video is
+// re-encoded the origin places the keyframes with -force_key_frames, so the
+// boundaries are exactly this. Where it is copied the source's keyframes decide
+// and this is only what ffmpeg is asked for — which the nominal grid tolerates,
+// because a seek restarts at the position the playlist names rather than
+// inheriting where the previous segment happened to end (ADR 0111).
+func segmentLengthFor(plan Plan) time.Duration { return encodedSegmentLength }
+
+// segmentIndexOf reads a segment index out of a resource name, accepting only
+// the exact form the playlist emits.
+func segmentIndexOf(resource string) (int, bool) {
+	name, ok := strings.CutSuffix(resource, ".m4s")
+	if !ok || name == "" {
 		return 0, false
 	}
-	spec := strings.TrimPrefix(header, prefix)
-	// One range only. A multi-range request over a live transcode has no sane
-	// answer, and no media element sends one.
-	if strings.Contains(spec, ",") {
-		return 0, false
-	}
-	dash := strings.Index(spec, "-")
-	if dash <= 0 {
-		return 0, false
-	}
-	n, err := strconv.ParseInt(strings.TrimSpace(spec[:dash]), 10, 64)
-	if err != nil || n < 0 {
+	n, err := strconv.Atoi(name)
+	if err != nil || n < 0 || strconv.Itoa(n) != name {
 		return 0, false
 	}
 	return n, true
 }
 
-// serveSeekableRemux answers a transcoded stream as a byte-addressable resource.
-//
-// The shape is what a media element expects of any ordinary file: a length, an
-// Accept-Ranges, and a 206 carrying a Content-Range when it asks for an offset.
-// What differs is that the bytes are produced on demand from a timestamp rather
-// than read out of one — so a seek costs a fresh ffmpeg at the mapped position,
-// and the previous one is reaped when its reader goes away.
-//
-// **Every response is a fresh process, and that is the cost being accepted.** A
-// viewer dragging the scrubber across a film starts several transcodes in a few
-// seconds. Bounding that is a session concern rather than a correctness one —
-// the reference implementations keep a keyed session and kill the running
-// process on a new seek, and the same is owed here — but each request in
-// isolation is correct, which is the property this builds first.
-func serveSeekableRemux(w http.ResponseWriter, r *http.Request, rx *Remuxer, sessions *Sessions, t ticket, plan Plan, key string) {
-	total := plan.contentLength()
-
-	w.Header().Set("Content-Type", rx.ContentType())
-	w.Header().Set("Accept-Ranges", "bytes")
+// writeSegment sends one segment with a real length, which a segment always has
+// because it is a finished file rather than a live pipe. That is the difference
+// the whole slice bought: the byte-addressed origin advertised a length it had
+// to estimate, and could not make the estimate true.
+func writeSegment(w http.ResponseWriter, r *http.Request, contentType string, size int64, body io.Reader) {
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	// A segment is immutable for the life of the ticket, but the ticket is
+	// short-lived and the upstream behind it shorter still, so nothing here is
+	// worth a cache that could outlive what it points at.
 	w.Header().Set("Cache-Control", "no-store")
-
-	// A HEAD is how a media element learns the length before deciding it can
-	// seek at all, so it must answer without starting a transcode.
+	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodHead {
-		w.Header().Set("Content-Length", strconv.FormatInt(total, 10))
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	start, ranged := int64(0), false
-	if h := r.Header.Get("Range"); h != "" {
-		n, ok := parseByteRangeStart(h)
-		if !ok || n >= total {
-			// An unsatisfiable or unsupported range gets the status that says so,
-			// with the length, rather than the whole stream from the beginning —
-			// which would silently ignore the seek.
-			w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(total, 10))
-			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
-			return
-		}
-		start, ranged = n, true
-	}
-
-	body, err := sessions.Open(r.Context(), rx, key, t.URL, t.Headers, plan, start)
-	if err != nil {
-		http.Error(w, "the origin could not produce a playable stream for this release ("+plan.Reason+")", http.StatusBadGateway)
-		return
-	}
-	defer body.Close()
-
-	// The same probe-before-status rule the pipe path follows: a transcode that
-	// produces nothing must not read as a successful empty range.
-	first := make([]byte, 64*1024)
-	n, readErr := io.ReadFull(body, first)
-	if n == 0 {
-		http.Error(w, "the origin could not produce a playable stream for this release ("+plan.Reason+")", http.StatusBadGateway)
-		return
-	}
-
-	// The advertised end is the estimate's end, not what ffmpeg will really
-	// produce. It has to be: the player needs a range that closes, and the true
-	// length is unknowable until the transcode finishes.
-	if ranged {
-		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, total-1, total))
-		w.Header().Set("Content-Length", strconv.FormatInt(total-start, 10))
-		w.WriteHeader(http.StatusPartialContent)
-	} else {
-		w.Header().Set("Content-Length", strconv.FormatInt(total, 10))
-		w.WriteHeader(http.StatusOK)
-	}
-
-	if _, err := w.Write(first[:n]); err != nil {
-		return
-	}
-	if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
 		return
 	}
 	_, _ = io.Copy(w, body)

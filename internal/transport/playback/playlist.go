@@ -36,10 +36,12 @@ import (
 // header and a request, so longer ones make a play cheaper. Neither is near a
 // cliff at six.
 //
-// **It applies only where the boundaries are ours** (ADR 0110). Where the video
-// is copied the source's keyframe spacing decides, and this constant has no say
-// — asking for six seconds of a release with ten-second keyframes produces
-// ten-second segments and a playlist describing positions that do not exist.
+// **Where the video is copied it is what ffmpeg is asked for and not what it
+// produces** — the source's keyframes decide, so a release with ten-second
+// keyframes yields ten-second segments however this is set. The nominal grid
+// tolerates that, because a seek restarts at the position the playlist names
+// rather than inheriting where the previous segment happened to end
+// (ADR 0111).
 const encodedSegmentLength = 6 * time.Second
 
 // segmentCount is how many segments a release of this length divides into.
@@ -85,6 +87,12 @@ func segmentDuration(n int, total, length time.Duration) time.Duration {
 // this wrong treats the playlist as a file to play rather than an index to
 // follow, which presents as an immediate decode failure.
 const mediaPlaylistType = "application/vnd.apple.mpegurl"
+
+// HLSMimeType is the same value, named for the client rather than the response.
+// It travels on the Player node so a client chooses its pipeline before it
+// fetches anything — Safari plays this natively and everything else needs a
+// media framework (ADR 0070's stated condition).
+const HLSMimeType = mediaPlaylistType
 
 // mediaPlaylist renders the whole playlist for a release of this length.
 //

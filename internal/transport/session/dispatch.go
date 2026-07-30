@@ -287,17 +287,17 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	}
 
 	node := screens.PlayerNode(screens.PlayerParams{
-		Src:    "/playback/" + ticket,
+		Src:    playbackSrc(ticket, plan),
 		Title:  env.Title,
 		Poster: env.Poster,
 		NodeID: env.NodeID,
 		PartID: string(res.PartID),
 
 		ResumeAt: resumeAt,
-		// Anything ffmpeg produces is fragmented MP4; naming the type lets a
-		// client pick its pipeline before it fetches a byte. A relayed stream
-		// keeps whatever the upstream sends, which the client discovers from
-		// the response rather than being told up front.
+		// Which pipeline the client should use, decided before it fetches a
+		// byte. A release that goes through ffmpeg is served as HLS and needs a
+		// media framework; a relayed one keeps whatever the upstream sends and
+		// the client discovers that from the response.
 		MimeType: playbackMimeType(plan),
 	})
 	msgs := []*sessionv1.ServerMessage{regionMsg(ctx, s, playerRegion, sessionv1.RegionUpdate_REPLACE, node)}
@@ -390,10 +390,31 @@ func (h *Handler) recordProbe(ctx context.Context, _ v1.Caller, partID v1.PartID
 
 // playbackMimeType names what the origin will serve.
 func playbackMimeType(plan playback.Plan) string {
-	if !plan.DirectPlay {
+	if plan.DirectPlay {
+		// The upstream's own container, whatever it is. A bare <video> reads it
+		// from the response, and naming it here would be a guess.
+		return ""
+	}
+	if plan.Duration <= 0 {
+		// No duration means no playlist, so the origin serves the unseekable
+		// fragmented-MP4 pipe and the client plays it as a plain progressive
+		// stream (ADR 0111).
 		return "video/mp4"
 	}
-	return ""
+	return playback.HLSMimeType
+}
+
+// playbackSrc is what the client fetches.
+//
+// A relayed stream is the ticket itself; a segmented one is the playlist beneath
+// it (ADR 0109). The two are different resources rather than the same one
+// behaving differently, so the difference is in the URL rather than in a header
+// the client would have to fetch before it knew what it had.
+func playbackSrc(ticket string, plan playback.Plan) string {
+	if !plan.DirectPlay && plan.Duration > 0 {
+		return "/playback/" + ticket + "/" + playback.PlaylistName
+	}
+	return "/playback/" + ticket
 }
 
 // importEnvelope is the importContent action input: a content ref to materialise

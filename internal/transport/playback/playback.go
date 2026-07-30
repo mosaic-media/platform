@@ -170,14 +170,14 @@ var relayedResponseHeaders = []string{
 // notice. A composition root builds its own registry and calls
 // HandlerWithSessions.
 func Handler(sealer *Sealer, client *http.Client, remuxer *Remuxer) http.Handler {
-	return HandlerWithSessions(sealer, client, remuxer, NewSessions(DefaultSpool))
+	return HandlerWithSessions(sealer, client, remuxer, NewSegmentSessions(DefaultSegmentDir))
 }
 
 // HandlerWithSessions is Handler over an explicit session registry, so the
 // caller can start its reaper and stop every running transcode on shutdown.
 // **This is the production constructor**; see Handler for what holding no
 // reference costs.
-func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, sessions *Sessions) http.Handler {
+func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, sessions *SegmentSessions) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
@@ -185,8 +185,13 @@ func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, 
 			return
 		}
 
-		raw := strings.TrimPrefix(r.URL.Path, "/playback/")
-		if raw == "" || strings.Contains(raw, "/") {
+		// The path is either a ticket on its own — the relayed stream — or a
+		// ticket and one HLS resource under it. Exactly one slash is allowed,
+		// and the resource is matched against a closed set below rather than
+		// used as a filename.
+		rest := strings.TrimPrefix(r.URL.Path, "/playback/")
+		raw, resource, _ := strings.Cut(rest, "/")
+		if raw == "" || strings.Contains(resource, "/") {
 			http.Error(w, "invalid playback request", http.StatusForbidden)
 			return
 		}
@@ -197,15 +202,21 @@ func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, 
 		}
 
 		// Anything the client cannot decode as-is goes through ffmpeg; anything
-		// it can is relayed untouched, which keeps byte-range seeking. The
-		// branch is here rather than in the module because this is a transform
-		// on the serving side, and a module never serves (ADR 0045).
+		// it can is relayed untouched, which keeps byte-range seeking and costs
+		// no CPU. The branch is here rather than in the module because this is a
+		// transform on the serving side, and a module never serves (ADR 0045).
 		if !t.Plan.DirectPlay {
 			if !remuxer.Available() {
 				http.Error(w, "this release needs re-encoding ("+t.Plan.Reason+") and ffmpeg is not installed", http.StatusNotImplemented)
 				return
 			}
-			serveRemuxed(w, r, remuxer, sessions, t, t.Plan, raw)
+			serveSegmented(w, r, remuxer, sessions, t, raw, resource)
+			return
+		}
+		if resource != "" {
+			// A relayed stream has no sub-resources: it is the upstream's own
+			// bytes at the ticket itself.
+			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 
