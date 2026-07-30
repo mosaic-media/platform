@@ -163,13 +163,20 @@ var relayedResponseHeaders = []string{
 //
 // Pass Client() in production; a test may pass a plain client to reach a
 // loopback fixture, exactly as the artwork proxy does.
+// It keeps a session registry nobody else can reach, so **nothing reaps or
+// stops the transcodes it starts**. That is fine for a test, whose process ends
+// in a moment, and wrong for a serving Platform: a viewer who closes the tab
+// leaves ffmpeg running and its spool on disk with no request left in which to
+// notice. A composition root builds its own registry and calls
+// HandlerWithSessions.
 func Handler(sealer *Sealer, client *http.Client, remuxer *Remuxer) http.Handler {
 	return HandlerWithSessions(sealer, client, remuxer, NewSessions(DefaultSpool))
 }
 
-// HandlerWithSessions is Handler over an explicit session registry, so a caller
-// that needs to reap or shut down running transcodes can hold one. Handler
-// keeps its own, which is right for a Platform that never stops.
+// HandlerWithSessions is Handler over an explicit session registry, so the
+// caller can start its reaper and stop every running transcode on shutdown.
+// **This is the production constructor**; see Handler for what holding no
+// reference costs.
 func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, sessions *Sessions) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {

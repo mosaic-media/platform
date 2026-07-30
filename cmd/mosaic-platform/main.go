@@ -664,6 +664,10 @@ func run() error {
 	} else {
 		boot.Warn("ffmpeg/ffprobe not found; playback relays unprobed, so a release whose audio the client cannot decode will play silently")
 	}
+	// The running transcodes, held here rather than inside the handler, because
+	// a transcode deliberately outlives the request that started it and
+	// something has to end it. Reaped on a ticker below and stopped on shutdown.
+	playbackSessions := playback.NewSessions(playback.DefaultSpool)
 
 	// Keep the install owner's authority current (ADR 0069).
 	//
@@ -809,6 +813,10 @@ func run() error {
 
 	sessionHandler := session.NewHandler(svc, artworkSigner.Rewrite, playbackSealer, playbackProber)
 	sessionHandler.Manager().StartReaper(serveCtx)
+	// The same arrangement for transcodes, and for the same reason: a playback
+	// deliberately outlives the request that started it, so the only thing that
+	// can end an abandoned one is a ticker.
+	playbackSessions.StartReaper(serveCtx)
 	// The session interceptor is the first and most important edge seam
 	// (ADR 0055): it is where a user's action enters the Platform, so it is
 	// where the Shell's trace is continued and where everything downstream —
@@ -822,7 +830,7 @@ func run() error {
 	// Each plain-HTTP surface is wrapped at its own seam and names itself, so a
 	// record says which surface produced it rather than only that it was HTTP.
 	apiMux.Handle("/artwork", telemetry.HTTPMiddleware("artwork", artwork.Handler(artworkSigner, artwork.GuardedClient())))
-	apiMux.Handle("/playback/", telemetry.HTTPMiddleware("playback", playback.Handler(playbackSealer, playback.Client(), playbackRemuxer)))
+	apiMux.Handle("/playback/", telemetry.HTTPMiddleware("playback", playback.HandlerWithSessions(playbackSealer, playback.Client(), playbackRemuxer, playbackSessions)))
 	apiMux.Handle(authPath, authConnect)
 	apiMux.Handle(sessionPath, sessionConnect)
 	// Serve the API over h2c (cleartext HTTP/2) so the two session lanes —
@@ -838,6 +846,9 @@ func run() error {
 	// the client reconnects rather than erroring (ADR 0041 stream resume, as
 	// ADR 0032's "going away" close did for the socket).
 	apiServer.RegisterOnShutdown(sessionHandler.Manager().Shutdown)
+	// And stop every running transcode, so a restart does not leave ffmpeg
+	// processes holding upstream connections open and spool files behind them.
+	apiServer.RegisterOnShutdown(playbackSessions.Close)
 
 	// Both servers feed one error channel; whichever fails first ends the
 	// serve phase and both are shut down together below.

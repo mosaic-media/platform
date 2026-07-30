@@ -191,9 +191,46 @@ func (s *Sessions) Close() {
 	}
 }
 
+// reapInterval is how often StartReaper looks for sessions to stop. It is
+// shorter than sessionIdle so a session that goes idle is reaped within about
+// one interval of becoming eligible rather than up to a whole one late.
+const reapInterval = 10 * time.Second
+
+// StartReaper runs Reap until ctx ends.
+//
+// **Nothing else stops a transcode whose viewer closed the tab.** startSession
+// detaches the process from the request that began it with
+// context.WithoutCancel — deliberately, so a player finishing one range and
+// opening the next does not kill and restart ffmpeg between them — and this is
+// the counterpart that makes the detachment bounded rather than permanent.
+//
+// Without it the reaping this type implements never runs: Reap and Close were
+// written, tested and called from nowhere, so an abandoned playback left ffmpeg
+// pulling the whole release from the upstream into a spool that was never
+// removed. Wire it once, from the composition root, beside the API server's
+// serve context.
+func (s *Sessions) StartReaper(ctx context.Context) {
+	if !s.usable() {
+		return
+	}
+	go func() {
+		t := time.NewTicker(reapInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-t.C:
+				s.Reap(now)
+			}
+		}
+	}()
+}
+
 // Reap stops sessions whose last reader left more than sessionIdle ago. A
-// Platform calls it periodically; nothing else bounds a session whose viewer
-// simply closed the tab, since there is no request in which to notice.
+// Platform calls it periodically through StartReaper; nothing else bounds a
+// session whose viewer simply closed the tab, since there is no request in
+// which to notice.
 func (s *Sessions) Reap(now time.Time) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
