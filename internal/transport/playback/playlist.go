@@ -6,6 +6,7 @@ package playback
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -26,36 +27,32 @@ import (
 // matters in a slice whose every previous design passed its unit tests and
 // failed in a browser.
 
-// segmentSeconds is the nominal length of one segment.
+// encodedSegmentLength is the segment length the origin chooses when it is
+// re-encoding the video and therefore places the keyframes itself.
 //
-// Six, following Jellyfin and `remux`, and the reason is the copy case rather
-// than a preference. Where video is re-encoded the boundaries are placed exactly
-// with -force_key_frames and any value works. Where video is **copied** there is
-// no such control: ffmpeg cuts at the next keyframe in the source, and a release
-// with keyframes ten seconds apart asked for four-second segments produces
-// ten-second ones — the playlist and the output then disagree everywhere. Six
-// sits above most encoders' keyframe intervals, so the drift is small.
+// Six, following Jellyfin and `remux`. It bounds two costs in opposite
+// directions: a seek to an unproduced position costs one ffmpeg restart, so
+// shorter segments make a scrub cheaper, while every segment costs a container
+// header and a request, so longer ones make a play cheaper. Neither is near a
+// cliff at six.
 //
-// It also bounds two costs in opposite directions. A seek to an unproduced
-// position costs one ffmpeg restart, so shorter segments make a scrub cheaper;
-// every segment costs a container header and a request, so longer ones make a
-// play cheaper. Neither cost is near a cliff at six.
-const segmentSeconds = 6
-
-// segmentLength is segmentSeconds as a duration.
-const segmentLength = segmentSeconds * time.Second
+// **It applies only where the boundaries are ours** (ADR 0110). Where the video
+// is copied the source's keyframe spacing decides, and this constant has no say
+// — asking for six seconds of a release with ten-second keyframes produces
+// ten-second segments and a playlist describing positions that do not exist.
+const encodedSegmentLength = 6 * time.Second
 
 // segmentCount is how many segments a release of this length divides into.
 //
 // The last one is short whenever the duration is not a whole multiple, and it is
 // still a segment: dropping it would make the final seconds of every film
 // unreachable, which is the failure the advertised-length estimate already had.
-func segmentCount(total time.Duration) int {
-	if total <= 0 {
+func segmentCount(total, length time.Duration) int {
+	if total <= 0 || length <= 0 {
 		return 0
 	}
-	n := int(total / segmentLength)
-	if total%segmentLength > 0 {
+	n := int(total / length)
+	if total%length > 0 {
 		n++
 	}
 	return n
@@ -64,24 +61,24 @@ func segmentCount(total time.Duration) int {
 // segmentStart is where segment n begins in the release. It is the value handed
 // to ffmpeg's -ss, and the reason a segment index is a position rather than an
 // opaque name.
-func segmentStart(n int) time.Duration {
-	if n <= 0 {
+func segmentStart(n int, length time.Duration) time.Duration {
+	if n <= 0 || length <= 0 {
 		return 0
 	}
-	return time.Duration(n) * segmentLength
+	return time.Duration(n) * length
 }
 
 // segmentDuration is how long segment n runs, which is a full segment except
 // for the last.
-func segmentDuration(n int, total time.Duration) time.Duration {
-	start := segmentStart(n)
-	if start >= total {
+func segmentDuration(n int, total, length time.Duration) time.Duration {
+	start := segmentStart(n, length)
+	if start >= total || length <= 0 {
 		return 0
 	}
-	if remaining := total - start; remaining < segmentLength {
+	if remaining := total - start; remaining < length {
 		return remaining
 	}
-	return segmentLength
+	return length
 }
 
 // mediaPlaylistType is what the origin serves a playlist as. A client that gets
@@ -107,8 +104,8 @@ const mediaPlaylistType = "application/vnd.apple.mpegurl"
 // Declaring the whole thing up front is what makes an unproduced position
 // seekable, and it is honest: the segment list is derived from a duration that
 // was measured, not from output that has been observed.
-func mediaPlaylist(total time.Duration, segmentURI func(n int) string) string {
-	count := segmentCount(total)
+func mediaPlaylist(total, length time.Duration, segmentURI func(n int) string) string {
+	count := segmentCount(total, length)
 
 	var b strings.Builder
 	b.WriteString("#EXTM3U\n")
@@ -116,14 +113,15 @@ func mediaPlaylist(total time.Duration, segmentURI func(n int) string) string {
 	// origin emits and what Apple's authoring rules require for HEVC.
 	b.WriteString("#EXT-X-VERSION:7\n")
 	b.WriteString("#EXT-X-PLAYLIST-TYPE:VOD\n")
-	// The integer ceiling of the longest segment, which the spec requires be no
-	// less than any EXTINF. A short final segment cannot raise it.
+	// The ceiling the spec requires be no less than any EXTINF, rounded up —
+	// a measured keyframe interval is rarely a whole number of seconds, and a
+	// truncated ceiling would sit under the segments it is supposed to bound.
 	//
 	// Sprintf rather than Fprintf throughout, because ADR 0053's gate bans
 	// every fmt function that emits — deliberately coarsely, since it cannot
 	// tell a strings.Builder from os.Stderr — and Sprintf is the formatter it
 	// leaves alone.
-	b.WriteString(fmt.Sprintf("#EXT-X-TARGETDURATION:%d\n", segmentSeconds))
+	b.WriteString(fmt.Sprintf("#EXT-X-TARGETDURATION:%d\n", int(math.Ceil(length.Seconds()))))
 	b.WriteString("#EXT-X-MEDIA-SEQUENCE:0\n")
 	// Every segment carries its own keyframe, so a player may start at any of
 	// them — which is the property that makes seeking work at all here.
@@ -131,7 +129,7 @@ func mediaPlaylist(total time.Duration, segmentURI func(n int) string) string {
 	b.WriteString(fmt.Sprintf("#EXT-X-MAP:URI=%q\n", segmentURI(initSegment)))
 
 	for n := range count {
-		b.WriteString(fmt.Sprintf("#EXTINF:%.6f,\n", segmentDuration(n, total).Seconds()))
+		b.WriteString(fmt.Sprintf("#EXTINF:%.6f,\n", segmentDuration(n, total, length).Seconds()))
 		b.WriteString(segmentURI(n))
 		b.WriteString("\n")
 	}

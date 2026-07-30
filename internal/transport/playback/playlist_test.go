@@ -21,6 +21,11 @@ func testURI(n int) string {
 	return strconv.Itoa(n) + ".m4s"
 }
 
+// segLen is the fixture segment length. It is a value the tests choose because
+// in production it is measured from the source rather than chosen (ADR 0110);
+// the arithmetic below is the same either way.
+const segLen = encodedSegmentLength
+
 // TestTheLastPartialSegmentIsListed is the arithmetic that decides whether the
 // end of a film is reachable.
 //
@@ -35,14 +40,14 @@ func TestTheLastPartialSegmentIsListed(t *testing.T) {
 	}{
 		{0, 0},
 		{-1, 0},
-		{time.Second, 1},                     // shorter than one segment is still one segment
-		{segmentLength, 1},                   // exactly one, with no empty second
-		{segmentLength + time.Nanosecond, 2}, // a nanosecond over needs another
-		{2 * segmentLength, 2},
+		{time.Second, 1},              // shorter than one segment is still one segment
+		{segLen, 1},                   // exactly one, with no empty second
+		{segLen + time.Nanosecond, 2}, // a nanosecond over needs another
+		{2 * segLen, 2},
 		{66*time.Minute + 30*time.Second, 665}, // 3990s / 6
 	}
 	for _, c := range cases {
-		if got := segmentCount(c.total); got != c.want {
+		if got := segmentCount(c.total, segLen); got != c.want {
 			t.Errorf("segmentCount(%v) = %d, want %d", c.total, got, c.want)
 		}
 	}
@@ -58,15 +63,15 @@ func TestSegmentDurationsSumToTheRelease(t *testing.T) {
 		90 * time.Minute,
 		66*time.Minute + 30*time.Second,
 		23*time.Minute + 1*time.Second,
-		segmentLength / 2,
+		segLen / 2,
 	} {
 		var sum time.Duration
-		for n := range segmentCount(total) {
-			d := segmentDuration(n, total)
+		for n := range segmentCount(total, segLen) {
+			d := segmentDuration(n, total, segLen)
 			if d <= 0 {
 				t.Fatalf("segment %d of %v has duration %v — a listed segment must have length", n, total, d)
 			}
-			if d > segmentLength {
+			if d > segLen {
 				t.Errorf("segment %d of %v is %v, longer than the advertised TARGETDURATION", n, total, d)
 			}
 			sum += d
@@ -81,16 +86,16 @@ func TestSegmentDurationsSumToTheRelease(t *testing.T) {
 // index is not a name: it is the -ss value, and it is what makes ADR 0108's
 // restart arithmetic survive into a segmented design.
 func TestSegmentStartIsWhereFFmpegIsToldToSeek(t *testing.T) {
-	if got := segmentStart(0); got != 0 {
-		t.Errorf("segmentStart(0) = %v, want 0 — the first segment is the start of the film", got)
+	if got := segmentStart(0, segLen); got != 0 {
+		t.Errorf("segmentStart(0, segLen) = %v, want 0 — the first segment is the start of the film", got)
 	}
-	if got := segmentStart(100); got != 100*segmentLength {
-		t.Errorf("segmentStart(100) = %v, want %v", got, 100*segmentLength)
+	if got := segmentStart(100, segLen); got != 100*segLen {
+		t.Errorf("segmentStart(100, segLen) = %v, want %v", got, 100*segLen)
 	}
 	// Defensive rather than expected: a negative index is a malformed request,
 	// and clamping it to the start beats handing ffmpeg a negative -ss.
-	if got := segmentStart(-5); got != 0 {
-		t.Errorf("segmentStart(-5) = %v, want 0", got)
+	if got := segmentStart(-5, segLen); got != 0 {
+		t.Errorf("segmentStart(-5, segLen) = %v, want 0", got)
 	}
 }
 
@@ -103,9 +108,9 @@ func TestSegmentStartIsWhereFFmpegIsToldToSeek(t *testing.T) {
 // Content-Length was synthesising and could not get right.
 func TestThePlaylistIsCompleteBeforeAnythingIsProduced(t *testing.T) {
 	const total = 90 * time.Minute
-	got := mediaPlaylist(total, testURI)
+	got := mediaPlaylist(total, segLen, testURI)
 
-	want := segmentCount(total)
+	want := segmentCount(total, segLen)
 	if n := strings.Count(got, ".m4s"); n != want {
 		t.Errorf("playlist lists %d segments, want all %d", n, want)
 	}
@@ -126,7 +131,7 @@ func TestThePlaylistIsCompleteBeforeAnythingIsProduced(t *testing.T) {
 // before it will parse the rest. Each is cheap to omit and each fails as an
 // immediate, unexplained decode error rather than as a bad playlist.
 func TestThePlaylistDeclaresWhatFMP4Needs(t *testing.T) {
-	got := mediaPlaylist(30*time.Minute, testURI)
+	got := mediaPlaylist(30*time.Minute, segLen, testURI)
 
 	for _, want := range []string{
 		// Version 7 is the floor for fMP4 segments.
@@ -135,7 +140,7 @@ func TestThePlaylistDeclaresWhatFMP4Needs(t *testing.T) {
 		// set up, whatever the segments contain.
 		`#EXT-X-MAP:URI="init.mp4"`,
 		// The ceiling must be no less than any EXTINF.
-		"#EXT-X-TARGETDURATION:" + strconv.Itoa(segmentSeconds),
+		"#EXT-X-TARGETDURATION:6",
 		"#EXT-X-INDEPENDENT-SEGMENTS",
 	} {
 		if !strings.Contains(got, want) {
@@ -156,7 +161,7 @@ func TestThePlaylistDeclaresWhatFMP4Needs(t *testing.T) {
 // would tell a player the film is zero seconds long. The caller serves the
 // unseekable pipe instead, exactly as it does today.
 func TestAnUnprobedReleaseGetsNoPlaylist(t *testing.T) {
-	got := mediaPlaylist(0, testURI)
+	got := mediaPlaylist(0, segLen, testURI)
 	if strings.Contains(got, ".m4s") {
 		t.Errorf("a release with no duration produced segments:\n%s", got)
 	}
