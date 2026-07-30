@@ -150,21 +150,51 @@ func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1
 // attaches.
 func (s *Service) attachResolvedStreams(ctx context.Context, caller v1.Caller, nodeID v1.NodeID, moduleID string, streams []v1.StreamLink, result *v1.ImportResult) {
 	for i, stream := range streams {
-		if _, err := s.AttachContentPart(ctx, v1.AttachContentPartCommand{
-			Caller: caller, NodeID: nodeID, Role: v1.PartEdition,
-			EditionLabel: editionLabelOf(stream),
-			// Preserves the provider's own ranking, so a consumer that expresses
-			// no preference still gets the order the source intended.
-			NaturalOrder: float64(i),
-			Location:     stream.Location,
-			SizeBytes:    stream.SizeBytes,
-		}); err != nil {
+		cmd := partCommandFor(nodeID, i, stream)
+		cmd.Caller = caller
+		if _, err := s.AttachContentPart(ctx, cmd); err != nil {
 			telemetry.From(ctx).Warn("stream enrichment could not attach a part",
 				telemetry.String("node_id", string(nodeID)),
 				telemetry.String("module", moduleID), telemetry.Err(err))
 			continue
 		}
 		result.Parts++
+	}
+}
+
+// partCommandFor translates one resolved candidate into the command that
+// attaches it.
+//
+// **It is a separate function because the translation is where this pass lost
+// what a module told it, and nothing could see that happening.** The
+// descriptive fields exist on `StreamLink` and on `AttachContentPartCommand`
+// under the same names and the same types — deliberately, so that moving a
+// candidate onto a Part is a copy rather than a translation — and this pass
+// carried four of them and dropped the rest. A module parsed the container and
+// both codecs at its own boundary (ADR 0051), and every candidate it resolved
+// arrived at the Platform saying less than its source had said, so the probe
+// was the only thing that ever knew what a release was.
+//
+// Naming the mapping gives it somewhere a test can reach without standing up a
+// Service and a boundary, which is why the drop survived: enrichment had no test
+// at all.
+func partCommandFor(nodeID v1.NodeID, order int, stream v1.StreamLink) v1.AttachContentPartCommand {
+	return v1.AttachContentPartCommand{
+		NodeID: nodeID, Role: v1.PartEdition,
+		EditionLabel: editionLabelOf(stream),
+		// Preserves the provider's own ranking, so a consumer that expresses
+		// no preference still gets the order the source intended.
+		NaturalOrder: float64(order),
+		Location:     stream.Location,
+		SizeBytes:    stream.SizeBytes,
+		// The three the source knew and this pass discarded. They are a parse of
+		// release text rather than a measurement — the probe still settles what a
+		// release actually is (ADR 0050) — but they are what makes a candidate
+		// list rankable before anything has been fetched, which is what item 6's
+		// selection needs and had nothing to read.
+		Container:  stream.Container,
+		VideoCodec: stream.VideoCodec,
+		AudioCodec: stream.AudioCodec,
 	}
 }
 
