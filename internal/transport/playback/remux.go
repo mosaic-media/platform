@@ -139,6 +139,7 @@ func (r *Remuxer) StreamFrom(ctx context.Context, upstreamURL string, headers ma
 
 	ctx, cancel := context.WithCancel(ctx)
 	args := []string{"-hide_banner", "-loglevel", "error"}
+	args = append(args, reconnectArgs(upstreamURL)...)
 	if h := ffmpegHeaderArg(headers); h != "" {
 		args = append(args, "-headers", h)
 	}
@@ -170,6 +171,44 @@ func (r *Remuxer) StreamFrom(ctx context.Context, upstreamURL string, headers ma
 		_ = cmd.Wait()
 	}
 	return stdout, stop, nil
+}
+
+// reconnectArgs lets ffmpeg re-establish a dropped upstream connection instead
+// of ending the transcode.
+//
+// **The remux path holds one HTTP connection open for the length of a film.** A
+// debrid CDN closing it after ninety minutes is ordinary rather than
+// exceptional, and without these the transcode simply ends: the spool stops
+// growing, readers see a clean EOF, and the viewer gets a stream that stops
+// mid-scene with nothing anywhere reporting an error. The relay path already
+// survives this, because a media element re-requests a range and the origin
+// opens a fresh upstream request for it.
+//
+// Only for http and https, and that guard is load-bearing rather than tidiness:
+// these are options of the HTTP protocol, and ffmpeg exits with "Option
+// reconnect not found" when nothing consumes one. A module resolving to any
+// other scheme must not be made unplayable by a flag meant to make it more
+// reliable.
+//
+// **`-reconnect_at_eof` is deliberately not among them**, though the reference
+// implementations pass it. It treats end-of-file as an error worth reconnecting
+// over, which is right for a live stream and wrong for a film: these inputs are
+// finite and range-capable, so ffmpeg knows the real length, and reconnecting at
+// a legitimate end would turn the last frame into a retry loop.
+func reconnectArgs(upstreamURL string) []string {
+	lower := strings.ToLower(upstreamURL)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return nil
+	}
+	return []string{
+		"-reconnect", "1",
+		// Streamed responses too: the origin asks for a range and reads it to the
+		// end, which ffmpeg treats as non-seekable once it is reading.
+		"-reconnect_streamed", "1",
+		// Bounded backoff. A source that is genuinely gone should fail the play
+		// rather than retry behind a viewer watching a still frame.
+		"-reconnect_delay_max", "5",
+	}
 }
 
 // ffmpegHeaderArg renders request headers in the CRLF-delimited form ffmpeg's

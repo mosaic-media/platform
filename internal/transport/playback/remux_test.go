@@ -144,6 +144,64 @@ func TestRemuxedResponseIsNotSeekable(t *testing.T) {
 	}
 }
 
+// TestARemoteUpstreamIsReconnectedTo covers the failure that ends a long play
+// silently: the remux path holds one HTTP connection for the length of a film,
+// and a debrid CDN closing it partway through is ordinary. Without these flags
+// ffmpeg stops, readers see a clean EOF, and the stream ends mid-scene with
+// nothing reporting an error.
+//
+// The flags must precede -i, because they configure the input protocol.
+func TestARemoteUpstreamIsReconnectedTo(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "args")
+	s := newTestSealer(t)
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", Plan{Reason: "eac3"})
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "frag", argsFile))).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw, nil))
+
+	got, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("ffmpeg was never started: %v", err)
+	}
+	line := string(got)
+	for _, want := range []string{"-reconnect 1", "-reconnect_streamed 1", "-reconnect_delay_max 5"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("ffmpeg args %q lack %q — a dropped upstream ends the film instead of resuming", line, want)
+		}
+	}
+	// Deliberately absent: it treats a legitimate end-of-file as an error worth
+	// retrying, which is right for a live stream and turns the last frame of a
+	// finite release into a reconnect loop.
+	if strings.Contains(line, "-reconnect_at_eof") {
+		t.Errorf("ffmpeg args %q carry -reconnect_at_eof; these inputs are finite and it would retry a real end of stream", line)
+	}
+	if strings.Index(line, "-reconnect") > strings.Index(line, "-i ") {
+		t.Errorf("ffmpeg args %q put the reconnect flags after -i, where they configure nothing", line)
+	}
+}
+
+// TestANonHTTPUpstreamCarriesNoReconnectFlags is the guard, and it is not
+// tidiness: -reconnect is an option of the HTTP protocol, and ffmpeg exits with
+// "Option reconnect not found" when nothing consumes one. Passing it
+// unconditionally would make every non-HTTP resolution unplayable in the name of
+// making HTTP ones more reliable.
+func TestANonHTTPUpstreamCarriesNoReconnectFlags(t *testing.T) {
+	for _, url := range []string{"file:///srv/media/movie.mkv", "rtsp://box.local/live", "srt://host:9000"} {
+		if got := reconnectArgs(url); got != nil {
+			t.Errorf("reconnectArgs(%q) = %v, want none — ffmpeg exits when the protocol cannot consume them", url, got)
+		}
+	}
+	// Case-insensitively, because a scheme is not case-sensitive and a module is
+	// free to hand back the one it was given.
+	if got := reconnectArgs("HTTPS://cdn.example/movie.mkv"); len(got) == 0 {
+		t.Error("reconnectArgs did not recognise an upper-case https scheme")
+	}
+}
+
 // TestFFmpegHeaderArgUsesCRLF guards the form ffmpeg's -headers flag needs: a
 // credentialed upstream must be reachable by the remux path on the same terms
 // as the relay path, and the delimiter is what makes that work.
