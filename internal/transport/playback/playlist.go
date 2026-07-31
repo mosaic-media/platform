@@ -150,3 +150,113 @@ func mediaPlaylist(total, length time.Duration, segmentURI func(n int) string) s
 // media segments, so one function renders every URI in the playlist and they
 // cannot drift apart.
 const initSegment = -1
+
+// videoPlaylistName is where the video's own media playlist moves to once a
+// master exists above it. Without subtitles there is no master and the media
+// playlist keeps the entry-point name, so a release with none is served exactly
+// the bytes it was before (ADR 0113).
+const videoPlaylistName = "v.m3u8"
+
+// masterPlaylist declares the video rendition and one subtitle rendition per
+// offered track (ADR 0113).
+//
+// A master is emitted only when there are subtitles to declare. The comment on
+// mediaPlaylist gives the reasons not to have one — a round trip, and a CODECS
+// string the origin can only guess at before the transcode runs — and neither is
+// answered by this; they are outweighed. **A subtitle rendition is the one thing
+// a player cannot be told about any other way**, and being told about it through
+// HLS is what makes subtitles cost no client change at all: the player already
+// has a menu, a track selector and a renderer for them.
+//
+// CODECS is still omitted, so the objection that mattered is avoided rather than
+// accepted: a wrong CODECS makes a browser refuse a stream, and an absent one
+// makes it look at what arrives. BANDWIDTH is not optional in the grammar, so it
+// is derived from the source's own size and duration — the honest estimate,
+// which is used by nothing here because there is no ladder to choose from.
+func masterPlaylist(bandwidth int, subtitles []SubtitleDelivery) string {
+	var b strings.Builder
+	b.WriteString("#EXTM3U\n")
+	b.WriteString("#EXT-X-VERSION:7\n")
+	b.WriteString("#EXT-X-INDEPENDENT-SEGMENTS\n")
+
+	for i, s := range subtitles {
+		b.WriteString("#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\"")
+		b.WriteString(fmt.Sprintf(",NAME=%q", s.Label))
+		if s.Language != "" {
+			b.WriteString(fmt.Sprintf(",LANGUAGE=%q", s.Language))
+		}
+		// DEFAULT is the whole delivery of ADR 0112: the escalation decided
+		// which track comes on, and this attribute is where that decision
+		// reaches the player. AUTOSELECT tracks it, so a client choosing by the
+		// system language does not overrule a choice the viewer already made.
+		b.WriteString(",DEFAULT=" + yesNo(s.Default))
+		b.WriteString(",AUTOSELECT=" + yesNo(s.Default))
+		// FORCED means the player may show this without the viewer asking, which
+		// is exactly what a forced track is for. It is a property of the track
+		// rather than of the choice, so it is set on every forced rendition and
+		// not only on the default one.
+		b.WriteString(",FORCED=" + yesNo(s.Forced))
+		b.WriteString(fmt.Sprintf(",URI=%q\n", subtitlePlaylistName(i)))
+	}
+
+	b.WriteString(fmt.Sprintf("#EXT-X-STREAM-INF:BANDWIDTH=%d,SUBTITLES=\"subs\"\n", bandwidth))
+	b.WriteString(videoPlaylistName + "\n")
+	return b.String()
+}
+
+// yesNo renders an HLS attribute's enumerated boolean, which is spelled out
+// rather than 0/1 and is not quoted.
+func yesNo(v bool) string {
+	if v {
+		return "YES"
+	}
+	return "NO"
+}
+
+// masterBandwidth estimates the stream's bit rate for the master's required
+// BANDWIDTH attribute.
+//
+// The source's size over its duration, which is what the release actually is on
+// the wire. It is wrong for a re-encoded stream — that is the same unknowable
+// the byte-addressed origin foundered on — and here it costs nothing, because a
+// master with one variant offers no choice for a wrong number to influence. The
+// fallback is a plausible 1080p rate for the case where the source reported no
+// size, and is equally inconsequential.
+func masterBandwidth(sourceBytes int64, duration time.Duration) int {
+	if sourceBytes <= 0 || duration <= 0 {
+		return 8_000_000
+	}
+	return int(float64(sourceBytes) * 8 / duration.Seconds())
+}
+
+// subtitlePlaylist renders one subtitle rendition, on its own grid.
+//
+// It describes the same running time as the video and divides it differently,
+// which HLS permits and which is the point: the segment length here is chosen
+// against the cost of extracting text out of a container rather than against the
+// cost of seeking video.
+//
+// There is no EXT-X-MAP. WebVTT segments are self-describing — each is a
+// complete little document with its own header — so there is no initialisation
+// segment to point at, which is also why they can be produced by a process that
+// starts anywhere in the release.
+func subtitlePlaylist(total time.Duration, track int) string {
+	count := segmentCount(total, subtitleWindow)
+
+	var b strings.Builder
+	b.WriteString("#EXTM3U\n")
+	b.WriteString("#EXT-X-VERSION:7\n")
+	b.WriteString("#EXT-X-PLAYLIST-TYPE:VOD\n")
+	b.WriteString(fmt.Sprintf("#EXT-X-TARGETDURATION:%d\n", int(math.Ceil(subtitleWindow.Seconds()))))
+	b.WriteString("#EXT-X-MEDIA-SEQUENCE:0\n")
+	for n := range count {
+		b.WriteString(fmt.Sprintf("#EXTINF:%.6f,\n", segmentDuration(n, total, subtitleWindow).Seconds()))
+		b.WriteString(subtitleSegmentName(track, n))
+		b.WriteString("\n")
+	}
+	b.WriteString("#EXT-X-ENDLIST\n")
+	return b.String()
+}
+
+// vttMimeType is what a WebVTT segment is served as.
+const vttMimeType = "text/vtt"

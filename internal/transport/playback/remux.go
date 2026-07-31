@@ -261,6 +261,69 @@ func (r *Remuxer) Segment(ctx context.Context, upstreamURL string, headers map[s
 	return stop, pause, resume, nil
 }
 
+// Subtitles extracts one window of one embedded subtitle track as WebVTT
+// (ADR 0113).
+//
+// It is the same arithmetic the video segments use — a start derived from an
+// index, a length, `-copyts` so the cues carry the times the source gave them —
+// applied to a stream that costs almost nothing to produce and quite a lot to
+// reach. **The cost is the container, not the text.** Subtitle packets are
+// interleaved with the video, so getting a minute of dialogue means reading a
+// minute of pictures, and `-ss` before `-i` is what keeps that to a range
+// request over the window rather than a read from the beginning of the release.
+//
+// `-vn -an` drop the video and audio outputs. They do not stop ffmpeg reading
+// the container, and nothing can; what they stop is it spending any time on
+// frames nobody will see.
+//
+// The result is small enough — a minute of dialogue is a few hundred bytes — to
+// go straight to the response, which is why nothing here writes a file. The
+// segment spool exists because a video segment must be complete before it is
+// served; a WebVTT segment has no such constraint, so the honest thing is to not
+// invent a spool for it.
+func (r *Remuxer) Subtitles(ctx context.Context, upstreamURL string, headers map[string]string, index, n int) (io.ReadCloser, func(), error) {
+	if !r.Available() {
+		return nil, nil, ErrRemuxUnavailable
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	args := []string{"-hide_banner", "-loglevel", "error"}
+	args = append(args, reconnectArgs(upstreamURL)...)
+	if h := ffmpegHeaderArg(headers); h != "" {
+		args = append(args, "-headers", h)
+	}
+	if offset := segmentStart(n, subtitleWindow); offset > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(offset.Seconds(), 'f', 3, 64))
+	}
+	// **`-to`, not `-t`, and the difference is not stylistic.** `-t` bounds the
+	// output's *duration*, which `-copyts` has already rebased onto the source's
+	// clock — so a window starting at 60 s with `-t 60` stops the instant it
+	// starts and every window but the first comes out empty. Measured: window 0
+	// yielded six cues and window 1 yielded none. `-to` is the absolute form and
+	// is the one that composes with `-copyts`.
+	args = append(args, "-copyts", "-i", upstreamURL,
+		"-to", strconv.FormatFloat(segmentStart(n+1, subtitleWindow).Seconds(), 'f', 3, 64),
+		"-vn", "-an",
+		"-map", fmt.Sprintf("0:%d", index),
+		"-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+
+	cmd := exec.CommandContext(ctx, r.binary, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	stop := func() {
+		cancel()
+		_ = cmd.Wait()
+	}
+	return stdout, stop, nil
+}
+
 // ffmpegHeaderArg renders request headers in the CRLF-delimited form ffmpeg's
 // -headers flag expects, so a credentialed upstream is reachable by the remux
 // path on the same terms as the relay path.
@@ -426,19 +489,37 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 	length := segmentLengthFor(t.Plan)
 
 	switch {
-	case resource == "" || resource == PlaylistName:
-		w.Header().Set("Content-Type", mediaPlaylistType)
+	// The entry point is a master when there are subtitles to declare and the
+	// media playlist itself when there are not, so a release with none is served
+	// exactly what it was before subtitles existed — no extra round trip bought
+	// for a rendition list that would be empty (ADR 0113).
+	case (resource == "" || resource == PlaylistName) && len(t.Plan.Subtitles) > 0:
+		writePlaylist(w, r, masterPlaylist(
+			masterBandwidth(t.Plan.SourceBytes, t.Plan.Duration), t.Plan.Subtitles))
+
+	case resource == "" || resource == PlaylistName || resource == videoPlaylistName:
 		// The playlist is derived from the probed duration and nothing else, so
 		// it is identical on every request for this ticket and costs nothing to
 		// re-render. It is still not cached: the ticket behind it expires.
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusOK)
-		if r.Method == http.MethodHead {
-			return
-		}
-		_, _ = io.WriteString(w, mediaPlaylist(t.Plan.Duration, length, func(n int) string {
+		writePlaylist(w, r, mediaPlaylist(t.Plan.Duration, length, func(n int) string {
 			return segmentName(n)
 		}))
+
+	case strings.HasSuffix(resource, ".m3u8"):
+		i, ok := subtitlePlaylistOf(resource)
+		if !ok || i >= len(t.Plan.Subtitles) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		writePlaylist(w, r, subtitlePlaylist(t.Plan.Duration, i))
+
+	case strings.HasSuffix(resource, ".vtt"):
+		i, n, ok := subtitleSegmentOf(resource)
+		if !ok || i >= len(t.Plan.Subtitles) || n >= segmentCount(t.Plan.Duration, subtitleWindow) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		serveSubtitleSegment(w, r, rx, t, t.Plan.Subtitles[i].Index, n)
 
 	case resource == segmentName(initSegment):
 		body, size, err := sessions.OpenInit(r.Context(), rx, key, t.URL, t.Headers, t.Plan, length)
@@ -472,13 +553,58 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 	}
 }
 
-// PlaylistName is the one playlist the origin serves. There is no master: one
-// rendition means a master would add a round trip and a CODECS string the origin
-// can only guess at before the transcode runs.
+// PlaylistName is the playlist a client is pointed at. What it holds depends on
+// the release: the video's own segment list when there are no subtitles, and a
+// master declaring the video and each subtitle rendition when there are
+// (ADR 0113). The client asks for the same URL either way.
 //
 // Exported because the transport that mints a ticket has to point the client at
 // it, and a second spelling of the same path is exactly the drift this avoids.
 const PlaylistName = "index.m3u8"
+
+// writePlaylist sends a playlist of either kind. Nothing here is cached: the
+// ticket behind it expires, and a playlist that outlived its ticket would point
+// a player at resources it can no longer fetch.
+func writePlaylist(w http.ResponseWriter, r *http.Request, body string) {
+	w.Header().Set("Content-Type", mediaPlaylistType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return
+	}
+	_, _ = io.WriteString(w, body)
+}
+
+// serveSubtitleSegment extracts and sends one window of one subtitle track.
+//
+// It streams rather than buffering, and answers 200 with no Content-Length: the
+// output is a few hundred bytes and its size is not known until ffmpeg has
+// finished, so buffering to learn a number nobody needs would only add latency.
+//
+// **An extraction that produces nothing is a success, not an error.** A minute
+// of a film with no dialogue in it is an ordinary thing, and the WebVTT header
+// alone is a valid document meaning exactly that. Only a failure to start ffmpeg
+// is a failure, and it is the one case where a player showing no subtitles for
+// the rest of the film should instead be told the origin could not produce them.
+func serveSubtitleSegment(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket, index, n int) {
+	body, stop, err := rx.Subtitles(r.Context(), t.URL, t.Headers, index, n)
+	if err != nil {
+		http.Error(w, "subtitles unavailable", http.StatusBadGateway)
+		return
+	}
+	defer stop()
+	defer body.Close()
+
+	w.Header().Set("Content-Type", vttMimeType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return
+	}
+	if _, err := io.Copy(w, body); err != nil {
+		return
+	}
+}
 
 // segmentLengthFor is how long a segment runs for this plan.
 //

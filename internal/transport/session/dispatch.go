@@ -253,6 +253,12 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	// names what someone wants when they got the language they asked for; when
 	// they did not, this is where the Platform notices and escalates.
 	subtitles := langs.SubtitlesFor(plan.AudioLanguage)
+	// Offered as HLS renditions, which is why subtitles cost no client change
+	// (ADR 0113). Only on the transcoded path: a direct-played release is
+	// relayed byte for byte, so there is no playlist to declare a rendition in.
+	if probed && !plan.DirectPlay {
+		plan.Subtitles = playback.DecideSubtitles(info.Subtitles, subtitles)
+	}
 
 	// One record saying what was chosen and what will happen to it. Playback has
 	// three independent places to go wrong — selection, probing, and the encode

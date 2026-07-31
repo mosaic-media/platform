@@ -82,6 +82,17 @@ type Plan struct {
 	// relay the upstream bytes, keeping byte-range seeking for free.
 	DirectPlay bool
 
+	// Subtitles are the embedded tracks this playback offers, and which of them
+	// comes on by itself (ADR 0112, ADR 0113). Empty when the release has none,
+	// when it was not probed, or when the stream is relayed untouched — a
+	// direct-played release is the upstream's own bytes, and the origin adds no
+	// wrapper it could hang a rendition off.
+	//
+	// It travels sealed in the ticket like the rest of the plan, so the origin
+	// answers a subtitle request without re-probing and a viewer's preference
+	// cannot change under a playback that is already running.
+	Subtitles []SubtitleDelivery `json:"s,omitempty"`
+
 	// Reason is a short human explanation of why work is needed, for logs and
 	// for telling a user what is happening rather than showing a spinner.
 	Reason string
