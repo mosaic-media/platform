@@ -145,3 +145,49 @@ func TestBoolPreferenceFallsBackRatherThanFailing(t *testing.T) {
 		t.Fatal("a preference set to true must read back true")
 	}
 }
+
+// TestLanguagePreferenceIsTheCallersOwnAndCannotFailAPlay covers the two claims
+// the boundary exemption for LanguagePreferenceFor rests on (ADR 0112), because
+// an exemption written in a comment and never exercised is an assertion rather
+// than a property.
+//
+// The first is scoping: it takes no target-user argument and answers from the
+// caller's own row, so one viewer's language never reaches another's playback.
+// The second is that it degrades instead of refusing — this is read on the path
+// that starts a play, and a taste setting must never be the reason someone
+// cannot watch something.
+func TestLanguagePreferenceIsTheCallersOwnAndCannotFailAPlay(t *testing.T) {
+	ctx := context.Background()
+	svc, db, _, session := importFixture(t)
+	caller := v1.Caller{Session: string(session)}
+
+	// Unset reads as nothing, which the transport turns into the default.
+	if got := svc.LanguagePreferenceFor(ctx, caller); got != nil {
+		t.Fatalf("unset = %q, want nil so the caller takes the default", got)
+	}
+
+	stored := []byte(`{"audio":["spa"],"subtitles":["eng"],"subtitleMode":"full"}`)
+	if _, err := svc.SetUserPreference(ctx, app.SetUserPreferenceCommand{
+		Caller: caller, Key: domain.PreferenceLanguages, Value: stored,
+	}); err != nil {
+		t.Fatalf("SetUserPreference: %v", err)
+	}
+	if got := svc.LanguagePreferenceFor(ctx, caller); string(got) != string(stored) {
+		t.Fatalf("read back %q, want the stored document %q", got, stored)
+	}
+
+	// A second viewer who has set nothing gets nothing — not the first one's
+	// Spanish.
+	db.seedUser(domain.User{ID: "u-2", Username: "other", Status: domain.UserActive})
+	db.seedSession("s-2", "u-2", time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC))
+	db.seedRole("u-2", adminRole())
+	if got := svc.LanguagePreferenceFor(ctx, v1.Caller{Session: "s-2"}); got != nil {
+		t.Fatalf("another viewer read %q, want nil — a language preference is one person's", got)
+	}
+
+	// An unknown session is nil rather than a panic or an error, because the
+	// alternative is a play that refused over a setting.
+	if got := svc.LanguagePreferenceFor(ctx, v1.Caller{Session: "nobody"}); got != nil {
+		t.Fatalf("unauthenticated = %q, want nil", got)
+	}
+}

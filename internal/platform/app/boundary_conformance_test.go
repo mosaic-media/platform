@@ -96,6 +96,19 @@ var boundaryExempt = map[string]string{
 	// treating the answer as authority is precisely the confusion ADR 0103
 	// forbids, because a hidden row is not evidence of a permission.
 	"HomeCompositionFor": "display preference; authenticates but does not authorize, returns no content, and hides nothing that is not reachable by other means",
+	// LanguagePreferenceFor reads what the caller wants to hear and read
+	// (ADR 0112). Exempt on the same terms as the two rows above: it
+	// authenticates, deliberately does not authorize, and returns the caller's
+	// own stored document and nothing else — no content, no other viewer's
+	// setting, nothing a permission was protecting.
+	//
+	// The stronger argument is what an entry point would cost here. This is read
+	// on the path that starts a playback, and an entry point must deny; denying
+	// would turn "your language preference could not be read" into "you cannot
+	// watch this", which inverts the relationship between a taste setting and the
+	// thing it decorates. It returns nil on every failure for that reason, and the
+	// transport reads nil as the default.
+	"LanguagePreferenceFor": "playback preference; authenticates but does not authorize, returns only the caller's own stored document, and degrades to the default rather than refusing a play",
 	// SessionForCaller answers "which session is this credential" (ADR 0102).
 	// It authenticates — an unknown credential is Unauthenticated, like
 	// everywhere else — and deliberately does not authorize, because there is

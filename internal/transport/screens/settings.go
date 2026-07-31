@@ -27,7 +27,9 @@ import (
 const (
 	sectionAccount = "account"
 	// sectionHomeRows is where a viewer arranges their own home (ADR 0103).
-	sectionHomeRows   = "home"
+	sectionHomeRows = "home"
+	// sectionLanguages is what a viewer wants to hear and read (ADR 0112).
+	sectionLanguages  = "language"
 	sectionPeople     = "people"
 	sectionExtensions = "extensions"
 	sectionTraces     = "traces"
@@ -118,6 +120,8 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 		return s.accountPanel(ctx, caller, nav)
 	case sectionHomeRows:
 		return s.homeRowsPanel(ctx, caller, nav)
+	case sectionLanguages:
+		return s.languagesPanel(ctx, caller, nav)
 	case sectionPeople:
 		return s.peoplePanel(ctx, caller, nav, params)
 	case sectionLibraryRules:
@@ -157,6 +161,12 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 		label:  "Home",
 		icon:   "home",
 		action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionHomeRows}),
+		panel:  true,
+	}, {
+		key:    sectionLanguages,
+		label:  "Language",
+		icon:   "info",
+		action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionLanguages}),
 		panel:  true,
 	}}})
 

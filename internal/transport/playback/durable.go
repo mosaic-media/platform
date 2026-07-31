@@ -158,10 +158,19 @@ func Decode(raw []byte) (MediaInfo, bool) {
 // actually be played — on the Hindi-first release, the first track's codec would
 // answer a question nobody asked.
 func SummaryAudioCodec(info MediaInfo) string {
-	// PreferredLanguages explicitly: chooseAudio does not apply the default the
-	// way Decide does, and an empty preference list ranks an untagged track above
-	// a tagged one — which would summarise the wrong track on exactly the
-	// multi-language release this exists for.
+	// PreferredLanguages explicitly, and it stays install-wide on purpose now
+	// that language is a person's preference (ADR 0112). This column feeds
+	// *candidate ranking*, which asks "will this release need an audio encode at
+	// all" — a coarse question one answer serves. Keying it per viewer is not
+	// possible anyway: it is one column on a Part that four people share, so it
+	// would be wrong for three of them silently. Per-user selection reads the
+	// full track list from the stored probe document instead, which is where the
+	// question "which track does *this* viewer get" is actually answered.
+	//
+	// chooseAudio does not apply the default the way Decide does, and an empty
+	// preference list ranks an untagged track above a tagged one — which would
+	// summarise the wrong track on exactly the multi-language release this
+	// exists for.
 	track, ok := chooseAudio(info.Audio, PreferredLanguages)
 	if !ok {
 		return ""

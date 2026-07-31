@@ -285,6 +285,12 @@ type contentQueries interface {
 	// setting that only decides what to show must never be able to fail a
 	// render.
 	HomeCompositionFor(context.Context, v1.Caller) app.HomeComposition
+
+	// LanguagePreferenceFor reads what this viewer wants to hear and read
+	// (ADR 0112), as the stored document. The bytes travel rather than a parsed
+	// value because the type that understands them belongs to the playback
+	// transport, and an application service may not import one.
+	LanguagePreferenceFor(context.Context, v1.Caller) []byte
 }
 
 // Service renders named screens. It holds the query surface the builders read

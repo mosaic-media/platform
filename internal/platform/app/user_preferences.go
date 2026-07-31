@@ -162,3 +162,32 @@ func (s *Service) ExpertModeEnabled(ctx context.Context, caller v1.Caller) bool 
 	}
 	return s.BoolPreference(ctx, userID, domain.PreferenceExpertMode, false)
 }
+
+// LanguagePreferenceFor returns the caller's stored language document
+// (ADR 0112), or nil when there is not one to return.
+//
+// **It returns the raw document rather than a parsed preference**, and the
+// reason is the dependency direction rather than laziness: the type that
+// understands this value lives in the playback transport, and an application
+// service may not import a transport. So the store's bytes travel and the
+// transport that owns the meaning decodes them — the same arrangement module
+// settings use, for the same reason.
+//
+// It cannot fail, like HomeCompositionFor and for the same argument: a
+// preference decides what a viewer gets, never whether they get anything, and a
+// play that refused because a taste setting could not be read would be a far
+// worse outcome than one that used the default.
+func (s *Service) LanguagePreferenceFor(ctx context.Context, caller v1.Caller) []byte {
+	if s.userPreferences == nil {
+		return nil
+	}
+	userID, err := s.authenticateCaller(ctx, caller)
+	if err != nil {
+		return nil
+	}
+	pref, err := s.userPreferences.Get(ctx, userID, domain.PreferenceLanguages)
+	if err != nil {
+		return nil
+	}
+	return pref.Value
+}

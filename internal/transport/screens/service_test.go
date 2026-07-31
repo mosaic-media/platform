@@ -52,6 +52,7 @@ type fakeQueries struct {
 	// compositions is how each viewer arranged their home (ADR 0103), keyed by
 	// the session the caller presents.
 	compositions map[string]app.HomeComposition
+	languages    map[string][]byte
 
 	node             v1.Node
 	children         []v1.Node
@@ -214,6 +215,14 @@ func (f *fakeQueries) HomeCompositionFor(_ context.Context, caller v1.Caller) ap
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.compositions[caller.Session]
+}
+
+// LanguagePreferenceFor answers with whatever a test stored, and nil — the
+// unset document — is a valid answer that reads back as the default.
+func (f *fakeQueries) LanguagePreferenceFor(_ context.Context, caller v1.Caller) []byte {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.languages[caller.Session]
 }
 
 func (f *fakeQueries) CallerCan(_ context.Context, _ v1.Caller, action policy.Action, _ string) bool {

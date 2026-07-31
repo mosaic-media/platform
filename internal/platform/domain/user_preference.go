@@ -50,3 +50,22 @@ const PreferenceExpertMode = "ui.expert_mode"
 // genuinely must not be reachable is the content scope, which is a different
 // mechanism and is unbuilt.
 const PreferenceHomeRows = "ui.home.rows"
+
+// PreferenceLanguages is which languages a viewer wants to hear and read
+// (ADR 0112).
+//
+// **Language belongs to a person, not to an install**, which is the whole
+// reason this key exists: the Platform picked audio tracks from a package
+// variable, so four people sharing one library got one person's answer. It is
+// the same argument ADR 0103 made about the home screen, applied to the setting
+// where two viewers most obviously disagree.
+//
+// The value is `{audio: [...], subtitles: [...], subtitleMode: "..."}` — two
+// ordered lists and a mode — and the mode is the part that is not obvious: it
+// says what a viewer wants **when the audio preference was met**, because a
+// subtitle setting expressed on its own is wrong half the time. Someone who
+// asked for an English dub wants forced subtitles alongside it and the whole
+// dialogue when no dub exists, and that is one preference rather than two.
+// The escalation lives in the playback decision, which is the only place that
+// knows which case a release turned out to be.
+const PreferenceLanguages = "playback.languages"

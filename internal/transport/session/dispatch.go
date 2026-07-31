@@ -238,11 +238,21 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	// the English audio" rather than either a whole-file transcode or a silent
 	// film. The plan travels sealed inside the ticket, so the origin does not
 	// re-probe on every range request a seeking player makes.
+	// What this viewer wants to hear (ADR 0112). Read here rather than baked
+	// into the Platform, because language belongs to a person: four people
+	// sharing one library previously got one person's answer from a package
+	// variable, and the parameter that would have carried theirs was passed nil.
+	langs := playback.ParseLanguagePreference(h.svc.LanguagePreferenceFor(ctx, caller))
+
 	info, probed := h.mediaInfo(ctx, caller, res)
 	plan := playback.Plan{DirectPlay: true}
 	if probed {
-		plan = playback.Decide(info, profile.codecs(), nil)
+		plan = playback.Decide(info, profile.codecs(), langs.Audio)
 	}
+	// What they should read, after the release has had its say. A preference
+	// names what someone wants when they got the language they asked for; when
+	// they did not, this is where the Platform notices and escalates.
+	subtitles := langs.SubtitlesFor(plan.AudioLanguage)
 
 	// One record saying what was chosen and what will happen to it. Playback has
 	// three independent places to go wrong — selection, probing, and the encode
@@ -271,7 +281,14 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		// Whether the bytes had to be probed again (ADR 0050). Once the
 		// aggregator call was cached this became the largest remaining cost
 		// between a click and a first frame, so it is the number to watch.
-		telemetry.Bool("probe_reused", probed && len(res.Probe) > 0))
+		telemetry.Bool("probe_reused", probed && len(res.Probe) > 0),
+		// Which language they actually got, and whether the subtitle mode had to
+		// be raised because it was not the one they asked for. Both are
+		// invisible from the outside — a viewer sees a film in a language and
+		// cannot tell whether the Platform chose it or settled for it.
+		telemetry.String("audio_language", plan.AudioLanguage),
+		telemetry.String("subtitle_mode", string(subtitles.Mode)),
+		telemetry.Bool("subtitle_escalated", subtitles.Escalated))
 	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, plan)
 	if err != nil {
 		return nil, contracts.WrapError(contracts.Internal, "mint playback ticket", err)
