@@ -21,9 +21,10 @@ func testURI(n int) string {
 	return strconv.Itoa(n) + ".m4s"
 }
 
-// segLen is the fixture segment length. It is a value the tests choose because
-// in production it is measured from the source rather than chosen (ADR 0110);
-// the arithmetic below is the same either way.
+// segLen is the segment length these tests divide by. The origin chooses it —
+// the grid is nominal, and a seek restarts at the position the playlist names
+// rather than inheriting where the previous segment ended (ADR 0111) — so the
+// arithmetic here is the arithmetic in production.
 const segLen = encodedSegmentLength
 
 // TestTheLastPartialSegmentIsListed is the arithmetic that decides whether the
