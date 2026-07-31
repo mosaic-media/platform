@@ -256,8 +256,14 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	// Offered as HLS renditions, which is why subtitles cost no client change
 	// (ADR 0113). Only on the transcoded path: a direct-played release is
 	// relayed byte for byte, so there is no playlist to declare a rendition in.
+	//
+	// A track that cannot be a rendition is burned into the picture instead
+	// (ADR 0114), which forces a video encode — so it can turn a release that
+	// would have direct-played into one that does not. That is the whole cost of
+	// typeset fidelity and of a Blu-ray's picture subtitles, and it is why the
+	// preference behind it is opt-in.
 	if probed && !plan.DirectPlay {
-		plan.Subtitles = playback.DecideSubtitles(info.Subtitles, subtitles)
+		plan.Subtitles, plan.Burn = playback.DecideSubtitles(info.Subtitles, subtitles, langs.Typeset)
 	}
 
 	// One record saying what was chosen and what will happen to it. Playback has
@@ -294,7 +300,12 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		// cannot tell whether the Platform chose it or settled for it.
 		telemetry.String("audio_language", plan.AudioLanguage),
 		telemetry.String("subtitle_mode", string(subtitles.Mode)),
-		telemetry.Bool("subtitle_escalated", subtitles.Escalated))
+		telemetry.Bool("subtitle_escalated", subtitles.Escalated),
+		// Whether subtitles forced a video encode (ADR 0114). This is the single
+		// most expensive thing a playback can decide to do, and from the outside
+		// it presents only as a release that suddenly plays badly — so the log
+		// has to be able to answer "was it the subtitles".
+		telemetry.Bool("subtitle_burned", plan.Burn != nil))
 	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, plan)
 	if err != nil {
 		return nil, contracts.WrapError(contracts.Internal, "mint playback ticket", err)

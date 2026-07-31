@@ -145,7 +145,7 @@ func TestChooseAudioPrefersMoreChannelsWithinALanguage(t *testing.T) {
 // because a correct decision expressed as the wrong ffmpeg invocation is still
 // a silent film.
 func TestPlanArgsCopyVideoEncodeAudio(t *testing.T) {
-	args := Decide(sameReleaseInSDR, DefaultBrowserCodecs, nil).ffmpegArgs()
+	args := Decide(sameReleaseInSDR, DefaultBrowserCodecs, nil).ffmpegArgs("https://cdn.example/movie.mkv")
 
 	if !hasPair(args, "-c:v", "copy") {
 		t.Errorf("args %v must copy video", args)

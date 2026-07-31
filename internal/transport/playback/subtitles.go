@@ -39,14 +39,85 @@ type SubtitleDelivery struct {
 	Default bool `json:"d,omitempty"`
 	// Label is what the player's menu shows.
 	Label string `json:"n,omitempty"`
+
+	// form is how this track can be delivered. Unexported and not serialised:
+	// it decides which list a track lands in here, and by the time a ticket is
+	// sealed that decision has already been made.
+	form SubtitleForm
+}
+
+// SubtitleForm is how a subtitle track can be delivered, which is decided by its
+// codec and not by anything a viewer chose (ADR 0114).
+type SubtitleForm int
+
+const (
+	// SubtitlePlain is a text track carrying words and little else — SubRip and
+	// its relatives. WebVTT represents everything it has, so a rendition is
+	// faithful and costs nothing.
+	SubtitlePlain SubtitleForm = iota
+	// SubtitleTypeset is a text track that also carries where the words go and
+	// what they look like — ASS and SSA, which is what anime releases use for
+	// signs, songs and captions placed over the picture.
+	//
+	// A rendition keeps the words, the bold and the italics, and **loses the
+	// position, the colour, the size and the alignment**. Measured: a cue
+	// authored `{\pos(640,120)\c&H00FF00&\fs72}` over a doorway arrived as
+	// ordinary bold text at the bottom of the screen.
+	SubtitleTypeset
+	// SubtitleGraphic is a track of pictures rather than words — PGS from a
+	// Blu-ray, VobSub from a DVD, DVB from a broadcast. There is no text in it
+	// to convert; ffmpeg refuses outright, with "subtitle encoding currently
+	// only possible from text to text or bitmap to bitmap". Burning it into the
+	// picture is the only delivery there is.
+	SubtitleGraphic
+)
+
+// formOf classifies a track by the codec ffprobe reported.
+//
+// Unknown codecs are treated as plain text, which is the safe default in the
+// direction that matters: a rendition that turns out empty costs one viewer
+// their subtitles for one playback, where treating an unknown text codec as
+// graphic would force a video encode on a release that never needed one.
+func formOf(codec string) SubtitleForm {
+	switch strings.ToLower(strings.TrimSpace(codec)) {
+	case "ass", "ssa":
+		return SubtitleTypeset
+	case "hdmv_pgs_subtitle", "pgssub", "dvd_subtitle", "dvdsub", "dvb_subtitle", "dvbsub", "xsub":
+		return SubtitleGraphic
+	default:
+		return SubtitlePlain
+	}
+}
+
+// BurnedSubtitle names a track to render into the picture itself (ADR 0114).
+//
+// It is the last resort and it is priced like one: burning forces a video
+// encode, because there is no way to draw on frames that are being copied
+// through untouched. **It also fixes the choice for the whole playback** — a
+// burned track cannot be switched off in the player's menu, since by then it is
+// part of the picture.
+type BurnedSubtitle struct {
+	// Index is the stream's index in the source, used by the overlay path.
+	Index int `json:"i"`
+	// Ordinal is the track's position among the source's *subtitle* streams,
+	// which is the numbering the `subtitles` filter's `si` option counts in and
+	// is not the same as Index.
+	Ordinal int `json:"o"`
+	// Graphic selects the delivery. A picture track is composited with
+	// `overlay`, reading the stream this run already has open; a text track is
+	// rendered by libass, which can only read a file and therefore opens the
+	// source a second time.
+	Graphic bool `json:"g,omitempty"`
+	// Label is what the track is, for telling a viewer what they are watching.
+	Label string `json:"n,omitempty"`
 }
 
 // DecideSubtitles turns a release's subtitle tracks and one viewer's intent into
-// the renditions a playback offers (ADR 0113).
+// what a playback offers, and what if anything it burns (ADR 0113, ADR 0114).
 //
 // The rule is ADR 0112's, applied to a list that already exists:
 //
-//   - **Every embedded track is offered**, in the order the container carries
+//   - **Every deliverable track is offered**, in the order the container carries
 //     them. A menu that hid tracks would make the preference an access control
 //     over the release rather than a default over it.
 //   - **At most one is default, and only in a language the viewer asked for.**
@@ -60,27 +131,90 @@ type SubtitleDelivery struct {
 // no forced track to be had, `full` wants the other way round. Neither invents a
 // track — a release with only forced subtitles and a viewer who asked for full
 // gets the forced one, which is more than nothing and is what the release has.
-func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent) []SubtitleDelivery {
+//
+// **Burning is decided last and only when there is no other way**, which is the
+// whole shape of ADR 0114. The chosen track is burned when it is graphic — there
+// being no text in it to send — or when it is typeset and this viewer asked to
+// see it as authored. Everything else is a rendition, because a rendition costs
+// nothing and a burn costs a video encode.
+//
+// When a track is burned nothing is offered beside it. The burned track is
+// already in the picture, and listing it again would draw it twice.
+func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, wantsTypeset bool) ([]SubtitleDelivery, *BurnedSubtitle) {
 	if len(tracks) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	out := make([]SubtitleDelivery, 0, len(tracks))
+	all := make([]SubtitleDelivery, 0, len(tracks))
 	for _, t := range tracks {
-		out = append(out, SubtitleDelivery{
+		all = append(all, SubtitleDelivery{
 			Index:    t.Index,
 			Language: strings.ToLower(t.Language),
 			Forced:   t.Forced,
 			Label:    subtitleLabel(t),
+			form:     formOf(t.Codec),
 		})
 	}
+
+	// Nobody asked for anything, so nothing is chosen — but the deliverable
+	// tracks are still listed, because turning subtitles on for one scene is not
+	// a change of preference.
 	if intent.Mode == SubtitlesOff {
-		return out
+		return renditions(all), nil
 	}
-	if n := defaultSubtitle(out, intent); n >= 0 {
-		out[n].Default = true
+
+	// The choice is made over *every* track, graphic ones included. A release
+	// whose only English subtitles are a Blu-ray's pictures must still be able
+	// to answer someone who asked for English.
+	n := defaultSubtitle(all, intent)
+	if n < 0 {
+		return renditions(all), nil
+	}
+
+	chosen := all[n]
+	if chosen.form == SubtitleGraphic || (chosen.form == SubtitleTypeset && wantsTypeset) {
+		return nil, &BurnedSubtitle{
+			Index:   chosen.Index,
+			Ordinal: subtitleOrdinal(tracks, chosen.Index),
+			Graphic: chosen.form == SubtitleGraphic,
+			Label:   chosen.Label,
+		}
+	}
+
+	out := renditions(all)
+	for i := range out {
+		if out[i].Index == chosen.Index {
+			out[i].Default = true
+		}
+	}
+	return out, nil
+}
+
+// renditions drops the tracks that cannot be one.
+//
+// A graphic track offered as a WebVTT rendition is the bug this function exists
+// to prevent, and it shipped: the extraction fails, the origin answers 200 with
+// an empty document, and the player lists a subtitle track that draws nothing
+// for the length of the film.
+func renditions(all []SubtitleDelivery) []SubtitleDelivery {
+	var out []SubtitleDelivery
+	for _, s := range all {
+		if s.form != SubtitleGraphic {
+			out = append(out, s)
+		}
 	}
 	return out
+}
+
+// subtitleOrdinal reports a stream's position among the source's subtitle
+// streams, which is what the `subtitles` filter's `si` option counts in.
+func subtitleOrdinal(tracks []SubtitleTrack, index int) int {
+	for i, t := range tracks {
+		if t.Index == index {
+			return i
+		}
+	}
+	return 0
 }
 
 // defaultSubtitle reports which offered track should come on by itself, or -1
@@ -169,6 +303,32 @@ var subtitleLanguageNames = map[string]string{
 // A minute is also comfortably more than any player reads ahead, so the window
 // is fetched long before the video reaches it.
 const subtitleWindow = 60 * time.Second
+
+// escapeFilterValue renders a value safe to put inside an ffmpeg filtergraph.
+//
+// **There are two levels of escaping and both apply**, which is why the result
+// looks wrong. A filtergraph is parsed once to split filters and their options,
+// and each option value is unescaped again — so a colon in a URL needs a
+// backslash to survive the option level, and that backslash needs a backslash to
+// survive the graph level. `https://host/x` becomes `https\\://host/x`.
+//
+// Measured, because it fails silently rather than loudly: a single-escaped URL
+// makes ffmpeg read `//host` as the value of an unrelated option and report
+// "unable to parse option value as image size", after which it renders the video
+// with no subtitles on it and exits successfully. Double-escaped, the same URL
+// with a query string burned its cues at exactly the right timestamps.
+func escapeFilterValue(s string) string {
+	// Option level: a backslash, then the characters that separate options.
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, ":", `\:`)
+	// Graph level: everything that separates filters, plus the backslashes just
+	// added.
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	for _, c := range []string{"'", "[", "]", ",", ";"} {
+		s = strings.ReplaceAll(s, c, `\`+c)
+	}
+	return s
+}
 
 // subtitlePlaylistName is the rendition playlist for offered track i.
 func subtitlePlaylistName(i int) string { return "s" + strconv.Itoa(i) + ".m3u8" }

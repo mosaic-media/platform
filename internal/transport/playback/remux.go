@@ -117,7 +117,7 @@ func (r *Remuxer) StreamFrom(ctx context.Context, upstreamURL string, headers ma
 		args = append(args, "-ss", strconv.FormatFloat(offset.Seconds(), 'f', 3, 64), "-copyts")
 	}
 	args = append(args, "-i", upstreamURL)
-	args = append(args, plan.ffmpegArgs()...)
+	args = append(args, plan.ffmpegArgs(upstreamURL)...)
 	args = append(args,
 		// Fragmented output, written without seeking back to patch a header —
 		// which is what makes it streamable down a pipe at all.
@@ -220,12 +220,12 @@ func (r *Remuxer) Segment(ctx context.Context, upstreamURL string, headers map[s
 	// makes a restarted segment carry the timestamps its index promises. Segment
 	// zero of a restart at zero is unaffected.
 	args = append(args, "-copyts", "-i", upstreamURL)
-	args = append(args, plan.ffmpegArgs()...)
+	args = append(args, plan.ffmpegArgs(upstreamURL)...)
 	// Where the video is re-encoded the origin places the keyframes, so the
 	// boundaries are exactly the nominal grid. Where it is copied this does
 	// nothing and the source's own keyframes decide — which the nominal grid
 	// tolerates, because a seek restarts rather than accumulating the difference.
-	if plan.Video == ActionEncode {
+	if plan.Video == ActionEncode || plan.Burn != nil {
 		args = append(args, "-force_key_frames",
 			"expr:gte(t,n_forced*"+strconv.FormatFloat(length.Seconds(), 'f', 3, 64)+")")
 	}
@@ -401,12 +401,43 @@ func serveRemuxed(w http.ResponseWriter, r *http.Request, t ticket, plan Plan, r
 // home server, while an audio encode is cheap enough to be unremarkable. The
 // chosen audio track is named by index rather than taken as "the first one",
 // which is how a release whose first track is Hindi ends up playing English.
-func (p Plan) ffmpegArgs() []string {
-	args := []string{"-map", fmt.Sprintf("0:%d", p.VideoIndex)}
-	if p.Video == ActionEncode {
+func (p Plan) ffmpegArgs(upstreamURL string) []string {
+	var args []string
+	switch {
+	case p.Burn != nil && p.Burn.Graphic:
+		// A picture track is composited onto the frames, reading the stream this
+		// run already has open — so no filename, no escaping and no second read
+		// of the source. eof_action=pass keeps the video running past the last
+		// subtitle rather than ending with it, and repeatlast=0 stops the final
+		// caption being held on screen for the rest of the film.
+		graph := fmt.Sprintf("[0:%d]scale[sub];[0:%d]", p.Burn.Index, p.VideoIndex)
 		if vf := p.videoFilter(); vf != "" {
-			args = append(args, "-vf", vf)
+			graph += vf + ","
 		}
+		graph += "null[main];[main][sub]overlay=eof_action=pass:repeatlast=0[v]"
+		args = append(args, "-filter_complex", graph, "-map", "[v]")
+	case p.Burn != nil:
+		// A text track is drawn by libass, which reads a *file* — so the source
+		// is named again and opened a second time. That is the cost of typeset
+		// fidelity and there is no way around it: the filter cannot be handed a
+		// stream that is already open.
+		chain := p.videoFilter()
+		if chain != "" {
+			chain += ","
+		}
+		chain += fmt.Sprintf("subtitles=filename=%s:si=%d",
+			escapeFilterValue(upstreamURL), p.Burn.Ordinal)
+		args = append(args, "-map", fmt.Sprintf("0:%d", p.VideoIndex), "-vf", chain)
+	default:
+		args = append(args, "-map", fmt.Sprintf("0:%d", p.VideoIndex))
+		if p.Video == ActionEncode {
+			if vf := p.videoFilter(); vf != "" {
+				args = append(args, "-vf", vf)
+			}
+		}
+	}
+
+	if p.Video == ActionEncode || p.Burn != nil {
 		// veryfast because a slower preset on a 4K source is not a trade a
 		// viewer waiting for a first frame would accept.
 		args = append(args, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20")

@@ -16,8 +16,14 @@ import (
 // The delivery half of ADR 0112, which is where the escalation stops being a
 // computed value and becomes something on a screen (ADR 0113).
 
+// offered is the common case: plain text tracks, nobody asking for typeset
+// fidelity, so nothing is ever burned.
 func offered(tracks []SubtitleTrack, intent SubtitleIntent) []SubtitleDelivery {
-	return DecideSubtitles(tracks, intent)
+	out, burn := DecideSubtitles(tracks, intent, false)
+	if burn != nil {
+		panic("this helper is for the rendition cases; use DecideSubtitles directly")
+	}
+	return out
 }
 
 // defaultedTo reports the label of the track marked default, or "" for none.
@@ -268,8 +274,9 @@ func TestSubtitleResourceNamesRoundTrip(t *testing.T) {
 // a release that has none: the entry point is the same media playlist it always
 // was, and no extra round trip was bought for an empty rendition list.
 func TestNoSubtitlesMeansNoMaster(t *testing.T) {
-	if got := DecideSubtitles(nil, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}); got != nil {
-		t.Errorf("DecideSubtitles(nil) = %+v, want nothing to declare", got)
+	got, burn := DecideSubtitles(nil, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, false)
+	if got != nil || burn != nil {
+		t.Errorf("DecideSubtitles(nil) = %+v, %+v, want nothing to declare", got, burn)
 	}
 }
 
@@ -399,6 +406,209 @@ func TestAnUnknownSubtitleResourceIsNotFound(t *testing.T) {
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw+"/"+resource, nil))
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s = %d, want 404", resource, rec.Code)
+		}
+	}
+}
+
+// The three forms a subtitle track comes in, and the three different right
+// answers (ADR 0114).
+
+// TestAGraphicTrackIsNeverOfferedAsARendition pins a bug that shipped. PGS and
+// VobSub are pictures, and ffmpeg refuses to make text of them — "subtitle
+// encoding currently only possible from text to text or bitmap to bitmap". The
+// rendition was listed anyway, the extraction failed, and the origin answered
+// 200 with an empty document: a subtitle track in the player's menu that drew
+// nothing for the length of the film.
+func TestAGraphicTrackIsNeverOfferedAsARendition(t *testing.T) {
+	tracks := []SubtitleTrack{
+		{Index: 3, Codec: "hdmv_pgs_subtitle", Language: "eng"},
+		{Index: 4, Codec: "subrip", Language: "jpn"},
+	}
+	// Nobody asked for a language either track has, so nothing is chosen and
+	// nothing is burned — but the picture track must still not be listed.
+	out, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"fra"}}, false)
+	if burn != nil {
+		t.Fatalf("burn = %+v, want none — no track was chosen", burn)
+	}
+	if len(out) != 1 || out[0].Index != 4 {
+		t.Fatalf("offered %+v, want only the text track", out)
+	}
+}
+
+// TestAGraphicTrackIsBurnedWhenItIsTheOneWanted is the other half. A Blu-ray
+// whose only English subtitles are pictures must still answer somebody who asked
+// for English, and burning is the only way there is.
+func TestAGraphicTrackIsBurnedWhenItIsTheOneWanted(t *testing.T) {
+	tracks := []SubtitleTrack{{Index: 3, Codec: "hdmv_pgs_subtitle", Language: "eng"}}
+
+	out, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, false)
+	if burn == nil {
+		t.Fatal("nothing was burned, so a viewer who asked for English gets nothing at all")
+	}
+	if burn.Index != 3 || !burn.Graphic {
+		t.Errorf("burn = %+v, want the picture track composited", burn)
+	}
+	// Nothing is offered beside it: it is in the picture already.
+	if len(out) != 0 {
+		t.Errorf("offered %+v alongside a burned track, which would draw it twice", out)
+	}
+}
+
+// TestTypesetIsFlattenedByDefaultAndBurnedOnRequest is the choice the setting
+// exists for. Measured: an ASS cue authored with a position, a colour and a size
+// arrives through a rendition as ordinary bold text at the bottom of the screen.
+// That is the right default because it is free; the alternative costs a video
+// encode.
+func TestTypesetIsFlattenedByDefaultAndBurnedOnRequest(t *testing.T) {
+	tracks := []SubtitleTrack{{Index: 3, Codec: "ass", Language: "eng"}}
+	intent := SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}
+
+	out, burn := DecideSubtitles(tracks, intent, false)
+	if burn != nil {
+		t.Errorf("burn = %+v, want none — the default must not force an encode", burn)
+	}
+	if len(out) != 1 || !out[0].Default {
+		t.Errorf("offered %+v, want the track listed and on", out)
+	}
+
+	out, burn = DecideSubtitles(tracks, intent, true)
+	if burn == nil {
+		t.Fatal("asking for the subtitles as authored produced no burn, so the setting does nothing")
+	}
+	if burn.Graphic {
+		t.Error("a text track must go through libass, not the picture overlay")
+	}
+	if len(out) != 0 {
+		t.Errorf("offered %+v beside a burned track", out)
+	}
+}
+
+// TestAskingForTypesetDoesNotBurnAPlainTrack is the bound that keeps the setting
+// from being a global "re-encode everything" switch. SubRip has no styling to
+// preserve, so there is nothing to buy with an encode.
+func TestAskingForTypesetDoesNotBurnAPlainTrack(t *testing.T) {
+	tracks := []SubtitleTrack{{Index: 3, Codec: "subrip", Language: "eng"}}
+
+	out, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, true)
+	if burn != nil {
+		t.Errorf("burn = %+v, want none — SubRip carries no styling an encode could preserve", burn)
+	}
+	if len(out) != 1 || !out[0].Default {
+		t.Errorf("offered %+v, want the plain track as an ordinary rendition", out)
+	}
+}
+
+// TestSubtitlesOffNeverBurns is the strongest form of ADR 0112's rule. Burning
+// is irreversible for the playback, so doing it to somebody who asked for no
+// subtitles would put text on their screen that they cannot turn off.
+func TestSubtitlesOffNeverBurns(t *testing.T) {
+	tracks := []SubtitleTrack{
+		{Index: 3, Codec: "hdmv_pgs_subtitle", Language: "eng"},
+		{Index: 4, Codec: "ass", Language: "eng"},
+	}
+	for _, wantsTypeset := range []bool{false, true} {
+		out, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesOff}, wantsTypeset)
+		if burn != nil {
+			t.Errorf("typeset=%v: burned %+v for someone who wants no subtitles", wantsTypeset, burn)
+		}
+		// The ASS track is still listed, so they can turn it on for one scene.
+		if len(out) != 1 || out[0].Index != 4 || out[0].Default {
+			t.Errorf("typeset=%v: offered %+v, want the text track listed and off", wantsTypeset, out)
+		}
+	}
+}
+
+// TestTheOrdinalIsNotTheStreamIndex guards the one number the libass path needs
+// and the overlay path does not. `si` counts subtitle streams; `-map` counts
+// container streams. A release whose subtitles start at stream 3 would otherwise
+// burn the wrong track, or none.
+func TestTheOrdinalIsNotTheStreamIndex(t *testing.T) {
+	tracks := []SubtitleTrack{
+		{Index: 3, Codec: "ass", Language: "jpn"},
+		{Index: 4, Codec: "ass", Language: "eng"},
+	}
+	_, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, true)
+	if burn == nil {
+		t.Fatal("nothing burned")
+	}
+	if burn.Index != 4 {
+		t.Errorf("Index = %d, want the container's stream number", burn.Index)
+	}
+	if burn.Ordinal != 1 {
+		t.Errorf("Ordinal = %d, want 1 — it is the second subtitle stream, not the fourth stream", burn.Ordinal)
+	}
+}
+
+// TestBurningForcesAVideoEncode is the consequence that makes this the last
+// resort. Frames being copied through cannot be drawn on, so a plan that burns
+// must encode however cheap the release would otherwise have been.
+func TestBurningForcesAVideoEncode(t *testing.T) {
+	const url = "https://cdn.example/movie.mkv"
+
+	graphic := Plan{Video: ActionCopy, VideoIndex: 0, Audio: ActionCopy, AudioIndex: 1,
+		Burn: &BurnedSubtitle{Index: 3, Graphic: true}}
+	args := strings.Join(graphic.ffmpegArgs(url), " ")
+	if strings.Contains(args, "-c:v copy") {
+		t.Errorf("args %q copy the video while drawing on it", args)
+	}
+	if !strings.Contains(args, "libx264") {
+		t.Errorf("args %q do not encode", args)
+	}
+	// The picture track is composited from the input this run already has open,
+	// so no filename appears and the source is not read a second time.
+	if !strings.Contains(args, "overlay=") || !strings.Contains(args, "[0:3]") {
+		t.Errorf("args %q do not overlay the picture track", args)
+	}
+	if strings.Contains(args, url) {
+		t.Errorf("args %q name the source again for a track already open", args)
+	}
+
+	text := Plan{Video: ActionCopy, VideoIndex: 0, Audio: ActionCopy, AudioIndex: 1,
+		Burn: &BurnedSubtitle{Index: 3, Ordinal: 1}}
+	args = strings.Join(text.ffmpegArgs(url), " ")
+	if !strings.Contains(args, "libx264") {
+		t.Errorf("args %q do not encode", args)
+	}
+	if !strings.Contains(args, "si=1") {
+		t.Errorf("args %q do not name the subtitle stream by its ordinal", args)
+	}
+	if !strings.Contains(args, "subtitles=filename=") {
+		t.Errorf("args %q do not render the text track", args)
+	}
+}
+
+// TestAFilterValueIsEscapedTwice pins a measured silent failure. A filtergraph
+// is unescaped once to split filters from options and again per option value, so
+// a colon needs two backslashes to survive. Single-escaped, ffmpeg read "//host"
+// as an unrelated option, reported "unable to parse option value as image size",
+// then encoded the video with no subtitles on it and exited successfully.
+func TestAFilterValueIsEscapedTwice(t *testing.T) {
+	got := escapeFilterValue("https://cdn.example/a.mkv?t=a:b")
+	if got != `https\\://cdn.example/a.mkv?t=a\\:b` {
+		t.Errorf("escapeFilterValue = %q, want every colon behind two backslashes", got)
+	}
+	// The characters that end a filter or an option must not survive raw, or a
+	// URL could rewrite the graph around it.
+	for _, c := range []string{"'", "[", "]", ",", ";"} {
+		if e := escapeFilterValue("a" + c + "b"); !strings.Contains(e, `\`+c) {
+			t.Errorf("escapeFilterValue left %q unescaped: %q", c, e)
+		}
+	}
+}
+
+// TestUnknownSubtitleCodecsAreTreatedAsText is the safe direction. Guessing
+// "text" costs one viewer their subtitles for one playback if it is wrong;
+// guessing "graphic" forces a video encode on a release that never needed one.
+func TestUnknownSubtitleCodecsAreTreatedAsText(t *testing.T) {
+	for codec, want := range map[string]SubtitleForm{
+		"subrip": SubtitlePlain, "mov_text": SubtitlePlain, "webvtt": SubtitlePlain,
+		"ass": SubtitleTypeset, "ssa": SubtitleTypeset, "ASS": SubtitleTypeset,
+		"hdmv_pgs_subtitle": SubtitleGraphic, "dvd_subtitle": SubtitleGraphic,
+		"dvb_subtitle": SubtitleGraphic, "xsub": SubtitleGraphic,
+		"": SubtitlePlain, "something_new": SubtitlePlain,
+	} {
+		if got := formOf(codec); got != want {
+			t.Errorf("formOf(%q) = %v, want %v", codec, got, want)
 		}
 	}
 }

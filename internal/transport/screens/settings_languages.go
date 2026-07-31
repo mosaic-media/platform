@@ -89,7 +89,23 @@ func (s *Service) languagesPanel(ctx context.Context, caller v1.Caller, nav sett
 			"undubbed shows the whole dialogue."), ui.Prop("variant", "caption")),
 		modes)
 
-	body := ui.Stack("vertical", 4, audio, subtitles, show).Build()
+	// Typeset fidelity, and the sentence under it has to say what it costs.
+	// Everything else on this screen is free; this one makes the server re-encode
+	// the video, which on a weak machine is the difference between a release that
+	// plays and one that does not. A setting that hid that would be a trap.
+	styling := ui.Stack("vertical", 0,
+		ui.Text(ui.Prop("text", "Styled subtitles"), ui.Prop("variant", "label")),
+		ui.Text(ui.Prop("text", "Anime and other releases often place subtitles over the "+
+			"picture — signs, captions, songs — in colours and positions the author "+
+			"chose. Showing them that way means drawing them into the video, which "+
+			"makes this server re-encode a release it could otherwise pass through "+
+			"untouched. Left off, those subtitles still appear, as plain text at the "+
+			"bottom."), ui.Prop("variant", "caption")),
+		ui.Stack("horizontal", 2,
+			typesetButton(current, false, "Plain text"),
+			typesetButton(current, true, "As authored")))
+
+	body := ui.Stack("vertical", 4, audio, subtitles, show, styling).Build()
 	return settingsFrame(nav, sectionLanguages, "Language",
 		"What you hear and what you read. Only ever yours — everyone sharing this "+
 			"server chooses their own.", body), nil
@@ -122,6 +138,18 @@ func modeButton(current playback.LanguagePreference, mode playback.SubtitleMode,
 	}
 	next := current
 	next.SubtitleMode = mode
+	return ui.Button(label, tone, ui.OnTap(setLanguages(next)))
+}
+
+// typesetButton is one of the two subtitle-styling choices, carrying the
+// document it sets.
+func typesetButton(current playback.LanguagePreference, typeset bool, label string) ui.El {
+	tone := "ghost"
+	if current.Typeset == typeset {
+		tone = "secondary"
+	}
+	next := current
+	next.Typeset = typeset
 	return ui.Button(label, tone, ui.OnTap(setLanguages(next)))
 }
 

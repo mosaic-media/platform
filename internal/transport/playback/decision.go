@@ -93,6 +93,16 @@ type Plan struct {
 	// cannot change under a playback that is already running.
 	Subtitles []SubtitleDelivery `json:"s,omitempty"`
 
+	// Burn names a subtitle track to render into the picture (ADR 0114), or nil
+	// for the ordinary case. It is set only when a rendition cannot carry the
+	// track — a graphic one, or a typeset one this viewer asked to see as
+	// authored — and it forces Video to ActionEncode, because frames being
+	// copied through cannot be drawn on.
+	//
+	// Subtitles is empty whenever this is set: the burned track is in the
+	// picture already, and offering it beside itself would draw it twice.
+	Burn *BurnedSubtitle `json:"b,omitempty"`
+
 	// Reason is a short human explanation of why work is needed, for logs and
 	// for telling a user what is happening rather than showing a spinner.
 	Reason string

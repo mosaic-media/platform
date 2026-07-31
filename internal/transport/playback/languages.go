@@ -45,6 +45,15 @@ type LanguagePreference struct {
 	Subtitles []string `json:"subtitles,omitempty"`
 	// SubtitleMode is what to show when the audio preference was met.
 	SubtitleMode SubtitleMode `json:"subtitleMode,omitempty"`
+	// Typeset asks for a styled subtitle track to be rendered as it was authored
+	// — signs placed over the picture, colours, fonts — rather than flattened to
+	// plain text (ADR 0114).
+	//
+	// **It is off by default and the reason is cost**, not taste. Honouring it
+	// means burning the track into the picture, which forces a video encode on a
+	// release that may not otherwise need one; the flattened rendition is free.
+	// So this is opt-in, and the setting says what it costs.
+	Typeset bool `json:"typeset,omitempty"`
 }
 
 // DefaultLanguagePreference is what a viewer who has set nothing gets.
@@ -84,7 +93,7 @@ func ParseLanguagePreference(raw []byte) LanguagePreference {
 // Codes are compared against what ffprobe reports, which is lower-case, so a
 // viewer who stored "ENG" must not silently stop matching anything.
 func (p LanguagePreference) normalised() LanguagePreference {
-	out := LanguagePreference{SubtitleMode: p.SubtitleMode}
+	out := LanguagePreference{SubtitleMode: p.SubtitleMode, Typeset: p.Typeset}
 	for _, l := range p.Audio {
 		if l = strings.ToLower(strings.TrimSpace(l)); l != "" {
 			out.Audio = append(out.Audio, l)
