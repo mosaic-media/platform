@@ -317,6 +317,11 @@ func boundaryCases() []boundaryCase {
 		{"ReresolvePlayback", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ReresolvePlayback(ctx, caller(sid), "part-1", "browser"))
 		}},
+		{"PlaybackSources", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.PlaybackSources(ctx, app.PlaybackSourcesQuery{
+				Caller: caller(sid), NodeID: "node-1",
+			}))
+		}},
 		// A write on a read path, which is why it is worth having a row here
 		// rather than an exemption: recording a probe is triggered by playing,
 		// but it mutates the content graph and must refuse an ungranted caller

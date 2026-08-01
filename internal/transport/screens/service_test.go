@@ -53,6 +53,11 @@ type fakeQueries struct {
 	// the session the caller presents.
 	compositions map[string]app.HomeComposition
 	languages    map[string][]byte
+	// sources is the candidate set behind a node (ADR 0116), keyed by node id.
+	// An absent entry is the no-candidate state, which is a legitimate answer
+	// and not a failure — sourcesErr is how a test asks for the failure.
+	sources    map[string][]app.PlaybackSource
+	sourcesErr error
 
 	node             v1.Node
 	children         []v1.Node
@@ -2088,4 +2093,14 @@ func TestDetailPanelOmitsUnprobedFacts(t *testing.T) {
 			t.Fatalf("unprobed release still reported %q = %v", l, m["value"])
 		}
 	}
+}
+
+// PlaybackSources answers with whatever a test staged, and an empty set
+// otherwise — which is the no-candidate state rather than a failure.
+func (f *fakeQueries) PlaybackSources(_ context.Context, q app.PlaybackSourcesQuery) (app.PlaybackSourcesResult, error) {
+	if f.sourcesErr != nil {
+		return app.PlaybackSourcesResult{}, f.sourcesErr
+	}
+	src := f.sources[string(q.NodeID)]
+	return app.PlaybackSourcesResult{Sources: src, Total: len(src)}, nil
 }

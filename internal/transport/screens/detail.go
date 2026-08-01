@@ -376,6 +376,16 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 		els = append(els, ui.Button(label, "primary", ui.IconName("play"),
 			ui.OnTap(ui.Invoke(playPartAction, playInput))))
 
+		// The way to the candidate set (ADR 0116). Offered beside Play rather
+		// than instead of it: the ranking is right often enough that making
+		// everyone choose would be a worse default than choosing for them, and
+		// wrong often enough that there has to be a way through.
+		els = append(els, ui.Button("Sources", "secondary", ui.OnTap(ui.Navigate(screenSources, map[string]any{
+			paramNodeID: string(playing.NodeID),
+			"title":     title,
+			"poster":    s.art(m.Poster),
+		}))))
+
 		if resumable {
 			// Start over is offered rather than assumed, and it does not clear
 			// the position: someone who starts again and stops after five

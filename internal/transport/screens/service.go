@@ -63,6 +63,8 @@ const (
 	// things you can open — and the settings side of the app is a working
 	// surface with no artwork on it.
 	screenHistory = "history"
+	// screenSources is the candidate releases behind one item (ADR 0116).
+	screenSources = "sources"
 	// screenExtensions is the browse-and-install surface for extension modules
 	// (ADR 0081). It is its own screen rather than a settings section because
 	// listing what is available reaches the trusted repository over the network,
@@ -291,6 +293,12 @@ type contentQueries interface {
 	// value because the type that understands them belongs to the playback
 	// transport, and an application service may not import one.
 	LanguagePreferenceFor(context.Context, v1.Caller) []byte
+
+	// PlaybackSources lists the candidate releases behind one item, ranked for
+	// the calling client (ADR 0116). It ranks and does not resolve: resolving
+	// every candidate to draw a list would spend a play's whole latency budget
+	// on a screen somebody may only be glancing at.
+	PlaybackSources(context.Context, app.PlaybackSourcesQuery) (app.PlaybackSourcesResult, error)
 }
 
 // Service renders named screens. It holds the query surface the builders read
@@ -348,6 +356,8 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.settingsScreen(ctx, caller, params)
 	case screenHistory:
 		return s.historyScreen(ctx, caller)
+	case screenSources:
+		return s.sourcesScreen(ctx, caller, params)
 	case screenExtensions:
 		return s.extensionsScreen(ctx, caller)
 	case screenLogs:
