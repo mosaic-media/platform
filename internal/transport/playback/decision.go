@@ -298,3 +298,52 @@ func chooseAudio(tracks []AudioTrack, preferred []string) (AudioTrack, bool) {
 	})
 	return ordered[0], true
 }
+
+// WithAudioOverride replaces the audio track a preference chose with one the
+// viewer named for this playback (ADR 0116).
+//
+// **It re-decides rather than re-labels**, which is the whole reason it is a
+// function and not a field assignment. Whether audio is copied or encoded is a
+// property of the *chosen track's* codec, and whether the video is copied is
+// then a property of that: a viewer switching from the AAC track to the DTS one
+// on a browser has turned a direct play into a transcode, and a plan that
+// carried the new index beside the old verdict would copy a stream the client
+// cannot decode and present it as silence.
+//
+// An index naming no track in the release leaves the plan untouched. A stale
+// menu is a worse reason to lose the audio than no menu at all.
+func WithAudioOverride(plan Plan, info MediaInfo, codecs ClientCodecs, index *int) Plan {
+	if index == nil {
+		return plan
+	}
+	var chosen AudioTrack
+	found := false
+	for _, t := range info.Audio {
+		if t.Index == *index {
+			chosen, found = t, true
+			break
+		}
+	}
+	if !found || chosen.Index == plan.AudioIndex {
+		return plan
+	}
+
+	codec := strings.ToLower(chosen.Codec)
+	plan.AudioIndex = chosen.Index
+	plan.AudioLanguage = chosen.Language
+	if codecs.Audio[codec] {
+		plan.Audio = ActionCopy
+	} else {
+		plan.Audio = ActionEncode
+		plan.Reason = "audio codec " + chosen.Codec + " is not decodable by this client"
+	}
+	// The output container's constraint, on the same terms Decide applies it:
+	// it binds only once ffmpeg is already involved, because while the stream is
+	// relayed the container is the source's own.
+	if plan.Audio == ActionCopy && plan.Video == ActionEncode && !mp4Audio[codec] {
+		plan.Audio = ActionEncode
+		plan.Reason += "; audio codec " + chosen.Codec + " cannot be carried by the MP4 output"
+	}
+	plan.DirectPlay = plan.Video == ActionCopy && plan.Audio == ActionCopy
+	return plan
+}

@@ -191,6 +191,17 @@ type playEnvelope struct {
 	// rather than a change to the state, so choosing it does not throw away
 	// where the viewer had got to until they watch past it.
 	Restart bool `json:"restart"`
+	// AudioIndex and SubtitleIndex override the tracks the preference would have
+	// chosen, for this sitting only (ADR 0116). Both are source stream indexes,
+	// and both are pointers because zero is a real stream: a nil is "no override"
+	// and a zero is "stream 0", and collapsing them would make the first track
+	// unselectable.
+	//
+	// **A preference decides the default; an override decides one playback.**
+	// Nothing here is written back, deliberately — somebody sampling the Japanese
+	// audio on one episode has not changed what they want on the next.
+	AudioIndex    *int `json:"audioIndex,omitempty"`
+	SubtitleIndex *int `json:"subtitleIndex,omitempty"`
 }
 
 // playPart resolves a Part to playable bytes, seals the result into a ticket and
@@ -248,6 +259,12 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	plan := playback.Plan{DirectPlay: true}
 	if probed {
 		plan = playback.Decide(info, profile.codecs(), langs.Audio)
+		// A track chosen for this sitting overrides the one the preference
+		// picked (ADR 0116). Applied after Decide rather than inside it, because
+		// the plan's *other* decisions — whether the video is copied, whether
+		// the audio needs an encode — still have to be made for the track that
+		// was actually chosen.
+		plan = playback.WithAudioOverride(plan, info, profile.codecs(), env.AudioIndex)
 	}
 	// What they should read, after the release has had its say. A preference
 	// names what someone wants when they got the language they asked for; when
@@ -265,6 +282,9 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	if probed && !plan.DirectPlay {
 		plan.Subtitles, plan.Burn, plan.Styled =
 			playback.DecideSubtitles(info.Subtitles, subtitles, langs.Styling)
+		// The same override for subtitles: it changes which track is on by
+		// default, and never which tracks are offered.
+		playback.WithSubtitleOverride(plan.Subtitles, plan.Styled, env.SubtitleIndex)
 	}
 
 	// One record saying what was chosen and what will happen to it. Playback has

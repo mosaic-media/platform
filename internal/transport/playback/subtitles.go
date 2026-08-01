@@ -459,3 +459,37 @@ func subtitlePlaylistOf(resource string) (int, bool) {
 	}
 	return i, true
 }
+
+// WithSubtitleOverride turns on the track a viewer chose for this sitting,
+// instead of the one their preference chose (ADR 0116).
+//
+// It moves the default and changes nothing else: the same tracks are offered,
+// in the same order, because an override is a choice among what is there rather
+// than a new opinion about what should be. An index naming no offered track
+// leaves the preference's choice alone — a stale menu is a worse reason to lose
+// subtitles than no menu at all.
+func WithSubtitleOverride(offered []SubtitleDelivery, styled []StyledSubtitle, index *int) {
+	if index == nil {
+		return
+	}
+	found := false
+	for i := range offered {
+		if offered[i].Index == *index {
+			found = true
+		}
+	}
+	for i := range styled {
+		if styled[i].Index == *index {
+			found = true
+		}
+	}
+	if !found {
+		return
+	}
+	for i := range offered {
+		offered[i].Default = offered[i].Index == *index
+	}
+	for i := range styled {
+		styled[i].Default = styled[i].Index == *index
+	}
+}
