@@ -263,7 +263,8 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	// typeset fidelity and of a Blu-ray's picture subtitles, and it is why the
 	// preference behind it is opt-in.
 	if probed && !plan.DirectPlay {
-		plan.Subtitles, plan.Burn = playback.DecideSubtitles(info.Subtitles, subtitles, langs.Typeset)
+		plan.Subtitles, plan.Burn, plan.Styled =
+			playback.DecideSubtitles(info.Subtitles, subtitles, langs.Styling)
 	}
 
 	// One record saying what was chosen and what will happen to it. Playback has
@@ -328,6 +329,10 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		PartID: string(res.PartID),
 
 		ResumeAt: resumeAt,
+		// The authored subtitle scripts, for a client that can draw them
+		// (ADR 0115). A client that cannot ignores this and uses the HLS
+		// renditions, which are in the playlist either way.
+		Subtitles: styledTracks(ticket, plan),
 		// Which pipeline the client should use, decided before it fetches a
 		// byte. A release that goes through ffmpeg is served as HLS and needs a
 		// media framework; a relayed one keeps whatever the upstream sends and
@@ -449,6 +454,30 @@ func playbackSrc(ticket string, plan playback.Plan) string {
 		return "/playback/" + ticket + "/" + playback.PlaylistName
 	}
 	return "/playback/" + ticket
+}
+
+// styledTracks renders the authored subtitle scripts as the player node carries
+// them (ADR 0115): a URL under the same ticket, what it is, and which one the
+// preference chose.
+//
+// The URL is the origin's own, never the upstream's, for the same reason the
+// playback source is: the location behind a ticket may carry a debrid credential
+// and stays server-side (ADR 0045).
+func styledTracks(ticket string, plan playback.Plan) []screens.SubtitleTrack {
+	if len(plan.Styled) == 0 {
+		return nil
+	}
+	out := make([]screens.SubtitleTrack, 0, len(plan.Styled))
+	for i, s := range plan.Styled {
+		out = append(out, screens.SubtitleTrack{
+			Src:      "/playback/" + ticket + "/" + playback.StyledSubtitleName(i),
+			Format:   "ass",
+			Language: s.Language,
+			Label:    s.Label,
+			Default:  s.Default,
+		})
+	}
+	return out
 }
 
 // importEnvelope is the importContent action input: a content ref to materialise

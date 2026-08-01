@@ -324,6 +324,51 @@ func (r *Remuxer) Subtitles(ctx context.Context, upstreamURL string, headers map
 	return stdout, stop, nil
 }
 
+// StyledSubtitles extracts one subtitle track as the script it was authored as
+// (ADR 0115).
+//
+// **It is not windowed, and it cannot be.** An ASS script is one document: a
+// header, a style table and then the events, and libass needs all of it before
+// it can draw the first line. So this reads the container from the start, which
+// is the cost of typeset fidelity — the same read burning would have done, minus
+// the encode.
+//
+// The output is small enough to stream straight to the response; a two-hour
+// film's script is a few hundred kilobytes. Nothing is written to disk.
+func (r *Remuxer) StyledSubtitles(ctx context.Context, upstreamURL string, headers map[string]string, ordinal int) (io.ReadCloser, func(), error) {
+	if !r.Available() {
+		return nil, nil, ErrRemuxUnavailable
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	args := []string{"-hide_banner", "-loglevel", "error"}
+	args = append(args, reconnectArgs(upstreamURL)...)
+	if h := ffmpegHeaderArg(headers); h != "" {
+		args = append(args, "-headers", h)
+	}
+	// No -ss and no -copyts. The script's own timestamps are what libass draws
+	// against and the client aligns them to the media clock itself, so seeking
+	// the input here would only lose the events before the offset.
+	args = append(args, "-i", upstreamURL, "-vn", "-an",
+		"-map", fmt.Sprintf("0:s:%d", ordinal), "-c:s", "copy", "-f", "ass", "pipe:1")
+
+	cmd := exec.CommandContext(ctx, r.binary, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	stop := func() {
+		cancel()
+		_ = cmd.Wait()
+	}
+	return stdout, stop, nil
+}
+
 // ffmpegHeaderArg renders request headers in the CRLF-delimited form ffmpeg's
 // -headers flag expects, so a credentialed upstream is reachable by the remux
 // path on the same terms as the relay path.
@@ -544,6 +589,14 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 		}
 		writePlaylist(w, r, subtitlePlaylist(t.Plan.Duration, i))
 
+	case strings.HasSuffix(resource, ".ass"):
+		i, ok := styledSubtitleOf(resource)
+		if !ok || i >= len(t.Plan.Styled) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		serveStyledSubtitle(w, r, rx, t, t.Plan.Styled[i].Ordinal)
+
 	case strings.HasSuffix(resource, ".vtt"):
 		i, n, ok := subtitleSegmentOf(resource)
 		if !ok || i >= len(t.Plan.Subtitles) || n >= segmentCount(t.Plan.Duration, subtitleWindow) {
@@ -604,6 +657,45 @@ func writePlaylist(w http.ResponseWriter, r *http.Request, body string) {
 		return
 	}
 	_, _ = io.WriteString(w, body)
+}
+
+// serveStyledSubtitle sends one subtitle track as the script it was authored as.
+//
+// Unlike a WebVTT window, an empty result here is a failure rather than a quiet
+// nothing: a script with no events is a script libass will draw nothing from for
+// the whole film, and the client has a flattened rendition to fall back to only
+// if it is told this one did not work. So the first bytes are read before the
+// status is written, the same ordering serveRemuxed uses and for the same
+// reason.
+func serveStyledSubtitle(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket, ordinal int) {
+	body, stop, err := rx.StyledSubtitles(r.Context(), t.URL, t.Headers, ordinal)
+	if err != nil {
+		http.Error(w, "subtitles unavailable", http.StatusBadGateway)
+		return
+	}
+	defer stop()
+	defer body.Close()
+
+	first := make([]byte, 4096)
+	n, readErr := io.ReadFull(body, first)
+	if n == 0 {
+		http.Error(w, "the origin could not extract this subtitle track", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", assMimeType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return
+	}
+	if _, err := w.Write(first[:n]); err != nil {
+		return
+	}
+	if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
+		return
+	}
+	_, _ = io.Copy(w, body)
 }
 
 // serveSubtitleSegment extracts and sends one window of one subtitle track.

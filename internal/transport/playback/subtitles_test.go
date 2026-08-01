@@ -19,7 +19,7 @@ import (
 // offered is the common case: plain text tracks, nobody asking for typeset
 // fidelity, so nothing is ever burned.
 func offered(tracks []SubtitleTrack, intent SubtitleIntent) []SubtitleDelivery {
-	out, burn := DecideSubtitles(tracks, intent, false)
+	out, burn, _ := DecideSubtitles(tracks, intent, StylingPlain)
 	if burn != nil {
 		panic("this helper is for the rendition cases; use DecideSubtitles directly")
 	}
@@ -274,7 +274,7 @@ func TestSubtitleResourceNamesRoundTrip(t *testing.T) {
 // a release that has none: the entry point is the same media playlist it always
 // was, and no extra round trip was bought for an empty rendition list.
 func TestNoSubtitlesMeansNoMaster(t *testing.T) {
-	got, burn := DecideSubtitles(nil, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, false)
+	got, burn, _ := DecideSubtitles(nil, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, StylingPlain)
 	if got != nil || burn != nil {
 		t.Errorf("DecideSubtitles(nil) = %+v, %+v, want nothing to declare", got, burn)
 	}
@@ -426,7 +426,7 @@ func TestAGraphicTrackIsNeverOfferedAsARendition(t *testing.T) {
 	}
 	// Nobody asked for a language either track has, so nothing is chosen and
 	// nothing is burned — but the picture track must still not be listed.
-	out, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"fra"}}, false)
+	out, burn, _ := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"fra"}}, StylingPlain)
 	if burn != nil {
 		t.Fatalf("burn = %+v, want none — no track was chosen", burn)
 	}
@@ -441,7 +441,7 @@ func TestAGraphicTrackIsNeverOfferedAsARendition(t *testing.T) {
 func TestAGraphicTrackIsBurnedWhenItIsTheOneWanted(t *testing.T) {
 	tracks := []SubtitleTrack{{Index: 3, Codec: "hdmv_pgs_subtitle", Language: "eng"}}
 
-	out, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, false)
+	out, burn, _ := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, StylingPlain)
 	if burn == nil {
 		t.Fatal("nothing was burned, so a viewer who asked for English gets nothing at all")
 	}
@@ -463,7 +463,7 @@ func TestTypesetIsFlattenedByDefaultAndBurnedOnRequest(t *testing.T) {
 	tracks := []SubtitleTrack{{Index: 3, Codec: "ass", Language: "eng"}}
 	intent := SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}
 
-	out, burn := DecideSubtitles(tracks, intent, false)
+	out, burn, _ := DecideSubtitles(tracks, intent, StylingPlain)
 	if burn != nil {
 		t.Errorf("burn = %+v, want none — the default must not force an encode", burn)
 	}
@@ -471,7 +471,7 @@ func TestTypesetIsFlattenedByDefaultAndBurnedOnRequest(t *testing.T) {
 		t.Errorf("offered %+v, want the track listed and on", out)
 	}
 
-	out, burn = DecideSubtitles(tracks, intent, true)
+	out, burn, _ = DecideSubtitles(tracks, intent, StylingBurn)
 	if burn == nil {
 		t.Fatal("asking for the subtitles as authored produced no burn, so the setting does nothing")
 	}
@@ -489,7 +489,7 @@ func TestTypesetIsFlattenedByDefaultAndBurnedOnRequest(t *testing.T) {
 func TestAskingForTypesetDoesNotBurnAPlainTrack(t *testing.T) {
 	tracks := []SubtitleTrack{{Index: 3, Codec: "subrip", Language: "eng"}}
 
-	out, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, true)
+	out, burn, _ := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, StylingBurn)
 	if burn != nil {
 		t.Errorf("burn = %+v, want none — SubRip carries no styling an encode could preserve", burn)
 	}
@@ -506,14 +506,17 @@ func TestSubtitlesOffNeverBurns(t *testing.T) {
 		{Index: 3, Codec: "hdmv_pgs_subtitle", Language: "eng"},
 		{Index: 4, Codec: "ass", Language: "eng"},
 	}
-	for _, wantsTypeset := range []bool{false, true} {
-		out, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesOff}, wantsTypeset)
+	for _, styling := range []SubtitleStyling{StylingPlain, StylingClient, StylingBurn} {
+		out, burn, styled := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesOff}, styling)
 		if burn != nil {
-			t.Errorf("typeset=%v: burned %+v for someone who wants no subtitles", wantsTypeset, burn)
+			t.Errorf("styling=%q: burned %+v for someone who wants no subtitles", styling, burn)
+		}
+		if len(styled) != 0 {
+			t.Errorf("styling=%q: sent %+v to a client for someone who wants no subtitles", styling, styled)
 		}
 		// The ASS track is still listed, so they can turn it on for one scene.
 		if len(out) != 1 || out[0].Index != 4 || out[0].Default {
-			t.Errorf("typeset=%v: offered %+v, want the text track listed and off", wantsTypeset, out)
+			t.Errorf("styling=%q: offered %+v, want the text track listed and off", styling, out)
 		}
 	}
 }
@@ -527,7 +530,7 @@ func TestTheOrdinalIsNotTheStreamIndex(t *testing.T) {
 		{Index: 3, Codec: "ass", Language: "jpn"},
 		{Index: 4, Codec: "ass", Language: "eng"},
 	}
-	_, burn := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, true)
+	_, burn, _ := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, StylingBurn)
 	if burn == nil {
 		t.Fatal("nothing burned")
 	}
@@ -610,5 +613,133 @@ func TestUnknownSubtitleCodecsAreTreatedAsText(t *testing.T) {
 		if got := formOf(codec); got != want {
 			t.Errorf("formOf(%q) = %v, want %v", codec, got, want)
 		}
+	}
+}
+
+// The third answer: send the script and let the client draw it (ADR 0115).
+
+// TestAStyledTrackGoesToTheClientByDefault is the choice that dominates the
+// other two. It preserves the positions and the colours, it costs no encode, and
+// the flattened rendition rides beside it for a client that cannot draw it — so
+// getting it wrong costs nothing.
+func TestAStyledTrackGoesToTheClientByDefault(t *testing.T) {
+	tracks := []SubtitleTrack{{Index: 3, Codec: "ass", Language: "eng"}}
+	intent := SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}
+
+	out, burn, styled := DecideSubtitles(tracks, intent, StylingClient)
+	if burn != nil {
+		t.Errorf("burn = %+v, want none — sending the script costs no encode", burn)
+	}
+	if len(styled) != 1 || styled[0].Index != 3 || !styled[0].Default {
+		t.Fatalf("styled = %+v, want the chosen track sent as authored", styled)
+	}
+	// The fallback is the point: a client that cannot render a script must still
+	// have subtitles.
+	if len(out) != 1 || !out[0].Default {
+		t.Errorf("offered %+v, want the flattened rendition beside it as the fallback", out)
+	}
+}
+
+// TestPlainAndBurnSendNoScript bounds it. Flattening means the viewer chose the
+// free answer and does not want the extra read; burning means the script is in
+// the picture already and sending it too would draw every sign twice.
+func TestPlainAndBurnSendNoScript(t *testing.T) {
+	tracks := []SubtitleTrack{{Index: 3, Codec: "ass", Language: "eng"}}
+	intent := SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}
+
+	for _, styling := range []SubtitleStyling{StylingPlain, StylingBurn} {
+		_, _, styled := DecideSubtitles(tracks, intent, styling)
+		if len(styled) != 0 {
+			t.Errorf("styling=%q sent %+v to the client", styling, styled)
+		}
+	}
+}
+
+// TestOnlyStyledTracksAreSentAsScripts guards a second read of the container for
+// nothing. SubRip carries nothing WebVTT does not, so a script of it would be
+// the same subtitles fetched twice.
+func TestOnlyStyledTracksAreSentAsScripts(t *testing.T) {
+	tracks := []SubtitleTrack{
+		{Index: 3, Codec: "subrip", Language: "eng"},
+		{Index: 4, Codec: "ass", Language: "jpn"},
+		{Index: 5, Codec: "hdmv_pgs_subtitle", Language: "eng"},
+	}
+	_, _, styled := DecideSubtitles(tracks, SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, StylingClient)
+
+	if len(styled) != 1 || styled[0].Index != 4 {
+		t.Fatalf("styled = %+v, want only the ASS track", styled)
+	}
+	// It is offered but not on: the viewer asked for English and it is Japanese.
+	if styled[0].Default {
+		t.Error("a track in a language nobody asked for was marked default")
+	}
+}
+
+// TestALegacyTypesetDocumentStillMeansBurn is the compatibility the field swap
+// owes. Somebody who chose "as authored" under ADR 0114 chose the burn, because
+// that was the only thing it meant, and their playback must not silently change.
+func TestALegacyTypesetDocumentStillMeansBurn(t *testing.T) {
+	got := ParseLanguagePreference([]byte(`{"audio":["eng"],"typeset":true}`))
+	if got.Styling != StylingBurn {
+		t.Errorf("Styling = %q, want burn — that is what the old field meant", got.Styling)
+	}
+
+	// And the absence of both is the new default rather than the old one.
+	if got := ParseLanguagePreference([]byte(`{"audio":["eng"]}`)); got.Styling != StylingClient {
+		t.Errorf("Styling = %q, want the default", got.Styling)
+	}
+	// An unknown value takes the default too, on the same terms as the mode.
+	if got := ParseLanguagePreference([]byte(`{"audio":["eng"],"styling":"holographic"}`)); got.Styling != StylingClient {
+		t.Errorf("Styling = %q, want the default", got.Styling)
+	}
+}
+
+// TestTheOriginServesTheAuthoredScript is the last hop: the URL the player node
+// carries has to resolve to the script itself.
+func TestTheOriginServesTheAuthoredScript(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "args")
+	s := newTestSealer(t)
+	plan := seekablePlan()
+	_, _, plan.Styled = DecideSubtitles([]SubtitleTrack{{Index: 4, Codec: "ass", Language: "eng"}},
+		SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}, StylingClient)
+	if len(plan.Styled) != 1 {
+		t.Fatalf("fixture: styled = %+v", plan.Styled)
+	}
+	raw, err := s.Mint("https://cdn.example/movie.mkv", nil, "session-1", plan)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	h := Handler(s, http.DefaultClient, NewRemuxerAt(recordingFFmpeg(t, "[Script Info]\n", argsFile)))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw+"/"+StyledSubtitleName(0), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("styled script: %d\n%s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != assMimeType {
+		t.Errorf("Content-Type = %q, want %q", ct, assMimeType)
+	}
+
+	got, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("ffmpeg was never started: %v", err)
+	}
+	line := " " + string(got) + " "
+	for _, want := range []string{"-map 0:s:0", "-c:s copy", "-f ass"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("args %q lack %q", line, want)
+		}
+	}
+	// No -ss and no -copyts: a script is one document from the start, and seeking
+	// the input would drop every event before the offset.
+	if strings.Contains(line, " -ss ") || strings.Contains(line, " -copyts ") {
+		t.Errorf("args %q seek the input, which would truncate the script", line)
+	}
+
+	// A track that was never offered is refused rather than clamped.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/playback/"+raw+"/"+StyledSubtitleName(1), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unoffered script = %d, want 404", rec.Code)
 	}
 }

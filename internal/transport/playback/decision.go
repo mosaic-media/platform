@@ -103,6 +103,13 @@ type Plan struct {
 	// picture already, and offering it beside itself would draw it twice.
 	Burn *BurnedSubtitle `json:"b,omitempty"`
 
+	// Styled are the tracks offered to the client as the scripts they were
+	// authored as, for a client that can draw them (ADR 0115). They ride beside
+	// Subtitles rather than replacing it, so a client that cannot render a script
+	// uses the flattened rendition and one that can puts the signs where the
+	// author put them.
+	Styled []StyledSubtitle `json:"y,omitempty"`
+
 	// Reason is a short human explanation of why work is needed, for logs and
 	// for telling a user what is happening rather than showing a spinner.
 	Reason string

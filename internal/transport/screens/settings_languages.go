@@ -96,14 +96,16 @@ func (s *Service) languagesPanel(ctx context.Context, caller v1.Caller, nav sett
 	styling := ui.Stack("vertical", 0,
 		ui.Text(ui.Prop("text", "Styled subtitles"), ui.Prop("variant", "label")),
 		ui.Text(ui.Prop("text", "Anime and other releases often place subtitles over the "+
-			"picture — signs, captions, songs — in colours and positions the author "+
-			"chose. Showing them that way means drawing them into the video, which "+
-			"makes this server re-encode a release it could otherwise pass through "+
-			"untouched. Left off, those subtitles still appear, as plain text at the "+
-			"bottom."), ui.Prop("variant", "caption")),
+			"picture — signs, captions, songs — in the colours and positions the author "+
+			"chose. As authored sends the real thing and lets your player draw it, which "+
+			"is free; a player that cannot falls back to plain text on its own. Burn into "+
+			"video draws them in here instead, which works on any player and makes this "+
+			"server re-encode a release it could otherwise pass through "+
+			"untouched."), ui.Prop("variant", "caption")),
 		ui.Stack("horizontal", 2,
-			typesetButton(current, false, "Plain text"),
-			typesetButton(current, true, "As authored")))
+			stylingButton(current, playback.StylingClient, "As authored"),
+			stylingButton(current, playback.StylingPlain, "Plain text"),
+			stylingButton(current, playback.StylingBurn, "Burn into video")))
 
 	body := ui.Stack("vertical", 4, audio, subtitles, show, styling).Build()
 	return settingsFrame(nav, sectionLanguages, "Language",
@@ -141,15 +143,19 @@ func modeButton(current playback.LanguagePreference, mode playback.SubtitleMode,
 	return ui.Button(label, tone, ui.OnTap(setLanguages(next)))
 }
 
-// typesetButton is one of the two subtitle-styling choices, carrying the
+// stylingButton is one of the three subtitle-styling choices, carrying the
 // document it sets.
-func typesetButton(current playback.LanguagePreference, typeset bool, label string) ui.El {
+func stylingButton(current playback.LanguagePreference, styling playback.SubtitleStyling, label string) ui.El {
 	tone := "ghost"
-	if current.Typeset == typeset {
+	if current.Styling == styling {
 		tone = "secondary"
 	}
 	next := current
-	next.Typeset = typeset
+	next.Styling = styling
+	// The field this replaced is cleared on any write, so a document written
+	// before it existed stops carrying an answer that contradicts the new one
+	// (ADR 0115). It is read on the way in and never written on the way out.
+	next.Typeset = false
 	return ui.Button(label, tone, ui.OnTap(setLanguages(next)))
 }
 

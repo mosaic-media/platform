@@ -45,16 +45,41 @@ type LanguagePreference struct {
 	Subtitles []string `json:"subtitles,omitempty"`
 	// SubtitleMode is what to show when the audio preference was met.
 	SubtitleMode SubtitleMode `json:"subtitleMode,omitempty"`
-	// Typeset asks for a styled subtitle track to be rendered as it was authored
-	// — signs placed over the picture, colours, fonts — rather than flattened to
-	// plain text (ADR 0114).
+	// Styling is what to do with a track that carries more than words —
+	// positioned signs, colours, fonts (ADR 0115).
+	Styling SubtitleStyling `json:"styling,omitempty"`
+
+	// Typeset is the field Styling replaced, read for documents written before
+	// it existed (ADR 0115). It meant "burn it in", which is what a `true` here
+	// still resolves to.
 	//
-	// **It is off by default and the reason is cost**, not taste. Honouring it
-	// means burning the track into the picture, which forces a video encode on a
-	// release that may not otherwise need one; the flattened rendition is free.
-	// So this is opt-in, and the setting says what it costs.
+	// Kept rather than migrated because a preference document is written by
+	// whichever client last touched it and read by every Platform after: a
+	// migration would have to be a write, and a write to somebody's settings on
+	// their behalf is a worse cost than a field that stays readable.
 	Typeset bool `json:"typeset,omitempty"`
 }
+
+// SubtitleStyling is how much of a styled subtitle track a viewer wants, and
+// therefore what the Platform has to spend to give it to them (ADR 0115).
+type SubtitleStyling string
+
+const (
+	// StylingPlain flattens a styled track to plain text. It is free, and it
+	// loses the positions, the colours and the sizes.
+	StylingPlain SubtitleStyling = "plain"
+	// StylingClient sends the track as authored and lets the client draw it.
+	//
+	// **This is the default and it is the one that dominates the other two**: it
+	// preserves everything, it costs no encode, and a client that cannot draw it
+	// falls back to the flattened rendition that is offered beside it. What it
+	// costs is a read of the container to extract the script.
+	StylingClient SubtitleStyling = "client"
+	// StylingBurn draws the track into the picture. It works on every client
+	// there is, including ones that can render nothing themselves, and it forces
+	// a video encode and cannot be switched off mid-playback.
+	StylingBurn SubtitleStyling = "burn"
+)
 
 // DefaultLanguagePreference is what a viewer who has set nothing gets.
 //
@@ -68,6 +93,11 @@ func DefaultLanguagePreference() LanguagePreference {
 		Audio:        []string{"eng", "en"},
 		Subtitles:    []string{"eng", "en"},
 		SubtitleMode: SubtitlesForced,
+		// Styled tracks go to the client as authored, because that costs nothing
+		// and degrades to the flattened rendition on a client that cannot draw
+		// them. The expensive answer — burning — is the one somebody has to
+		// choose (ADR 0115).
+		Styling: StylingClient,
 	}
 }
 
@@ -93,7 +123,7 @@ func ParseLanguagePreference(raw []byte) LanguagePreference {
 // Codes are compared against what ffprobe reports, which is lower-case, so a
 // viewer who stored "ENG" must not silently stop matching anything.
 func (p LanguagePreference) normalised() LanguagePreference {
-	out := LanguagePreference{SubtitleMode: p.SubtitleMode, Typeset: p.Typeset}
+	out := LanguagePreference{SubtitleMode: p.SubtitleMode, Styling: p.Styling}
 	for _, l := range p.Audio {
 		if l = strings.ToLower(strings.TrimSpace(l)); l != "" {
 			out.Audio = append(out.Audio, l)
@@ -114,6 +144,18 @@ func (p LanguagePreference) normalised() LanguagePreference {
 		// reason an unreadable document is: a preference is not worth failing a
 		// play over.
 		out.SubtitleMode = DefaultLanguagePreference().SubtitleMode
+	}
+	switch out.Styling {
+	case StylingPlain, StylingClient, StylingBurn:
+	default:
+		// A document written before Styling existed said `typeset: true` to mean
+		// "burn it in", so that is what it still means. Anything else — an
+		// unknown value, or nothing at all — takes the default.
+		if p.Typeset {
+			out.Styling = StylingBurn
+		} else {
+			out.Styling = DefaultLanguagePreference().Styling
+		}
 	}
 	return out
 }

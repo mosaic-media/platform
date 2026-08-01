@@ -140,9 +140,9 @@ type BurnedSubtitle struct {
 //
 // When a track is burned nothing is offered beside it. The burned track is
 // already in the picture, and listing it again would draw it twice.
-func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, wantsTypeset bool) ([]SubtitleDelivery, *BurnedSubtitle) {
+func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, styling SubtitleStyling) ([]SubtitleDelivery, *BurnedSubtitle, []StyledSubtitle) {
 	if len(tracks) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	all := make([]SubtitleDelivery, 0, len(tracks))
@@ -160,7 +160,7 @@ func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, wantsTypeset
 	// tracks are still listed, because turning subtitles on for one scene is not
 	// a change of preference.
 	if intent.Mode == SubtitlesOff {
-		return renditions(all), nil
+		return renditions(all), nil, nil
 	}
 
 	// The choice is made over *every* track, graphic ones included. A release
@@ -168,17 +168,20 @@ func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, wantsTypeset
 	// to answer someone who asked for English.
 	n := defaultSubtitle(all, intent)
 	if n < 0 {
-		return renditions(all), nil
+		return renditions(all), nil, nil
 	}
 
 	chosen := all[n]
-	if chosen.form == SubtitleGraphic || (chosen.form == SubtitleTypeset && wantsTypeset) {
+	// A picture track has no other delivery. A styled one is burned only when
+	// this viewer asked for it to be, because burning is the expensive answer
+	// and sending the script to the client is the cheap one (ADR 0115).
+	if chosen.form == SubtitleGraphic || (chosen.form == SubtitleTypeset && styling == StylingBurn) {
 		return nil, &BurnedSubtitle{
 			Index:   chosen.Index,
 			Ordinal: subtitleOrdinal(tracks, chosen.Index),
 			Graphic: chosen.form == SubtitleGraphic,
 			Label:   chosen.Label,
-		}
+		}, nil
 	}
 
 	out := renditions(all)
@@ -187,7 +190,55 @@ func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, wantsTypeset
 			out[i].Default = true
 		}
 	}
-	return out, nil
+	return out, nil, styled(all, tracks, chosen, styling)
+}
+
+// StyledSubtitle is a track offered to the client as it was authored, for a
+// client that can draw it (ADR 0115).
+//
+// It rides beside the flattened rendition rather than replacing it. That is the
+// whole reason this costs nothing to get wrong: a client that cannot render the
+// script ignores this and uses the rendition, and one that can renders the
+// signs where the author put them.
+type StyledSubtitle struct {
+	// Index is the stream's index in the source.
+	Index int `json:"i"`
+	// Ordinal is its position among the source's subtitle streams, which is what
+	// the extraction's `-map 0:s:N` counts in.
+	Ordinal int `json:"o"`
+	// Language is the track's language code.
+	Language string `json:"l,omitempty"`
+	// Label is what a client's menu shows.
+	Label string `json:"n,omitempty"`
+	// Default marks the track the preference chose, so a client that draws these
+	// knows which one to turn on without re-deriving the decision.
+	Default bool `json:"d,omitempty"`
+}
+
+// styled lists the tracks worth sending as authored.
+//
+// Only typeset ones, and only when the viewer did not ask for them flattened.
+// A plain track has nothing a script could carry that WebVTT does not, so
+// offering one here would be a second copy of the same subtitles and a second
+// read of the container to produce it.
+func styled(all []SubtitleDelivery, tracks []SubtitleTrack, chosen SubtitleDelivery, styling SubtitleStyling) []StyledSubtitle {
+	if styling != StylingClient {
+		return nil
+	}
+	var out []StyledSubtitle
+	for _, s := range all {
+		if s.form != SubtitleTypeset {
+			continue
+		}
+		out = append(out, StyledSubtitle{
+			Index:    s.Index,
+			Ordinal:  subtitleOrdinal(tracks, s.Index),
+			Language: s.Language,
+			Label:    s.Label,
+			Default:  s.Index == chosen.Index,
+		})
+	}
+	return out
 }
 
 // renditions drops the tracks that cannot be one.
@@ -303,6 +354,36 @@ var subtitleLanguageNames = map[string]string{
 // A minute is also comfortably more than any player reads ahead, so the window
 // is fetched long before the video reaches it.
 const subtitleWindow = 60 * time.Second
+
+// StyledSubtitleName is the authored script for offered styled track i.
+//
+// Exported because the transport that mints a ticket has to point the client at
+// it, like PlaylistName and for the same reason: a second spelling of the same
+// path is exactly the drift this avoids.
+//
+// `.ass` rather than a generic extension because it is what the file is, and a
+// client choosing a renderer reads the extension before it reads a byte.
+func StyledSubtitleName(i int) string { return "styled" + strconv.Itoa(i) + ".ass" }
+
+// styledSubtitleOf reads a styled-track index out of a resource name, accepting
+// only the exact form the player node emits.
+func styledSubtitleOf(resource string) (int, bool) {
+	name, cut := strings.CutSuffix(resource, ".ass")
+	if !cut || !strings.HasPrefix(name, "styled") {
+		return 0, false
+	}
+	name = strings.TrimPrefix(name, "styled")
+	i, err := strconv.Atoi(name)
+	if err != nil || i < 0 || strconv.Itoa(i) != name {
+		return 0, false
+	}
+	return i, true
+}
+
+// assMimeType is what an authored subtitle script is served as. There is no
+// registered type for it, and this is the spelling libass-based clients look
+// for.
+const assMimeType = "text/x-ssa"
 
 // escapeFilterValue renders a value safe to put inside an ffmpeg filtergraph.
 //
