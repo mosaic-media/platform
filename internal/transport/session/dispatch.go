@@ -307,7 +307,12 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		// it presents only as a release that suddenly plays badly — so the log
 		// has to be able to answer "was it the subtitles".
 		telemetry.Bool("subtitle_burned", plan.Burn != nil))
-	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, plan)
+	// The part and the capability class ride sealed in the ticket so the origin
+	// can ask the source again when the address stops working (ADR 0049). A
+	// debrid link dies whenever its torrent leaves the provider's cache, so this
+	// is what makes the resolution cache safe rather than merely fast.
+	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, plan,
+		playback.For(string(res.PartID), profile.class))
 	if err != nil {
 		return nil, contracts.WrapError(contracts.Internal, "mint playback ticket", err)
 	}

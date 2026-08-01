@@ -404,3 +404,72 @@ func playbackScore(p v1.Part, prefer PlaybackPreference) int {
 	score -= int(p.NaturalOrder)
 	return score
 }
+
+// ReresolvePlayback asks the source again where a release's bytes are, and
+// overwrites the cached answer (ADR 0049's invalidate-on-read).
+//
+// **It is the cache's correction, and it deliberately does not read the cache.**
+// The origin calls this precisely because the cached address did not work, so
+// consulting it would return the dead link that prompted the call. The write at
+// the end overwrites rather than deletes, which is the store's own rule: the
+// *candidate* was never wrong, only its address changed, and deleting would
+// throw away a key about to be written again.
+//
+// It runs as the session that minted the ticket, so it authorises on exactly the
+// same terms as the play that produced it. That is why the origin can call it at
+// all: a transport calls services, and this one re-runs the boundary rather than
+// trusting the ticket as proof of anything but its own provenance.
+//
+// It resolves the Part it is given and does not re-run selection. Selection
+// already chose this release for this client; re-choosing mid-playback could
+// hand back a different release, and a viewer who is thirty minutes in would
+// have the film change under them.
+func (s *Service) ReresolvePlayback(ctx context.Context, caller v1.Caller, partID v1.PartID, class string) (ResolvePlaybackResult, error) {
+	if caller.Session == "" {
+		return ResolvePlaybackResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
+	}
+	if partID == "" {
+		return ResolvePlaybackResult{}, contracts.NewError(contracts.InvalidArgument, "part id is required")
+	}
+	if _, err := s.enter(ctx, caller, ActionContentRead, policy.Resource{Type: "content"}); err != nil {
+		return ResolvePlaybackResult{}, err
+	}
+	if s.parts == nil {
+		return ResolvePlaybackResult{}, contracts.NewError(contracts.Unavailable, "no part store configured")
+	}
+	part, err := s.parts.FindByID(ctx, partID)
+	if err != nil {
+		return ResolvePlaybackResult{}, err
+	}
+
+	entry, ok := s.playbackProvider()
+	if !ok {
+		return ResolvePlaybackResult{}, contracts.NewError(contracts.NotFound, "no playback module is installed")
+	}
+	settings, err := s.readModuleSettings(ctx, entry.ModuleID)
+	if err != nil {
+		return ResolvePlaybackResult{}, err
+	}
+
+	ctx, span := moduleSpan(ctx, entry.ModuleID, "reresolve_playback")
+	res, err := entry.Provider.Resolve(ctx, v1.PlaybackRequest{
+		Caller: caller, Settings: settings, Part: part,
+	})
+	failSpan(span, err)
+	span.End()
+	if err != nil {
+		return ResolvePlaybackResult{}, contracts.WrapError(contracts.Unavailable, "resolve playback", err)
+	}
+	if res.Kind != v1.PlaybackDirect || res.URL == "" {
+		return ResolvePlaybackResult{}, contracts.NewError(contracts.NotFound, "playback module resolved no location for this part")
+	}
+
+	s.cacheResolution(ctx, part.ID, class, res.URL, res.Headers)
+
+	return ResolvePlaybackResult{
+		ModuleID: entry.ModuleID, URL: res.URL, Headers: res.Headers,
+		PartID: part.ID, Release: part.EditionLabel,
+		VideoCodec: part.VideoCodec, AudioCodec: part.AudioCodec, Height: part.Height,
+		Probe: probeAttribute(part),
+	}, nil
+}

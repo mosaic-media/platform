@@ -309,6 +309,14 @@ func boundaryCases() []boundaryCase {
 				Caller: caller(sid), PartID: "part-1",
 			}))
 		}},
+		// The origin's correction for a dead cached link (ADR 0049). It is
+		// called from a transport rather than from a client, which is exactly
+		// why it earns a row instead of an exemption: a ticket proves its own
+		// provenance and nothing else, so the session it names has to clear the
+		// boundary here the same as anywhere.
+		{"ReresolvePlayback", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ReresolvePlayback(ctx, caller(sid), "part-1", "browser"))
+		}},
 		// A write on a read path, which is why it is worth having a row here
 		// rather than an exemption: recording a probe is triggered by playing,
 		// but it mutates the content graph and must refuse an ungranted caller

@@ -417,6 +417,22 @@ func serveRemuxed(w http.ResponseWriter, r *http.Request, t ticket, plan Plan, r
 	first := make([]byte, 64*1024)
 	n, readErr := io.ReadFull(body, first)
 	if n == 0 {
+		// Nothing came out, which a dead upstream link looks exactly like from
+		// here. Re-resolve and try once more (ADR 0049) — still before any byte
+		// has been written to the client, so the retry is invisible.
+		if fresh, ok := refreshed(r.Context(), t); ok {
+			stop()
+			body.Close()
+			retryBody, retryStop, retryErr := rx.Stream(r.Context(), fresh.URL, fresh.Headers, plan)
+			if retryErr == nil {
+				defer retryStop()
+				defer retryBody.Close()
+				body = retryBody
+				n, readErr = io.ReadFull(body, first)
+			}
+		}
+	}
+	if n == 0 {
 		http.Error(w, "the origin could not produce a playable stream for this release ("+plan.Reason+")", http.StatusBadGateway)
 		return
 	}
@@ -628,6 +644,15 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 			return
 		}
 		body, size, err := sessions.Open(r.Context(), rx, key, t.URL, t.Headers, t.Plan, length, n)
+		if err != nil {
+			// A segment that will not start is the same signal as a pipe that
+			// produced nothing: re-resolve once and try again (ADR 0049). The
+			// session key changes with the address, so the retry does not adopt
+			// the failed run's spool.
+			if fresh, ok := refreshed(r.Context(), t); ok {
+				body, size, err = sessions.Open(r.Context(), rx, key, fresh.URL, fresh.Headers, fresh.Plan, length, n)
+			}
+		}
 		if err != nil {
 			http.Error(w, "the origin could not produce a playable stream for this release ("+t.Plan.Reason+")", http.StatusBadGateway)
 			return

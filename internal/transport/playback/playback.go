@@ -22,6 +22,7 @@
 package playback
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -58,6 +59,47 @@ type ticket struct {
 	// request, which for a seeking player would mean probing dozens of times.
 	Plan    Plan  `json:"p,omitempty"`
 	Expires int64 `json:"e"`
+
+	// PartID and Class are what the origin needs to ask the source again
+	// (ADR 0049). A cached upstream address is perishable with no trustworthy
+	// expiry — a debrid link dies the moment its torrent leaves the provider's
+	// cache, whatever its age — so the answer to a dead one is to re-resolve
+	// rather than to fail the play, and re-resolving needs the release and the
+	// capability class the address was cached under.
+	//
+	// Both are absent on a ticket minted without them, and the origin then
+	// behaves exactly as it did before this existed: one attempt, and an honest
+	// failure if it does not work.
+	PartID string `json:"pid,omitempty"`
+	Class  string `json:"cls,omitempty"`
+}
+
+// TicketOption is extra detail sealed into a ticket.
+//
+// Variadic rather than more parameters because the two things it carries are
+// optional in a real sense: a ticket without them still plays, it just cannot
+// recover from a dead link. Growing Mint's signature would have made twenty
+// call sites state that they have nothing to say.
+type TicketOption func(*ticket)
+
+// For records which release and capability class an address was resolved for,
+// so the origin can re-ask when it stops working (ADR 0049).
+func For(partID, class string) TicketOption {
+	return func(t *ticket) { t.PartID, t.Class = partID, class }
+}
+
+// Resolver re-asks the source where a release's bytes are.
+//
+// It is the origin's one call back into the application services, and it is an
+// interface here rather than a concrete type for the reason every transport
+// boundary is: a transport calls services, and naming one by its interface is
+// what keeps that checkable. The composition root supplies the implementation.
+//
+// It takes a session rather than a caller because a ticket carries one: the
+// re-resolve runs as whoever minted the ticket, so it is authorised on exactly
+// the same terms as the play that produced it.
+type Resolver interface {
+	ReresolvePlayback(ctx context.Context, session, partID, class string) (url string, headers map[string]string, err error)
 }
 
 // Sealer mints and opens playback tickets. Its key is process-scoped, like the
@@ -88,14 +130,18 @@ var ErrInvalidTicket = errors.New("playback: invalid ticket")
 
 // Mint seals an upstream location into an opaque ticket string, safe to put in
 // a URL path.
-func (s *Sealer) Mint(url string, headers map[string]string, session string, plan Plan) (string, error) {
-	payload, err := json.Marshal(ticket{
+func (s *Sealer) Mint(url string, headers map[string]string, session string, plan Plan, opts ...TicketOption) (string, error) {
+	t := ticket{
 		URL:     url,
 		Headers: headers,
 		Session: session,
 		Plan:    plan,
 		Expires: s.now().Add(TicketTTL).Unix(),
-	})
+	}
+	for _, opt := range opts {
+		opt(&t)
+	}
+	payload, err := json.Marshal(t)
 	if err != nil {
 		return "", err
 	}
@@ -173,6 +219,39 @@ func Handler(sealer *Sealer, client *http.Client, remuxer *Remuxer) http.Handler
 	return HandlerWithSessions(sealer, client, remuxer, NewSegmentSessions(DefaultSegmentDir))
 }
 
+// resolver is the re-resolve the origin will use, set by the composition root.
+//
+// A package variable rather than a parameter on Handler, because every other
+// constructor here is already four arguments wide and this is one optional
+// collaborator that the whole package shares. A nil resolver is the honest
+// no-op: the origin then behaves exactly as it did before invalidate-on-read
+// existed, which is what a test that has not set one wants.
+var resolver Resolver
+
+// SetResolver gives the origin a way to re-ask the source for a dead link
+// (ADR 0049). Called once from the composition root.
+func SetResolver(r Resolver) { resolver = r }
+
+// refreshed re-resolves a ticket's upstream address and reports whether it
+// changed to something worth retrying.
+//
+// **The old address is not compared against the new one for equality alone.** A
+// source that hands back the identical URL has told the origin the link is not
+// the problem, and retrying it would be a second identical failure; a source
+// that hands back a different one has repaired exactly the failure this exists
+// for. So an unchanged address is treated as no answer.
+func refreshed(ctx context.Context, t ticket) (ticket, bool) {
+	if resolver == nil || t.PartID == "" || t.Class == "" {
+		return t, false
+	}
+	url, headers, err := resolver.ReresolvePlayback(ctx, t.Session, t.PartID, t.Class)
+	if err != nil || url == "" || url == t.URL {
+		return t, false
+	}
+	t.URL, t.Headers = url, headers
+	return t, true
+}
+
 // HandlerWithSessions is Handler over an explicit session registry, so the
 // caller can start its reaper and stop every running transcode on shutdown.
 // **This is the production constructor**; see Handler for what holding no
@@ -220,26 +299,20 @@ func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, 
 			return
 		}
 
-		req, err := http.NewRequestWithContext(r.Context(), r.Method, t.URL, nil)
-		if err != nil {
-			http.Error(w, "bad upstream url", http.StatusBadGateway)
-			return
-		}
-		// The module's headers first — they are what the upstream requires —
-		// then the client's range, which must not be overridable by them.
-		for k, v := range t.Headers {
-			req.Header.Set(k, v)
-		}
-		for _, h := range relayedRequestHeaders {
-			if v := r.Header.Get(h); v != "" {
-				req.Header.Set(h, v)
+		// The relayed fetch, retried once against a re-resolved address
+		// (ADR 0049). This is the cleanest place in the origin to do it: the
+		// upstream is contacted before a byte is written to the client, so a
+		// dead link can be repaired with nothing committed to the response.
+		resp, err := relayFetch(r, client, t)
+		if err != nil || resp.StatusCode >= 400 {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			if fresh, ok := refreshed(r.Context(), t); ok {
+				t = fresh
+				resp, err = relayFetch(r, client, t)
 			}
 		}
-		if req.Header.Get("User-Agent") == "" {
-			req.Header.Set("User-Agent", "mosaic-platform-playback/1")
-		}
-
-		resp, err := client.Do(req)
 		if err != nil {
 			http.Error(w, "upstream fetch failed", http.StatusBadGateway)
 			return
@@ -267,4 +340,30 @@ func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, 
 		// lifetime rather than a byte count.
 		_, _ = io.Copy(w, resp.Body)
 	})
+}
+
+// relayFetch performs one upstream request for a relayed stream.
+//
+// Split out of the handler so the same request can be made twice — once against
+// the cached address and once against a re-resolved one — without the header
+// assembly drifting between the two attempts.
+func relayFetch(r *http.Request, client *http.Client, t ticket) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, t.URL, nil)
+	if err != nil {
+		return nil, err
+	}
+	// The module's headers first — they are what the upstream requires — then
+	// the client's range, which must not be overridable by them.
+	for k, v := range t.Headers {
+		req.Header.Set(k, v)
+	}
+	for _, h := range relayedRequestHeaders {
+		if v := r.Header.Get(h); v != "" {
+			req.Header.Set(h, v)
+		}
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", "mosaic-platform-playback/1")
+	}
+	return client.Do(req)
 }

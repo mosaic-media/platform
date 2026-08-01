@@ -831,6 +831,10 @@ func run() error {
 	// Each plain-HTTP surface is wrapped at its own seam and names itself, so a
 	// record says which surface produced it rather than only that it was HTTP.
 	apiMux.Handle("/artwork", telemetry.HTTPMiddleware("artwork", artwork.Handler(artworkSigner, artwork.GuardedClient())))
+	// The origin's way back to the source for a link that has died (ADR 0049).
+	// Wired here rather than constructed in the transport, because a transport
+	// calls application services and does not reach for one itself.
+	playback.SetResolver(playbackResolver{svc: svc})
 	apiMux.Handle("/playback/", telemetry.HTTPMiddleware("playback", playback.HandlerWithSessions(playbackSealer, playback.Client(), playbackRemuxer, playbackSessions)))
 	apiMux.Handle(authPath, authConnect)
 	apiMux.Handle(sessionPath, sessionConnect)
@@ -925,4 +929,21 @@ func run() error {
 
 	boot.Info("exiting cleanly")
 	return serveErr
+}
+
+// playbackResolver adapts the application service to the origin's Resolver
+// (ADR 0049).
+//
+// The adapter exists so the playback transport names a two-method-wide interface
+// in primitives instead of importing the whole application service — the same
+// shape every other transport boundary in this repository takes, and what keeps
+// "transports call services only" checkable rather than asserted.
+type playbackResolver struct{ svc *app.Service }
+
+func (p playbackResolver) ReresolvePlayback(ctx context.Context, session, partID, class string) (string, map[string]string, error) {
+	res, err := p.svc.ReresolvePlayback(ctx, v1.Caller{Session: session}, v1.PartID(partID), class)
+	if err != nil {
+		return "", nil, err
+	}
+	return res.URL, res.Headers, nil
 }

@@ -103,7 +103,7 @@ func NewHandler(svc *app.Service, artwork func(string) string, tickets TicketMin
 // session transport does not depend on the playback transport: both are
 // transports, and one importing the other would be the wrong direction.
 type TicketMinter interface {
-	Mint(url string, headers map[string]string, session string, plan playback.Plan) (string, error)
+	Mint(url string, headers map[string]string, session string, plan playback.Plan, opts ...playback.TicketOption) (string, error)
 }
 
 // Manager exposes the session store for lifecycle wiring (reaper, shutdown).
