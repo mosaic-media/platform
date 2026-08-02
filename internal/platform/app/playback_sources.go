@@ -215,3 +215,65 @@ func humanSize(b int64) string {
 		return strconv.FormatInt(b, 10) + " B"
 	}
 }
+
+// PlayableAfterImportQuery asks which release to play for a work that has just
+// been materialised (ADR 0118).
+type PlayableAfterImportQuery struct {
+	Caller v1.Caller
+	WorkID v1.NodeID
+}
+
+// PlayableAfterImportResult names the one item worth playing, when there is
+// exactly one.
+type PlayableAfterImportResult struct {
+	NodeID v1.NodeID
+	PartID v1.PartID
+	// Ambiguous reports that the work has more than one playable item — a
+	// series. It is a distinct answer rather than an error because it is the
+	// *correct* outcome: adding a series and then guessing an episode would be
+	// worse than adding it and letting the viewer choose.
+	Ambiguous bool
+}
+
+// PlayableAfterImport finds the release to start, for a work materialised by a
+// play (ADR 0118).
+//
+// **A film is one item and a series is many, and the difference is the whole
+// function.** Materialising a film from a Play button should start it; doing the
+// same for a series would have to guess an episode, and the honest answer there
+// is to have added the series and re-drawn the screen with its episodes on it.
+func (s *Service) PlayableAfterImport(ctx context.Context, q PlayableAfterImportQuery) (PlayableAfterImportResult, error) {
+	if q.Caller.Session == "" {
+		return PlayableAfterImportResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
+	}
+	if q.WorkID == "" {
+		return PlayableAfterImportResult{}, contracts.NewError(contracts.InvalidArgument, "work id is required")
+	}
+	if _, err := s.enter(ctx, q.Caller, ActionContentRead, policy.Resource{Type: "content"}); err != nil {
+		return PlayableAfterImportResult{}, err
+	}
+	if s.nodes == nil || s.parts == nil {
+		return PlayableAfterImportResult{}, contracts.NewError(contracts.Unavailable, "no content stores configured")
+	}
+
+	nodes, err := s.nodes.ListByWork(ctx, q.WorkID)
+	if err != nil {
+		return PlayableAfterImportResult{}, err
+	}
+	_, _, items := indexWork(q.WorkID, nodes)
+
+	var found PlayableAfterImportResult
+	for _, item := range items {
+		parts, err := s.parts.ListByNode(ctx, item.ID)
+		if err != nil || len(parts) == 0 {
+			continue
+		}
+		if found.PartID != "" {
+			// A second playable item. Nothing here can choose between episodes,
+			// and a wrong guess starts the wrong one.
+			return PlayableAfterImportResult{Ambiguous: true}, nil
+		}
+		found = PlayableAfterImportResult{NodeID: item.ID, PartID: parts[0].ID}
+	}
+	return found, nil
+}

@@ -202,6 +202,12 @@ type playEnvelope struct {
 	// audio on one episode has not changed what they want on the next.
 	AudioIndex    *int `json:"audioIndex,omitempty"`
 	SubtitleIndex *int `json:"subtitleIndex,omitempty"`
+
+	// Ref materialises the item before playing it, for something not in the
+	// library yet (ADR 0118). It is the same envelope importContent takes,
+	// deliberately: pressing Play on something unowned *is* an import, and
+	// giving it a second shape would hide that.
+	Ref *importRef `json:"ref,omitempty"`
 }
 
 // playPart resolves a Part to playable bytes, seals the result into a ticket and
@@ -228,6 +234,23 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		if err := json.Unmarshal(input, &env); err != nil {
 			return nil, contracts.NewError(contracts.InvalidArgument, "play part: input is not valid JSON")
 		}
+	}
+	// Playing something unowned adds it first (ADR 0118). The library gains
+	// things people bounce off after ninety seconds, and that cost is accepted:
+	// the alternative was a Play button that did not exist for anything not
+	// already added.
+	if env.PartID == "" && env.Ref != nil {
+		partID, nodeID, err := h.materialiseForPlay(ctx, caller, *env.Ref)
+		if err != nil {
+			return nil, err
+		}
+		if partID == "" {
+			// Added, and nothing unambiguous to start — a series, whose episodes
+			// the screen now lists. Re-rendering is the answer rather than
+			// guessing which episode was meant.
+			return nil, nil
+		}
+		env.PartID, env.NodeID = string(partID), nodeID
 	}
 	if env.PartID == "" {
 		return nil, contracts.NewError(contracts.InvalidArgument, "play part: a part id is required")
@@ -558,14 +581,31 @@ func (h *Handler) externalSubtitles(ctx context.Context, caller v1.Caller, nodeI
 // (ADR 0028), under the runtime's `ref` key — the same shape the detail screen's
 // Add-to-library action emits.
 type importEnvelope struct {
-	Ref struct {
-		Provider       string `json:"provider"`
-		NativeID       string `json:"nativeId"`
-		NativeType     string `json:"nativeType"`
-		MediaType      string `json:"mediaType"`
-		ExternalScheme string `json:"externalScheme"`
-		ExternalID     string `json:"externalId"`
-	} `json:"ref"`
+	Ref importRef `json:"ref"`
+}
+
+// importRef is the ref itself, named rather than anonymous because playPart now
+// carries the same one (ADR 0118): pressing Play on something unowned *is* an
+// import, and two shapes for one thing would have hidden that.
+type importRef struct {
+	Provider       string `json:"provider"`
+	NativeID       string `json:"nativeId"`
+	NativeType     string `json:"nativeType"`
+	MediaType      string `json:"mediaType"`
+	ExternalScheme string `json:"externalScheme"`
+	ExternalID     string `json:"externalId"`
+}
+
+// contentRef is the published shape the application services take.
+func (r importRef) contentRef() v1.ContentRef {
+	return v1.ContentRef{
+		Provider:       r.Provider,
+		NativeID:       r.NativeID,
+		NativeType:     r.NativeType,
+		MediaType:      v1.MediaType(r.MediaType),
+		ExternalScheme: r.ExternalScheme,
+		ExternalID:     r.ExternalID,
+	}
 }
 
 // importRefFromInput decodes an importContent action envelope into a ContentRef.
@@ -576,14 +616,7 @@ func importRefFromInput(input []byte) (v1.ContentRef, error) {
 			return v1.ContentRef{}, contracts.NewError(contracts.InvalidArgument, "import content: input is not valid JSON")
 		}
 	}
-	return v1.ContentRef{
-		Provider:       env.Ref.Provider,
-		NativeID:       env.Ref.NativeID,
-		NativeType:     env.Ref.NativeType,
-		MediaType:      v1.MediaType(env.Ref.MediaType),
-		ExternalScheme: env.Ref.ExternalScheme,
-		ExternalID:     env.Ref.ExternalID,
-	}, nil
+	return env.Ref.contentRef(), nil
 }
 
 // configureEnvelope is the configureModule action input: a module id and its
@@ -748,4 +781,37 @@ func sessionIDFromInput(input []byte) (domain.SessionID, error) {
 		return "", contracts.NewError(contracts.InvalidArgument, "revoke session: a session id is required")
 	}
 	return domain.SessionID(env.SessionID), nil
+}
+
+// materialiseForPlay adds an item to the library and reports what to play
+// (ADR 0118).
+//
+// **It is an import, and it authorises as one.** The command it calls is the
+// same one the Add-to-library button invokes, so a viewer without
+// `content.import` is refused here exactly as they are refused there — pressing
+// Play cannot be a way around the authority that curates the library
+// (ADR 0069).
+//
+// An empty part id with no error means the work was added and there is nothing
+// unambiguous to start: a series. Guessing an episode would be worse than
+// showing the ones that now exist.
+func (h *Handler) materialiseForPlay(ctx context.Context, caller v1.Caller, ref importRef) (v1.PartID, string, error) {
+	res, err := h.svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: ref.contentRef()})
+	if err != nil {
+		return "", "", err
+	}
+	playable, err := h.svc.PlayableAfterImport(ctx, app.PlayableAfterImportQuery{
+		Caller: caller, WorkID: res.WorkID,
+	})
+	if err != nil {
+		// The item is added; only the choice of what to start failed. Reporting
+		// that as a play failure would hide the thing that did work.
+		telemetry.From(ctx).For("playback").Warn("materialised but could not choose a release",
+			telemetry.Identifier("work", string(res.WorkID)), telemetry.Err(err))
+		return "", "", nil
+	}
+	if playable.Ambiguous {
+		return "", "", nil
+	}
+	return playable.PartID, string(playable.NodeID), nil
 }

@@ -323,7 +323,18 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 
 	if !res.InLibrary {
 		if canImport {
-			els = append(els, ui.Button("Add to library", "primary", ui.IconName("plus"),
+			// Play comes first and Add second, which is the ordering ADR 0118
+			// argues for: a viewer wants to watch the thing, and adding it is
+			// what the Platform has to do to let them. Both are drawn only for a
+			// caller who may import, because **pressing Play here adds it** —
+			// the same authority, honestly gated (ADR 0069).
+			els = append(els, ui.Button("Play", "primary", ui.IconName("play"),
+				ui.OnTap(ui.Invoke(playPartAction, map[string]any{
+					paramRef: refInput(ref),
+					"title":  title,
+					"poster": s.art(m.Poster),
+				}))))
+			els = append(els, ui.Button("Add to library", "secondary", ui.IconName("plus"),
 				ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
 		}
 		if hasTrailer {

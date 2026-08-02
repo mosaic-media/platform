@@ -1227,7 +1227,7 @@ func TestCatalogScreenRendersItemsAsDetailLinks(t *testing.T) {
 	}
 }
 
-func TestVirtualDetailShowsAddToLibrary(t *testing.T) {
+func TestVirtualDetailOffersPlayAndAdd(t *testing.T) {
 	fake := &fakeQueries{
 		previewMeta: v1.ContentMetadata{
 			Title: "Blade Runner 2049", Year: 2017, Overview: "A blade runner uncovers a secret.",
@@ -1254,12 +1254,33 @@ func TestVirtualDetailShowsAddToLibrary(t *testing.T) {
 	if prop(hero, "logo") == nil || prop(hero, "logo") == "" {
 		t.Fatalf("hero has no logo prop; want the clearlogo bound")
 	}
-	// The sole library affordance is Add to library, in the hero's actions slot.
+	// Two library affordances, and Play comes first (ADR 0118): a viewer wants
+	// to watch the thing, and adding it is what the Platform does to let them.
+	// Both carry the previewed ref, and both are drawn only for a caller who may
+	// import — because pressing Play here adds it.
 	actions := slotNodes(hero, "actions")
-	if len(actions) != 1 || prop(actions[0], "label") != "Add to library" {
-		t.Fatalf("hero actions = %+v, want a single Add to library button", actions)
+	if len(actions) != 2 {
+		t.Fatalf("hero actions = %+v, want Play and Add to library", actions)
 	}
-	act := actionOf(actions[0])
+	if prop(actions[0], "label") != "Play" || prop(actions[1], "label") != "Add to library" {
+		t.Fatalf("hero actions = %+v, want Play first and Add to library second", actions)
+	}
+
+	play := actionOf(actions[0])
+	if play["kind"] != sdui.KindInvoke || play["mutation"] != "playPart" {
+		t.Fatalf("play action = %+v, want Invoke playPart", play)
+	}
+	// It names no part, because there is no Part yet — the ref is what
+	// materialises one.
+	playInput := mapAt(play, "input")
+	if playInput["partId"] != nil {
+		t.Errorf("play names a part id (%v) for something not in the library", playInput["partId"])
+	}
+	if ref := mapAt(playInput, "ref"); ref["nativeId"] != "tt1254207" {
+		t.Fatalf("play ref = %+v, want the previewed ref", ref)
+	}
+
+	act := actionOf(actions[1])
 	if act["kind"] != sdui.KindInvoke || act["mutation"] != "importContent" {
 		t.Fatalf("add action = %+v, want Invoke importContent", act)
 	}

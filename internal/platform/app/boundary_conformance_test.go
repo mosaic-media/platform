@@ -327,6 +327,11 @@ func boundaryCases() []boundaryCase {
 				Caller: caller(sid), NodeID: "node-1",
 			}))
 		}},
+		{"PlayableAfterImport", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.PlayableAfterImport(ctx, app.PlayableAfterImportQuery{
+				Caller: caller(sid), WorkID: "work-1",
+			}))
+		}},
 		// A write on a read path, which is why it is worth having a row here
 		// rather than an exemption: recording a probe is triggered by playing,
 		// but it mutates the content graph and must refuse an ungranted caller
