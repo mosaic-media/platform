@@ -312,6 +312,37 @@ func (r *CapabilityRegistry) StreamProviders() []StreamProviderEntry {
 	return out
 }
 
+// SubtitlesProviderEntry pairs a subtitles-capable module's id with its
+// provider, so a caller can read the module's settings before invoking it.
+type SubtitlesProviderEntry struct {
+	ModuleID string
+	Provider v1.SubtitlesProvider
+}
+
+// SubtitlesProviders returns every registered capability that fills
+// RoleSubtitles, in stable module-id order.
+//
+// The plural was missing while the singular was not, and that is the shape of
+// the gap ADR 0117 closes: `SubtitlesProvider(id)` could resolve one *by name*
+// and nothing ever knew a name to ask for. Subtitles fan out for the same reason
+// streams do (ADR 0073) — a provider is asked about content it did not source,
+// so every installed one is asked rather than only the module that supplied the
+// metadata.
+func (r *CapabilityRegistry) SubtitlesProviders() []SubtitlesProviderEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var out []SubtitlesProviderEntry
+	for _, id := range r.sortedIDs() {
+		if !fills(r.byID[id], v1.RoleSubtitles) {
+			continue
+		}
+		if p, ok := r.byID[id].(v1.SubtitlesProvider); ok {
+			out = append(out, SubtitlesProviderEntry{ModuleID: id, Provider: p})
+		}
+	}
+	return out
+}
+
 // ArtworkProviderEntry pairs an artwork-capable module's id with its provider.
 type ArtworkProviderEntry struct {
 	ModuleID string

@@ -493,3 +493,46 @@ func WithSubtitleOverride(offered []SubtitleDelivery, styled []StyledSubtitle, i
 		styled[i].Default = styled[i].Index == *index
 	}
 }
+
+// ExternalSubtitle is a subtitle file a module found somewhere else (ADR 0117).
+//
+// It differs from every other track here in one way that decides the design:
+// **it is already a complete file, and it is not in the release.** So there is
+// nothing to extract and no container to read past — the origin fetches it,
+// converts it if it is not already WebVTT, and serves it. That is far cheaper
+// than the embedded path, which is why a remote source with no subtitles of its
+// own is better served this way than by extraction.
+type ExternalSubtitle struct {
+	// URL is where the module said the file is. It is sealed in the ticket and
+	// never sent to a client: a module resolves and the Platform serves
+	// (ADR 0045), and the URL may carry a credential.
+	URL string `json:"u"`
+	// Language is the source's own label, and Label what a menu shows.
+	Language string `json:"l,omitempty"`
+	Label    string `json:"n,omitempty"`
+	// Module is who offered it, so two sources' answers are tellable apart in a
+	// menu that lists both.
+	Module string `json:"m,omitempty"`
+}
+
+// externalSubtitleName is the origin's path for external track i.
+func externalSubtitleName(i int) string { return "ext" + strconv.Itoa(i) + ".vtt" }
+
+// ExternalSubtitleName is externalSubtitleName for the transport that mints the
+// ticket, on the same terms as StyledSubtitleName.
+func ExternalSubtitleName(i int) string { return externalSubtitleName(i) }
+
+// externalSubtitleOf reads an external-track index out of a resource name,
+// accepting only the exact form the player node emits.
+func externalSubtitleOf(resource string) (int, bool) {
+	name, cut := strings.CutSuffix(resource, ".vtt")
+	if !cut || !strings.HasPrefix(name, "ext") {
+		return 0, false
+	}
+	name = strings.TrimPrefix(name, "ext")
+	i, err := strconv.Atoi(name)
+	if err != nil || i < 0 || strconv.Itoa(i) != name {
+		return 0, false
+	}
+	return i, true
+}

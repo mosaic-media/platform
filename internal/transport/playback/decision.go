@@ -110,6 +110,12 @@ type Plan struct {
 	// author put them.
 	Styled []StyledSubtitle `json:"y,omitempty"`
 
+	// External are subtitle files a module resolved for this item (ADR 0117).
+	// They are not in the release; they were found elsewhere, and the origin
+	// fetches them so the module's URL — which may carry a credential and always
+	// carries the viewer's identity to a third party — never reaches a client.
+	External []ExternalSubtitle `json:"x,omitempty"`
+
 	// Reason is a short human explanation of why work is needed, for logs and
 	// for telling a user what is happening rather than showing a spinner.
 	Reason string

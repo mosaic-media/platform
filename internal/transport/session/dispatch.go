@@ -270,6 +270,13 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	// names what someone wants when they got the language they asked for; when
 	// they did not, this is where the Platform notices and escalates.
 	subtitles := langs.SubtitlesFor(plan.AudioLanguage)
+	// What the installed subtitle sources have for this item (ADR 0117). Asked
+	// on every play rather than stored, because a subtitle URL is perishable in
+	// the same way a stream address is — and best-effort, so a source that is
+	// down costs the extra tracks and never the playback.
+	external := h.externalSubtitles(ctx, caller, env.NodeID)
+	plan.External = external
+
 	// Offered as HLS renditions, which is why subtitles cost no client change
 	// (ADR 0113). Only on the transcoded path: a direct-played release is
 	// relayed byte for byte, so there is no playlist to declare a rendition in.
@@ -357,7 +364,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		// The authored subtitle scripts, for a client that can draw them
 		// (ADR 0115). A client that cannot ignores this and uses the HLS
 		// renditions, which are in the playlist either way.
-		Subtitles: styledTracks(ticket, plan),
+		Subtitles: subtitleTracksFor(ticket, plan),
 		// Which pipeline the client should use, decided before it fetches a
 		// byte. A release that goes through ffmpeg is served as HLS and needs a
 		// media framework; a relayed one keeps whatever the upstream sends and
@@ -488,11 +495,8 @@ func playbackSrc(ticket string, plan playback.Plan) string {
 // The URL is the origin's own, never the upstream's, for the same reason the
 // playback source is: the location behind a ticket may carry a debrid credential
 // and stays server-side (ADR 0045).
-func styledTracks(ticket string, plan playback.Plan) []screens.SubtitleTrack {
-	if len(plan.Styled) == 0 {
-		return nil
-	}
-	out := make([]screens.SubtitleTrack, 0, len(plan.Styled))
+func subtitleTracksFor(ticket string, plan playback.Plan) []screens.SubtitleTrack {
+	var out []screens.SubtitleTrack
 	for i, s := range plan.Styled {
 		out = append(out, screens.SubtitleTrack{
 			Src:      "/playback/" + ticket + "/" + playback.StyledSubtitleName(i),
@@ -500,6 +504,51 @@ func styledTracks(ticket string, plan playback.Plan) []screens.SubtitleTrack {
 			Language: s.Language,
 			Label:    s.Label,
 			Default:  s.Default,
+		})
+	}
+	// The module-found files, served as WebVTT by the origin (ADR 0117). They
+	// are never default: the release's own tracks are the ones a preference was
+	// resolved against, and a file from elsewhere turning itself on would
+	// override a decision nobody asked it to make.
+	for i, s := range plan.External {
+		out = append(out, screens.SubtitleTrack{
+			Src:      "/playback/" + ticket + "/" + playback.ExternalSubtitleName(i),
+			Format:   "vtt",
+			Language: s.Language,
+			Label:    s.Label,
+		})
+	}
+	return out
+}
+
+// externalSubtitles asks the installed subtitle sources what they have, and
+// costs the play nothing when they have nothing to say (ADR 0117).
+func (h *Handler) externalSubtitles(ctx context.Context, caller v1.Caller, nodeID string) []playback.ExternalSubtitle {
+	if nodeID == "" {
+		return nil
+	}
+	res, err := h.svc.PlaybackSubtitles(ctx, app.PlaybackSubtitlesQuery{
+		Caller: caller, NodeID: v1.NodeID(nodeID),
+	})
+	if err != nil {
+		// Best-effort, like the enrichment fan-out it mirrors. A source that is
+		// down must cost the extra tracks and never the playback.
+		telemetry.From(ctx).For("playback").Warn("subtitle sources could not be asked",
+			telemetry.Identifier("node", nodeID), telemetry.Err(err))
+		return nil
+	}
+	out := make([]playback.ExternalSubtitle, 0, len(res.Subtitles))
+	for _, s := range res.Subtitles {
+		label := s.Language
+		if label == "" {
+			label = "Subtitles"
+		}
+		// The module is named in the label because two sources answering for one
+		// title is the ordinary case, and "English" twice is a menu a viewer
+		// cannot choose from.
+		out = append(out, playback.ExternalSubtitle{
+			URL: s.URL, Language: s.Language,
+			Label: label + " — " + s.ModuleID, Module: s.ModuleID,
 		})
 	}
 	return out

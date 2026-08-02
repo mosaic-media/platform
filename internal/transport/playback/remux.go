@@ -605,6 +605,14 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 		}
 		writePlaylist(w, r, subtitlePlaylist(t.Plan.Duration, i))
 
+	case strings.HasPrefix(resource, "ext") && strings.HasSuffix(resource, ".vtt"):
+		i, ok := externalSubtitleOf(resource)
+		if !ok || i >= len(t.Plan.External) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		serveExternalSubtitle(w, r, rx, t.Plan.External[i].URL)
+
 	case strings.HasSuffix(resource, ".ass"):
 		i, ok := styledSubtitleOf(resource)
 		if !ok || i >= len(t.Plan.Styled) {
@@ -791,6 +799,82 @@ func writeSegment(w http.ResponseWriter, r *http.Request, contentType string, si
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodHead {
+		return
+	}
+	_, _ = io.Copy(w, body)
+}
+
+// ExternalSubtitles fetches a module-resolved subtitle file and converts it to
+// WebVTT (ADR 0117).
+//
+// **ffmpeg does the fetch as well as the conversion**, which is not laziness: it
+// already speaks every scheme a module might return, it already carries the
+// reconnect behaviour the rest of this file needs, and a SubRip file that is
+// already WebVTT costs a passthrough rather than a second code path. The
+// alternative — fetch with net/http, then decide whether to convert — would
+// duplicate both.
+//
+// The whole file is read, and there is nothing to window: a subtitle document
+// has no seekable structure and is a few hundred kilobytes at most.
+func (r *Remuxer) ExternalSubtitles(ctx context.Context, url string) (io.ReadCloser, func(), error) {
+	if !r.Available() {
+		return nil, nil, ErrRemuxUnavailable
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	args := []string{"-hide_banner", "-loglevel", "error"}
+	args = append(args, reconnectArgs(url)...)
+	args = append(args, "-i", url, "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+
+	cmd := exec.CommandContext(ctx, r.binary, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	stop := func() {
+		cancel()
+		_ = cmd.Wait()
+	}
+	return stdout, stop, nil
+}
+
+// serveExternalSubtitle sends one module-resolved subtitle file as WebVTT.
+//
+// The first bytes are read before the status is written, for the reason
+// serveRemuxed does it: a fetch that failed and a file that is genuinely empty
+// are indistinguishable once a 200 has gone out, and a client would show an
+// empty subtitle track rather than falling back.
+func serveExternalSubtitle(w http.ResponseWriter, r *http.Request, rx *Remuxer, url string) {
+	body, stop, err := rx.ExternalSubtitles(r.Context(), url)
+	if err != nil {
+		http.Error(w, "subtitles unavailable", http.StatusBadGateway)
+		return
+	}
+	defer stop()
+	defer body.Close()
+
+	first := make([]byte, 4096)
+	n, readErr := io.ReadFull(body, first)
+	if n == 0 {
+		http.Error(w, "the origin could not fetch this subtitle file", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", vttMimeType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return
+	}
+	if _, err := w.Write(first[:n]); err != nil {
+		return
+	}
+	if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
 		return
 	}
 	_, _ = io.Copy(w, body)
