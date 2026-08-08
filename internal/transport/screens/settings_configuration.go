@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -227,7 +228,7 @@ func inHours(d time.Duration) string { return strconv.Itoa(int(d.Hours())) }
 // that was never made.
 func pendingSentence(pending app.GetPendingConfigVersionResult, now time.Time) string {
 	var what string
-	if changed := changedSummary(pending.Version.Payload); changed != "" {
+	if changed := changedSummary(pending.Changed, pending.Version.Payload); changed != "" {
 		what = " It sets " + changed + "."
 	}
 	var when string
@@ -285,15 +286,45 @@ func payloadValues(payload []byte) map[string]string {
 	return values
 }
 
-// changedSummary names the fields a pending version would change, for the
-// sentence that says what is waiting.
-func changedSummary(payload []byte) string {
+// changedSummary names the fields a pending version would actually change, for
+// the sentence that says what is waiting.
+//
+// **It takes the changed set rather than deriving one from the payload**, and
+// that is the whole correctness of the sentence. A pending version is a
+// complete configuration, not a patch — the activation model diffs two payloads
+// — so its payload carries every field including the untouched ones. Listing
+// the payload's keys reported "it sets keep logs for → 21" to somebody who had
+// changed the maintenance interval and nothing else, with logs already at 21.
+//
+// A field outside the curated set is named by its schema key rather than
+// dropped. It cannot have been changed from this screen, so it came from
+// somewhere else — and a banner that quietly omitted it would say a change is
+// waiting while declining to say what.
+func changedSummary(changed []string, payload []byte) string {
 	values := payloadValues(payload)
-	labels := make([]string, 0, len(values))
+	labelled := make(map[string]string, len(configurableFields))
 	for _, field := range configurableFields {
-		if v, ok := values[field.name]; ok {
-			labels = append(labels, strings.ToLower(field.label)+" → "+v)
+		labelled[field.name] = strings.ToLower(field.label)
+	}
+
+	// In the panel's own order, so the sentence reads in the order the rows do,
+	// then anything left over. The changed set comes back in map order and
+	// would otherwise vary between renders of the same pending version.
+	inSet := make(map[string]bool, len(changed))
+	for _, name := range changed {
+		inSet[name] = true
+	}
+	labels := make([]string, 0, len(changed))
+	for _, field := range configurableFields {
+		if inSet[field.name] {
+			labels = append(labels, labelled[field.name]+" → "+values[field.name])
+			delete(inSet, field.name)
 		}
 	}
-	return joinWords(labels)
+	rest := make([]string, 0, len(inSet))
+	for name := range inSet {
+		rest = append(rest, name+" → "+values[name])
+	}
+	sort.Strings(rest)
+	return joinWords(append(labels, rest...))
 }

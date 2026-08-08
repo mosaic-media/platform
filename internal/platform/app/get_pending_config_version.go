@@ -35,6 +35,17 @@ type GetPendingConfigVersionResult struct {
 	Version     domain.ConfigVersion
 	Found       bool
 	ReloadClass config.ReloadClass
+	// Changed names the fields that actually differ from what is Active.
+	//
+	// It is here rather than left to a caller because a pending version is a
+	// *whole* configuration and not a patch — the activation model diffs two
+	// payloads, so a draft carries every field, including the ones nobody
+	// touched. A caller listing the payload's keys would report a change to
+	// every setting in it. That is not a hypothetical: the first version of the
+	// configuration panel did exactly that, and told an operator a change was
+	// waiting to set two values they had not touched to the values they already
+	// had.
+	Changed []string
 }
 
 func validateGetPendingConfigVersionQuery(query GetPendingConfigVersionQuery) error {
@@ -82,9 +93,19 @@ func (s *Service) GetPendingConfigVersion(ctx context.Context, query GetPendingC
 		return GetPendingConfigVersionResult{}, err
 	}
 
+	// A payload that cannot be diffed yields no field names rather than an
+	// error. RequiredClassBetween answers Recovery for the same input, which is
+	// the safe direction: the caller is told something is waiting and that only
+	// recovery can apply it, which is more useful than refusing the read.
+	changed, err := config.ChangedFields(current.Payload, pending.Payload)
+	if err != nil {
+		changed = nil
+	}
+
 	return GetPendingConfigVersionResult{
 		Version:     pending,
 		Found:       true,
 		ReloadClass: config.RequiredClassBetween(current.Payload, pending.Payload),
+		Changed:     changed,
 	}, nil
 }

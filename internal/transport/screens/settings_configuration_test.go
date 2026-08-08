@@ -94,6 +94,7 @@ func TestAChangeWaitingForARestartSaysSoAndSaysWhatItChanges(t *testing.T) {
 	fake := &fakeQueries{pendingConfig: app.GetPendingConfigVersionResult{
 		Found:       true,
 		ReloadClass: config.Restart,
+		Changed:     []string{"library.maintenance.interval_hours"},
 		Version: domain.ConfigVersion{
 			ID: "cfg-1", Status: domain.ConfigPending,
 			Payload: payload, RequestedAt: &requested,
@@ -110,6 +111,75 @@ func TestAChangeWaitingForARestartSaysSoAndSaysWhatItChanges(t *testing.T) {
 	// ominous — "something is waiting" is not something anybody can check.
 	if !strings.Contains(text, "library pass, every → 12") {
 		t.Errorf("the banner does not say what is waiting: %s", text)
+	}
+}
+
+// **The banner names what changed, not what the version contains.** A pending
+// version is a whole configuration rather than a patch, so its payload carries
+// every field including the ones nobody touched. Listing the payload's keys —
+// which the first version of this panel did — told an operator who had changed
+// the maintenance interval that a change was also waiting to set their log
+// retention to the value it already had.
+func TestTheBannerNamesOnlyWhatActuallyChanged(t *testing.T) {
+	payload, err := json.Marshal(map[string]any{
+		// The whole configuration, as a draft carries it.
+		"telemetry.retention.logs_days":      21,
+		"library.maintenance.items_per_run":  150,
+		"library.maintenance.interval_hours": 8,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeQueries{pendingConfig: app.GetPendingConfigVersionResult{
+		Found:       true,
+		ReloadClass: config.Restart,
+		// Only one of the three differs from what is Active.
+		Changed: []string{"library.maintenance.interval_hours"},
+		Version: domain.ConfigVersion{
+			ID: "cfg-1", Status: domain.ConfigPending, Payload: payload,
+		},
+	}}
+	svc := configService(fake)
+
+	text := treeStrings(render(t, svc, "settings", map[string]any{"section": sectionConfiguration}))
+
+	if !strings.Contains(text, "library pass, every → 8") {
+		t.Errorf("the banner does not name the field that changed: %s", text)
+	}
+	for _, unchanged := range []string{"keep logs for → 21", "library pass budget → 150"} {
+		if strings.Contains(text, unchanged) {
+			t.Errorf("the banner reported %q, which nobody changed: %s", unchanged, text)
+		}
+	}
+}
+
+// A field outside the curated set is named by its schema key rather than
+// dropped. It cannot have been changed from this screen, so it came from
+// somewhere else — and a banner that omitted it would say a change is waiting
+// while declining to say what.
+func TestAChangedFieldThisScreenDoesNotOfferIsStillNamed(t *testing.T) {
+	payload, err := json.Marshal(map[string]any{"composition.modules": "tmdb,cinemeta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeQueries{pendingConfig: app.GetPendingConfigVersionResult{
+		Found:       true,
+		ReloadClass: config.Generation,
+		Changed:     []string{"composition.modules"},
+		Version: domain.ConfigVersion{
+			ID: "cfg-2", Status: domain.ConfigPending, Payload: payload,
+		},
+	}}
+	svc := configService(fake)
+
+	text := treeStrings(render(t, svc, "settings", map[string]any{"section": sectionConfiguration}))
+	if !strings.Contains(text, "composition.modules → tmdb,cinemeta") {
+		t.Errorf("a changed field this screen does not offer was not named: %s", text)
+	}
+	// And it must say the escalation it is waiting for does not exist, rather
+	// than promising an upgrade nobody can trigger.
+	if !strings.Contains(text, "not built yet") {
+		t.Errorf("a generation-class pending change did not say its escalation is unbuilt: %s", text)
 	}
 }
 
