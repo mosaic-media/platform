@@ -20,8 +20,9 @@
 # the Platform itself here, which is the whole point — it is the shape ADR 0004
 # describes and the one where ADR 0060's boot id is honoured end to end, since
 # a process compose started mints its own id and cannot adopt anybody's. The
-# Platform is consequently on the Supervisor's *own* loopback, reachable only
-# through the front door, exactly as a deployed install has it.
+# Both children listen on Unix sockets under /run/mosaic inside this container
+# (ADR 0120), so the front door is not merely the address you are given — it is
+# the only path that exists. Nothing is published but :8443.
 #
 # **This is an overlay, not the default dev loop.** `docker-compose.dev.yml`
 # alone still gives you Vite on :5173 with hot reload and the Platform on
@@ -102,11 +103,11 @@ services:
         condition: service_completed_successfully
     environment:
       MOSAIC_SUPERVISOR_ADDR: ":8443"
-      # Both children are on this container's own loopback now, reachable
-      # only through the front door.
-      MOSAIC_SUPERVISOR_PLATFORM_URL: "http://127.0.0.1:8081"
-      MOSAIC_SUPERVISOR_PLATFORM_HANDOFF_URL: "http://127.0.0.1:8080"
-      MOSAIC_SUPERVISOR_SHELL_URL: "http://127.0.0.1:8090"
+      # No upstream URLs: every child defaults to a socket under the runtime
+      # directory, which is the shipped shape (ADR 0120). The Supervisor
+      # creates the directory and tells each child which socket to bind, so
+      # the two halves cannot disagree about the path.
+      MOSAIC_RUNTIME_DIR: "/run/mosaic"
       MOSAIC_SUPERVISOR_PLATFORM_COMMAND: "/opt/mosaic/mosaic-platform"
       MOSAIC_SUPERVISOR_PLATFORM_DIR: "/src/platform"
       MOSAIC_SUPERVISOR_SHELL_COMMAND: "/src/web/mosaic-shell/mosaic-shell"
@@ -115,8 +116,8 @@ services:
       # inherits the Supervisor's environment — which is the Supervisor booting
       # the Platform (ADR 0004), not a leak.
       MOSAIC_POSTGRES_DSN: "postgres://mosaic:mosaic@postgres:5432/mosaic?sslmode=disable"
-      MOSAIC_API_ADDR: ":8081"
-      MOSAIC_HEALTH_ADDR: ":8080"
+      # No MOSAIC_API_ADDR or MOSAIC_HEALTH_ADDR: the Supervisor sets both on
+      # the child, to the sockets it is going to dial.
       MOSAIC_INSTANCE_FILE: "/var/lib/mosaic/instance.json"
       MOSAIC_BOOTSTRAP_ADMIN_USERNAME: "${MOSAIC_BOOTSTRAP_ADMIN_USERNAME:-}"
       MOSAIC_BOOTSTRAP_ADMIN_PASSWORD: "${MOSAIC_BOOTSTRAP_ADMIN_PASSWORD:-}"

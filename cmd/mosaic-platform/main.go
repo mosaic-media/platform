@@ -31,6 +31,7 @@ import (
 	"github.com/mosaic-media/platform/internal/adapters/crypto"
 	"github.com/mosaic-media/platform/internal/adapters/extension"
 	"github.com/mosaic-media/platform/internal/adapters/instance"
+	"github.com/mosaic-media/platform/internal/adapters/listen"
 	"github.com/mosaic-media/platform/internal/composition/bootstrap"
 	"github.com/mosaic-media/platform/internal/composition/builtin"
 	"github.com/mosaic-media/platform/internal/composition/extensions"
@@ -65,7 +66,11 @@ const postgresDSNEnv = "MOSAIC_POSTGRES_DSN"
 // Supervisor handoff HTTP surface listens on.
 const healthAddrEnv = "MOSAIC_HEALTH_ADDR"
 
-const defaultHealthAddr = ":8080"
+// A socket, not a port: this surface carries Generation, migration and
+// config-activation state and deliberately skips the policy gate, so it must
+// be reachable only by the Supervisor (ADR 0120). A `host:port` still works
+// and is what the plain dev stack uses.
+const defaultHealthAddr = "/run/mosaic/platform-handoff.sock"
 
 // apiAddrEnv names the environment variable carrying the address the
 // client-facing Connect API listens on. It is a separate surface from the
@@ -75,7 +80,10 @@ const defaultHealthAddr = ":8080"
 // reason as the DSN above.
 const apiAddrEnv = "MOSAIC_API_ADDR"
 
-const defaultAPIAddr = ":8081"
+// A socket for the same reason, so the front door is the only way a client
+// reaches the Platform rather than merely the address they are told about
+// (ADR 0120).
+const defaultAPIAddr = "/run/mosaic/platform.sock"
 
 // bootstrapAdminUserEnv and bootstrapAdminPasswordEnv name the credentials for
 // the optional first-run administrator. Both must be set for the bootstrap to
@@ -858,15 +866,29 @@ func run() error {
 	// Both servers feed one error channel; whichever fails first ends the
 	// serve phase and both are shut down together below.
 	serveErrCh := make(chan error, 2)
-	serve := func(s *http.Server) {
-		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	serve := func(s *http.Server, l net.Listener) {
+		if err := s.Serve(l); err != nil && err != http.ErrServerClosed {
 			serveErrCh <- err
 			return
 		}
 		serveErrCh <- nil
 	}
-	go serve(httpServer)
-	go serve(apiServer)
+
+	// Bound before either is served, so a socket that cannot be created is a
+	// refusal to start rather than a Platform that is up and unreachable.
+	// listen.On decides the transport from the address (ADR 0120).
+	handoffListener, err := listen.On(healthAddr)
+	if err != nil {
+		return fmt.Errorf("listening on the handoff surface %s: %w", healthAddr, err)
+	}
+	apiListener, err := listen.On(apiAddr)
+	if err != nil {
+		handoffListener.Close()
+		return fmt.Errorf("listening on the client API %s: %w", apiAddr, err)
+	}
+
+	go serve(httpServer, handoffListener)
+	go serve(apiServer, apiListener)
 
 	lifecycle.MarkRunning()
 	boot.Info("serving supervisor handoff surface", telemetry.String("addr", healthAddr))
