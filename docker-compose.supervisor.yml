@@ -1,0 +1,70 @@
+# The dev stack behind the Supervisor's front door.
+#
+#   # once, in the web repository, to produce the Shell binary:
+#   cd ../web
+#   docker compose -f docker-compose.test.yml run --rm test \
+#     npm run build --workspace packages/shell
+#   docker compose -f docker-compose.test.yml run --rm shell-binary \
+#     bash ../scripts/build-shell-binary.sh
+#
+#   # then, here:
+#   cd ../platform
+#   docker compose -f docker-compose.dev.yml -f docker-compose.supervisor.yml \
+#     up postgres platform supervisor
+#
+# Then https://localhost:8443 — one port, TLS, the Shell at the root and the
+# Platform behind it. The certificate is self-signed and generated per boot, so
+# a browser will warn; that warning is the accurate description of it.
+#
+# **This is an overlay, not the default dev loop.** `docker-compose.dev.yml`
+# alone still gives you Vite on :5173 with hot reload, which is the right thing
+# for working on the client. Use this one to exercise what the *deployed* shape
+# does: TLS termination, routing, and the degradation ladder — none of which
+# Vite is involved in. Note the `up` above names its services explicitly and
+# omits `web`, because the Shell is served from the binary here rather than
+# from the dev server.
+#
+# The prerequisite above is real and deliberate: the binary embeds the built
+# bundle, and nothing in this file can produce it, because building it needs
+# Node and this stack's images do not carry it. A stale binary serves a stale
+# Shell with no warning, so rebuild it when the client changes.
+name: mosaic-dev
+
+services:
+  supervisor:
+    # The Go toolchain image is enough: the binary is built by the platform
+    # repository's own supervisor gate and mounted, rather than compiled here,
+    # so this service starts in a second rather than a minute.
+    image: golang:1.25-bookworm
+    depends_on:
+      platform:
+        condition: service_healthy
+    environment:
+      MOSAIC_SUPERVISOR_ADDR: ":8443"
+      # Service names, not loopback: the Platform is another container here.
+      MOSAIC_SUPERVISOR_PLATFORM_URL: "http://platform:8081"
+      MOSAIC_SUPERVISOR_PLATFORM_HANDOFF_URL: "http://platform:8080"
+      # The Shell is a child of *this* process, so it is on this container's
+      # own loopback and nothing else can reach it — which is the shape a
+      # deployed install has, where the front door is the only way in.
+      MOSAIC_SUPERVISOR_SHELL_URL: "http://127.0.0.1:8090"
+      MOSAIC_SUPERVISOR_SHELL_COMMAND: "/src/web/mosaic-shell/mosaic-shell"
+      # The Platform is started by compose here, so the Supervisor fronts and
+      # reports on it without owning its lifecycle. Leaving the command unset
+      # is what selects that; it is a supported shape, not a limitation.
+      #
+      # Consequently the Platform does NOT adopt the Supervisor's boot id in
+      # this stack — compose started it, so it minted its own. The Shell does
+      # adopt it, being a real child. That asymmetry is the honest state of
+      # ADR 0060 here rather than something the file hides.
+    volumes:
+      - ./supervisor:/src/supervisor
+      # The Shell binary, read-only: the Supervisor executes it and never
+      # writes to it.
+      - ../web:/src/web:ro
+    working_dir: /src/supervisor
+    ports:
+      # 8443 rather than 443 so it needs no privileged port, and so it cannot
+      # collide with anything already fronting this machine.
+      - "8443:8443"
+    command: ["./mosaic-supervisor"]
