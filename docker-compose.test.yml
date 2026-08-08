@@ -123,6 +123,42 @@ services:
         go vet -tags mosaicdev ./...
         go test -tags mosaicdev ./internal/adapters/extension/...
 
+  # The Supervisor, which is a *separate Go module* living in this repository
+  # only because it has no repository of its own yet:
+  #
+  #   docker compose -f docker-compose.test.yml run --rm supervisor
+  #
+  # It needs its own service for a reason that would otherwise be silent: `go
+  # build ./...` does not descend into a nested module, so the gate above
+  # compiles none of it and would stay green while the Supervisor did not
+  # build at all. It also imports nothing — no database, no ffmpeg, no SDK —
+  # so it has nothing to wait for and does not depend on postgres.
+  supervisor:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./supervisor:/src/supervisor
+      - mosaic-test-gomod:/go/pkg/mod
+      - mosaic-test-gobuild:/root/.cache/go-build
+    working_dir: /src/supervisor
+    command:
+      - bash
+      - -eu
+      - -o
+      - pipefail
+      - -c
+      - |
+        gofmt -l . > /tmp/unformatted
+        if [ -s /tmp/unformatted ]; then
+          echo "These files are not gofmt-clean:" >&2
+          cat /tmp/unformatted >&2
+          exit 1
+        fi
+        go vet ./...
+        go build ./...
+        go test ./...
+
 volumes:
   mosaic-test-gomod:
   mosaic-test-gobuild:
