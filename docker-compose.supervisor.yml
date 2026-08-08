@@ -1,5 +1,10 @@
 # The dev stack behind the Supervisor's front door.
 #
+#   # once, in the supervisor repository, to produce its binary:
+#   cd ../supervisor
+#   docker compose -f docker-compose.test.yml run --rm test \
+#     go build -o mosaic-supervisor ./cmd/mosaic-supervisor
+#
 #   # once, in the web repository, to produce the Shell binary:
 #   cd ../web
 #   docker compose -f docker-compose.test.yml run --rm test \
@@ -24,17 +29,25 @@
 # omits `web`, because the Shell is served from the binary here rather than
 # from the dev server.
 #
-# The prerequisite above is real and deliberate: the binary embeds the built
-# bundle, and nothing in this file can produce it, because building it needs
-# Node and this stack's images do not carry it. A stale binary serves a stale
-# Shell with no warning, so rebuild it when the client changes.
+# Both prerequisites above are real and deliberate: this overlay builds
+# nothing. The Supervisor is its own repository (github.com/mosaic-media/supervisor)
+# with its own gate, matching every other Mosaic repository — it is a sibling
+# checkout at ../supervisor, not a subdirectory here, so building it is that
+# repository's job. The Shell binary embeds the built bundle and nothing in
+# this file can produce that either, because building it needs Node and this
+# stack's images do not carry it. A stale binary serves a stale build with no
+# warning, so rebuild both when their source changes.
+#
+# ../supervisor is the assumed sibling path. Override it with
+# MOSAIC_SUPERVISOR_SRC if a checkout of some other, unrelated project already
+# occupies that name on your machine.
 name: mosaic-dev
 
 services:
   supervisor:
-    # The Go toolchain image is enough: the binary is built by the platform
-    # repository's own supervisor gate and mounted, rather than compiled here,
-    # so this service starts in a second rather than a minute.
+    # The Go toolchain image is enough: the binary is built by the
+    # supervisor repository's own gate and mounted, rather than compiled
+    # here, so this service starts in a second rather than a minute.
     image: golang:1.25-bookworm
     depends_on:
       platform:
@@ -58,7 +71,7 @@ services:
       # adopt it, being a real child. That asymmetry is the honest state of
       # ADR 0060 here rather than something the file hides.
     volumes:
-      - ./supervisor:/src/supervisor
+      - ${MOSAIC_SUPERVISOR_SRC:-../supervisor}:/src/supervisor:ro
       # The Shell binary, read-only: the Supervisor executes it and never
       # writes to it.
       - ../web:/src/web:ro

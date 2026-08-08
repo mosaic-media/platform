@@ -42,7 +42,3 @@ go.work.sum
 # They are downloaded artefacts, not source, and a signed binary committed to a
 # public repository is the one thing the trust model must never do by accident.
 /mosaic-extensions/
-
-# The Supervisor binary, linked into its own module directory by the gate
-# service and mounted into the dev stack's front-door overlay.
-/supervisor/mosaic-supervisor
