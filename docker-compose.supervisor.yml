@@ -1,9 +1,5 @@
-# The dev stack behind the Supervisor's front door.
-#
-#   # once, in the supervisor repository, to produce its binary:
-#   cd ../supervisor
-#   docker compose -f docker-compose.test.yml run --rm test \
-#     go build -o mosaic-supervisor ./cmd/mosaic-supervisor
+# The dev stack as a real install has it: one process tree, the Supervisor at
+# the root, the Platform and the Shell as its children.
 #
 #   # once, in the web repository, to produce the Shell binary:
 #   cd ../web
@@ -15,28 +11,28 @@
 #   # then, here:
 #   cd ../platform
 #   docker compose -f docker-compose.dev.yml -f docker-compose.supervisor.yml \
-#     up postgres platform supervisor
+#     up postgres supervisor
 #
-# Then https://localhost:8443 — one port, TLS, the Shell at the root and the
-# Platform behind it. The certificate is self-signed and generated per boot, so
-# a browser will warn; that warning is the accurate description of it.
+# Then https://localhost:8443. The certificate is self-signed and generated per
+# boot, so a browser will warn; that warning is the accurate description of it.
+#
+# Note what is NOT in that `up`: the `platform` service. The Supervisor starts
+# the Platform itself here, which is the whole point — it is the shape ADR 0004
+# describes and the one where ADR 0060's boot id is honoured end to end, since
+# a process compose started mints its own id and cannot adopt anybody's. The
+# Platform is consequently on the Supervisor's *own* loopback, reachable only
+# through the front door, exactly as a deployed install has it.
 #
 # **This is an overlay, not the default dev loop.** `docker-compose.dev.yml`
-# alone still gives you Vite on :5173 with hot reload, which is the right thing
-# for working on the client. Use this one to exercise what the *deployed* shape
-# does: TLS termination, routing, and the degradation ladder — none of which
-# Vite is involved in. Note the `up` above names its services explicitly and
-# omits `web`, because the Shell is served from the binary here rather than
-# from the dev server.
+# alone still gives you Vite on :5173 with hot reload and the Platform on
+# :8081, which is right for working on either. Use this one to exercise
+# process supervision, TLS termination, routing and the degradation ladder.
 #
-# Both prerequisites above are real and deliberate: this overlay builds
-# nothing. The Supervisor is its own repository (github.com/mosaic-media/supervisor)
-# with its own gate, matching every other Mosaic repository — it is a sibling
-# checkout at ../supervisor, not a subdirectory here, so building it is that
-# repository's job. The Shell binary embeds the built bundle and nothing in
-# this file can produce that either, because building it needs Node and this
-# stack's images do not carry it. A stale binary serves a stale build with no
-# warning, so rebuild both when their source changes.
+# The Shell binary is a stated prerequisite because building it needs Node and
+# these images do not carry it. The Platform's binary is built for you by the
+# `platform-build` service below, and the Supervisor is `go run` from its
+# sibling checkout — it imports the standard library alone, so that costs
+# seconds.
 #
 # ../supervisor is the assumed sibling path. Override it with
 # MOSAIC_SUPERVISOR_SRC if a checkout of some other, unrelated project already
@@ -44,40 +40,104 @@
 name: mosaic-dev
 
 services:
-  supervisor:
-    # The Go toolchain image is enough: the binary is built by the
-    # supervisor repository's own gate and mounted, rather than compiled
-    # here, so this service starts in a second rather than a minute.
-    image: golang:1.25-bookworm
-    depends_on:
-      platform:
-        condition: service_healthy
+  # Compiles the Platform once, into a volume, so the Supervisor execs a binary
+  # rather than `go run`. That matters here beyond speed: `go run` compiles on
+  # every start, so a restart would take minutes and the restart path — the
+  # thing this overlay exists to exercise — would be untestable. It is also
+  # what a release does (ADR 0063).
+  platform-build:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     environment:
-      MOSAIC_SUPERVISOR_ADDR: ":8443"
-      # Service names, not loopback: the Platform is another container here.
-      MOSAIC_SUPERVISOR_PLATFORM_URL: "http://platform:8081"
-      MOSAIC_SUPERVISOR_PLATFORM_HANDOFF_URL: "http://platform:8080"
-      # The Shell is a child of *this* process, so it is on this container's
-      # own loopback and nothing else can reach it — which is the shape a
-      # deployed install has, where the front door is the only way in.
-      MOSAIC_SUPERVISOR_SHELL_URL: "http://127.0.0.1:8090"
-      MOSAIC_SUPERVISOR_SHELL_COMMAND: "/src/web/mosaic-shell/mosaic-shell"
-      # The Platform is started by compose here, so the Supervisor fronts and
-      # reports on it without owning its lifecycle. Leaving the command unset
-      # is what selects that; it is a supported shape, not a limitation.
-      #
-      # Consequently the Platform does NOT adopt the Supervisor's boot id in
-      # this stack — compose started it, so it minted its own. The Shell does
-      # adopt it, being a real child. That asymmetry is the honest state of
-      # ADR 0060 here rather than something the file hides.
+      TMDB_RAC: "${TMDB_RAC:-}"
+    volumes:
+      - .:/src/platform
+      - mosaic-dev-gomod:/go/pkg/mod
+      - mosaic-dev-gobuild:/root/.cache/go-build
+      - mosaic-dev-bin:/out
+    working_dir: /src/platform
+    command:
+      - sh
+      - -c
+      - >-
+        go build -ldflags "-X github.com/mosaic-media/module-tmdb.defaultReadAccessToken=$${TMDB_RAC}"
+        -o /out/mosaic-platform ./cmd/mosaic-platform
+
+  # The Supervisor, compiled for the same reason as the Platform above and one
+  # more that is specific to it: it must run as the container's own process so
+  # a `docker compose stop` reaches it. Under `go run` the toolchain is the
+  # process being signalled, the Supervisor never sees SIGTERM, and every child
+  # is killed by Docker rather than stopped in order — which makes the one
+  # behaviour this overlay exists to exercise impossible to observe.
+  supervisor-build:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     volumes:
       - ${MOSAIC_SUPERVISOR_SRC:-../supervisor}:/src/supervisor:ro
-      # The Shell binary, read-only: the Supervisor executes it and never
-      # writes to it.
+      - mosaic-dev-gomod:/go/pkg/mod
+      - mosaic-dev-gobuild:/root/.cache/go-build
+      - mosaic-dev-bin:/out
+    working_dir: /src/supervisor
+    command: ["go", "build", "-o", "/out/mosaic-supervisor", "./cmd/mosaic-supervisor"]
+
+  supervisor:
+    # Dockerfile.dev rather than a plain Go image: the Supervisor needs none of
+    # ffmpeg, but the Platform it starts as a child does (ADR 0050), and a
+    # child inherits its parent's container.
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    # Stopping this container stops the whole tree, so give the Supervisor
+    # longer than compose's default 10s: it drains the front door, then stops
+    # the Shell and the Platform in order, each with its own grace.
+    stop_grace_period: 90s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      platform-build:
+        condition: service_completed_successfully
+      supervisor-build:
+        condition: service_completed_successfully
+    environment:
+      MOSAIC_SUPERVISOR_ADDR: ":8443"
+      # Both children are on this container's own loopback now, reachable
+      # only through the front door.
+      MOSAIC_SUPERVISOR_PLATFORM_URL: "http://127.0.0.1:8081"
+      MOSAIC_SUPERVISOR_PLATFORM_HANDOFF_URL: "http://127.0.0.1:8080"
+      MOSAIC_SUPERVISOR_SHELL_URL: "http://127.0.0.1:8090"
+      MOSAIC_SUPERVISOR_PLATFORM_COMMAND: "/opt/mosaic/mosaic-platform"
+      MOSAIC_SUPERVISOR_PLATFORM_DIR: "/src/platform"
+      MOSAIC_SUPERVISOR_SHELL_COMMAND: "/src/web/mosaic-shell/mosaic-shell"
+
+      # The Platform's own configuration. It reaches the child because a child
+      # inherits the Supervisor's environment — which is the Supervisor booting
+      # the Platform (ADR 0004), not a leak.
+      MOSAIC_POSTGRES_DSN: "postgres://mosaic:mosaic@postgres:5432/mosaic?sslmode=disable"
+      MOSAIC_API_ADDR: ":8081"
+      MOSAIC_HEALTH_ADDR: ":8080"
+      MOSAIC_INSTANCE_FILE: "/var/lib/mosaic/instance.json"
+      MOSAIC_BOOTSTRAP_ADMIN_USERNAME: "${MOSAIC_BOOTSTRAP_ADMIN_USERNAME:-}"
+      MOSAIC_BOOTSTRAP_ADMIN_PASSWORD: "${MOSAIC_BOOTSTRAP_ADMIN_PASSWORD:-}"
+    volumes:
+      - ${MOSAIC_SUPERVISOR_SRC:-../supervisor}:/src/supervisor:ro
+      # The Platform's source, for the extension install directory it resolves
+      # relative to its working directory (ADR 0081).
+      - .:/src/platform
+      # The Shell binary, read-only: the Supervisor executes it, never writes
+      # to it.
       - ../web:/src/web:ro
+      - mosaic-dev-bin:/opt/mosaic:ro
+      - mosaic-dev-gomod:/go/pkg/mod
+      - mosaic-dev-gobuild:/root/.cache/go-build
+      - mosaic-dev-state:/var/lib/mosaic
     working_dir: /src/supervisor
     ports:
       # 8443 rather than 443 so it needs no privileged port, and so it cannot
       # collide with anything already fronting this machine.
       - "8443:8443"
-    command: ["./mosaic-supervisor"]
+    command: ["/opt/mosaic/mosaic-supervisor"]
+
+volumes:
+  mosaic-dev-bin:

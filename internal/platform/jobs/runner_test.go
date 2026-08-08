@@ -408,8 +408,14 @@ func TestRunnerReportsAClaimFailureWithoutCrashing(t *testing.T) {
 }
 
 // Survives a restart. A job left running by a process that died is not
-// stranded: its lease lapses and the next runner — a different owner, which is
-// what a new boot is — takes it.
+// stranded: its lease lapses and the next runner takes it.
+//
+// Reclaiming turns on the lease having lapsed and nothing else — `Claim` never
+// compares `leased_by` to the claiming owner. That is worth stating because
+// the owner *is* the boot id, and under the Supervisor a restarted Platform
+// adopts the same boot id its predecessor had (ADR 0060), so a new runner is
+// no longer necessarily a new owner. This test uses two owners because that is
+// the harder case to get right, not because the code depends on them differing.
 func TestAJobAbandonedByADeadRunnerIsReclaimed(t *testing.T) {
 	store, clock := newFakeStore(), &fakeClock{now: testNow}
 
