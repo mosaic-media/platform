@@ -126,6 +126,8 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 		return s.peoplePanel(ctx, caller, nav, params)
 	case sectionLibraryRules:
 		return s.libraryRulesPanel(ctx, caller, nav, params)
+	case sectionConfiguration:
+		return s.configurationPanel(ctx, caller, nav)
 	}
 	return settingsFrame(nav, active, "", "", noSectionPanel(nav.groups)), nil
 }
@@ -194,6 +196,18 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 			label:  "Library",
 			icon:   "grid",
 			action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionLibraryRules}),
+			panel:  true,
+		})
+	}
+	// What the install itself is set to do (ADR 0011). It sits in Server beside
+	// Library for the same reason: it is the install's own policy rather than a
+	// person's taste, and one person decides it for everybody.
+	if s.content.CallerCan(ctx, caller, app.ActionConfigRead, "config") {
+		server = append(server, settingsNavEntry{
+			key:    sectionConfiguration,
+			label:  "Configuration",
+			icon:   "settings",
+			action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionConfiguration}),
 			panel:  true,
 		})
 	}

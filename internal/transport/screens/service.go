@@ -271,6 +271,23 @@ type contentQueries interface {
 	// ListSessions backs the Devices section: where this account is signed in,
 	// so a person can end a device they no longer have (ADR 0102).
 	ListSessions(context.Context, app.ListSessionsQuery) (app.ListSessionsResult, error)
+	// The configuration reads (ADR 0011, roadmap M4.4). Both authorise
+	// `config.read` for themselves. Pending is a separate query rather than a
+	// field on the active result because "nothing is waiting" is the ordinary
+	// answer and has to be sayable without an error.
+	GetActiveConfigVersion(context.Context, app.GetActiveConfigVersionQuery) (app.GetActiveConfigVersionResult, error)
+	GetPendingConfigVersion(context.Context, app.GetPendingConfigVersionQuery) (app.GetPendingConfigVersionResult, error)
+	// What the three configured background passes are actually running with.
+	//
+	// These take no caller, and naming them here rather than reading the stored
+	// payload is deliberate: each applies its own default for an unset field,
+	// falls back again for an unusable one, and the audit floor (ADR 0057) is
+	// applied after both. They are the definition of "what is in force", so a
+	// panel formatting the payload instead would show numbers the Platform is
+	// not using. The panel that calls them authorises `config.read` first.
+	TelemetryRetention(context.Context) app.TelemetryRetention
+	LibraryMaintenance(context.Context) app.LibraryMaintenanceSettings
+	Availability(context.Context) app.AvailabilitySettings
 	// CallerCan decides whether an affordance is drawn at all. It is the only
 	// method here that answers about authority rather than returning data, and
 	// it never substitutes for the checks above.

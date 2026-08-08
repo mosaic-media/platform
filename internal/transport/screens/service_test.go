@@ -112,6 +112,22 @@ type fakeQueries struct {
 	// exercised. Absent an entry, GetContentNode falls back to the flat children.
 	childrenByNode map[v1.NodeID][]v1.Node
 
+	// The configuration reads (ADR 0011, roadmap M4.4).
+	//
+	// activeConfigErr defaults to nil and the zero result stands for "a version
+	// is active and carries nothing", which is not the state a fresh install is
+	// in — a test that wants that sets activeConfigErr to a NotFound, and the
+	// panel is expected to render defaults rather than fail.
+	activeConfig    app.GetActiveConfigVersionResult
+	activeConfigErr error
+	pendingConfig   app.GetPendingConfigVersionResult
+	// The three effective-settings readers. Zero values would render as "0
+	// days", which is never what the Platform applies, so the fake answers the
+	// same defaults the real readers fall back to unless a test overrides them.
+	retention    *app.TelemetryRetention
+	maintenance  *app.LibraryMaintenanceSettings
+	availability *app.AvailabilitySettings
+
 	// canReadTelemetry is what CallerCan reports — the fake's way of saying
 	// "this caller holds telemetry.read", which is what decides whether the
 	// expert-mode affordance is drawn at all.
@@ -260,6 +276,35 @@ func (f *fakeQueries) ListSessions(_ context.Context, _ app.ListSessionsQuery) (
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return app.ListSessionsResult{Sessions: f.userSessions, Current: f.currentSession}, nil
+}
+
+func (f *fakeQueries) GetActiveConfigVersion(_ context.Context, _ app.GetActiveConfigVersionQuery) (app.GetActiveConfigVersionResult, error) {
+	return f.activeConfig, f.activeConfigErr
+}
+
+func (f *fakeQueries) GetPendingConfigVersion(_ context.Context, _ app.GetPendingConfigVersionQuery) (app.GetPendingConfigVersionResult, error) {
+	return f.pendingConfig, nil
+}
+
+func (f *fakeQueries) TelemetryRetention(_ context.Context) app.TelemetryRetention {
+	if f.retention != nil {
+		return *f.retention
+	}
+	return app.DefaultTelemetryRetention
+}
+
+func (f *fakeQueries) LibraryMaintenance(_ context.Context) app.LibraryMaintenanceSettings {
+	if f.maintenance != nil {
+		return *f.maintenance
+	}
+	return app.DefaultLibraryMaintenance
+}
+
+func (f *fakeQueries) Availability(_ context.Context) app.AvailabilitySettings {
+	if f.availability != nil {
+		return *f.availability
+	}
+	return app.DefaultAvailability
 }
 
 func (f *fakeQueries) ListJobs(_ context.Context, q app.ListJobsQuery) (app.ListJobsResult, error) {

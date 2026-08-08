@@ -163,6 +163,11 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		return h.deleteLibraryRule(ctx, s, caller, input)
 	case "runLibraryMaintenance":
 		return h.runLibraryMaintenance(ctx, s, caller)
+	case "applyConfiguration":
+		// What the install is set to do (ADR 0011). One action over draft,
+		// validate and activate — see configuration.go for why those three are
+		// not three controls.
+		return h.applyConfiguration(ctx, s, caller, input)
 	case "setWatched":
 		cmd, err := setWatchedFromInput(input)
 		if err != nil {

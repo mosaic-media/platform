@@ -500,6 +500,9 @@ func boundaryCases() []boundaryCase {
 		{"GetActiveConfigVersion", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetActiveConfigVersion(ctx, app.GetActiveConfigVersionQuery{CallerSessionID: sid}))
 		}},
+		{"GetPendingConfigVersion", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.GetPendingConfigVersion(ctx, app.GetPendingConfigVersionQuery{CallerSessionID: sid}))
+		}},
 
 		// --- the library and its rules (ADR 0104) ---
 		//
