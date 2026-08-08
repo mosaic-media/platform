@@ -26,15 +26,15 @@ func NewConfigStore(pool *pgxpool.Pool) contracts.ConfigStore {
 	return &configStore{q: pool}
 }
 
-const configColumns = `id, payload, status, created_at, validated_at, validation_detail, activated_at, rejected_at, superseded_at`
+const configColumns = `id, payload, status, created_at, validated_at, validation_detail, requested_at, activated_at, rejected_at, superseded_at`
 
 func (s *configStore) Save(ctx context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
 	_, err := s.q.Exec(ctx,
 		`INSERT INTO config_versions
-		   (id, payload, status, created_at, validated_at, validation_detail, activated_at, rejected_at, superseded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		   (id, payload, status, created_at, validated_at, validation_detail, requested_at, activated_at, rejected_at, superseded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		string(version.ID), version.Payload, string(version.Status), version.CreatedAt,
-		version.ValidatedAt, version.ValidationDetail, version.ActivatedAt, version.RejectedAt, version.SupersededAt,
+		version.ValidatedAt, version.ValidationDetail, version.RequestedAt, version.ActivatedAt, version.RejectedAt, version.SupersededAt,
 	)
 	if err != nil {
 		return domain.ConfigVersion{}, mapError("save config version", err)
@@ -82,6 +82,23 @@ func (s *configStore) FindActive(ctx context.Context) (domain.ConfigVersion, err
 	return version, nil
 }
 
+// FindPending returns the version waiting for an escalation, or NotFound.
+// A unique index (migration 0028) keeps there being at most one: two would
+// both be applied by a single restart, in an order nobody chose.
+func (s *configStore) FindPending(ctx context.Context) (domain.ConfigVersion, error) {
+	row := s.q.QueryRow(ctx,
+		`SELECT `+configColumns+` FROM config_versions WHERE status = 'pending' ORDER BY requested_at DESC LIMIT 1`,
+	)
+	version, err := scanConfigVersion(row)
+	if err != nil {
+		if isNoRows(err) {
+			return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no config version awaiting escalation")
+		}
+		return domain.ConfigVersion{}, mapError("find pending config version", err)
+	}
+	return version, nil
+}
+
 // UpdateStatus overwrites the mutable transition fields of an existing
 // config version. A unique index on (status) WHERE status = 'active'
 // (migration 0010) rejects a second concurrent activation with Conflict,
@@ -89,10 +106,10 @@ func (s *configStore) FindActive(ctx context.Context) (domain.ConfigVersion, err
 func (s *configStore) UpdateStatus(ctx context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
 	tag, err := s.q.Exec(ctx,
 		`UPDATE config_versions
-		 SET status = $2, validated_at = $3, validation_detail = $4, activated_at = $5, rejected_at = $6, superseded_at = $7
+		 SET status = $2, validated_at = $3, validation_detail = $4, requested_at = $5, activated_at = $6, rejected_at = $7, superseded_at = $8
 		 WHERE id = $1`,
 		string(version.ID), string(version.Status), version.ValidatedAt, version.ValidationDetail,
-		version.ActivatedAt, version.RejectedAt, version.SupersededAt,
+		version.RequestedAt, version.ActivatedAt, version.RejectedAt, version.SupersededAt,
 	)
 	if err != nil {
 		return domain.ConfigVersion{}, mapError("update config version status", err)
@@ -111,7 +128,8 @@ func scanConfigVersion(row pgx.Row) (domain.ConfigVersion, error) {
 	)
 	if err := row.Scan(
 		&id, &version.Payload, &status, &version.CreatedAt,
-		&version.ValidatedAt, &version.ValidationDetail, &version.ActivatedAt, &version.RejectedAt, &version.SupersededAt,
+		&version.ValidatedAt, &version.ValidationDetail, &version.RequestedAt,
+		&version.ActivatedAt, &version.RejectedAt, &version.SupersededAt,
 	); err != nil {
 		return domain.ConfigVersion{}, err
 	}

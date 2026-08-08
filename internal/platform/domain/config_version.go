@@ -15,6 +15,13 @@ const (
 	// ConfigValidated means schema and policy checks passed; the version may
 	// be activated.
 	ConfigValidated ConfigStatus = "validated"
+	// ConfigPending means a user asked for this version and applying it
+	// needs more than the Platform can do to itself — a restart, a new
+	// Generation, or the recovery flow. It is the difference between a
+	// version that merely passed validation and one somebody chose: without
+	// it, a restart would either apply every validated candidate nobody
+	// asked for, or apply none of them and lose the request.
+	ConfigPending ConfigStatus = "pending"
 	// ConfigActive means this version is the currently effective
 	// configuration. At most one version is ever Active at a time.
 	ConfigActive ConfigStatus = "active"
@@ -27,8 +34,9 @@ const (
 )
 
 // ConfigVersion is a persisted configuration snapshot moving through the
-// activation state machine (Draft -> Validated -> Active ->
-// Superseded, with Validated -> Rejected as the failed-validation branch).
+// activation state machine (Draft -> Validated -> Active -> Superseded, with
+// Validated -> Rejected as the failed-validation branch, and Validated ->
+// Pending -> Active for a change that cannot be applied without escalation).
 // The Payload itself is immutable once saved; only Status and the
 // transition timestamps below change over the version's lifetime.
 type ConfigVersion struct {
@@ -43,6 +51,11 @@ type ConfigVersion struct {
 	ValidatedAt      *time.Time
 	ValidationDetail string
 
+	// RequestedAt is when a user asked for this version, set by the
+	// transition to Pending. It is distinct from ActivatedAt because the gap
+	// between the two is the escalation, and how long a change has been
+	// waiting for a restart is a question an operator asks.
+	RequestedAt  *time.Time
 	ActivatedAt  *time.Time
 	RejectedAt   *time.Time
 	SupersededAt *time.Time
@@ -79,6 +92,20 @@ func (c ConfigVersion) MarkRejected(now time.Time, detail string) ConfigVersion 
 	c.Status = ConfigRejected
 	c.ValidatedAt = &now
 	c.ValidationDetail = detail
+	return c
+}
+
+// AwaitingEscalation reports whether this version was asked for and is
+// waiting for the restart, Generation or recovery flow that can apply it.
+func (c ConfigVersion) AwaitingEscalation() bool {
+	return c.Status == ConfigPending
+}
+
+// MarkPending returns a copy of c transitioned to ConfigPending: requested,
+// and waiting for an escalation that can apply it.
+func (c ConfigVersion) MarkPending(now time.Time) ConfigVersion {
+	c.Status = ConfigPending
+	c.RequestedAt = &now
 	return c
 }
 

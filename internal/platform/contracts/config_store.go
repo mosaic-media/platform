@@ -27,6 +27,10 @@ type ConfigStore interface {
 	// status. At most one version is ever Active; NotFound is returned if
 	// none has been activated yet.
 	FindActive(ctx context.Context) (domain.ConfigVersion, error)
+	// FindPending returns the version a user asked for that is waiting for
+	// an escalation — a restart, a Generation, or the recovery flow — or
+	// NotFound. At most one version is ever Pending.
+	FindPending(ctx context.Context) (domain.ConfigVersion, error)
 	// UpdateStatus persists a status transition (validate, activate,
 	// reject, supersede) already computed by the config domain layer. It
 	// overwrites the mutable transition fields of an existing version.

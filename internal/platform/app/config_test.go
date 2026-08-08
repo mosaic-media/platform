@@ -160,13 +160,16 @@ func TestActivateConfigVersionRejectsGenerationClassChangeFromHotApplying(t *tes
 		t.Fatalf("ReloadClass = %q, want %q", result.ReloadClass, config.Generation)
 	}
 
-	// The version must be left Validated, not silently moved to Active or
-	// any other state, so a future Supervisor-handoff slice can pick it up.
+	// Pending, not Active and not merely Validated. The Supervisor handoff
+	// this was left for now exists, and what it needs is the *request*: a
+	// version left Validated is indistinguishable from one that passed
+	// validation and nobody asked for, so an escalation would have to apply
+	// all of them or none.
 	db.mu.Lock()
 	stored := db.configs[drafted.Version.ID]
 	db.mu.Unlock()
-	if stored.Status != domain.ConfigValidated {
-		t.Fatalf("persisted status = %q, want %q (deferred, not activated)", stored.Status, domain.ConfigValidated)
+	if stored.Status != domain.ConfigPending {
+		t.Fatalf("persisted status = %q, want %q (requested, awaiting escalation)", stored.Status, domain.ConfigPending)
 	}
 
 	// A deferred activation must be flagged (config.activation_deferred),

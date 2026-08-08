@@ -133,6 +133,10 @@ func (mockConfigStore) FindActive(ctx context.Context) (domain.ConfigVersion, er
 	return domain.ConfigVersion{}, nil
 }
 
+func (mockConfigStore) FindPending(ctx context.Context) (domain.ConfigVersion, error) {
+	return domain.ConfigVersion{}, nil
+}
+
 func (mockConfigStore) UpdateStatus(ctx context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
 	return version, nil
 }

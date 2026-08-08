@@ -46,3 +46,21 @@ func moreRestrictive(a, b ReloadClass) ReloadClass {
 	}
 	return a
 }
+
+// RequiredClassBetween reports the most restrictive reload class among the
+// fields that differ between two configuration payloads, using the Platform
+// schema.
+//
+// It exists so a caller outside this package — the Supervisor handoff surface,
+// which has to say what escalation is owed — can ask the question without
+// holding a Manager or reimplementing the diff. A malformed payload answers
+// Recovery: the most restrictive class is the safe direction to fail, because
+// it stops short of claiming a change can be applied more cheaply than it can.
+func RequiredClassBetween(current, candidate []byte) ReloadClass {
+	changed, err := ChangedFields(current, candidate)
+	if err != nil {
+		return Recovery
+	}
+	class, _ := PlatformSchema().RequiredReloadClass(changed)
+	return class
+}

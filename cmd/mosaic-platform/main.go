@@ -626,6 +626,28 @@ func run() error {
 	// ADR 0035/0072), so one being absent is the ordinary degraded state, not the
 	// inert Platform RequireComposedRoleClasses refuses. Default-empty: a fresh
 	// install has adopted nothing.
+	// A configuration change that needed a restart got one: this *is* the
+	// restart it was waiting for, so apply it before anything reads config
+	// (ADR 0004's escalation, recorded as Pending when the user asked). A
+	// Generation-class change is left alone — a restart was never going to
+	// carry it, and the Supervisor is what can.
+	// Its own context: bootCtx belongs to the connect-and-migrate phase and is
+	// cancelled the moment that finishes, long before here.
+	applyCtx, applyCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	pending, err := svc.ApplyPendingConfig(applyCtx, config.Restart)
+	applyCancel()
+	if err != nil {
+		// Not fatal. A Platform that refuses to boot because a queued
+		// configuration change could not be applied is one an operator cannot
+		// reach to withdraw the change.
+		boot.Error("could not apply the pending configuration", telemetry.Err(err))
+	} else if pending.Version.ID != "" {
+		boot.Info("applied a configuration change that was waiting for this restart",
+			telemetry.String("version", string(pending.Version.ID)),
+			telemetry.Bool("activated", pending.Activated),
+			telemetry.String("reload_class", string(pending.ReloadClass)))
+	}
+
 	extManager.SetContent(svc)
 	// Stop adopted module processes when the Platform stops, so a module process
 	// never outlives the Platform that spawned it.

@@ -831,6 +831,18 @@ func (s *fakeConfigStore) FindByID(_ context.Context, id domain.ConfigVersionID)
 	return version, nil
 }
 
+func (s *fakeConfigStore) FindPending(_ context.Context) (domain.ConfigVersion, error) {
+	s.trace.record("config.find_pending")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	for _, v := range s.db.configs {
+		if v.Status == domain.ConfigPending {
+			return v, nil
+		}
+	}
+	return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no config version awaiting escalation")
+}
+
 func (s *fakeConfigStore) FindActive(_ context.Context) (domain.ConfigVersion, error) {
 	s.trace.record("config.find_active")
 	s.db.mu.Lock()

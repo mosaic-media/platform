@@ -23,8 +23,15 @@ func (f fakeReporter) ReportHealth(context.Context) domain.ComponentHealth { ret
 // FindActive is exercised by this package's tests, but every method must
 // exist to satisfy the interface.
 type fakeConfigStore struct {
-	mu     sync.Mutex
-	active *domain.ConfigVersion
+	mu      sync.Mutex
+	active  *domain.ConfigVersion
+	pending *domain.ConfigVersion
+}
+
+func (s *fakeConfigStore) setPending(v domain.ConfigVersion) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pending = &v
 }
 
 func (s *fakeConfigStore) setActive(v domain.ConfigVersion) {
@@ -52,6 +59,15 @@ func (s *fakeConfigStore) FindActive(context.Context) (domain.ConfigVersion, err
 		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no active config version")
 	}
 	return *s.active, nil
+}
+
+func (s *fakeConfigStore) FindPending(context.Context) (domain.ConfigVersion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pending == nil {
+		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no config version awaiting escalation")
+	}
+	return *s.pending, nil
 }
 
 func (s *fakeConfigStore) UpdateStatus(_ context.Context, v domain.ConfigVersion) (domain.ConfigVersion, error) {

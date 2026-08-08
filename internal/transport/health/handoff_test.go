@@ -26,7 +26,10 @@ type fakeReporter struct{ health domain.ComponentHealth }
 func (f fakeReporter) ReportHealth(context.Context) domain.ComponentHealth { return f.health }
 
 // fakeConfigStore is a minimal in-memory contracts.ConfigStore.
-type fakeConfigStore struct{ active *domain.ConfigVersion }
+type fakeConfigStore struct {
+	active  *domain.ConfigVersion
+	pending *domain.ConfigVersion
+}
 
 func (s *fakeConfigStore) Save(_ context.Context, v domain.ConfigVersion) (domain.ConfigVersion, error) {
 	return v, nil
@@ -42,6 +45,12 @@ func (s *fakeConfigStore) FindActive(context.Context) (domain.ConfigVersion, err
 		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no active config version")
 	}
 	return *s.active, nil
+}
+func (s *fakeConfigStore) FindPending(context.Context) (domain.ConfigVersion, error) {
+	if s.pending == nil {
+		return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no config version awaiting escalation")
+	}
+	return *s.pending, nil
 }
 func (s *fakeConfigStore) UpdateStatus(_ context.Context, v domain.ConfigVersion) (domain.ConfigVersion, error) {
 	return v, nil

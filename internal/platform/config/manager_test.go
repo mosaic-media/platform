@@ -34,6 +34,15 @@ func newFakeConfigStore() *fakeConfigStore {
 	return &fakeConfigStore{versions: make(map[domain.ConfigVersionID]domain.ConfigVersion)}
 }
 
+func (s *fakeConfigStore) FindPending(context.Context) (domain.ConfigVersion, error) {
+	for _, v := range s.versions {
+		if v.Status == domain.ConfigPending {
+			return v, nil
+		}
+	}
+	return domain.ConfigVersion{}, contracts.NewError(contracts.NotFound, "no config version awaiting escalation")
+}
+
 func (s *fakeConfigStore) Save(_ context.Context, version domain.ConfigVersion) (domain.ConfigVersion, error) {
 	s.versions[version.ID] = version
 	return version, nil
@@ -180,8 +189,15 @@ func TestManagerActivateDefersGenerationClassChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindByID: %v", err)
 	}
-	if stored.Status != domain.ConfigValidated {
-		t.Fatalf("persisted status = %q, want %q (left for a future Supervisor handoff)", stored.Status, domain.ConfigValidated)
+	// Pending, not Validated: the request is recorded, which is what lets an
+	// escalation tell a version somebody chose from one that merely passed
+	// validation. It used to be left Validated, and a restart could not have
+	// applied it without also applying every other validated candidate.
+	if stored.Status != domain.ConfigPending {
+		t.Fatalf("persisted status = %q, want %q", stored.Status, domain.ConfigPending)
+	}
+	if stored.RequestedAt == nil {
+		t.Error("no RequestedAt — how long a change has been waiting is unanswerable")
 	}
 }
 
@@ -258,5 +274,102 @@ func TestManagerCannotActivateDraft(t *testing.T) {
 	_, err = manager.Activate(ctx, store, draft.ID)
 	if got := contracts.CategoryOf(err); got != contracts.Conflict {
 		t.Fatalf("CategoryOf(err) = %s, want %s", got, contracts.Conflict)
+	}
+}
+
+// requested drafts, validates and asks for a payload, returning its id.
+func requested(t *testing.T, m *config.Manager, store contracts.ConfigStore, payload string) domain.ConfigVersionID {
+	t.Helper()
+	ctx := context.Background()
+	draft, err := m.Draft(ctx, store, []byte(payload))
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	if _, err := m.Validate(ctx, store, draft.ID); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if _, err := m.Activate(ctx, store, draft.ID); err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+	return draft.ID
+}
+
+// The restart happens, and the change it was performed for is applied.
+func TestApplyPendingAppliesARestartClassChange(t *testing.T) {
+	store := newFakeConfigStore()
+	manager := config.NewManager(fakeClock{now: testNow}, &sequentialIDGenerator{}, testSchema(t))
+	ctx := context.Background()
+
+	id := requested(t, manager, store, `{"runtime.environment":"production"}`)
+
+	outcome, err := manager.ApplyPending(ctx, store, config.Restart)
+	if err != nil {
+		t.Fatalf("ApplyPending: %v", err)
+	}
+	if !outcome.Activated {
+		t.Fatal("the restart did not apply the change it was performed for")
+	}
+	stored, _ := store.FindByID(ctx, id)
+	if !stored.Activated() {
+		t.Errorf("status = %q, want active", stored.Status)
+	}
+	// Nothing left waiting, so the next boot does not apply it a second time.
+	if _, err := store.FindPending(ctx); err == nil {
+		t.Error("still pending after being applied — every boot would reapply it")
+	}
+}
+
+// A restart must not carry a change that needs more than a restart. Applying
+// a Generation-class change because a process happened to bounce is exactly
+// what the classification exists to prevent.
+func TestApplyPendingLeavesAChangeNeedingMoreThanWasGranted(t *testing.T) {
+	store := newFakeConfigStore()
+	manager := config.NewManager(fakeClock{now: testNow}, &sequentialIDGenerator{}, testSchema(t))
+	ctx := context.Background()
+
+	id := requested(t, manager, store, `{"composition.modules":["postgres"]}`)
+
+	outcome, err := manager.ApplyPending(ctx, store, config.Restart)
+	if err != nil {
+		t.Fatalf("ApplyPending: %v", err)
+	}
+	if outcome.Activated {
+		t.Fatal("a restart applied a generation-class change")
+	}
+	if outcome.ReloadClass != config.Generation {
+		t.Errorf("ReloadClass = %q, want generation", outcome.ReloadClass)
+	}
+	stored, _ := store.FindByID(ctx, id)
+	if !stored.AwaitingEscalation() {
+		t.Errorf("status = %q — it should still be waiting for the Supervisor", stored.Status)
+	}
+}
+
+// Nothing waiting is the ordinary boot and must be silent, not an error every
+// process start has to ignore.
+func TestApplyPendingWithNothingWaitingIsSilent(t *testing.T) {
+	store := newFakeConfigStore()
+	manager := config.NewManager(fakeClock{now: testNow}, &sequentialIDGenerator{}, testSchema(t))
+
+	outcome, err := manager.ApplyPending(context.Background(), store, config.Restart)
+	if err != nil {
+		t.Fatalf("ApplyPending: %v", err)
+	}
+	if outcome.Activated || outcome.Version.ID != "" {
+		t.Errorf("reported something applied: %+v", outcome)
+	}
+}
+
+// A Hot change is applied on the spot and never becomes pending, so a restart
+// has nothing to do and cannot reapply it.
+func TestAHotChangeNeverBecomesPending(t *testing.T) {
+	store := newFakeConfigStore()
+	manager := config.NewManager(fakeClock{now: testNow}, &sequentialIDGenerator{}, testSchema(t))
+	ctx := context.Background()
+
+	requested(t, manager, store, `{"runtime.log_level":"debug"}`)
+
+	if _, err := store.FindPending(ctx); err == nil {
+		t.Error("a hot change was recorded as awaiting an escalation")
 	}
 }

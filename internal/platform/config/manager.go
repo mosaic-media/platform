@@ -95,6 +95,54 @@ type ActivationOutcome struct {
 	ReloadClass ReloadClass
 }
 
+// ApplyPending applies the version waiting for an escalation, if the
+// escalation that has just happened is enough to carry it.
+//
+// `granted` is what the caller can vouch for having done: a Platform that has
+// just started grants Restart, because restarting is exactly what it did. The
+// class is re-derived rather than read back from the record, because it is a
+// function of the diff against whatever is Active *now* — storing it at
+// request time would be persisting a derived value that a later activation
+// could invalidate.
+//
+// A version needing more than was granted is left alone rather than refused:
+// a Generation-class change survives a restart it was never going to be
+// applied by, and waits for the Supervisor.
+func (m *Manager) ApplyPending(ctx context.Context, store contracts.ConfigStore, granted ReloadClass) (ActivationOutcome, error) {
+	version, err := store.FindPending(ctx)
+	switch {
+	case err == nil:
+	case contracts.CategoryOf(err) == contracts.NotFound:
+		return ActivationOutcome{}, nil
+	default:
+		return ActivationOutcome{}, err
+	}
+
+	current, err := store.FindActive(ctx)
+	switch {
+	case err == nil:
+	case contracts.CategoryOf(err) == contracts.NotFound:
+		current = domain.ConfigVersion{}
+	default:
+		return ActivationOutcome{}, err
+	}
+
+	changed, err := ChangedFields(current.Payload, version.Payload)
+	if err != nil {
+		return ActivationOutcome{}, contracts.WrapError(contracts.Internal, "diff config payload", err)
+	}
+	class, _ := m.schema.RequiredReloadClass(changed)
+	if reloadClassRank[class] > reloadClassRank[granted] {
+		return ActivationOutcome{Version: version, Activated: false, ReloadClass: class}, nil
+	}
+
+	applied, err := m.activate(ctx, store, version, current)
+	if err != nil {
+		return ActivationOutcome{}, err
+	}
+	return ActivationOutcome{Version: applied, Activated: true, ReloadClass: class}, nil
+}
+
 // Activate attempts to activate a Validated version. It diffs the
 // candidate's payload against the currently Active version's payload (none
 // if this is the first activation) and classifies the change by the most
@@ -132,9 +180,32 @@ func (m *Manager) Activate(ctx context.Context, store contracts.ConfigStore, id 
 
 	class, _ := m.schema.RequiredReloadClass(changed)
 	if class != Hot {
-		return ActivationOutcome{Version: version, Activated: false, ReloadClass: class}, nil
+		// Requested, and waiting for something that can apply it. Recording
+		// the intent is what lets a restart tell this version from a
+		// candidate that merely validated and nobody chose — without it a
+		// restart must apply all of them or none.
+		pending, err := store.UpdateStatus(ctx, version.MarkPending(m.clock.Now()))
+		if err != nil {
+			return ActivationOutcome{}, err
+		}
+		return ActivationOutcome{Version: pending, Activated: false, ReloadClass: class}, nil
 	}
 
+	activated, err := m.activate(ctx, store, version, current)
+	if err != nil {
+		return ActivationOutcome{}, err
+	}
+	return ActivationOutcome{Version: activated, Activated: true, ReloadClass: Hot}, nil
+}
+
+// activate supersedes whatever is Active and marks version Active in its
+// place. Shared by the Hot path and the escalated one so the two can never
+// disagree about the ordering below.
+func (m *Manager) activate(
+	ctx context.Context,
+	store contracts.ConfigStore,
+	version, current domain.ConfigVersion,
+) (domain.ConfigVersion, error) {
 	now := m.clock.Now()
 
 	// Supersede the previous Active version before activating the new one:
@@ -143,14 +214,8 @@ func (m *Manager) Activate(ctx context.Context, store contracts.ConfigStore, id 
 	// Active at the same time, even momentarily.
 	if current.ID != "" && current.ID != version.ID {
 		if _, err := store.UpdateStatus(ctx, current.MarkSuperseded(now)); err != nil {
-			return ActivationOutcome{}, err
+			return domain.ConfigVersion{}, err
 		}
 	}
-
-	activated, err := store.UpdateStatus(ctx, version.MarkActive(now))
-	if err != nil {
-		return ActivationOutcome{}, err
-	}
-
-	return ActivationOutcome{Version: activated, Activated: true, ReloadClass: Hot}, nil
+	return store.UpdateStatus(ctx, version.MarkActive(now))
 }
