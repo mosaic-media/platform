@@ -5,8 +5,13 @@
 package auth_test
 
 import (
+	"net/http"
+	"net/http/httptest"
+
 	"context"
 	"encoding/json"
+	"github.com/mosaic-media/contracts/gen/mosaic/auth/v1/authv1connect"
+	"github.com/mosaic-media/platform/internal/transport/clientaddr"
 	"sort"
 	"strings"
 	"testing"
@@ -192,7 +197,11 @@ func TestBootstrapDoesNotVaryOnWhoExists(t *testing.T) {
 }
 
 // It is the one surface reachable before authentication, so it is bounded.
-func TestBootstrapIsRateLimitedPerPeer(t *testing.T) {
+// The burst and the refill. It is deliberately not named "per peer": every
+// request here comes from the same (absent) caller, so separation between
+// callers is the *next* test's job — this one was called that for a while and
+// checked no such thing.
+func TestBootstrapBurstIsSpendableAndRefills(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)
 	h := auth.NewHandler(newTestService(db, testNow))
@@ -223,6 +232,59 @@ func TestBootstrapIsRateLimitedPerPeer(t *testing.T) {
 	now = now.Add(time.Minute)
 	if err := req(); err != nil {
 		t.Fatalf("the bucket did not refill: %v", err)
+	}
+}
+
+// Separation between callers, over real HTTP, because that is the only place
+// the chain that produces it exists: the middleware resolves an address, the
+// handler keys a bucket on it, and neither half is meaningful alone.
+//
+// It matters more since ADR 0120 than it did before. Every request now arrives
+// from the Supervisor over a Unix socket, which has no peer address at all, so
+// without the forwarded address one household shares one bucket and any member
+// of it can spend everyone's.
+func TestTwoCallersGetSeparateBuckets(t *testing.T) {
+	db := newFakeDB()
+	signedInUser(db)
+	h := auth.NewHandler(newTestService(db, testNow))
+	now := testNow
+	auth.SetClockForTest(h, func() time.Time { return now })
+
+	path, connectHandler := authv1connect.NewAuthServiceHandler(h)
+	mux := http.NewServeMux()
+	mux.Handle(path, connectHandler)
+	// Trusted, as it is on a socket the front door alone can reach.
+	server := httptest.NewServer(clientaddr.Middleware(true)(mux))
+	defer server.Close()
+
+	client := authv1connect.NewAuthServiceClient(server.Client(), server.URL)
+	call := func(caller string) error {
+		req := connect.NewRequest(&authv1.BootstrapRequest{})
+		req.Header().Set("X-Forwarded-For", caller)
+		_, err := client.Bootstrap(context.Background(), req)
+		return err
+	}
+
+	// One caller spends its whole burst and is then refused.
+	for i := 0; i < auth.BootstrapBurstForTest; i++ {
+		if err := call("198.51.100.1"); err != nil {
+			t.Fatalf("request %d of the first caller's burst was refused: %v", i+1, err)
+		}
+	}
+	if err := call("198.51.100.1"); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("the first caller was not limited: %v", err)
+	}
+
+	// A second caller is unaffected. Before the forwarded address was read,
+	// both were the Supervisor and this request would have been refused.
+	if err := call("198.51.100.2"); err != nil {
+		t.Fatalf("a second caller was refused because the first had spent its budget: %v", err)
+	}
+
+	// And a caller cannot escape its own bucket by prepending an address it
+	// made up: the front door's entry is the last one.
+	if err := call("10.0.0.99, 198.51.100.1"); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("a forged prefix bought a fresh bucket: %v", err)
 	}
 }
 

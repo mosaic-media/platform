@@ -41,7 +41,7 @@ func (h *Handler) Invoke(ctx context.Context, req *connect.Request[authv1.Invoke
 	// the same surface from an abuser's point of view — the pre-authentication
 	// one — and two independent limits would each be reachable in full, which is
 	// twice the ceiling nobody chose.
-	if !h.bootstrapLimit.allow(peerOf(req), h.now()) {
+	if !h.bootstrapLimit.allow(peerOf(ctx, req), h.now()) {
 		return nil, connect.NewError(connect.CodeResourceExhausted,
 			errors.New("too many requests; try again shortly"))
 	}

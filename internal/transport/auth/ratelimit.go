@@ -5,12 +5,14 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
-	"net"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect"
+
+	"github.com/mosaic-media/platform/internal/transport/clientaddr"
 )
 
 // The rate limit on the pre-session surface (ADR 0101).
@@ -104,21 +106,18 @@ func (l *limiter) sweep(now time.Time) {
 // peerOf is the key a request is limited under: the caller's address without
 // its port, so one client's many connections share one bucket.
 //
-// It is the peer as the *server* observed it, never a header. An
-// X-Forwarded-For a caller controls is a rate limit a caller can opt out of,
-// and the deployment topology that would make one trustworthy — a front door
-// that terminates TLS and rewrites it — does not exist yet.
-func peerOf[T any](req *connect.Request[T]) string {
-	addr := req.Peer().Addr
-	if host, _, err := net.SplitHostPort(addr); err == nil {
-		return host
-	}
-	if addr == "" {
-		// No peer at all is an in-process call (a test, or a future in-binary
-		// client). One shared bucket rather than one per empty string.
-		return "unknown"
-	}
-	return addr
+// It reads what the transport resolved (internal/transport/clientaddr) rather
+// than the connection's own peer, because behind the front door those are not
+// the same thing. Every request now arrives from the Supervisor, and over a
+// Unix socket there is no peer address at all — so keying on the connection
+// would put the whole household in one bucket, which is the failure this
+// exists to prevent rather than a lesser version of it.
+//
+// The header is believed only on a listener that cannot be reached except
+// through the front door; clientaddr.Middleware is where that is decided, and
+// it is a parameter there rather than a guess here.
+func peerOf[T any](ctx context.Context, _ *connect.Request[T]) string {
+	return clientaddr.From(ctx)
 }
 
 // countDefinitions reports how many components a served payload carries, for

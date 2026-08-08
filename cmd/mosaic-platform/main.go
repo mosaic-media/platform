@@ -47,6 +47,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	"github.com/mosaic-media/platform/internal/transport/artwork"
 	authtransport "github.com/mosaic-media/platform/internal/transport/auth"
+	"github.com/mosaic-media/platform/internal/transport/clientaddr"
 	"github.com/mosaic-media/platform/internal/transport/health"
 	"github.com/mosaic-media/platform/internal/transport/netguard"
 	"github.com/mosaic-media/platform/internal/transport/playback"
@@ -799,7 +800,6 @@ func run() error {
 	baseContext := func(net.Listener) context.Context { return requestCtx }
 
 	httpServer := &http.Server{
-		Addr:        healthAddr,
 		Handler:     telemetry.HTTPMuxMiddleware("handoff", handoff.Mux()),
 		BaseContext: baseContext,
 	}
@@ -850,9 +850,15 @@ func run() error {
 	// concurrent unary intents and the long-lived Subscribe stream — multiplex
 	// onto one connection (ADR 0041); Connect still degrades to HTTP/1.1 for the
 	// artwork and playback handlers.
+	// Behind the front door every request arrives from the Supervisor, so the
+	// address to attribute a caller to is the one the front door observed and
+	// forwarded — and over a Unix socket there is no peer address at all
+	// (ADR 0120). The header is believed only on a socket, which is the
+	// listener nothing can reach except through that door; on TCP it would be
+	// a claim by whoever connected.
+	trustForwarded := listen.IsSocket(apiAddr)
 	apiServer := &http.Server{
-		Addr:        apiAddr,
-		Handler:     h2c.NewHandler(apiMux, &http2.Server{}),
+		Handler:     h2c.NewHandler(clientaddr.Middleware(trustForwarded)(apiMux), &http2.Server{}),
 		BaseContext: baseContext,
 	}
 	// On graceful shutdown, close every session so its Subscribe stream ends and

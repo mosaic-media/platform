@@ -24,7 +24,7 @@ import (
 // the transport and the address together, rather than an address beside a mode
 // flag that can contradict it.
 func On(addr string) (net.Listener, error) {
-	if !isSocketPath(addr) {
+	if !IsSocket(addr) {
 		return net.Listen("tcp", addr)
 	}
 
@@ -53,8 +53,12 @@ func On(addr string) (net.Listener, error) {
 	return listener, nil
 }
 
-// isSocketPath reports whether an address names a filesystem path.
-func isSocketPath(addr string) bool { return strings.HasPrefix(addr, "/") }
+// IsSocket reports whether an address names a Unix socket rather than a
+// host:port. It is exported because callers need the same answer for reasons
+// beyond binding — whether a forwarded header may be believed turns on it
+// (ADR 0120), and asking the question twice with two rules is how the two
+// answers come to disagree.
+func IsSocket(addr string) bool { return strings.HasPrefix(addr, "/") }
 
 // removeStaleSocket unlinks a leftover socket, and refuses to touch anything
 // that is not one — a path that has become a regular file is a

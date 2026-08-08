@@ -44,7 +44,7 @@ func (h *Handler) Bootstrap(ctx context.Context, req *connect.Request[authv1.Boo
 	// Rate-limited because it is the one surface reachable before
 	// authentication (ADR 0101). It is cheap — one store read and some embedded
 	// bytes — so the limit is against volume rather than cost.
-	if !h.bootstrapLimit.allow(peerOf(req), h.now()) {
+	if !h.bootstrapLimit.allow(peerOf(ctx, req), h.now()) {
 		return nil, connect.NewError(connect.CodeResourceExhausted,
 			errors.New("too many bootstrap requests; try again shortly"))
 	}
