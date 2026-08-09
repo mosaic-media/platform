@@ -5,7 +5,12 @@
 package telemetry
 
 import (
+	"context"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Level is a record's severity.
@@ -57,7 +62,11 @@ func ParseLevel(s string) Level {
 // logger seeded into a context cannot be altered by something downstream that
 // holds it.
 type Logger struct {
-	sink      Sink
+	sink Sink
+	// otel is where a record is actually emitted (ADR 0128). It is derived from
+	// sink rather than configured beside it, so there is no way to have a logger
+	// whose records go somewhere other than the sink it names.
+	otel      log.Logger
 	resource  Resource
 	component string
 	module    string
@@ -73,13 +82,19 @@ func New(sink Sink, resource Resource, min Level) *Logger {
 	if sink == nil {
 		sink = discardSink{}
 	}
-	return &Logger{sink: sink, resource: resource, min: min, clock: time.Now}
+	return &Logger{
+		sink:     sink,
+		otel:     newLoggerProvider(sink).Logger(tracerName),
+		resource: resource,
+		min:      min,
+		clock:    time.Now,
+	}
 }
 
 // nop is the Logger From returns for a context that was never seeded. It is a
 // working Logger that discards, not nil — the whole point is that a call site
 // never has to check.
-var nop = &Logger{sink: discardSink{}, min: LevelError + 1, clock: time.Now}
+var nop = New(discardSink{}, Resource{}, LevelError+1)
 
 // For returns a Logger attributed to a component — the Platform-side origin of
 // a record ("session", "outbox-worker", "postgres").
@@ -113,6 +128,11 @@ func (l *Logger) WithSink(sink Sink) *Logger {
 	}
 	d := l.derive()
 	d.sink = sink
+	// Rebuilt with the sink, never left pointing at the old one: WithSink is how
+	// the composition root attaches the queryable sink once storage is up, and a
+	// logger that kept emitting into the boot sink afterwards would lose every
+	// record from that point on with nothing reporting it (ADR 0058).
+	d.otel = newLoggerProvider(sink).Logger(tracerName)
 	return d
 }
 
@@ -173,14 +193,28 @@ func (l *Logger) emit(level Level, message string, fields []Field) {
 		all = append(all, l.bound...)
 		all = append(all, fields...)
 	}
-	l.sink.Write(Record{
-		Time:      l.clock(),
-		Level:     level,
-		Component: l.component,
-		Module:    l.module,
-		Message:   message,
-		Fields:    all,
-		Resource:  l.resource,
-		Trace:     l.trace,
-	})
+	var record log.Record
+	record.SetTimestamp(l.clock())
+	record.SetSeverity(severityOf(level))
+	record.SetSeverityText(level.String())
+	record.SetBody(attribute.StringValue(message))
+	record.AddAttributes(
+		attribute.String(attrComponent, l.component),
+		attribute.String(attrModule, l.module),
+		attribute.String(attrServiceName, l.resource.ServiceName),
+		attribute.String(attrServiceVersion, l.resource.ServiceVersion),
+		attribute.String(attrServiceInstance, l.resource.InstanceID),
+		attribute.String(attrGenerationID, l.resource.GenerationID),
+		attribute.String(attrBootID, l.resource.BootID),
+	)
+	for _, f := range all {
+		record.AddAttributes(logValueOf(f))
+	}
+
+	// **The trace travels in the context, which is how OpenTelemetry correlates
+	// a record with a span.** Carrying it as two more attributes would work and
+	// would put the ids somewhere no OTLP consumer looks — and the whole point
+	// of the trace id being the correlation id (ADR 0054) is that it is found
+	// where a reader expects it.
+	l.otel.Emit(trace.ContextWithSpanContext(context.Background(), l.trace.SpanContext()), record)
 }

@@ -259,3 +259,63 @@ func parseLogLine(t *testing.T, data []byte) map[string]interface{} {
 	}
 	return m
 }
+
+// A field's *type* has to survive the round trip through OpenTelemetry
+// (ADR 0128), and losing it is the quiet way this conversion could have gone
+// wrong.
+//
+// A record is emitted as an OTel record and rebuilt for the sink, so a count
+// rendered back as text would turn `"results":7` into `"results":"7"` — in the
+// JSON file, in the telemetry store and in everything that parses either. No
+// test asserting "the field is present" would notice.
+func TestFieldTypesSurviveTheRoundTripThroughOpenTelemetry(t *testing.T) {
+	var buf strings.Builder
+	logger := telemetry.New(telemetry.NewJSONSink(&buf), telemetry.Resource{}, telemetry.LevelDebug)
+
+	logger.Info("counted",
+		telemetry.String("provider", "tmdb"),
+		telemetry.Int("results", 7),
+		telemetry.Int64("bytes", 1<<40),
+		telemetry.Bool("cached", true),
+	)
+
+	for _, want := range []string{
+		`"provider":"tmdb"`,
+		`"results":7`,
+		`"bytes":1099511627776`,
+		`"cached":true`,
+	} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("record does not carry %s: %s", want, buf.String())
+		}
+	}
+}
+
+// And redaction still happens on the way out, at the same point it always did.
+// The conversion moved where a record is assembled, not what a sink is allowed
+// to see (ADR 0056).
+func TestRedactionStillAppliesThroughOpenTelemetry(t *testing.T) {
+	var buf strings.Builder
+	logger := telemetry.New(telemetry.NewJSONSink(&buf), telemetry.Resource{}, telemetry.LevelDebug)
+
+	logger.Info("resolved",
+		telemetry.Secret("api_key", "sk-live-4242"),
+		telemetry.Sensitive("query", "the terminator"),
+		telemetry.String("safe", "postgres"),
+	)
+
+	for _, leaked := range []string{"sk-live-4242", "the terminator"} {
+		if strings.Contains(buf.String(), leaked) {
+			t.Errorf("%q reached the sink: %s", leaked, buf.String())
+		}
+	}
+	if !strings.Contains(buf.String(), `"safe":"postgres"`) {
+		t.Errorf("a classified-safe field was lost: %s", buf.String())
+	}
+	// The keys survive, so a record still shows the field was there.
+	for _, key := range []string{`"api_key"`, `"query"`} {
+		if !strings.Contains(buf.String(), key) {
+			t.Errorf("%s vanished entirely: %s", key, buf.String())
+		}
+	}
+}
