@@ -33,6 +33,9 @@ type Service struct {
 	moduleSettings   contracts.ModuleSettingsStore
 	userPreferences  contracts.UserPreferenceStore
 	telemetryQueries contracts.TelemetryQueryStore
+	// metrics is the live meter collector (ADR 0130). Nil in a Service built
+	// without one, which is every test that does not exercise diagnostics.
+	metrics          *telemetry.MetricCollector
 	tokens           contracts.TokenStore
 	nodes            contracts.NodeStore
 	parts            contracts.PartStore
@@ -156,6 +159,8 @@ type Deps struct {
 	// surface (ADR 0058). Read-only and outside any transaction, like the
 	// write side and for the mirror-image reason.
 	TelemetryQueries contracts.TelemetryQueryStore
+	// Metrics is the process's meter collector, read by ListMetrics (ADR 0130).
+	Metrics *telemetry.MetricCollector
 	// Tokens is the direct read handle for a session's bearer pair (ADR 0102):
 	// validating an access token happens on every call and must not open a
 	// transaction. Writes go through the UnitOfWork, where a pair and the
@@ -207,6 +212,7 @@ func NewService(d Deps) *Service {
 		moduleSettings:   d.ModuleSettings,
 		userPreferences:  d.UserPreferences,
 		telemetryQueries: d.TelemetryQueries,
+		metrics:          d.Metrics,
 		tokens:           d.Tokens,
 		nodes:            d.Nodes,
 		parts:            d.Parts,

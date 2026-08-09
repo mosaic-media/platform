@@ -10,6 +10,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/platform/policy"
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -120,6 +121,48 @@ func (s *Service) ListTraces(ctx context.Context, q ListTracesQuery) (ListTraces
 		return ListTracesResult{}, err
 	}
 	return ListTracesResult{Traces: traces}, nil
+}
+
+// ListMetricsQuery reads every instrument's current value.
+type ListMetricsQuery struct {
+	Caller v1.Caller
+}
+
+// ListMetricsResult is one row per series, ordered by scope then instrument.
+type ListMetricsResult struct {
+	Series []telemetry.MetricSeries
+}
+
+// ListMetrics returns the live value of every counter and histogram (ADR 0130).
+//
+// **It reads the process rather than the store, which is the one thing about
+// this query that is not like the three above it.** A log record and a span are
+// written once and read back; a metric is a running value with no moment of
+// production, so there is nothing in PostgreSQL to select and the answer comes
+// from the collector this process is holding. What that costs is stated on
+// MetricCollector and worth repeating where somebody calls it: these reset on
+// restart and carry no history.
+//
+// It takes the same telemetry.read gate as the others, and for the same reason
+// ADR 0058 gives — an instrument's dimensions describe what a module was asked
+// to do, which is the shape of somebody's activity even when every value is
+// redacted.
+func (s *Service) ListMetrics(ctx context.Context, q ListMetricsQuery) (ListMetricsResult, error) {
+	if _, err := s.enter(ctx, q.Caller, ActionTelemetryRead, policy.Resource{Type: "telemetry"}); err != nil {
+		return ListMetricsResult{}, err
+	}
+	// After the gate rather than before it. A caller who cannot read telemetry
+	// must not learn from the error whether this install has metrics
+	// configured — that is an unauthenticated caller reading a fact about the
+	// deployment, small but free to avoid.
+	if s.metrics == nil {
+		return ListMetricsResult{}, contracts.NewError(contracts.Unavailable, "metrics are not configured")
+	}
+	series, err := s.metrics.Snapshot(ctx)
+	if err != nil {
+		return ListMetricsResult{}, contracts.NewError(contracts.Internal, "could not read metrics")
+	}
+	return ListMetricsResult{Series: series}, nil
 }
 
 // authorizeTelemetryRead is the shared gate for the three reads above. It is

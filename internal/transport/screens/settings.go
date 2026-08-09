@@ -34,6 +34,7 @@ const (
 	sectionExtensions = "extensions"
 	sectionTraces     = "traces"
 	sectionLogs       = "logs"
+	sectionMetrics    = "metrics"
 	sectionJobs       = "jobs"
 	moduleSectionKey  = "module:"
 )
@@ -303,7 +304,8 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 		if canReadTelemetry {
 			diagnostics = append(diagnostics,
 				settingsNavEntry{key: sectionTraces, label: "Traces", icon: "info", action: ui.Navigate(screenTraces, nil)},
-				settingsNavEntry{key: sectionLogs, label: "Logs", icon: "list", action: ui.Navigate(screenLogs, nil)})
+				settingsNavEntry{key: sectionLogs, label: "Logs", icon: "list", action: ui.Navigate(screenLogs, nil)},
+				settingsNavEntry{key: sectionMetrics, label: "Metrics", icon: "info", action: ui.Navigate(screenMetrics, nil)})
 		}
 		if canReadJobs {
 			diagnostics = append(diagnostics,

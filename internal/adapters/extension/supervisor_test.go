@@ -192,6 +192,9 @@ func (r *recordingTelemetry) Span(ctx context.Context, _ string, _ ...v1.Field) 
 	return ctx, noopSpan{}
 }
 
+func (r *recordingTelemetry) Count(string, int64, ...v1.Field)              {}
+func (r *recordingTelemetry) Measure(string, float64, v1.Unit, ...v1.Field) {}
+
 func (r *recordingTelemetry) sawError(msg string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()

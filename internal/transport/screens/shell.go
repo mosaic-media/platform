@@ -36,7 +36,7 @@ const (
 // it in the same region.
 func chromeFor(screen string) string {
 	switch screen {
-	case screenSettings, screenExtensions, screenLogs, screenTraces, screenTrace:
+	case screenSettings, screenExtensions, screenLogs, screenTraces, screenTrace, screenMetrics:
 		return chromeAdmin
 	default:
 		return chromeMedia
@@ -52,6 +52,8 @@ func breadcrumbFor(screen string) string {
 		return "/ Settings / Logs"
 	case screenTraces, screenTrace:
 		return "/ Settings / Traces"
+	case screenMetrics:
+		return "/ Settings / Metrics"
 	default:
 		return ""
 	}

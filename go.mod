@@ -10,16 +10,18 @@ require (
 
 require golang.org/x/crypto v0.54.0
 
-require github.com/mosaic-media/contracts v0.60.0
+require github.com/mosaic-media/contracts v0.60.1-0.20260809213952-d69b6a2d5926
 
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/hashicorp/go-plugin v1.8.0
-	github.com/mosaic-media/sdk/host v0.8.0
+	github.com/mosaic-media/sdk/host v0.8.1-0.20260809214217-707b692daef8
 	go.opentelemetry.io/otel v1.45.0
 	go.opentelemetry.io/otel/log v0.21.0
+	go.opentelemetry.io/otel/metric v1.45.0
 	go.opentelemetry.io/otel/sdk v1.45.0
 	go.opentelemetry.io/otel/sdk/log v0.21.0
+	go.opentelemetry.io/otel/sdk/metric v1.45.0
 	go.opentelemetry.io/otel/trace v1.45.0
 	golang.org/x/net v0.57.0
 	google.golang.org/protobuf v1.36.11
@@ -38,7 +40,6 @@ require (
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/otel/metric v1.45.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/grpc v1.82.1 // indirect
 )
@@ -53,7 +54,7 @@ require (
 	github.com/mosaic-media/module-cinemeta v0.4.0
 	github.com/mosaic-media/module-remote-playback v0.4.0
 	github.com/mosaic-media/module-tmdb v0.11.0
-	github.com/mosaic-media/sdk v0.26.1-0.20260809181051-866aef95a264
+	github.com/mosaic-media/sdk v0.26.1-0.20260809214217-707b692daef8
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0 // indirect

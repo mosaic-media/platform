@@ -44,6 +44,10 @@ const (
 	screenLogs   = "logs"
 	screenTraces = "traces"
 	screenTrace  = "trace"
+	// screenMetrics is the live instrument list (ADR 0130). It sits with the
+	// other two and reads something different from both: logs and traces are
+	// stored events, and this is the current value of a running counter.
+	screenMetrics = "metrics"
 	// The background-work screens (ADR 0017). Same expert-mode group as the
 	// telemetry ones and a different permission: `job.read` is what the
 	// install did to itself, `telemetry.read` is what its users did.
@@ -262,6 +266,7 @@ type contentQueries interface {
 	// if the affordance leading to it were ever drawn by mistake.
 	QueryTelemetryLogs(context.Context, app.QueryTelemetryLogsQuery) (app.QueryTelemetryLogsResult, error)
 	ListTraces(context.Context, app.ListTracesQuery) (app.ListTracesResult, error)
+	ListMetrics(context.Context, app.ListMetricsQuery) (app.ListMetricsResult, error)
 	GetTrace(context.Context, app.GetTraceQuery) (app.GetTraceResult, error)
 	// The background-work reads (ADR 0017). Each authorises job.read for
 	// itself, so the screens cannot be reached without the grant however the
@@ -385,6 +390,8 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.tracesScreen(ctx, caller, params)
 	case screenTrace:
 		return s.traceScreen(ctx, caller, params)
+	case screenMetrics:
+		return s.metricsScreen(ctx, caller)
 	case screenJobs:
 		return s.jobsScreen(ctx, caller, params)
 	case screenJob:

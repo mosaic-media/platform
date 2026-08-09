@@ -399,6 +399,12 @@ func boundaryCases() []boundaryCase {
 		{"ListTraces", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListTraces(ctx, app.ListTracesQuery{Caller: caller(sid)}))
 		}},
+		// Reads the process rather than the store (ADR 0130), and takes the same
+		// gate for the same reason: an instrument's dimensions describe what a
+		// module was asked to do.
+		{"ListMetrics", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListMetrics(ctx, app.ListMetricsQuery{Caller: caller(sid)}))
+		}},
 		{"GetTrace", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetTrace(ctx, app.GetTraceQuery{Caller: caller(sid), TraceID: "trace-1"}))
 		}},

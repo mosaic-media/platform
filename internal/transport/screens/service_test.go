@@ -22,6 +22,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 	"github.com/mosaic-media/platform/internal/platform/domain"
 	"github.com/mosaic-media/platform/internal/platform/policy"
+	"github.com/mosaic-media/platform/internal/platform/telemetry"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
@@ -166,6 +167,7 @@ type fakeQueries struct {
 	gotSettingsModuleID string
 	gotLogFilter        domain.TelemetryLogFilter
 	gotTraceFilter      domain.TelemetryTraceFilter
+	metrics             []telemetry.MetricSeries
 	gotTraceID          string
 	gotJobFilter        domain.JobFilter
 	gotJobID            domain.JobID
@@ -354,6 +356,12 @@ func (f *fakeQueries) QueryTelemetryLogs(_ context.Context, q app.QueryTelemetry
 	f.gotLogFilter = q.Filter
 	f.mu.Unlock()
 	return app.QueryTelemetryLogsResult{Records: f.logs}, nil
+}
+
+func (f *fakeQueries) ListMetrics(_ context.Context, _ app.ListMetricsQuery) (app.ListMetricsResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return app.ListMetricsResult{Series: f.metrics}, nil
 }
 
 func (f *fakeQueries) ListTraces(_ context.Context, q app.ListTracesQuery) (app.ListTracesResult, error) {

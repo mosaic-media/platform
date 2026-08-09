@@ -40,7 +40,7 @@ func moduleSpan(ctx context.Context, moduleID, operation string) (context.Contex
 	// module id is fixed here from the registry, not taken from anything the
 	// module said, and the SDK's context key is unexported so a module cannot
 	// plant a different one.
-	ctx = v1.WithTelemetry(ctx, newModuleTelemetry(lg, moduleID))
+	ctx = v1.WithTelemetry(ctx, newModuleTelemetry(lg, moduleID, telemetry.MetricsFrom(ctx)))
 
 	return telemetry.Start(ctx, "module."+operation,
 		telemetry.String("module", moduleID),

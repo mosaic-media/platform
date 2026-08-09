@@ -563,6 +563,12 @@ func run() error {
 	}
 	instanceIdentity := instance.NewFile(instanceFile)
 
+	// Where every module's counters and histograms land (ADR 0130). One
+	// collector for the process, built here because the composition root is the
+	// only thing that decides where a recording goes — a module receives a
+	// meter and nothing that configures one.
+	metrics := telemetry.NewMetricCollector()
+
 	extManager := extensions.NewManager(extensions.Deps{
 		Installer: installer,
 		Registry:  capRegistry,
@@ -570,6 +576,7 @@ func run() error {
 		Clock:     set.Clock,
 		Policy:    extension.DefaultRestartPolicy(),
 		Root:      root,
+		Metrics:   metrics,
 	})
 
 	svc := app.NewService(app.Deps{
@@ -592,6 +599,7 @@ func run() error {
 		ModuleSettings:   set.ModuleSettings,
 		UserPreferences:  set.UserPreferences,
 		TelemetryQueries: set.TelemetryQueries,
+		Metrics:          metrics,
 		// The session's bearer pair (ADR 0102). Direct, because validating an
 		// access token happens on every call and must not open a transaction.
 		Tokens: set.Tokens,
@@ -830,7 +838,8 @@ func run() error {
 	// context from serveCtx rather than serveCtx itself: serveCtx is cancelled
 	// by the shutdown signal, and using it here would abort in-flight requests
 	// at exactly the moment graceful shutdown is trying to let them finish.
-	requestCtx := telemetry.WithSpanSink(telemetry.Into(context.Background(), root), spanSink)
+	requestCtx := telemetry.WithMetrics(
+		telemetry.WithSpanSink(telemetry.Into(context.Background(), root), spanSink), metrics)
 	baseContext := func(net.Listener) context.Context { return requestCtx }
 
 	httpServer := &http.Server{

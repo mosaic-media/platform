@@ -43,6 +43,7 @@ type Manager struct {
 	clock     contracts.Clock
 	policy    extension.RestartPolicy
 	root      *telemetry.Logger
+	metrics   *telemetry.MetricCollector
 	findings  Findings
 
 	mu   sync.Mutex
@@ -69,6 +70,10 @@ type Deps struct {
 	// Root is the telemetry root; per-module telemetry (ADR 0059) and the
 	// manager's own diagnostics are derived from it.
 	Root *telemetry.Logger
+	// Metrics is where an adopted module's counters and histograms land
+	// (ADR 0130). Optional: nil discards them, which is what a Manager built
+	// without one did before the surface existed.
+	Metrics *telemetry.MetricCollector
 	// Findings is the resolution register (ADR 0119). Optional: a Manager
 	// built without one logs and skips, which is what it did before the
 	// register existed.
@@ -85,6 +90,7 @@ func NewManager(d Deps) *Manager {
 		clock:     d.Clock,
 		policy:    d.Policy,
 		root:      d.Root,
+		metrics:   d.Metrics,
 		findings:  d.Findings,
 		live:      make(map[string]*extension.Supervised),
 	}
@@ -284,7 +290,7 @@ func (m *Manager) Close() {
 // tracks the handle, replacing any earlier one for the same id — a reinstall
 // swaps the process. The caller holds m.mu.
 func (m *Manager) spawnLocked(inst extension.Installed) (*extension.Supervised, error) {
-	tel := app.NewModuleTelemetry(m.root.For("module."+inst.ModuleID), inst.ModuleID)
+	tel := app.NewModuleTelemetry(m.root.For("module."+inst.ModuleID), inst.ModuleID, m.metrics)
 	inst.Config.Content = m.content
 	inst.Config.Telemetry = tel
 	sup, err := extension.Supervise(inst.Config, m.policy, tel)

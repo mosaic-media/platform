@@ -22,7 +22,7 @@ import (
 func moduleTelemetryFixture(buf *bytes.Buffer, moduleID string) v1.Telemetry {
 	lg := telemetry.New(telemetry.NewJSONSink(buf), telemetry.Resource{ServiceName: "mosaic-platform"}, telemetry.LevelDebug).
 		ForModule("module", moduleID)
-	return newModuleTelemetry(lg, moduleID)
+	return newModuleTelemetry(lg, moduleID, nil)
 }
 
 func lastRecord(t *testing.T, buf *bytes.Buffer) map[string]any {
@@ -179,4 +179,97 @@ type captureModuleSpanRecords struct{ records []telemetry.SpanRecord }
 
 func (c *captureModuleSpanRecords) WriteSpan(r telemetry.SpanRecord) {
 	c.records = append(c.records, r)
+}
+
+// A module's counters land in the collector attributed to the module, and the
+// attribution is the Platform's rather than the module's — the same rule the
+// log records follow (ADR 0059, ADR 0130).
+func TestModuleMetricsAreAttributedToTheModule(t *testing.T) {
+	var buf bytes.Buffer
+	collector := telemetry.NewMetricCollector()
+	tel := moduleMetricFixture(&buf, "stremio", collector)
+
+	tel.Count("addon_requests", 4, v1.String("addon", "cinemeta"))
+	tel.Measure("payload", 512, v1.UnitBytes)
+
+	series, err := collector.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if len(series) != 2 {
+		t.Fatalf("want two series, got %d: %+v", len(series), series)
+	}
+	for _, s := range series {
+		if s.Scope != "stremio" {
+			t.Errorf("%s is scoped to %q, want the module id", s.Instrument, s.Scope)
+		}
+	}
+}
+
+// The unit crosses the adapter, and an unknown one becomes unitless rather than
+// an annotation a backend would convert against.
+func TestModuleMetricUnitsCrossTheAdapter(t *testing.T) {
+	var buf bytes.Buffer
+	collector := telemetry.NewMetricCollector()
+	tel := moduleMetricFixture(&buf, "tmdb", collector)
+
+	tel.Measure("elapsed", 1, v1.UnitSeconds)
+	tel.Measure("odd", 1, v1.Unit("furlongs"))
+
+	series, err := collector.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	units := map[string]string{}
+	for _, s := range series {
+		units[s.Instrument] = s.Unit
+	}
+	if units["elapsed"] != "s" {
+		t.Errorf("seconds arrived as %q", units["elapsed"])
+	}
+	if units["odd"] != "" {
+		t.Errorf("an unknown unit arrived as %q, want unitless", units["odd"])
+	}
+}
+
+// **The record quota must not bound metrics.** A record accumulates in a store
+// and a metric does not — a counter written a million times is one series
+// holding one number — so applying the per-invocation record cap here would stop
+// a busy module counting anything after its 512th call, silently.
+func TestTheRecordQuotaDoesNotBoundMetrics(t *testing.T) {
+	var buf bytes.Buffer
+	collector := telemetry.NewMetricCollector()
+	tel := moduleMetricFixture(&buf, "busy", collector)
+
+	const writes = 2000
+	for range writes {
+		tel.Count("requests", 1)
+	}
+
+	series, err := collector.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if len(series) != 1 {
+		t.Fatalf("want one series, got %d", len(series))
+	}
+	if series[0].Total != writes {
+		t.Errorf("counter total is %v after %d writes — the record quota is bounding metrics",
+			series[0].Total, writes)
+	}
+}
+
+// A module with no collector configured records nothing and does not panic,
+// which is the state every test that does not exercise diagnostics is in.
+func TestModuleMetricsWithoutACollectorDiscard(t *testing.T) {
+	var buf bytes.Buffer
+	tel := moduleMetricFixture(&buf, "stremio", nil)
+	tel.Count("requests", 1)
+	tel.Measure("payload", 1, v1.UnitBytes)
+}
+
+func moduleMetricFixture(buf *bytes.Buffer, moduleID string, collector *telemetry.MetricCollector) v1.Telemetry {
+	lg := telemetry.New(telemetry.NewJSONSink(buf), telemetry.Resource{ServiceName: "mosaic-platform"}, telemetry.LevelDebug).
+		ForModule("module", moduleID)
+	return newModuleTelemetry(lg, moduleID, collector)
 }
