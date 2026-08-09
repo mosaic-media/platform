@@ -30,6 +30,7 @@ import (
 	"github.com/mosaic-media/contracts/gen/mosaic/session/v1/sessionv1connect"
 	"github.com/mosaic-media/platform/internal/adapters/crypto"
 	"github.com/mosaic-media/platform/internal/adapters/extension"
+	"github.com/mosaic-media/platform/internal/adapters/filesystem"
 	"github.com/mosaic-media/platform/internal/adapters/instance"
 	"github.com/mosaic-media/platform/internal/adapters/listen"
 	"github.com/mosaic-media/platform/internal/composition/bootstrap"
@@ -660,6 +661,12 @@ func run() error {
 	}
 	adoptCancel()
 
+	// The Supervisor's own findings, adopted once (ADR 0119). Best-effort by
+	// design: a Platform that refused to start because it could not read the
+	// *diagnostics* would be the machinery defeating what it is for, and an
+	// install with no Supervisor has no file to read.
+	adoptSupervisorFindings(context.Background(), svc, os.Getenv(supervisorFindingsEnv), root)
+
 	// The artwork proxy (ADR 0030) re-serves remote poster/backdrop images from
 	// the Platform's origin, so a client gets same-origin (CORS-clean) artwork.
 	// Its signing key is process-scoped: emitted screens are re-fetched, so a
@@ -997,4 +1004,53 @@ func (p playbackResolver) ReresolvePlayback(ctx context.Context, session, partID
 		return "", nil, err
 	}
 	return res.URL, res.Headers, nil
+}
+
+// supervisorFindingsEnv is where the Supervisor says it has written its
+// findings. Set by the Supervisor on this process, never configured here: two
+// halves that have to agree must not be able to disagree.
+const supervisorFindingsEnv = "MOSAIC_SUPERVISOR_FINDINGS"
+
+// adoptSupervisorFindings takes over what the Supervisor recorded while the
+// Platform was not running (ADR 0119).
+//
+// **Every failure here is logged and none is returned.** The whole point of the
+// spool is the boot where something already went wrong; refusing to start
+// because that record was unreadable would lose the install as well as the
+// finding.
+//
+// A type the Platform does not know is skipped, which is the correct outcome for
+// a spool written by a newer Supervisor: the closed vocabulary is the
+// Platform's, and a row it cannot render is worse than a row it never wrote.
+func adoptSupervisorFindings(ctx context.Context, svc *app.Service, path string, log *telemetry.Logger) {
+	if path == "" {
+		return
+	}
+	findings, err := filesystem.ReadSpool(path)
+	if err != nil {
+		log.For("findings").Error("could not adopt the supervisor's findings", telemetry.Err(err))
+		return
+	}
+	adopted := 0
+	for _, f := range findings {
+		issue := domain.Issue{
+			Type:      domain.IssueType(f.Type),
+			Context:   domain.IssueContext(f.Context),
+			Reference: f.Reference,
+			Source:    domain.SourceSupervisor,
+			Detail:    f.Detail,
+			FirstSeen: f.At,
+			LastSeen:  f.At,
+		}
+		if err := svc.RaiseIssue(ctx, issue); err != nil {
+			log.For("findings").Warn("skipped a finding from the supervisor",
+				telemetry.String("type", f.Type), telemetry.Err(err))
+			continue
+		}
+		adopted++
+	}
+	if adopted > 0 {
+		log.For("findings").Info("adopted findings from the supervisor",
+			telemetry.Int("count", adopted))
+	}
 }
