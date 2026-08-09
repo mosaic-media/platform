@@ -9,6 +9,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"strings"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 // TraceparentHeader is the W3C Trace Context header every Mosaic edge reads
@@ -163,6 +165,11 @@ type traceKey struct{}
 
 // TraceInto returns a context carrying tc.
 func TraceInto(ctx context.Context, tc TraceContext) context.Context {
+	// **Both representations, always.** TraceFrom reads Mosaic's and the OTel
+	// tracer reads OpenTelemetry's, so seeding only one would give a span a
+	// parent by one account and none by the other — a tree that looks right in
+	// the record and is rootless in an exported trace (ADR 0128).
+	ctx = trace.ContextWithSpanContext(ctx, tc.SpanContext())
 	return context.WithValue(ctx, traceKey{}, tc)
 }
 

@@ -6,8 +6,13 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // SpanRecord is one completed unit of work: what it was, how long it took, and
@@ -63,7 +68,11 @@ func WithSpanSink(ctx context.Context, sink SpanSink) context.Context {
 	if sink == nil {
 		return ctx
 	}
-	return context.WithValue(ctx, spanSinkKey{}, sink)
+	ctx = context.WithValue(ctx, spanSinkKey{}, sink)
+	// The tracer travels with the sink rather than being configured separately,
+	// so there is exactly one thing to set up and no way to have a tracer whose
+	// spans go somewhere other than the sink beside it (ADR 0128).
+	return context.WithValue(ctx, tracerKey{}, newTracerProvider(sink).Tracer(tracerName))
 }
 
 // spanSinkFrom returns the configured sink, or one that discards.
@@ -82,10 +91,10 @@ func spanSinkFrom(ctx context.Context) SpanSink {
 // is simply never recorded, so a panicking path costs a missing span rather
 // than a corrupt trace.
 type Span struct {
-	mu     sync.Mutex
-	record SpanRecord
-	sink   SpanSink
-	ended  bool
+	mu    sync.Mutex
+	span  trace.Span
+	trace TraceContext
+	ended bool
 }
 
 // Start begins a span named name and returns a context carrying it as the
@@ -100,33 +109,28 @@ type Span struct {
 // sink configured the span is built and discarded, so a unit test exercising
 // an instrumented path needs no telemetry setup at all.
 func Start(ctx context.Context, name string, attrs ...Field) (context.Context, *Span) {
+	// The parent comes from Mosaic's own trace context, which StartRequest and
+	// TraceInto both seed — and TraceInto seeds OpenTelemetry's alongside it, so
+	// the tracer below parents to the same span this reads. A trace with no
+	// parent at all begins one here, and is its root.
 	parent, ok := TraceFrom(ctx)
 	if !ok || parent.TraceID == [16]byte{} {
-		// No trace at all: this span begins one, and is its root.
-		parent = NewRootTrace()
+		ctx = TraceInto(ctx, NewRootTrace())
 	}
-	current := parent.Child()
 
 	lg := From(ctx)
-	span := &Span{
-		record: SpanRecord{
-			Trace: current,
-			// Empty for a root span. SpanIDString already renders a zero span
-			// id as "", so a trace started here records no parent rather than
-			// a run of zeros that looks like a real id.
-			ParentID:  parent.SpanIDString(),
-			Name:      name,
-			Component: lg.component,
-			Module:    lg.module,
-			Start:     time.Now(),
-			Status:    "ok",
-			// Copied, not aliased: a caller reusing its attrs slice after
-			// Start must not be able to mutate a span already in flight.
-			Attributes: append([]Field(nil), attrs...),
-			Resource:   lg.resource,
-		},
-		sink: spanSinkFrom(ctx),
+	// Set at start rather than on the provider: the identity is the ambient
+	// logger's, and the exporter reads them back to rebuild a SpanRecord.
+	started := append(resourceAttributes(lg.resource),
+		attribute.String(attrComponent, lg.component),
+		attribute.String(attrModule, lg.module))
+	for _, f := range attrs {
+		started = append(started, attributeOf(f))
 	}
+
+	ctx, otelSpan := tracerFrom(ctx).Start(ctx, name, trace.WithAttributes(started...))
+	current := TraceContextOf(otelSpan.SpanContext())
+	span := &Span{span: otelSpan, trace: current}
 
 	// Rebind both the trace and the logger, so log records emitted inside this
 	// span carry *its* span id rather than its parent's. Without this a log
@@ -135,6 +139,40 @@ func Start(ctx context.Context, name string, attrs ...Field) (context.Context, *
 	ctx = TraceInto(ctx, current)
 	ctx = Into(ctx, lg.WithTrace(current))
 	return ctx, span
+}
+
+// attributeOf renders a Field as an OpenTelemetry attribute, applying redaction
+// on the way out exactly as a sink does — a span attribute is not a laxer
+// channel than a log field (ADR 0056).
+func attributeOf(f Field) attribute.KeyValue {
+	value := f.EmitValue()
+	switch v := value.(type) {
+	case string:
+		return attribute.String(f.Key, v)
+	case bool:
+		return attribute.Bool(f.Key, v)
+	case int:
+		return attribute.Int(f.Key, v)
+	case int64:
+		return attribute.Int64(f.Key, v)
+	case float64:
+		return attribute.Float64(f.Key, v)
+	case nil:
+		return attribute.String(f.Key, "")
+	default:
+		return attribute.String(f.Key, fmt.Sprint(v))
+	}
+}
+
+// resourceAttributes renders the process identity for a span to carry.
+func resourceAttributes(r Resource) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String(attrServiceName, r.ServiceName),
+		attribute.String(attrServiceVersion, r.ServiceVersion),
+		attribute.String(attrServiceInstance, r.InstanceID),
+		attribute.String(attrGenerationID, r.GenerationID),
+		attribute.String(attrBootID, r.BootID),
+	}
 }
 
 // SetAttributes adds attributes to a span in flight. They are redaction-classed
@@ -149,7 +187,9 @@ func (s *Span) SetAttributes(attrs ...Field) {
 	if s.ended {
 		return
 	}
-	s.record.Attributes = append(s.record.Attributes, attrs...)
+	for _, f := range attrs {
+		s.span.SetAttributes(attributeOf(f))
+	}
 }
 
 // Fail marks the span as failed, recording the Platform error category.
@@ -167,9 +207,9 @@ func (s *Span) Fail(category string, err error) {
 	if s.ended {
 		return
 	}
-	s.record.Status = "error"
-	s.record.ErrorCategory = category
-	s.record.Attributes = append(s.record.Attributes, Err(err))
+	s.span.SetStatus(codes.Error, err.Error())
+	s.span.SetAttributes(attribute.String(attrErrorCategory, category))
+	s.span.SetAttributes(attributeOf(Err(err)))
 }
 
 // End completes the span and writes it. It is idempotent, so `defer span.End()`
@@ -185,12 +225,12 @@ func (s *Span) End() {
 		return
 	}
 	s.ended = true
-	s.record.End = time.Now()
-	record := s.record
-	sink := s.sink
+	span := s.span
 	s.mu.Unlock()
 
-	sink.WriteSpan(record)
+	// The exporter behind the tracer is what turns this into a SpanRecord and
+	// hands it to the sink, so ending is the only write and it happens once.
+	span.End()
 }
 
 // TraceContext is the span's own context — its trace, and its span id as the
@@ -201,5 +241,5 @@ func (s *Span) TraceContext() TraceContext {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.record.Trace
+	return s.trace
 }

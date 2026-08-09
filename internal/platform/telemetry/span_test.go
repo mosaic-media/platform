@@ -188,3 +188,95 @@ func TestUnendedSpanIsNeverRecorded(t *testing.T) {
 		t.Fatalf("an unended span was recorded (%d spans)", n)
 	}
 }
+
+// One journey, end to end, with nothing losing coherence in the middle of it.
+//
+// **This is the property the conversion to OpenTelemetry had to preserve**
+// (ADR 0128), and it is asserted over a whole request rather than a pair of
+// spans: an inbound traceparent from a client, an entry span, a handler, a
+// module invocation and a SQL statement, with a log record emitted at every
+// level. Every one of them must carry the *same* trace id — a conversion
+// producing a valid trace id per hop would pass every test that checks one
+// exists, and would leave a support report joinable to nothing.
+func TestAWholeJourneyKeepsOneTraceAcrossSpansAndLogs(t *testing.T) {
+	caller := telemetry.NewTraceContext()
+	sink := &captureSpans{}
+	var logs strings.Builder
+
+	// The edge, as a client reaches it.
+	ctx := telemetry.StartRequest(context.Background(), caller.Traceparent())
+	ctx = telemetry.WithSpanSink(ctx, sink)
+	ctx = telemetry.Into(ctx, telemetry.New(telemetry.NewJSONSink(&logs), telemetry.Resource{}, telemetry.LevelDebug))
+
+	rpcCtx, rpc := telemetry.Start(ctx, "rpc")
+	telemetry.From(rpcCtx).Info("handling")
+
+	handlerCtx, handler := telemetry.Start(rpcCtx, "handler")
+	telemetry.From(handlerCtx).Info("authorised")
+
+	moduleCtx, module := telemetry.Start(handlerCtx, "module.tmdb.Import")
+	telemetry.From(moduleCtx).Info("fetching")
+
+	sqlCtx, sql := telemetry.Start(moduleCtx, "sql INSERT nodes")
+	telemetry.From(sqlCtx).Info("inserted")
+
+	sql.End()
+	module.End()
+	handler.End()
+	rpc.End()
+
+	recorded := sink.all()
+	if len(recorded) != 4 {
+		t.Fatalf("want four spans, got %d", len(recorded))
+	}
+
+	// One trace, from the caller's header all the way to the statement.
+	want := caller.TraceIDString()
+	for _, s := range recorded {
+		if got := s.Trace.TraceIDString(); got != want {
+			t.Errorf("span %q is on trace %s, want the caller's %s", s.Name, got, want)
+		}
+	}
+	// Every log line too, which is the half a waterfall cannot show and a
+	// support report is actually read from.
+	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+		if !strings.Contains(line, `"trace":"`+want+`"`) {
+			t.Errorf("a log record left the trace: %s", line)
+		}
+	}
+
+	// And the chain is intact, so the journey is one shape rather than four
+	// spans that merely agree on an id.
+	byName := map[string]telemetry.SpanRecord{}
+	for _, s := range recorded {
+		byName[s.Name] = s
+	}
+	for _, step := range []struct{ child, parent string }{
+		{"handler", "rpc"},
+		{"module.tmdb.Import", "handler"},
+		{"sql INSERT nodes", "module.tmdb.Import"},
+	} {
+		if got, want := byName[step.child].ParentID, byName[step.parent].Trace.SpanIDString(); got != want {
+			t.Errorf("%s parent is %q, want %s's span %q", step.child, got, step.parent, want)
+		}
+	}
+	// The entry span hangs off the caller's own span, which is outside this
+	// process and is why the trace continues rather than beginning here.
+	if got := byName["rpc"].ParentID; got != caller.SpanIDString() {
+		t.Errorf("the entry span parents to %q, want the caller's span %q", got, caller.SpanIDString())
+	}
+
+	// Each log record must carry the span it happened in, not an ancestor's.
+	for name, want := range map[string]string{
+		"handling":   byName["rpc"].Trace.SpanIDString(),
+		"authorised": byName["handler"].Trace.SpanIDString(),
+		"fetching":   byName["module.tmdb.Import"].Trace.SpanIDString(),
+		"inserted":   byName["sql INSERT nodes"].Trace.SpanIDString(),
+	} {
+		for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+			if strings.Contains(line, `"message":"`+name+`"`) && !strings.Contains(line, `"span":"`+want+`"`) {
+				t.Errorf("the %q record does not carry its own span %s: %s", name, want, line)
+			}
+		}
+	}
+}
