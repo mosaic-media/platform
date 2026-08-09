@@ -90,6 +90,11 @@ func administratorActions() []policy.Action {
 		// because they are different disclosures — one says what the install
 		// decided, the other changes it — even though the preset confers both.
 		ActionLibraryRuleRead, ActionLibraryRuleManage,
+		// The resolution register (ADR 0119). An administrator, because a
+		// finding is about the install rather than about the person reading:
+		// "an extension will not start" is not one viewer's business, and
+		// acting on it changes what this install is for everybody.
+		ActionFindingsRead, ActionFindingsResolve,
 	)
 }
 

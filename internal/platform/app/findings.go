@@ -177,7 +177,14 @@ func offers(t domain.IssueType, suggestion domain.SuggestionType) bool {
 // transport that reaches it.
 func (s *Service) RaiseIssue(ctx context.Context, issue domain.Issue) error {
 	if s.issues == nil {
-		return nil
+		// **Reported, not swallowed.** This returned nil for a while, and the
+		// consequence was a boot that adopted two findings from the Supervisor,
+		// logged "adopted findings count=2", and wrote none of them — because
+		// the composition root had never passed the store in. Nothing was red
+		// anywhere; the register was simply always empty. A detector is free to
+		// ignore this error (they all do, on the boot path), but it must be
+		// possible to see.
+		return contracts.NewError(contracts.Unavailable, "this build keeps no resolution register")
 	}
 	if !issue.Type.Valid() {
 		// Refused rather than stored. The type is a closed vocabulary because
@@ -203,6 +210,11 @@ func (s *Service) RaiseIssue(ctx context.Context, issue domain.Issue) error {
 // ClearIssueSituation withdraws a finding because the situation it described is
 // no longer true. Same terms as RaiseIssue: it is the detector's counterpart,
 // so it takes no Caller either.
+//
+// **Unlike RaiseIssue, a missing register is success here**, and the asymmetry
+// is the point: raising into nothing loses information, and withdrawing from
+// nothing loses none. Erroring would mean every successful boot of a build with
+// no register logged a failure to withdraw a finding that was never made.
 func (s *Service) ClearIssueSituation(ctx context.Context, t domain.IssueType, c domain.IssueContext, reference string) error {
 	if s.issues == nil {
 		return nil

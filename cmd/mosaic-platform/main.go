@@ -606,6 +606,8 @@ func run() error {
 		// What a provider said about a materialised title (ADR 0107), so a
 		// library detail renders from the graph rather than from a live call.
 		NodeMetadata: set.NodeMetadata,
+		// The resolution register (ADR 0119).
+		Issues: set.Issues,
 		// The last good answer each source gave (ADR 0052), so a restart under a
 		// live client renders the library it had rather than an empty state
 		// telling a configured install to configure itself.
