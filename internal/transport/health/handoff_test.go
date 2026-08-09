@@ -10,7 +10,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/mosaic-media/platform/internal/composition/builtin"
 	"github.com/mosaic-media/platform/internal/platform/contracts"
@@ -230,4 +233,68 @@ func TestConfigReflectsActiveVersion(t *testing.T) {
 	if !got.HasActiveVersion || got.VersionID != "cv-1" {
 		t.Fatalf("got = %+v", got)
 	}
+}
+
+// The two binaries have to agree on these three keys, and nothing structurally
+// holds them together (ADR 0129).
+//
+// **This is the same hazard the Supervisor's telemetry had**: a shape written by
+// one process and read by another, where a key quietly renamed on one side reads
+// as an absent value on the other rather than as an error. The Supervisor's
+// reader is `UpgradeRequest` in its own repository; this pins what it is reading.
+func TestTheUpgradeHandoffKeysAreTheOnesTheSupervisorReads(t *testing.T) {
+	handoff := &health.Handoff{UpgradeStore: &fakePendingUpgrades{
+		version: "v0.4.0", at: time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC),
+	}}
+	recorder := httptest.NewRecorder()
+	handoff.Mux().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/upgrade", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 — a pending request is not an error condition", recorder.Code)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil {
+		t.Fatalf("not JSON: %v", err)
+	}
+	keys := make([]string, 0, len(got))
+	for k := range got {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if strings.Join(keys, ",") != "pending,requestedAt,version" {
+		t.Fatalf("keys are %v, want pending,requestedAt,version", keys)
+	}
+	if got["pending"] != true || got["version"] != "v0.4.0" {
+		t.Fatalf("body is %v", got)
+	}
+}
+
+// Nothing pending answers 200 with pending:false rather than a status code
+// carrying meaning: the Supervisor polls this every few seconds, and an absent
+// request must not be indistinguishable from a Platform that is unwell.
+func TestNoPendingUpgradeStillAnswersOK(t *testing.T) {
+	handoff := &health.Handoff{UpgradeStore: &fakePendingUpgrades{}}
+	recorder := httptest.NewRecorder()
+	handoff.Mux().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/upgrade", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), `"pending":false`) {
+		t.Fatalf("body is %s", recorder.Body.String())
+	}
+}
+
+type fakePendingUpgrades struct {
+	version string
+	at      time.Time
+}
+
+func (f *fakePendingUpgrades) Request(context.Context, domain.UpgradeRequest) error { return nil }
+func (f *fakePendingUpgrades) Settle(context.Context) error                         { return nil }
+func (f *fakePendingUpgrades) Pending(context.Context) (domain.UpgradeRequest, error) {
+	if f.version == "" {
+		return domain.UpgradeRequest{}, contracts.NewError(contracts.NotFound, "nothing requested")
+	}
+	return domain.UpgradeRequest{Version: f.version, RequestedAt: f.at}, nil
 }

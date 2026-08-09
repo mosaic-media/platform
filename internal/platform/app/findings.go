@@ -98,15 +98,16 @@ func (s *Service) ApplySuggestion(ctx context.Context, cmd ApplySuggestionComman
 	if cmd.IssueID == "" {
 		return ApplySuggestionResult{}, contracts.NewError(contracts.InvalidArgument, "issue id is required")
 	}
-	if _, err := s.enterSession(ctx, cmd.CallerSessionID, ActionFindingsResolve, findingsResource); err != nil {
+	authorized, err := s.enterSession(ctx, cmd.CallerSessionID, ActionFindingsResolve, findingsResource)
+	if err != nil {
 		return ApplySuggestionResult{}, err
 	}
 	if s.issues == nil {
 		return ApplySuggestionResult{}, contracts.NewError(contracts.Unavailable, "this build keeps no resolution register")
 	}
 
-	issue, err := s.issues.Get(ctx, cmd.IssueID)
-	if err != nil {
+	issue, getErr := s.issues.Get(ctx, cmd.IssueID)
+	if err := getErr; err != nil {
 		return ApplySuggestionResult{}, err
 	}
 	if !offers(issue.Type, cmd.Suggestion) {
@@ -125,6 +126,36 @@ func (s *Service) ApplySuggestion(ctx context.Context, cmd ApplySuggestionComman
 			return ApplySuggestionResult{}, err
 		}
 		return ApplySuggestionResult{Cleared: true}, nil
+
+	case domain.SuggestionApplyUpgrade:
+		// **Recorded, not performed.** The Platform cannot stop and restart
+		// itself onto a different Generation, so this writes down what was asked
+		// for and the Supervisor reads it over the handoff (ADR 0129). The
+		// version comes from the Issue rather than from the caller, so a client
+		// cannot ask for a version nobody was offered — and the Supervisor
+		// resolves even that name against the signed catalogue.
+		if s.upgrades == nil {
+			return ApplySuggestionResult{}, contracts.NewError(contracts.Unavailable,
+				"this build has no upgrade path")
+		}
+		if issue.Reference == "" {
+			return ApplySuggestionResult{}, contracts.NewError(contracts.InvalidArgument,
+				"this finding names no version to install")
+		}
+		if err := s.upgrades.Request(ctx, domain.UpgradeRequest{
+			ID:          string(s.ids.NewID()),
+			Version:     issue.Reference,
+			RequestedBy: string(authorized.userID),
+			RequestedAt: s.clock.Now().UTC(),
+		}); err != nil {
+			return ApplySuggestionResult{}, err
+		}
+		// **The finding stays.** It is still true — the install is still not on
+		// that version — and it stops being true when the upgrade lands, at
+		// which point the situation is cleared by the code that observes it.
+		// Clearing it here would leave a person with no row and no evidence
+		// anything was happening.
+		return ApplySuggestionResult{}, nil
 
 	case domain.SuggestionUninstallExtension:
 		if s.extensions == nil {

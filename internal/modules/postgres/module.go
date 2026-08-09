@@ -129,6 +129,10 @@ type ContractSet struct {
 	LibraryRules contracts.LibraryRuleStore
 	// Issues is the resolution register (ADR 0119).
 	Issues contracts.IssueStore
+	// Upgrades records what somebody asked the Supervisor to install
+	// (ADR 0129), which is the one remedy on the register the Platform cannot
+	// perform itself.
+	Upgrades contracts.UpgradeStore
 	// NodeMetadata is the direct read handle for a stored provider answer
 	// (ADR 0107) — what a library detail renders from.
 	NodeMetadata contracts.NodeMetadataStore
@@ -213,6 +217,7 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		LibraryRules:         NewLibraryRuleStore(pool),
 		NodeMetadata:         NewNodeMetadataStore(pool),
 		Issues:               NewIssueStore(pool),
+		Upgrades:             NewUpgradeStore(pool),
 		Snapshots:            NewSourceSnapshotStore(pool),
 		WatchAvailability:    NewWatchAvailabilityStore(pool),
 		Tokens:               NewTokenStore(pool),

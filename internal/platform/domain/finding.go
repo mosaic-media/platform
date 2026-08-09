@@ -48,6 +48,21 @@ const (
 	// IssueProvisionFailed is a first boot that could not fetch or verify a
 	// Generation. Nothing is running, so nothing else can report it.
 	IssueProvisionFailed IssueType = "provision_failed"
+	// IssueUpgradeAvailable is a newer release the signed catalogue offers and
+	// this install has not taken (ADR 0129).
+	//
+	// **It is the one entry here that is not a fault**, and it is a finding
+	// anyway because the register is already the surface for "something needs
+	// your attention" and already folds repeats into one row with a count. The
+	// alternative was a notification channel built for one feature. It is also
+	// the first type whose Suggestion actually does something rather than
+	// acknowledging — see SuggestionApplyUpgrade.
+	IssueUpgradeAvailable IssueType = "upgrade_available"
+	// IssueUpgradeFailed is a requested upgrade that did not install. Distinct
+	// from IssueGenerationRolledBack, which is one that installed, came up
+	// badly and was reverted: this one never got that far, so the remedy and
+	// the reason are different.
+	IssueUpgradeFailed IssueType = "upgrade_failed"
 )
 
 // KnownIssueTypes is the closed set, in the order a screen lists them.
@@ -57,6 +72,8 @@ const (
 // would enforce nothing.
 var KnownIssueTypes = []IssueType{
 	IssueProvisionFailed,
+	IssueUpgradeFailed,
+	IssueUpgradeAvailable,
 	IssueGenerationRolledBack,
 	IssueChildUnrecoverable,
 	IssueExtensionUnavailable,
@@ -87,6 +104,15 @@ const (
 	// SuggestionUninstallExtension removes a module that will not come up, so
 	// the install stops carrying a capability it does not have.
 	SuggestionUninstallExtension SuggestionType = "uninstall_extension"
+	// SuggestionApplyUpgrade asks the Supervisor to install the version this
+	// Issue is about (ADR 0129).
+	//
+	// **The Platform cannot perform it**, which is why the whole channel
+	// exists: pressing this records a request naming the version, the handoff
+	// reports it, and the Supervisor — the only process that can stop and
+	// restart the Platform — carries it out. The request settles when the
+	// Platform is running the version it asked for.
+	SuggestionApplyUpgrade SuggestionType = "apply_upgrade"
 	// SuggestionDismiss closes an Issue without changing anything. It is a real
 	// answer: "I know, and I am choosing to live with it" is a decision, and an
 	// Issue that cannot be dismissed becomes furniture nobody reads.
@@ -172,7 +198,13 @@ func SuggestionsFor(t IssueType) []SuggestionType {
 	switch t {
 	case IssueExtensionUnavailable:
 		return []SuggestionType{SuggestionReinstallExtension, SuggestionUninstallExtension, SuggestionDismiss}
-	case IssueChildUnrecoverable, IssueGenerationRolledBack, IssueProvisionFailed:
+	case IssueUpgradeAvailable:
+		// The first suggestion on this register that *acts*. Dismiss stands
+		// beside it because declining a version is a real answer, and the offer
+		// returns on the next check — which is correct, since the version is
+		// still there and still not installed.
+		return []SuggestionType{SuggestionApplyUpgrade, SuggestionDismiss}
+	case IssueChildUnrecoverable, IssueGenerationRolledBack, IssueProvisionFailed, IssueUpgradeFailed:
 		// Nothing this build can *do* about these from a screen — restarting a
 		// child and re-running an upgrade are the Supervisor's, and it has no
 		// action lane (ADR 0123 gave it a read surface and no more). Offering a
@@ -182,4 +214,21 @@ func SuggestionsFor(t IssueType) []SuggestionType {
 	default:
 		return []SuggestionType{SuggestionDismiss}
 	}
+}
+
+// UpgradeRequest is somebody asking for a version to be installed (ADR 0129).
+//
+// **It names a version and never "latest".** The Platform does not hold the
+// release catalogue, so it asks for the version it was offered — and the
+// Supervisor resolves that name against the *signed* catalogue rather than
+// trusting the request, which is what stops a request pointing an install at
+// bytes nobody signed for.
+type UpgradeRequest struct {
+	ID      string
+	Version string
+	// RequestedBy is the user id that pressed the control, for the record. An
+	// upgrade is the most consequential thing a non-destructive control does,
+	// and "who asked for this" is the first question afterwards.
+	RequestedBy string
+	RequestedAt time.Time
 }

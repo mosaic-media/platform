@@ -607,7 +607,8 @@ func run() error {
 		// library detail renders from the graph rather than from a live call.
 		NodeMetadata: set.NodeMetadata,
 		// The resolution register (ADR 0119).
-		Issues: set.Issues,
+		Issues:   set.Issues,
+		Upgrades: set.Upgrades,
 		// The last good answer each source gave (ADR 0052), so a restart under a
 		// live client renders the library it had rather than an empty state
 		// telling a configured install to configure itself.
@@ -811,11 +812,12 @@ func run() error {
 		telemetry.Duration("library_availability_every", availability.Interval))
 
 	handoff := &health.Handoff{
-		Metadata:    generationMetadata,
-		Registry:    diagRegistry,
-		Lifecycle:   lifecycle,
-		Migrations:  migrations,
-		ConfigStore: set.Config,
+		Metadata:     generationMetadata,
+		Registry:     diagRegistry,
+		Lifecycle:    lifecycle,
+		Migrations:   migrations,
+		ConfigStore:  set.Config,
+		UpgradeStore: set.Upgrades,
 	}
 	healthAddr := os.Getenv(healthAddrEnv)
 	if healthAddr == "" {

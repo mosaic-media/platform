@@ -90,6 +90,10 @@ type Service struct {
 	// service. It is a direct handle rather than transactional because the
 	// detectors are boot paths and background work, not somebody's command.
 	issues contracts.IssueStore
+	// upgrades records what somebody asked the Supervisor to install
+	// (ADR 0129). The Platform cannot perform an upgrade, so this is a request
+	// rather than an action.
+	upgrades contracts.UpgradeStore
 	// instance is what this install calls itself, held outside PostgreSQL
 	// (ADR 0098). Optional: a Service built without one has no name to report
 	// and records none when a server is claimed, which is what a test service
@@ -170,6 +174,10 @@ type Deps struct {
 	LibraryRules contracts.LibraryRuleStore
 	// Issues is the resolution register (ADR 0119).
 	Issues contracts.IssueStore
+	// Upgrades is where a request for a version is recorded for the Supervisor
+	// to carry out (ADR 0129). Nil is a build with no upgrade path, where the
+	// suggestion is refused rather than silently doing nothing.
+	Upgrades contracts.UpgradeStore
 	// NodeMetadata is the direct read handle for stored descriptive metadata
 	// (ADR 0107). Optional: without it nothing is stored and nothing is read,
 	// and a detail falls back to what the node itself carries.
@@ -220,6 +228,7 @@ func NewService(d Deps) *Service {
 		libraryRules:         d.LibraryRules,
 		nodeMetadata:         d.NodeMetadata,
 		issues:               d.Issues,
+		upgrades:             d.Upgrades,
 		snapshots:            d.Snapshots,
 		watchAvailability:    d.WatchAvailability,
 		instance:             d.Instance,

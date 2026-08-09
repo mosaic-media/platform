@@ -107,6 +107,14 @@ func issueHeadline(issue domain.Issue) string {
 		return fmt.Sprintf("The update to %s did not work, and was undone", issue.Reference)
 	case domain.IssueProvisionFailed:
 		return "Mosaic could not download what it needs to run"
+	case domain.IssueUpgradeAvailable:
+		// **The one headline here that is not about something being wrong.** It
+		// is on this panel because the register is where an install says what
+		// needs a person's attention, and it reads as an offer rather than a
+		// fault so nobody arrives thinking their Mosaic is broken.
+		return fmt.Sprintf("Version %s is available", issue.Reference)
+	case domain.IssueUpgradeFailed:
+		return fmt.Sprintf("The update to %s could not be installed", issue.Reference)
 	default:
 		// A type this build does not know cannot reach here — the store
 		// CHECK-constrains it and RaiseIssue refuses it — but a row written by
@@ -149,6 +157,12 @@ func suggestionControl(s domain.SuggestionType) (label, variant string, ok bool)
 	switch s {
 	case domain.SuggestionUninstallExtension:
 		return "Remove it", "danger", true
+	case domain.SuggestionApplyUpgrade:
+		// The Platform cannot perform this and says so honestly by wording it as
+		// a request: pressing it records what was asked for, and the Supervisor
+		// carries it out (ADR 0129). "Install it" would promise an immediacy
+		// that crossing a process boundary does not have.
+		return "Install it", "primary", true
 	case domain.SuggestionDismiss:
 		return "Dismiss", "ghost", true
 	case domain.SuggestionReinstallExtension:

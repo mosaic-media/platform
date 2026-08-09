@@ -34,6 +34,9 @@ type Handoff struct {
 	Lifecycle   *runtime.Lifecycle
 	Migrations  *runtime.MigrationTracker
 	ConfigStore contracts.ConfigStore
+	// UpgradeStore is where a request for a version waits (ADR 0129). Nil is a
+	// build with no upgrade path, which reports nothing pending.
+	UpgradeStore contracts.UpgradeStore
 }
 
 // Mux builds the Supervisor handoff HTTP surface:
@@ -44,6 +47,7 @@ type Handoff struct {
 //     running, 503 once it has begun graceful shutdown)
 //   - GET /migrations — migration status (required/running/complete/failed)
 //   - GET /config     — active configuration version and reload class
+//   - GET /upgrade    — the version somebody asked the Supervisor to install
 func (h *Handoff) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metadata", h.handleMetadata)
@@ -51,6 +55,7 @@ func (h *Handoff) Mux() *http.ServeMux {
 	mux.HandleFunc("/healthz", h.handleLiveness)
 	mux.HandleFunc("/migrations", h.handleMigrations)
 	mux.HandleFunc("/config", h.handleConfigActivation)
+	mux.HandleFunc("/upgrade", h.handleUpgrade)
 	return mux
 }
 
@@ -89,6 +94,16 @@ func (h *Handoff) handleMigrations(w http.ResponseWriter, _ *http.Request) {
 		httpStatus = http.StatusServiceUnavailable
 	}
 	writeJSON(w, httpStatus, status)
+}
+
+// handleUpgrade reports what somebody asked for, which is the one remedy on the
+// resolution register the Platform cannot perform itself (ADR 0129).
+//
+// Always 200, including "nothing pending": the Supervisor polls this every few
+// seconds and a status code carrying meaning would make an absent request
+// indistinguishable from a Platform that is unwell.
+func (h *Handoff) handleUpgrade(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, runtime.CheckUpgrade(r.Context(), h.UpgradeStore))
 }
 
 func (h *Handoff) handleConfigActivation(w http.ResponseWriter, r *http.Request) {
