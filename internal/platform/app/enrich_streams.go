@@ -195,6 +195,17 @@ func partCommandFor(nodeID v1.NodeID, order int, stream v1.StreamLink) v1.Attach
 		Container:  stream.Container,
 		VideoCodec: stream.VideoCodec,
 		AudioCodec: stream.AudioCodec,
+		// And the three the SDK added after this mapping was written, which the
+		// same reflection guard caught the moment they existed. They are the
+		// inputs to the two most expensive outcomes a Platform can choose:
+		// sending a client more pixels than it can display, and tone-mapping a
+		// stream it cannot render. Neither was rankable before a fetch —
+		// `Quality` is a display label rather than a number, and nothing carried
+		// dynamic range at all — so a source offering an HDR and an SDR cut of
+		// one title could not be told to prefer the one that plays untouched.
+		Width:     stream.Width,
+		Height:    stream.Height,
+		HDRFormat: stream.HDRFormat,
 	}
 }
 
