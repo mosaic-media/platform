@@ -121,6 +121,8 @@ type fakeQueries struct {
 	activeConfig    app.GetActiveConfigVersionResult
 	activeConfigErr error
 	pendingConfig   app.GetPendingConfigVersionResult
+	issues          []domain.Issue
+	issuesErr       error
 	// The three effective-settings readers. Zero values would render as "0
 	// days", which is never what the Platform applies, so the fake answers the
 	// same defaults the real readers fall back to unless a test overrides them.
@@ -284,6 +286,12 @@ func (f *fakeQueries) GetActiveConfigVersion(_ context.Context, _ app.GetActiveC
 
 func (f *fakeQueries) GetPendingConfigVersion(_ context.Context, _ app.GetPendingConfigVersionQuery) (app.GetPendingConfigVersionResult, error) {
 	return f.pendingConfig, nil
+}
+
+// The resolution register (ADR 0119). issues is what the Problems panel draws;
+// issuesErr is how a test makes the read fail.
+func (f *fakeQueries) ListIssues(_ context.Context, _ app.ListIssuesQuery) (app.ListIssuesResult, error) {
+	return app.ListIssuesResult{Issues: f.issues}, f.issuesErr
 }
 
 func (f *fakeQueries) TelemetryRetention(_ context.Context) app.TelemetryRetention {

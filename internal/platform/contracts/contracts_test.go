@@ -46,6 +46,7 @@ func (mockTx) PlaybackStates() contracts.PlaybackStateStore   { return nil }
 func (mockTx) InstalledExtensions() contracts.InstalledExtensionStore { return nil }
 func (mockTx) LibraryRules() contracts.LibraryRuleStore               { return nil }
 func (mockTx) NodeMetadata() contracts.NodeMetadataStore              { return nil }
+func (mockTx) Issues() contracts.IssueStore                           { return nil }
 func (mockTx) Tokens() contracts.TokenStore                           { return nil }
 
 type mockUserStore struct{}

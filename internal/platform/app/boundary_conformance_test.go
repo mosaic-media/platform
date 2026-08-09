@@ -504,6 +504,23 @@ func boundaryCases() []boundaryCase {
 			return discard(s.GetPendingConfigVersion(ctx, app.GetPendingConfigVersionQuery{CallerSessionID: sid}))
 		}},
 
+		// --- the resolution register (ADR 0119) ---
+		//
+		// Reading and resolving are separate rows because they are separate
+		// powers: seeing that an extension will not start is diagnostic, and
+		// uninstalling it changes what this install is. Raising a finding has
+		// no row and must not: it takes no caller by design, because the code
+		// that detects a problem is a boot path or a spool rather than
+		// somebody's request.
+		{"ListIssues", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ListIssues(ctx, app.ListIssuesQuery{CallerSessionID: sid}))
+		}},
+		{"ApplySuggestion", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
+			return discard(s.ApplySuggestion(ctx, app.ApplySuggestionCommand{
+				CallerSessionID: sid, IssueID: "issue-1", Suggestion: "dismiss",
+			}))
+		}},
+
 		// --- the library and its rules (ADR 0104) ---
 		//
 		// RunLibraryMaintenance is the row worth reading twice. It *acts* as the

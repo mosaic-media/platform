@@ -81,4 +81,11 @@ type Tx interface {
 	// the same transaction then rolled back would be a cache entry for content
 	// that does not exist.
 	NodeMetadata() NodeMetadataStore
+
+	// Issues is the resolution register (ADR 0119). It joins the set so a
+	// finding and the act that produced it commit together — an extension
+	// uninstalled to resolve an Issue must not leave the Issue behind if the
+	// uninstall rolls back, and an Issue cleared by a repair that then failed
+	// would be a register saying the problem is gone when it is not.
+	Issues() IssueStore
 }

@@ -134,3 +134,7 @@ func (t *tx) LibraryRules() contracts.LibraryRuleStore {
 func (t *tx) NodeMetadata() contracts.NodeMetadataStore {
 	return &nodeMetadataStore{q: t.q}
 }
+
+func (t *tx) Issues() contracts.IssueStore {
+	return &issueStore{q: t.q}
+}

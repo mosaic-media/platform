@@ -985,6 +985,12 @@ func (tx *fakeTx) NodeMetadata() contracts.NodeMetadataStore {
 	return &fakeNodeMetadataStore{db: tx.db, trace: tx.trace}
 }
 
+// Issues is the resolution register (ADR 0119). Nil rather than a fake: nothing
+// reached through a transaction raises or reads a finding — the detectors hold
+// the direct handle, because they run on boot paths rather than inside
+// somebody's command.
+func (tx *fakeTx) Issues() contracts.IssueStore { return nil }
+
 // fakeNodeMetadataStore implements contracts.NodeMetadataStore over fakeDB
 // (ADR 0107). Get on a node that was never enriched is NotFound, which is the
 // distinction the real store draws and the one a caller renders around.

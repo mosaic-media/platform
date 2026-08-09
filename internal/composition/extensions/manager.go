@@ -43,6 +43,7 @@ type Manager struct {
 	clock     contracts.Clock
 	policy    extension.RestartPolicy
 	root      *telemetry.Logger
+	findings  Findings
 
 	mu   sync.Mutex
 	live map[string]*extension.Supervised
@@ -68,6 +69,10 @@ type Deps struct {
 	// Root is the telemetry root; per-module telemetry (ADR 0059) and the
 	// manager's own diagnostics are derived from it.
 	Root *telemetry.Logger
+	// Findings is the resolution register (ADR 0119). Optional: a Manager
+	// built without one logs and skips, which is what it did before the
+	// register existed.
+	Findings Findings
 }
 
 // NewManager wires a Manager from its dependencies.
@@ -80,6 +85,7 @@ func NewManager(d Deps) *Manager {
 		clock:     d.Clock,
 		policy:    d.Policy,
 		root:      d.Root,
+		findings:  d.Findings,
 		live:      make(map[string]*extension.Supervised),
 	}
 }
@@ -94,6 +100,15 @@ func (m *Manager) SetContent(content v1.ContentService) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.content = content
+}
+
+// SetFindings supplies the resolution register, wired after construction for
+// the same reason SetContent is: the Service holds the register and the Manager
+// is built before the Service exists.
+func (m *Manager) SetFindings(f Findings) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.findings = f
 }
 
 // InstalledExtensions is the durable installed set, read from the store — the
@@ -130,10 +145,28 @@ func (m *Manager) Available(ctx context.Context) ([]app.ExtensionCatalogueEntry,
 	return out, nil
 }
 
+// Findings is the slice of the resolution register this package needs
+// (ADR 0119): somewhere to state that a capability is missing, and somewhere to
+// withdraw that statement when it comes back.
+//
+// An interface rather than the Service, so this package keeps depending on the
+// application layer through the narrowest surface that does its job.
+type Findings interface {
+	RaiseIssue(ctx context.Context, issue domain.Issue) error
+	ClearIssueSituation(ctx context.Context, t domain.IssueType, c domain.IssueContext, reference string) error
+}
+
 // AdoptInstalled brings up every installed extension at boot (ADR 0081). Each is
 // re-verified against its cached manifest and spawned; a failure is a degraded
-// capability — logged and skipped, never fatal, because extensions fill no
-// required role class. It is called once, before the serve loop.
+// capability — never fatal, because extensions fill no required role class. It
+// is called once, before the serve loop.
+//
+// **A failure is also recorded** (ADR 0119). It used to be logged and skipped,
+// which is the exact shape that document exists to stop: the capability is
+// simply absent, nothing fails, nothing is said, and the line scrolls away
+// before anybody wonders why their addons stopped working. A success withdraws
+// any finding from a previous boot, so the register says what is wrong *now*
+// rather than what has ever been wrong.
 func (m *Manager) AdoptInstalled(ctx context.Context) error {
 	records, err := m.store.List(ctx)
 	if err != nil {
@@ -150,17 +183,20 @@ func (m *Manager) AdoptInstalled(ctx context.Context) error {
 				telemetry.String("module", rec.ModuleID),
 				telemetry.String("repository", rec.Repository),
 				telemetry.Err(adoptErr))
+			m.raiseUnavailable(ctx, log, rec.ModuleID, adoptErr)
 			continue
 		}
 		if _, err := m.spawnLocked(adopted); err != nil {
 			log.Error("installed extension could not be launched; capability degraded",
 				telemetry.String("module", rec.ModuleID), telemetry.Err(err))
+			m.raiseUnavailable(ctx, log, rec.ModuleID, err)
 			continue
 		}
 		log.Info("adopted extension module",
 			telemetry.String("module", rec.ModuleID),
 			telemetry.String("version", rec.Version),
 			telemetry.String("repository", rec.Repository))
+		m.clearUnavailable(ctx, log, rec.ModuleID)
 	}
 	return nil
 }
@@ -271,5 +307,41 @@ func (m *Manager) stopLocked(moduleID string) {
 	if sup, ok := m.live[moduleID]; ok {
 		sup.Close()
 		delete(m.live, moduleID)
+	}
+}
+
+// raiseUnavailable states that a module is not running.
+//
+// **The register's own failure is logged and swallowed**, which is the one
+// place that is right: this runs on the boot path, and a Platform that refused
+// to start because it could not write down that an *optional* module did not
+// start would have turned a degradation into an outage.
+func (m *Manager) raiseUnavailable(ctx context.Context, log *telemetry.Logger, moduleID string, cause error) {
+	if m.findings == nil {
+		return
+	}
+	err := m.findings.RaiseIssue(ctx, domain.Issue{
+		Type:      domain.IssueExtensionUnavailable,
+		Context:   domain.ContextExtension,
+		Reference: moduleID,
+		Source:    domain.SourcePlatform,
+		Detail:    cause.Error(),
+	})
+	if err != nil {
+		log.Error("could not record that an extension is unavailable",
+			telemetry.String("module", moduleID), telemetry.Err(err))
+	}
+}
+
+// clearUnavailable withdraws that statement when the module comes up.
+func (m *Manager) clearUnavailable(ctx context.Context, log *telemetry.Logger, moduleID string) {
+	if m.findings == nil {
+		return
+	}
+	err := m.findings.ClearIssueSituation(ctx,
+		domain.IssueExtensionUnavailable, domain.ContextExtension, moduleID)
+	if err != nil {
+		log.Error("could not withdraw an extension finding",
+			telemetry.String("module", moduleID), telemetry.Err(err))
 	}
 }

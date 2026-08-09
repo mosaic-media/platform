@@ -277,6 +277,8 @@ type contentQueries interface {
 	// answer and has to be sayable without an error.
 	GetActiveConfigVersion(context.Context, app.GetActiveConfigVersionQuery) (app.GetActiveConfigVersionResult, error)
 	GetPendingConfigVersion(context.Context, app.GetPendingConfigVersionQuery) (app.GetPendingConfigVersionResult, error)
+	// The resolution register (ADR 0119): what is wrong with this install, now.
+	ListIssues(context.Context, app.ListIssuesQuery) (app.ListIssuesResult, error)
 	// What the three configured background passes are actually running with.
 	//
 	// These take no caller, and naming them here rather than reading the stored

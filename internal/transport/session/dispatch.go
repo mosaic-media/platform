@@ -163,6 +163,10 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		return h.deleteLibraryRule(ctx, s, caller, input)
 	case "runLibraryMaintenance":
 		return h.runLibraryMaintenance(ctx, s, caller)
+	case "applySuggestion":
+		// Acting on a finding (ADR 0119). An ordinary action on the ordinary
+		// lane: repair is not a privileged back channel.
+		return h.applySuggestion(ctx, s, caller, input)
 	case "applyConfiguration":
 		// What the install is set to do (ADR 0011). One action over draft,
 		// validate and activate — see configuration.go for why those three are

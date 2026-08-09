@@ -128,6 +128,8 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 		return s.libraryRulesPanel(ctx, caller, nav, params)
 	case sectionConfiguration:
 		return s.configurationPanel(ctx, caller, nav)
+	case sectionFindings:
+		return s.findingsPanel(ctx, caller, nav)
 	}
 	return settingsFrame(nav, active, "", "", noSectionPanel(nav.groups)), nil
 }
@@ -208,6 +210,19 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 			label:  "Configuration",
 			icon:   "settings",
 			action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionConfiguration}),
+			panel:  true,
+		})
+	}
+	// What is wrong with this install, now (ADR 0119). In Server because it is
+	// about the install rather than the person reading, and last in the group
+	// because it is the row somebody goes looking for rather than one they
+	// browse.
+	if s.content.CallerCan(ctx, caller, app.ActionFindingsRead, "findings") {
+		server = append(server, settingsNavEntry{
+			key:    sectionFindings,
+			label:  "Problems",
+			icon:   "warning",
+			action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionFindings}),
 			panel:  true,
 		})
 	}

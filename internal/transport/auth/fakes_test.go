@@ -463,6 +463,10 @@ func (fakeTx) InstalledExtensions() contracts.InstalledExtensionStore { return n
 func (fakeTx) LibraryRules() contracts.LibraryRuleStore               { return nil }
 func (fakeTx) NodeMetadata() contracts.NodeMetadataStore              { return nil }
 
+// Issues is the resolution register (ADR 0119). No fake yet: nothing in
+// this package's tests raises or reads a finding.
+func (tx fakeTx) Issues() contracts.IssueStore { return nil }
+
 type fakeUnitOfWork struct{ db *fakeDB }
 
 func (u fakeUnitOfWork) WithinTx(ctx context.Context, fn func(ctx context.Context, tx contracts.Tx) error) error {

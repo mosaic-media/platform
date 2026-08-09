@@ -127,6 +127,8 @@ type ContractSet struct {
 	// contain (ADR 0104). Writes go through the UnitOfWork, where a rule and
 	// the event announcing it commit together.
 	LibraryRules contracts.LibraryRuleStore
+	// Issues is the resolution register (ADR 0119).
+	Issues contracts.IssueStore
 	// NodeMetadata is the direct read handle for a stored provider answer
 	// (ADR 0107) — what a library detail renders from.
 	NodeMetadata contracts.NodeMetadataStore
@@ -210,6 +212,7 @@ func newContractSet(pool *pgxpool.Pool) *ContractSet {
 		Jobs:                 NewJobStore(pool),
 		LibraryRules:         NewLibraryRuleStore(pool),
 		NodeMetadata:         NewNodeMetadataStore(pool),
+		Issues:               NewIssueStore(pool),
 		Snapshots:            NewSourceSnapshotStore(pool),
 		WatchAvailability:    NewWatchAvailabilityStore(pool),
 		Tokens:               NewTokenStore(pool),

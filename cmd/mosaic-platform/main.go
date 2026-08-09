@@ -649,6 +649,7 @@ func run() error {
 	}
 
 	extManager.SetContent(svc)
+	extManager.SetFindings(svc)
 	// Stop adopted module processes when the Platform stops, so a module process
 	// never outlives the Platform that spawned it.
 	defer extManager.Close()
