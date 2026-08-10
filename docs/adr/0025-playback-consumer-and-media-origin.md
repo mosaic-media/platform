@@ -215,9 +215,9 @@ answer.
   [platform#13](0013-how-a-capability-acts.md)'s reserved gap finally has to be
   answered.
 - **A consumer module does not fit the naming scheme.**
-  [platform#2](0002-module-storage-and-delivery-model.md)'s `module-<system>` names the
+  [architecture#2](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0002-repository-naming-convention.md)'s `module-<system>` names the
   upstream system a module consumes; a playback module consumes no system.
-  `module-remote-playback` is the name, and [platform#2](0002-module-storage-and-delivery-model.md) gains a sentence for the
+  `module-remote-playback` is the name, and [architecture#2](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0002-repository-naming-convention.md) gains a sentence for the
   consumer case.
 
 ## Implementation implications

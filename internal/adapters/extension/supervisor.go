@@ -42,7 +42,7 @@ import (
 // # What a degraded capability looks like
 //
 // A call made while the module is down or disabled returns Unavailable, which is
-// exactly how [platform#23](0035) and [platform#24](0036) expect an absent capability
+// exactly how [platform#23](0023-metadata-as-required-capability.md) and [platform#24](0024-capability-gated-affordances.md) expect an absent capability
 // to read: the affordance that depends on it degrades, and nothing crashes.
 // Runtime absence is a degraded state; composition-time absence stays fatal, and
 // that check ran before the serve loop (platform#38).

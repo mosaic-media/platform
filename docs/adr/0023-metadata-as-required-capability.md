@@ -11,7 +11,7 @@ question this record answers one way and the code answers the other; it is
 **now resolved by [module-cinemeta#1](https://github.com/mosaic-media/module-cinemeta/blob/main/docs/adr/0001-the-guaranteed-metadata-provider-needs-no-credential.md)**,
 which puts the default in a zero-configuration core module and rejects the
 bootstrap seed specified here. Also amended by
-[platform#3](0003-platform-as-execution-kernel.md), which makes a metadata provider a *core*
+[architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md), which makes a metadata provider a *core*
 module under its guarantee clause.
 **Date:** 2026-07-21
 

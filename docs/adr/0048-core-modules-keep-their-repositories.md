@@ -3,13 +3,13 @@
 **Status:** Proposed
 **Date:** 2026-07-24
 
-Answers a question [platform#3](0003-platform-as-execution-kernel.md) left implicit and
+Answers a question [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md) left implicit and
 [platform#38](0038-platform-binary-built-by-ci.md) assumed. Supersedes neither.
 Nothing here is built.
 
 ## Context
 
-[platform#3](0003-platform-as-execution-kernel.md) puts core modules in the Platform binary and
+[architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md) puts core modules in the Platform binary and
 records as a consequence that `module-remote-playback` "keeps its direct
 `require` in the Platform's `go.mod`".
 [platform#38](0038-platform-binary-built-by-ci.md) has Mosaic's CI build that binary
@@ -29,7 +29,7 @@ things worth more than the friction it removes.
 **Licensing.** `module-tmdb`, `module-cinemeta`, `module-remote-playback` and the
 rest are MIT. The Platform is AGPL-3.0-only with a linking exception. In-repo
 means relicensing them or running a mixed-license repository, and
-[platform#1](0001-transactional-store-extensibility.md) governs that choice deliberately rather than
+[architecture#1](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0001-licensing.md) governs that choice deliberately rather than
 incidentally.
 
 **The SDK-only boundary stops being compiler-enforced.** A separate Go module
@@ -39,7 +39,7 @@ if a capability needs a private Platform import, the contracts are not ready to
 publish — is enforced by Go itself today, and a test is a weaker thing than the
 toolchain refusing to compile.
 
-**[platform#3](0003-platform-as-execution-kernel.md)'s tier mobility.** That record states that
+**[architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md)'s tier mobility.** That record states that
 "a module does not know which tier it is in, and moving one between tiers is a
 build change rather than a rewrite." If core modules live in the Platform
 repository, promoting one to the extension tier becomes a repository extraction
@@ -127,13 +127,13 @@ vendored tree is a second copy that can drift from the tag it claims to be.
 
 ## Consequences
 
-- **MIT stays MIT.** No relicensing, and [platform#1](0001-transactional-store-extensibility.md) is not
+- **MIT stays MIT.** No relicensing, and [architecture#1](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0001-licensing.md) is not
   reopened.
 - **Go itself keeps enforcing the SDK-only boundary for core modules**, which is
   a stronger guarantee than the boundary test the in-repo alternative would have
   left, and it keeps [platform#12](0012-published-contract-surface.md)'s stop point
   executable.
-- **[platform#3](0003-platform-as-execution-kernel.md)'s tier mobility survives intact.**
+- **[architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md)'s tier mobility survives intact.**
   Moving `module-fanart-tv` between tiers stays a build change.
 - **CI becomes load-bearing for the core tier.** A broken dispatch means a core
   module release silently does not reach the binary — a failure with no red build
@@ -143,7 +143,7 @@ vendored tree is a second copy that can drift from the tag it claims to be.
   infrastructure Mosaic does not run. The warm-up retry mitigates it and does not
   remove it.
 - **This is buildable today.** Almost everything else in the
-  [platform#3](0003-platform-as-execution-kernel.md)–[platform#40](0040-module-distribution-and-trust.md)
+  [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md)–[platform#40](0040-module-distribution-and-trust.md)
   thread waits on a Supervisor that does not exist; this part waits on nothing.
 
 **Open.** Whether the same dispatch should bump the **SDK** across every module

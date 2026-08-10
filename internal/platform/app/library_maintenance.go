@@ -76,7 +76,7 @@ type LibraryMaintenanceSettings struct {
 // Six-hourly rather than hourly. A catalog is curated by people and changes on
 // the order of days, so asking four times a day is already generous — and the
 // cost of asking is paid to somebody else's API on a credential a whole
-// household may share (supervisor#1).
+// household may share (architecture#4).
 var DefaultLibraryMaintenance = LibraryMaintenanceSettings{
 	Interval: 6 * time.Hour,
 	Budget:   200,

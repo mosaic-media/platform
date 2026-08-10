@@ -161,7 +161,7 @@ func degradedDoorway(state app.ServerState) sdui.Node {
 // Six steps became four in platform#54 and four is what is here. The concept's
 // library and playback steps are gone because Mosaic has no filesystem scanner
 // and decides playback per stream, and there is no metadata credential to
-// collect because official builds carry project credentials (supervisor#1) over a
+// collect because official builds carry project credentials (architecture#4) over a
 // Cinemeta floor that needs none. What is left is genuinely everything a
 // household must decide.
 func setupDoorway(model DoorwayModel) sdui.Node {

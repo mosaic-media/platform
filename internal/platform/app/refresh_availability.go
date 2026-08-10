@@ -51,7 +51,7 @@ type AvailabilitySettings struct {
 	// Budget is how many works one run may re-ask about. It is a budget rather
 	// than "all of them" for the reason the maintenance pass has one: this turns
 	// a household's upstream load from human-triggered into continuous, and the
-	// credential paying for it may be one a whole household shares (supervisor#1).
+	// credential paying for it may be one a whole household shares (architecture#4).
 	Budget int
 }
 

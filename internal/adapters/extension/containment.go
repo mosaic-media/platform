@@ -5,14 +5,14 @@
 package extension
 
 // EgressContainment describes whether an extension module's process is denied
-// *direct* network egress by the operating system — [platform#39](0064)'s layer 3,
+// *direct* network egress by the operating system — [platform#39](0039-extension-module-boundary.md)'s layer 3,
 // the control that turns the forward proxy from the easy path into the only one.
 //
 // The Platform cannot make this true on its own. Denying a subprocess a network
 // of its own is an OS mechanism — a network namespace, a dedicated uid with a
 // firewall owner rule, or seccomp on connect(2) — that needs privileges a
 // non-root Platform does not have, and on macOS and Windows there is no low-cost
-// mechanism at all ([platform#50](0080)). So the guarantee is a property of the
+// mechanism at all ([platform#50](0050-deployment-topologies.md)). So the guarantee is a property of the
 // *deployment*, and the honest thing the Platform can do is know and report which
 // posture it is in rather than claim enforcement uniformly. That report is this
 // type: it is what an admin surface shows as "module egress is enforced" versus

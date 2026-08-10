@@ -169,7 +169,7 @@ func superuserPermissions() []domain.Permission {
 // that names concrete core modules — the composition-root equivalent of the
 // Build Pipeline's generated imports (platform#4).
 //
-// All three are core modules under platform#3's guarantee clause: Cinemeta and
+// All three are core modules under architecture#3's guarantee clause: Cinemeta and
 // TMDB back the metadata/search class platform#23 requires, and remote playback
 // backs the consumer class without which the library is inert. **Extension
 // modules are no longer here** — Stremio, AIOStreams and fanart.tv used to be

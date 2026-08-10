@@ -24,7 +24,7 @@ import (
 // decision. Nothing here is on the published surface, and no module reads its
 // own rules.
 //
-// [platform#51]: https://github.com/mosaic-media/architecture/blob/main/docs/adr/0081-extension-installation-is-user-initiated-and-persistent.md
+// [platform#51]: https://github.com/mosaic-media/platform/blob/main/docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md
 
 // LibraryRuleID identifies one rule.
 type LibraryRuleID ID

@@ -26,7 +26,7 @@ import (
 // difference from stream enrichment. A subtitle file is small, external and
 // perishable in the same way a debrid link is; resolving twenty of them into the
 // graph at import buys entries that have been decaying since before anyone
-// wanted them, which is the mistake [platform#28](0049) already names for streams.
+// wanted them, which is the mistake [platform#28](0028-resolution-cache-and-capability-classes.md) already names for streams.
 
 // PlaybackSubtitlesQuery asks the installed subtitle sources what they have for
 // one item.

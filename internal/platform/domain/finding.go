@@ -23,7 +23,7 @@ import "time"
 
 // IssueType is what is wrong, as a closed vocabulary.
 //
-// Closed by [platform#11](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0015-open-and-closed-vocabularies.md)'s
+// Closed by [platform#11](https://github.com/mosaic-media/platform/blob/main/docs/adr/0011-open-and-closed-vocabularies.md)'s
 // test — Platform code branches on it to decide which Suggestions to offer, and
 // a client branches on it to choose words. An open set would let a subsystem
 // state a problem no client can render and no code can act on, which fails open

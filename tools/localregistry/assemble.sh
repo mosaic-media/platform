@@ -172,7 +172,7 @@ for repo in "${present[@]}"; do
   version="local-$described"
 
   binary="$cmd-$GOOS_LOCAL-$GOARCH_LOCAL"
-  # A module carrying a project credential (supervisor#1) has it linked in by the
+  # A module carrying a project credential (architecture#4) has it linked in by the
   # workflow that builds the artefact shipping it — which for an extension is
   # that module's own `release.yml`, not platform's. This loop is the local
   # counterpart of that build, so it applies the same `-X` from the same
@@ -181,7 +181,7 @@ for repo in "${present[@]}"; do
   #
   # Empty is a supported configuration and the interesting one to be able to
   # reach: it is what a build with no secret set produces, so the fallback chain
-  # supervisor#1 names — personal key, project key, zero-configuration floor — can
+  # architecture#4 names — personal key, project key, zero-configuration floor — can
   # be exercised locally rather than assumed. The symbol path here is the same
   # string the module's own linkercheck gate asserts against a canary.
   ldflags=""

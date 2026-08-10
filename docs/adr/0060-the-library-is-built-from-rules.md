@@ -126,7 +126,7 @@ nothing — the whole value here is that something runs when nobody is watching.
   once.
 - Upstream load becomes predictable and continuous. That is better for a
   provider and worse for a shared quota, which is the cost
-  [supervisor#1](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0001-supervisor-as-host-manager.md) also carries.
+  [architecture#4](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0004-project-credentials-in-official-builds.md) also carries.
 - A rule can produce a large library quickly, so the first run of a new rule is
   the one most likely to surprise its author. Bounding it and reporting what it
   will do before it does it is part of the surface, not a refinement.

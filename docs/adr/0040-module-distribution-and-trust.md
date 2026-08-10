@@ -18,7 +18,7 @@ offline as well as in CI, rotated by overlapping trust, with revocation still
 open.
 **Date:** 2026-07-22
 
-Depends on [platform#3](0003-platform-as-execution-kernel.md),
+Depends on [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md),
 [platform#38](0038-platform-binary-built-by-ci.md) and
 [platform#39](0039-extension-module-boundary.md). Begins to discharge what
 [platform#4](0004-static-go-module-composition.md) left as "signing and trust

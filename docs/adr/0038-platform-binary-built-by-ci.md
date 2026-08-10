@@ -13,7 +13,7 @@ separately (see the roadmap).
 Relocates [supervisor#3](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0003-supervisor-orchestrates-isolated-builds.md)'s build
 sequence and supersedes [platform#4](0004-static-go-module-composition.md)'s
 per-install Build Pipeline. Depends on
-[platform#3](0003-platform-as-execution-kernel.md). Amends
+[architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md). Amends
 [platform#23](0023-metadata-as-required-capability.md). Nothing here is built.
 
 ## Context
@@ -38,7 +38,7 @@ able to add Mosaic to a Docker Compose file and start.
 
 The build pipeline was designed to solve a real problem: composing a tailored
 Platform from a selected module set, deterministically, with atomic activation and
-rollback. [platform#3](0003-platform-as-execution-kernel.md) removes the reason it had to run
+rollback. [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md) removes the reason it had to run
 per install — third-party modules leave the binary entirely, so the only thing
 being composed is a small, curated, first-party core set that is the same for
 everyone.
@@ -139,7 +139,7 @@ trigger it are unanswered; it likely deserves its own record.
 [platform#23](0023-metadata-as-required-capability.md)'s requirement is re-expressed:
 the check runs over the **composed capability set — core and extension together**
 — before the serve loop, and fails loudly when no provider fills `RoleSearch` and
-`RoleMetadata`. A guarantee-clause core module ([platform#3](0003-platform-as-execution-kernel.md))
+`RoleMetadata`. A guarantee-clause core module ([architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md))
 means that check passes on a fresh install with no configuration, which is what
 [platform#23](0023-metadata-as-required-capability.md)'s seeded-Cinemeta stopgap was reaching for.
 
@@ -150,7 +150,7 @@ introduces it ([platform#39](0039-extension-module-boundary.md)).
 
 **Ship the build pipeline as designed.** *Rejected*, on the install experience
 argued in Context. It is coherent, it is what is currently written down, and it
-was the right design when third-party modules had to be in the binary. [platform#3](0003-platform-as-execution-kernel.md)
+was the right design when third-party modules had to be in the binary. [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md)
 removed that constraint.
 
 **One binary per module *selection*, built by CI on demand.** *Rejected.* It
@@ -197,7 +197,7 @@ solve. Using the mechanism that exists beats inventing a second one.
 - **The binary carries code it never runs.** Disabled core modules are size and
   latent surface. Acceptable for a curated first-party set; it would not be for
   an open one — which is the same reason
-  [platform#3](0003-platform-as-execution-kernel.md) closes that set.
+  [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md) closes that set.
 - **Dependency conflicts between core modules become a CI problem.** They do not
   disappear. They become ours, discovered at release time, which is tractable only
   because the set is small.

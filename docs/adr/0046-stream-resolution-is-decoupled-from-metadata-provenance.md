@@ -123,7 +123,7 @@ already are.
 
 - **A title described by TMDB and streamed by Stremio is now the normal case**,
   which is what the two-tier module story has been pointing at since
-  [platform#3](0003-platform-as-execution-kernel.md). Rich metadata no longer costs you
+  [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md). Rich metadata no longer costs you
   playback.
 - **Import gets slower and noisier.** It was one module's work and is now one
   module's work plus a fan-out over every stream provider, per item. For a

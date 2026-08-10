@@ -259,7 +259,7 @@ services:
       - mosaic-dev-gobuild:/root/.cache/go-build
     environment:
       # An extension module's project credential is linked by the build that
-      # produces the artefact shipping it (supervisor#1 rule 2), and this loop is
+      # produces the artefact shipping it (architecture#4 rule 2), and this loop is
       # the local counterpart of that build. Bring-your-own from `.env` or the
       # shell, like TMDB_RAC on the platform service: a GitHub secret reaches
       # only CI runners. Unset links an empty key, which is the shape a release

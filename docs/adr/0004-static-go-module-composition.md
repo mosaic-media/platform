@@ -2,7 +2,7 @@
 
 **Status:** Accepted, and **partly superseded — for the extension tier only.**
 Static composition still governs the **core** tier, and
-[platform#3](0003-platform-as-execution-kernel.md) says so in as many words: it splits the
+[architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md) says so in as many words: it splits the
 modules in two and keeps this record's rejection of module RPC — *paying a
 distributed-systems cost for a problem that is not distributed* — for the core
 modules compiled into the binary. For **extension** modules that rejection is

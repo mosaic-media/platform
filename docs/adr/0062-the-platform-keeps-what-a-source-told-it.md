@@ -25,7 +25,7 @@ cards with no artwork — and that is what somebody browsing their own library g
 The obvious repair is to send the ref along with the id. It is the wrong one: it
 makes every library detail a live provider call, which is precisely what M2.7
 already names as a defect. With one user that is freshness; with four on a
-credential shared by every default install ([supervisor#1](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0001-supervisor-as-host-manager.md))
+credential shared by every default install ([architecture#4](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0004-project-credentials-in-official-builds.md))
 it is latency and failure, and now a rule-built library of several hundred
 titles makes it a browse that cannot be paid for.
 

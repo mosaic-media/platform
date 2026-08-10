@@ -21,7 +21,7 @@ runtime under
 [platform#51](0051-extension-installation-is-user-initiated-and-persistent.md).
 **This record supersedes [platform#4](0004-static-go-module-composition.md)'s
 rejection of module RPC, for the extension tier only** —
-[platform#3](0003-platform-as-execution-kernel.md) keeps that rejection for the core modules,
+[architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md) keeps that rejection for the core modules,
 which are still statically linked.
 **Partly superseded: the "Supervisor owns the install" division is reversed by
 [platform#49](0049-the-platform-manages-extension-modules.md)** — the Platform
@@ -30,14 +30,14 @@ process ownership this record built (spawn, health, restart, kill) stands and is
 what that division now extends backwards over install.
 **Date:** 2026-07-22
 
-Depends on [platform#3](0003-platform-as-execution-kernel.md). Supersedes
+Depends on [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md). Supersedes
 [platform#4](0004-static-go-module-composition.md)'s rejection of module RPC for
 the extension tier only. Presumes
 [contracts#6](https://github.com/mosaic-media/contracts/blob/main/docs/adr/0006-contracts-protobuf-workspace.md). Nothing here is built.
 
 ## Context
 
-[platform#3](0003-platform-as-execution-kernel.md) puts extension modules in their own process.
+[architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md) puts extension modules in their own process.
 This is how the process is crossed, and the constraint that shapes every part of
 it is that **crossing it must not change what a module author writes.**
 
