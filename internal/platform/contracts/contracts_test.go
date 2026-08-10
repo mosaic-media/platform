@@ -160,6 +160,22 @@ func (mockCredentialStore) ListPasskeys(ctx context.Context, userID domain.UserI
 	return nil, nil
 }
 
+func (mockCredentialStore) SaveTOTP(ctx context.Context, credential domain.TOTPCredential) error {
+	return nil
+}
+
+func (mockCredentialStore) FindTOTP(ctx context.Context, userID domain.UserID) (domain.TOTPCredential, error) {
+	return domain.TOTPCredential{}, nil
+}
+
+func (mockCredentialStore) DeleteTOTP(ctx context.Context, userID domain.UserID) error {
+	return nil
+}
+
+func (mockCredentialStore) ConsumeTOTPStep(ctx context.Context, userID domain.UserID, step int64) (bool, error) {
+	return true, nil
+}
+
 func (mockCredentialStore) SaveRecoveryFactor(ctx context.Context, factor domain.RecoveryFactor) error {
 	return nil
 }

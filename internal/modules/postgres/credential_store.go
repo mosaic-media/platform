@@ -148,3 +148,73 @@ func scanRecoveryFactor(row pgx.Row) (domain.RecoveryFactor, error) {
 	factor.ConsumedAt = consumedAt
 	return factor, nil
 }
+
+func (s *credentialStore) SaveTOTP(ctx context.Context, credential domain.TOTPCredential) error {
+	// Upsert: re-enrolling is how a user moves the factor to a new phone, and
+	// it replaces the secret, the confirmation and the spent-step watermark
+	// together — a new secret with an old watermark would refuse the first
+	// codes the new phone produces.
+	_, err := s.q.Exec(ctx,
+		`INSERT INTO totp_credentials (user_id, secret, confirmed_at, last_used_step, created_at)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (user_id) DO UPDATE SET
+		     secret         = EXCLUDED.secret,
+		     confirmed_at   = EXCLUDED.confirmed_at,
+		     last_used_step = EXCLUDED.last_used_step,
+		     created_at     = EXCLUDED.created_at`,
+		string(credential.UserID), credential.Secret, credential.ConfirmedAt,
+		credential.LastUsedStep, credential.CreatedAt,
+	)
+	if err != nil {
+		return mapError("save totp credential", err)
+	}
+	return nil
+}
+
+func (s *credentialStore) FindTOTP(ctx context.Context, userID domain.UserID) (domain.TOTPCredential, error) {
+	row := s.q.QueryRow(ctx,
+		`SELECT user_id, secret, confirmed_at, last_used_step, created_at
+		 FROM totp_credentials WHERE user_id = $1`,
+		string(userID),
+	)
+	var (
+		credential  domain.TOTPCredential
+		id          string
+		confirmedAt *time.Time
+	)
+	if err := row.Scan(&id, &credential.Secret, &confirmedAt,
+		&credential.LastUsedStep, &credential.CreatedAt); err != nil {
+		return domain.TOTPCredential{}, mapError("find totp credential", err)
+	}
+	credential.UserID = domain.UserID(id)
+	credential.ConfirmedAt = confirmedAt
+	credential.Confirmed = confirmedAt != nil
+	return credential, nil
+}
+
+func (s *credentialStore) DeleteTOTP(ctx context.Context, userID domain.UserID) error {
+	// Idempotent: turning off a factor that is already off is not an error a
+	// screen has to explain, and a user pressing a button twice is the ordinary
+	// way to reach it.
+	if _, err := s.q.Exec(ctx, `DELETE FROM totp_credentials WHERE user_id = $1`, string(userID)); err != nil {
+		return mapError("delete totp credential", err)
+	}
+	return nil
+}
+
+func (s *credentialStore) ConsumeTOTPStep(ctx context.Context, userID domain.UserID, step int64) (bool, error) {
+	// **One statement, and that is the point.** A read-then-write would let two
+	// sign-ins racing with the same stolen code both see the old watermark and
+	// both accept it, which is exactly the replay the watermark exists to
+	// refuse. The `<` in the WHERE clause is what decides it, in the one place
+	// only one caller can win.
+	tag, err := s.q.Exec(ctx,
+		`UPDATE totp_credentials SET last_used_step = $2
+		 WHERE user_id = $1 AND last_used_step < $2`,
+		string(userID), step,
+	)
+	if err != nil {
+		return false, mapError("consume totp step", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}

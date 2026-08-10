@@ -35,6 +35,7 @@ type fakeDB struct {
 	accessTokens  map[string]domain.AccessToken
 	refreshTokens map[string]domain.RefreshToken
 	passwords     map[domain.UserID]domain.PasswordCredential
+	totp          map[domain.UserID]domain.TOTPCredential
 	roles         map[domain.UserID][]domain.Role
 	rolesByID     map[domain.RoleID]domain.Role
 	outbox        []domain.OutboxEvent
@@ -48,6 +49,7 @@ func newFakeDB() *fakeDB {
 		accessTokens:  make(map[string]domain.AccessToken),
 		refreshTokens: make(map[string]domain.RefreshToken),
 		passwords:     make(map[domain.UserID]domain.PasswordCredential),
+		totp:          make(map[domain.UserID]domain.TOTPCredential),
 		roles:         make(map[domain.UserID][]domain.Role),
 		rolesByID:     make(map[domain.RoleID]domain.Role),
 	}
@@ -348,6 +350,46 @@ func (fakeCredentialStore) SavePasskey(context.Context, domain.PasskeyCredential
 func (fakeCredentialStore) ListPasskeys(context.Context, domain.UserID) ([]domain.PasskeyCredential, error) {
 	return nil, nil
 }
+
+func (s fakeCredentialStore) SaveTOTP(_ context.Context, credential domain.TOTPCredential) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.totp[credential.UserID] = credential
+	return nil
+}
+
+func (s fakeCredentialStore) FindTOTP(_ context.Context, userID domain.UserID) (domain.TOTPCredential, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	credential, ok := s.db.totp[userID]
+	if !ok {
+		return domain.TOTPCredential{}, contracts.NewError(contracts.NotFound, "totp credential not found")
+	}
+	return credential, nil
+}
+
+func (s fakeCredentialStore) DeleteTOTP(_ context.Context, userID domain.UserID) error {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	delete(s.db.totp, userID)
+	return nil
+}
+
+// ConsumeTOTPStep is the fake's version of the store's conditional update: the
+// step is spent only when it is strictly greater than the watermark, so a
+// replayed code is refused here exactly as the real store refuses it.
+func (s fakeCredentialStore) ConsumeTOTPStep(_ context.Context, userID domain.UserID, step int64) (bool, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	credential, ok := s.db.totp[userID]
+	if !ok || step <= credential.LastUsedStep {
+		return false, nil
+	}
+	credential.LastUsedStep = step
+	s.db.totp[userID] = credential
+	return true, nil
+}
+
 func (fakeCredentialStore) SaveRecoveryFactor(context.Context, domain.RecoveryFactor) error {
 	return nil
 }

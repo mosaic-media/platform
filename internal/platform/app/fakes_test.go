@@ -50,6 +50,7 @@ type fakeDBSnapshot struct {
 	usernames       map[string]domain.UserID
 	sessions        map[domain.SessionID]domain.Session
 	passwords       map[domain.UserID]domain.PasswordCredential
+	totp            map[domain.UserID]domain.TOTPCredential
 	configs         map[domain.ConfigVersionID]domain.ConfigVersion
 	outbox          []domain.OutboxEvent
 	nodes           map[v1.NodeID]v1.Node
@@ -76,6 +77,7 @@ type fakeDB struct {
 	accessTokens  map[string]domain.AccessToken
 	refreshTokens map[string]domain.RefreshToken
 	passwords     map[domain.UserID]domain.PasswordCredential
+	totp          map[domain.UserID]domain.TOTPCredential
 	configs       map[domain.ConfigVersionID]domain.ConfigVersion
 	outbox        []domain.OutboxEvent
 	// roles is never written by any Service command in this slice — it is
@@ -130,6 +132,7 @@ func newFakeDB() *fakeDB {
 		accessTokens:    make(map[string]domain.AccessToken),
 		refreshTokens:   make(map[string]domain.RefreshToken),
 		passwords:       make(map[domain.UserID]domain.PasswordCredential),
+		totp:            make(map[domain.UserID]domain.TOTPCredential),
 		configs:         make(map[domain.ConfigVersionID]domain.ConfigVersion),
 		roles:           make(map[domain.UserID][]domain.Role),
 		rolesByID:       make(map[domain.RoleID]domain.Role),
@@ -312,6 +315,10 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 	for k, v := range db.passwords {
 		passwords[k] = v
 	}
+	totp := make(map[domain.UserID]domain.TOTPCredential, len(db.totp))
+	for k, v := range db.totp {
+		totp[k] = v
+	}
 	configs := make(map[domain.ConfigVersionID]domain.ConfigVersion, len(db.configs))
 	for k, v := range db.configs {
 		configs[k] = v
@@ -366,6 +373,7 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 		usernames:      usernames,
 		sessions:       sessions,
 		passwords:      passwords,
+		totp:           totp,
 		configs:        configs,
 		outbox:         outbox,
 		nodes:          nodes,
@@ -389,6 +397,7 @@ func (db *fakeDB) restore(snap fakeDBSnapshot) {
 	db.usernames = snap.usernames
 	db.sessions = snap.sessions
 	db.passwords = snap.passwords
+	db.totp = snap.totp
 	db.configs = snap.configs
 	db.outbox = snap.outbox
 	db.nodes = snap.nodes
@@ -656,8 +665,8 @@ func (s *fakeTokenStore) DeleteExpired(_ context.Context, before time.Time) (int
 	return n, nil
 }
 
-// fakeCredentialStore implements contracts.CredentialStore. Only the
-// password methods this slice's commands use are exercised by tests;
+// fakeCredentialStore implements contracts.CredentialStore. The password and
+// TOTP methods store state, so a test can read back what a command wrote;
 // passkey and recovery methods exist to satisfy the interface shape.
 type fakeCredentialStore struct {
 	db    *fakeDB
@@ -689,6 +698,49 @@ func (s *fakeCredentialStore) SavePasskey(context.Context, domain.PasskeyCredent
 
 func (s *fakeCredentialStore) ListPasskeys(context.Context, domain.UserID) ([]domain.PasskeyCredential, error) {
 	return nil, nil
+}
+
+func (s *fakeCredentialStore) SaveTOTP(_ context.Context, credential domain.TOTPCredential) error {
+	s.trace.record("credentials.save_totp")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	s.db.totp[credential.UserID] = credential
+	return nil
+}
+
+func (s *fakeCredentialStore) FindTOTP(_ context.Context, userID domain.UserID) (domain.TOTPCredential, error) {
+	s.trace.record("credentials.find_totp")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	credential, ok := s.db.totp[userID]
+	if !ok {
+		return domain.TOTPCredential{}, contracts.NewError(contracts.NotFound, "totp credential not found")
+	}
+	return credential, nil
+}
+
+func (s *fakeCredentialStore) DeleteTOTP(_ context.Context, userID domain.UserID) error {
+	s.trace.record("credentials.delete_totp")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	delete(s.db.totp, userID)
+	return nil
+}
+
+// ConsumeTOTPStep is the fake's version of the store's conditional update: the
+// step is spent only when it is strictly greater than the watermark, so a
+// replayed code is refused here exactly as the real store refuses it.
+func (s *fakeCredentialStore) ConsumeTOTPStep(_ context.Context, userID domain.UserID, step int64) (bool, error) {
+	s.trace.record("credentials.consume_totp_step")
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	credential, ok := s.db.totp[userID]
+	if !ok || step <= credential.LastUsedStep {
+		return false, nil
+	}
+	credential.LastUsedStep = step
+	s.db.totp[userID] = credential
+	return true, nil
 }
 
 func (s *fakeCredentialStore) SaveRecoveryFactor(context.Context, domain.RecoveryFactor) error {

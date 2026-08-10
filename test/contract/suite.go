@@ -386,6 +386,139 @@ func RunCredentialStoreContract(t *testing.T, newDeps Factory) {
 		_, err = d.Credentials.ConsumeRecoveryFactor(c, uid, "code-1")
 		requireCategory(t, err, contracts.NotFound)
 	})
+
+	t.Run("totp factor round-trips and reports confirmation", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		uid := seedUser(t, d, c)
+
+		// Enrolment begins unconfirmed. An unconfirmed factor must never gate a
+		// sign-in, so the flag has to survive the round trip rather than being
+		// inferred from the row existing (ADR 0132).
+		if err := d.Credentials.SaveTOTP(c, domain.TOTPCredential{
+			UserID: uid, Secret: "JBSWY3DPEHPK3PXP", CreatedAt: now,
+		}); err != nil {
+			t.Fatalf("SaveTOTP: %v", err)
+		}
+		got, err := d.Credentials.FindTOTP(c, uid)
+		if err != nil {
+			t.Fatalf("FindTOTP: %v", err)
+		}
+		if got.Confirmed || got.Active() {
+			t.Fatalf("a freshly enrolled factor reads as confirmed: %+v", got)
+		}
+		if got.Secret != "JBSWY3DPEHPK3PXP" {
+			t.Fatalf("secret came back as %q", got.Secret)
+		}
+
+		confirmed := now
+		if err := d.Credentials.SaveTOTP(c, domain.TOTPCredential{
+			UserID: uid, Secret: "JBSWY3DPEHPK3PXP", ConfirmedAt: &confirmed, CreatedAt: now,
+		}); err != nil {
+			t.Fatalf("SaveTOTP (confirm): %v", err)
+		}
+		got, err = d.Credentials.FindTOTP(c, uid)
+		if err != nil {
+			t.Fatalf("FindTOTP after confirm: %v", err)
+		}
+		if !got.Confirmed || !got.Active() {
+			t.Fatalf("a confirmed factor reads as unconfirmed: %+v", got)
+		}
+	})
+
+	t.Run("totp is absent for most users and deleting is idempotent", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		uid := seedUser(t, d, c)
+
+		// Most users have no second factor, so NotFound is the ordinary answer
+		// rather than an exceptional one.
+		_, err := d.Credentials.FindTOTP(c, uid)
+		requireCategory(t, err, contracts.NotFound)
+
+		// Turning off a factor that is already off is not an error a screen has
+		// to explain, and pressing a button twice is the ordinary way there.
+		if err := d.Credentials.DeleteTOTP(c, uid); err != nil {
+			t.Fatalf("DeleteTOTP on a missing factor: %v", err)
+		}
+	})
+
+	t.Run("a totp step is spent once", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		uid := seedUser(t, d, c)
+		confirmed := now
+		if err := d.Credentials.SaveTOTP(c, domain.TOTPCredential{
+			UserID: uid, Secret: "JBSWY3DPEHPK3PXP", ConfirmedAt: &confirmed, CreatedAt: now,
+		}); err != nil {
+			t.Fatalf("SaveTOTP: %v", err)
+		}
+
+		// **This is the replay guard.** A code stays valid for its whole
+		// period, so without a spent-step watermark the same six digits work
+		// again for up to a minute — long enough for a code read over a
+		// shoulder, or relayed by a proxy, to be used twice.
+		ok, err := d.Credentials.ConsumeTOTPStep(c, uid, 100)
+		if err != nil || !ok {
+			t.Fatalf("first use of step 100 = %v, %v; want accepted", ok, err)
+		}
+		ok, err = d.Credentials.ConsumeTOTPStep(c, uid, 100)
+		if err != nil {
+			t.Fatalf("second use of step 100: %v", err)
+		}
+		if ok {
+			t.Fatal("the same step was spent twice; a replayed code would be accepted")
+		}
+		// An earlier step must not be spendable either — a code from a previous
+		// period is as replayable as the current one.
+		ok, err = d.Credentials.ConsumeTOTPStep(c, uid, 99)
+		if err != nil {
+			t.Fatalf("earlier step: %v", err)
+		}
+		if ok {
+			t.Fatal("a step earlier than the watermark was accepted")
+		}
+		// The next period is a new code and must be spendable.
+		ok, err = d.Credentials.ConsumeTOTPStep(c, uid, 101)
+		if err != nil || !ok {
+			t.Fatalf("step 101 = %v, %v; want accepted", ok, err)
+		}
+	})
+
+	t.Run("re-enrolling resets the spent-step watermark", func(t *testing.T) {
+		d := newDeps(t)
+		c := ctx(t)
+		uid := seedUser(t, d, c)
+		confirmed := now
+		if err := d.Credentials.SaveTOTP(c, domain.TOTPCredential{
+			UserID: uid, Secret: "JBSWY3DPEHPK3PXP", ConfirmedAt: &confirmed, CreatedAt: now,
+		}); err != nil {
+			t.Fatalf("SaveTOTP: %v", err)
+		}
+		if _, err := d.Credentials.ConsumeTOTPStep(c, uid, 5_000_000); err != nil {
+			t.Fatalf("ConsumeTOTPStep: %v", err)
+		}
+
+		// Moving the factor to a new phone writes a new secret. Carrying the
+		// old watermark across would refuse every code the new phone produces
+		// until real time caught up with it — which for a watermark set by a
+		// clock-skewed device could be never.
+		if err := d.Credentials.SaveTOTP(c, domain.TOTPCredential{
+			UserID: uid, Secret: "KRSXG5CTMVRXEZLU", ConfirmedAt: &confirmed, CreatedAt: now,
+		}); err != nil {
+			t.Fatalf("SaveTOTP (re-enrol): %v", err)
+		}
+		got, err := d.Credentials.FindTOTP(c, uid)
+		if err != nil {
+			t.Fatalf("FindTOTP: %v", err)
+		}
+		if got.LastUsedStep != 0 {
+			t.Fatalf("re-enrolment kept the watermark at %d", got.LastUsedStep)
+		}
+		if got.Secret != "KRSXG5CTMVRXEZLU" {
+			t.Fatalf("re-enrolment kept the old secret: %q", got.Secret)
+		}
+	})
 }
 
 // RunConfigStoreContract verifies config version persistence, latest
