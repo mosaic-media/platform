@@ -120,7 +120,7 @@ func (s *Service) focusedSearch(ctx context.Context, caller v1.Caller, text stri
 	focus v1.MediaType, params map[string]any, field ui.El) (sdui.Node, error) {
 
 	// Ask for one more than the page needs. That extra result is the *only*
-	// honest evidence there is another page (ADR 0093): a page that happens to be
+	// honest evidence there is another page (contracts#16): a page that happens to be
 	// full says nothing, and a client inferring "more" from a full count asks for
 	// a page that does not exist. The extra is never rendered.
 	page := intParam(params, paramPage)

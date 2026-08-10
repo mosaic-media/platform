@@ -42,7 +42,7 @@ const (
 // The setup wizard's field names. Each is the name an input writes into the
 // doorway's one State scope and the key the claim command reads back out, so
 // the two spellings cannot drift; they are also the names a field-level
-// rejection travels under (ADR 0089), which is the third place the same string
+// rejection travels under (contracts#13), which is the third place the same string
 // has to match.
 const (
 	fieldServerName      = "serverName"
@@ -96,7 +96,7 @@ func doorwayTitle(state app.ServerState) string {
 // signInDoorway is what a claimed server shows: the form.
 //
 // The submit collects the scope and merges it into the action's input
-// (ADR 0096), so the username and password the person typed are what arrive —
+// (contracts#19), so the username and password the person typed are what arrive —
 // under the same names a field-level rejection comes back on.
 func signInDoorway(state app.ServerState) sdui.Node {
 	return ui.Screen(

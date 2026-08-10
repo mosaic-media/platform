@@ -23,7 +23,7 @@ import (
 // Since ADR 0061 those two are the whole client API, and both mount this.
 //
 // Both call shapes are covered, and they are covered differently on purpose
-// (ADR 0041 gives them different lifetimes):
+// (contracts#5 gives them different lifetimes):
 //
 //   - **Unary calls** — SignIn/SignOut, and the Attach/Navigate/Invoke/
 //     SubmitInput intents — get one record each, with the duration and whether

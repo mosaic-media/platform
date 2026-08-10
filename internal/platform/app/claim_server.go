@@ -101,7 +101,7 @@ type ClaimServerResult struct {
 	IdentityProblem     string
 }
 
-// validateClaimServerCommand rejects per field (ADR 0089).
+// validateClaimServerCommand rejects per field (contracts#13).
 //
 // Every message here names the field it belongs to, because this is the first
 // screen a person ever sees and the first form Mosaic ever asked anyone to

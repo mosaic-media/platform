@@ -172,7 +172,7 @@ func TestFollowingACollectionSaysWhatTheFirstRunWillDo(t *testing.T) {
 	if !ok {
 		t.Fatal("the confirmation has no form to create the rule from")
 	}
-	// A Submit wraps the Invoke it will send (ADR 0096), and an Invoke carries
+	// A Submit wraps the Invoke it will send (contracts#19), and an Invoke carries
 	// its arguments as `input` rather than as `params` — the same distinction
 	// that makes a navigate and a mutation different things on the wire.
 	submit, _ := prop(form, "submitAction").(map[string]any)

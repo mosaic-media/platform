@@ -24,7 +24,7 @@ import (
 
 // createAccountEnvelope is what the new-account form submits. The four fields
 // come from the form's scope; the preset comes from the action, because it is
-// which form this is rather than something the form collects (ADR 0096's merge
+// which form this is rather than something the form collects (contracts#19's merge
 // rule keeps the two apart).
 type createAccountEnvelope struct {
 	Username    string `json:"username"`
@@ -81,7 +81,7 @@ func (h *Handler) createAccount(ctx context.Context, caller v1.Caller, input []b
 	})
 	if err != nil {
 		// A taken username belongs on the field that carries it, not in a toast
-		// floating beside a form with four boxes in it (ADR 0089).
+		// floating beside a form with four boxes in it (contracts#13).
 		if contracts.CategoryOf(err) == contracts.Conflict {
 			return contracts.RejectFields("That account could not be created.",
 				contracts.FieldRejection{Field: "username", Message: "That username is already taken."})
@@ -173,7 +173,7 @@ func (h *Handler) partialAccount(ctx context.Context, user domain.User, what str
 			", so they cannot sign in yet. Open their account and grant it there", err)
 }
 
-// validateNewAccount rejects per field (ADR 0089).
+// validateNewAccount rejects per field (contracts#13).
 //
 // It repeats the client's own rules deliberately. The client enforces what it
 // can before anything is sent, which is what makes a form feel like it works;

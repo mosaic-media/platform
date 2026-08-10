@@ -76,7 +76,7 @@ func TestALibraryCardOpensTheNodeTheInstallOwns(t *testing.T) {
 	}
 }
 
-// The library scrolls lazily rather than paging (ADR 0093): the grid says it is
+// The library scrolls lazily rather than paging (contracts#16): the grid says it is
 // a page of something longer and what fetches the rest, and the client asks as
 // the end comes into view.
 //

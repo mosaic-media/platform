@@ -104,7 +104,7 @@ internal/
     crypto/
   transport/
     auth/                # Connect AuthService — mints a session (ADR 0061)
-    session/             # Connect SessionService — the two-lane live session (ADR 0041)
+    session/             # Connect SessionService — the two-lane live session ([contracts#5](https://github.com/mosaic-media/contracts/blob/main/docs/adr/0005-cross-client-transport-two-lane-rpc.md))
     screens/             # The SDUI emit-side (ADR 0029)
     artwork/             # The artwork proxy (ADR 0030)
     playback/            # The media origin (ADR 0045)

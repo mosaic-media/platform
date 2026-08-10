@@ -122,7 +122,7 @@ func (s *Service) capabilitySettingsUIProvider(id string) (v1.SettingsUIProvider
 
 // validateUINode confines a module-supplied settings screen to a well-formed,
 // correctly namespaced UINode tree before the Platform hosts it (ADR 0038,
-// ADR 0085): the bytes must be a JSON object carrying a non-empty string "type",
+// contracts#9): the bytes must be a JSON object carrying a non-empty string "type",
 // and **every** node in the tree must name a type this module may emit.
 //
 // This is the one boundary a module's own UI crosses, so it is where the

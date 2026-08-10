@@ -5,7 +5,7 @@
 // Package auth is the Connect transport that mints and revokes sessions
 // (ADR 0061). It is the only first-party surface a caller reaches without
 // already holding a session, and it is what a client calls before it can open
-// the two-lane SessionService of ADR 0041.
+// the two-lane SessionService of contracts#5.
 //
 // It replaced the GraphQL signIn/signOut mutations. Like every transport in
 // this repository it is a projection surface only: each method calls exactly

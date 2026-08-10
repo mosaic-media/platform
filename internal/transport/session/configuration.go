@@ -64,7 +64,7 @@ func (h *Handler) applyConfiguration(ctx context.Context, s *liveSession, caller
 	}
 	// A rejected draft is the ordinary answer to a bad value rather than a
 	// failure of the call, and the detail names the field and why. It belongs
-	// on the form that carries it rather than in a toast beside it (ADR 0089).
+	// on the form that carries it rather than in a toast beside it (contracts#13).
 	if validated.Version.Status == domain.ConfigRejected {
 		return nil, contracts.NewError(contracts.InvalidArgument,
 			"That change was not accepted: "+validated.Version.ValidationDetail)

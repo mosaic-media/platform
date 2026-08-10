@@ -39,7 +39,7 @@ func TestNumbersArriveAsTextAndAreStoredAsNumbers(t *testing.T) {
 
 // A value that is not a number is a rejection on the box that carries it, not a
 // generic refusal — a form with eight inputs on it must say which one is wrong
-// (ADR 0089).
+// (contracts#13).
 func TestANonNumberIsRejectedOnItsOwnField(t *testing.T) {
 	_, err := configFieldsFromInput([]byte(`{"telemetry.retention.logs_days":"a fortnight"}`))
 	if err == nil {

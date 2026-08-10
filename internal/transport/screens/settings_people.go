@@ -219,7 +219,7 @@ func (s *Service) newAccountPanel(ctx context.Context, caller v1.Caller, nav set
 				ui.SubmitLabel("Create account"),
 				// The preset travels in the action rather than in the scope,
 				// because it is not something this form collects — it is which
-				// form this is. ADR 0096's merge rule is what makes that safe:
+				// form this is. contracts#19's merge rule is what makes that safe:
 				// the scope wins only for the names it declares, and this is not
 				// one of them.
 				ui.SubmitAction(ui.Submit(ui.Invoke(createAccountAction, map[string]any{

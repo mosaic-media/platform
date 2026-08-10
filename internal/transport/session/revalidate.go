@@ -18,7 +18,7 @@ import (
 //
 // A source-backed screen is served from a durable snapshot and revalidated
 // behind it; the live result arrives here, as a `RegionUpdate` on the push lane.
-// That op-set has existed since ADR 0041 and, until this, nothing had ever sent
+// That op-set has existed since contracts#5 and, until this, nothing had ever sent
 // one that a client had not just asked for — every region update in the Platform
 // was the answer to a navigate. This is the first genuinely unsolicited one.
 

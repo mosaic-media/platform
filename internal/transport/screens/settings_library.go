@@ -350,7 +350,7 @@ func (s *Service) newLibraryRulePanel(ctx context.Context, caller v1.Caller, nav
 				ui.SubmitLabel("Follow this collection"),
 				// Everything that addresses the catalog travels in the action
 				// rather than in the form's scope: it is which form this is
-				// rather than something the form collects, and ADR 0096's merge
+				// rather than something the form collects, and contracts#19's merge
 				// rule keeps the two apart.
 				ui.SubmitAction(ui.Submit(ui.Invoke(createLibraryRuleAction, map[string]any{
 					paramAddModule:  moduleID,

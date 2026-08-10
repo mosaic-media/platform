@@ -36,7 +36,7 @@ const (
 
 // homeScreen is the default landing surface: a full-viewport cinematic hero
 // over rows of the enabled modules' catalogs (ADR 0028's virtual plane, browsed
-// not materialised — TMDB's, on a keyed deployment, since ADR 0095 made the
+// not materialised — TMDB's, on a keyed deployment, since contracts#18 made the
 // browse roles ranked). Each row is a carousel of cards that open a detail and a
 // heading that opens the whole catalog; the hero rotates through the top item of
 // each of the first few catalogs, enriched with its backdrop and logo. Browsing

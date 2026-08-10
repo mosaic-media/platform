@@ -102,7 +102,7 @@ func TestHistoryTrimsToLimit(t *testing.T) {
 	}
 }
 
-// TestResumePlan pins the replay-vs-rebuild decision table (ADR 0041 stream
+// TestResumePlan pins the replay-vs-rebuild decision table (contracts#5 stream
 // resume).
 func TestResumePlan(t *testing.T) {
 	build := func(seqs ...uint64) *liveSession {
@@ -190,7 +190,7 @@ func TestServeResumeReplaysThenTails(t *testing.T) {
 }
 
 // TestServeSupersededByReconnect proves a second Subscribe for a session retires
-// the first: the prior sender returns promptly (ADR 0041 — a reconnect wins).
+// the first: the prior sender returns promptly (contracts#5 — a reconnect wins).
 func TestServeSupersededByReconnect(t *testing.T) {
 	s := newLiveSession("sess-1", time.Now())
 	ctx, cancel := context.WithCancel(context.Background())
@@ -216,7 +216,7 @@ func TestServeSupersededByReconnect(t *testing.T) {
 }
 
 // TestShutdownEndsServe proves Manager.Shutdown ends an in-flight stream so the
-// client reconnects (ADR 0041 stream resume, replacing ADR 0032's going-away
+// client reconnects (contracts#5 stream resume, replacing ADR 0032's going-away
 // close).
 func TestShutdownEndsServe(t *testing.T) {
 	m := NewManager()
@@ -270,7 +270,7 @@ func TestReapDiscardsIdleSessions(t *testing.T) {
 }
 
 // TestMailboxOrderingUnderConcurrentEnqueue is the -race guard for the
-// outbound-mailbox discipline (ADR 0041): many goroutines enqueue while the
+// outbound-mailbox discipline (contracts#5): many goroutines enqueue while the
 // single sender drains, and every message must reach the wire in strictly
 // increasing seq order. The total stays under historyLimit so nothing is
 // evicted mid-drain, making delivery complete as well as ordered (the

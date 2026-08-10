@@ -97,7 +97,7 @@ func (s *Service) homeRowsPanel(ctx context.Context, caller v1.Caller, nav setti
 				// switch cannot say for itself.
 				//
 				// **A finding rather than a choice:** `Switch` has no accessible
-				// name in the contract (ADR 0091), so a screen reader hears "on"
+				// name in the contract (contracts#14), so a screen reader hears "on"
 				// and nothing else whatever this text says — the Text beside it is
 				// a sibling, not a label. Fixing that is a vocabulary change, not
 				// a word here.

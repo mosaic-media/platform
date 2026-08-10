@@ -263,7 +263,7 @@ func TestLibraryRulesFillTheLibraryOverTheWire(t *testing.T) {
 }
 
 // renderScreen declares a route and reads the pushed content region back — the
-// two-lane round trip a client makes on every navigation (ADR 0041).
+// two-lane round trip a client makes on every navigation (contracts#5).
 //
 // Attach then Subscribe, per navigation, rather than one long-lived stream: a
 // test that held the stream open would be asserting on the *order* of pushes as

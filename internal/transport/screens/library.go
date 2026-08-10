@@ -38,7 +38,7 @@ import (
 // The screen scrolls rather than paging: a `query` action replaces the content
 // region, so each further page is the whole window re-rendered, and the client's
 // lazy-list observer asks for the next one as the end of the grid comes into
-// view (ADR 0093). That is why this is a page *increment* and not a page.
+// view (contracts#16). That is why this is a page *increment* and not a page.
 const libraryPageSize = 60
 
 // libraryWindowCap is where the scroll stops.
@@ -146,7 +146,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		cards = append(cards, s.libraryCard(work))
 	}
 
-	// The lazy list (ADR 0093). `hasMore` and `loadMore` are the server's
+	// The lazy list (contracts#16). `hasMore` and `loadMore` are the server's
 	// statement that this is a page of something longer and what fetches the
 	// rest; the client observes the end of the grid coming into view and asks.
 	// A full page is deliberately not evidence of another — that is why this is

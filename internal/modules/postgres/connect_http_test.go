@@ -89,7 +89,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	// Both services on one mux, as the composition root mounts them. Plain
 	// HTTP/1.1 is enough here: the Connect protocol carries a server stream over
 	// chunked encoding, so the push lane works without h2c. The binary serves
-	// h2c so the lanes *multiplex* onto one connection (ADR 0041), which is a
+	// h2c so the lanes *multiplex* onto one connection (contracts#5), which is a
 	// performance property, not a correctness one.
 	mux := http.NewServeMux()
 	authPath, authHandler := authv1connect.NewAuthServiceHandler(authtransport.NewHandler(svc))
@@ -174,7 +174,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	// 4. Read the push lane until the content region arrives, and assert the
 	// screen the Platform rendered is the one holding the seeded work. Reading
 	// until rather than asserting on the first message is deliberate: connect
-	// pushes the definition library and the shell first (ADR 0024, ADR 0031),
+	// pushes the definition library and the shell first (contracts#2, ADR 0031),
 	// and pinning that order here would make this test fail for a change it does
 	// not cover.
 	var sawDefinitions, sawShell bool
@@ -212,7 +212,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 		t.Fatal("the stream ended before the content region was pushed")
 	}
 	if !sawDefinitions {
-		t.Error("the definition library was not pushed before the content (ADR 0024)")
+		t.Error("the definition library was not pushed before the content (contracts#2)")
 	}
 	if !sawShell {
 		t.Error("the app shell was not pushed before the content (ADR 0031)")

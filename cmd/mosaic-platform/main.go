@@ -852,7 +852,7 @@ func run() error {
 		apiAddr = defaultAPIAddr
 	}
 	// The client API is Connect, and only Connect (ADR 0061). Two services:
-	// AuthService mints the session, then the two-lane SessionService (ADR 0041)
+	// AuthService mints the session, then the two-lane SessionService (contracts#5)
 	// carries everything else — unary intents (Navigate/Invoke/SubmitInput/
 	// Attach) and one server-streaming Subscribe per session for push. Between
 	// them they are the whole surface a client speaks; the GraphQL transport
@@ -891,7 +891,7 @@ func run() error {
 	apiMux.Handle(sessionPath, sessionConnect)
 	// Serve the API over h2c (cleartext HTTP/2) so the two session lanes —
 	// concurrent unary intents and the long-lived Subscribe stream — multiplex
-	// onto one connection (ADR 0041); Connect still degrades to HTTP/1.1 for the
+	// onto one connection (contracts#5); Connect still degrades to HTTP/1.1 for the
 	// artwork and playback handlers.
 	// Behind the front door every request arrives from the Supervisor, so the
 	// address to attribute a caller to is the one the front door observed and
@@ -905,7 +905,7 @@ func run() error {
 		BaseContext: baseContext,
 	}
 	// On graceful shutdown, close every session so its Subscribe stream ends and
-	// the client reconnects rather than erroring (ADR 0041 stream resume, as
+	// the client reconnects rather than erroring (contracts#5 stream resume, as
 	// ADR 0032's "going away" close did for the socket).
 	apiServer.RegisterOnShutdown(sessionHandler.Manager().Shutdown)
 	// And stop every running transcode, so a restart does not leave ffmpeg

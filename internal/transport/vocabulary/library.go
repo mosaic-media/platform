@@ -8,7 +8,7 @@ import (
 	"github.com/mosaic-media/contracts/tokens"
 )
 
-// The two things a client is handed before it can draw anything (ADR 0040):
+// The two things a client is handed before it can draw anything (contracts#4):
 // the components, and the skin. They live here rather than in either transport
 // because both transports serve them — the session pushes them on connect, and
 // the pre-session bootstrap (ADR 0101) sends the doorway's share of them to a
@@ -42,7 +42,7 @@ func mustDefinitions() []byte {
 }
 
 // tokenSet is the design token set the Platform serves — the skin half of what
-// a client is handed (ADR 0040's UI-library tier). Values used to live in the
+// a client is handed (contracts#4's UI-library tier). Values used to live in the
 // client's own stylesheet, so a re-skin was a client release and the contract's
 // copy drifted into fiction.
 var tokenSet = mustTokens()

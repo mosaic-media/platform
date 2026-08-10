@@ -41,12 +41,12 @@ import (
 // and the screen is the whole difference between degrading and failing quietly.
 //
 // Only the primitive tier is filtered. Components are definitions the server
-// delivers (ADR 0040), so a client renders whatever it is sent; the thing it can
+// delivers (contracts#4), so a client renders whatever it is sent; the thing it can
 // fail to draw is a primitive inside a template, which is what the definition
 // library's per-session fallback selection answers.
 
 // contractPrimitives is the primitive tier as the contract publishes it
-// (ADR 0083). Reading it rather than keeping a list here is the point: a
+// (contracts#8). Reading it rather than keeping a list here is the point: a
 // primitive added to the vocabulary is one this filter knows about without
 // anyone remembering to add it.
 var contractPrimitives = func() map[string]bool {

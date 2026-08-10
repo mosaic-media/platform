@@ -347,7 +347,7 @@ func (s *Service) moduleSettingsPanel(ctx context.Context, caller v1.Caller, nav
 		return nil, err
 	}
 	// The module returns its settings UI as a UINode; decode it into the typed
-	// node (protojson, since the tree is now protobuf — ADR 0044).
+	// node (protojson, since the tree is now protobuf — contracts#6).
 	node := ui.Component("").Build()
 	if err := protojson.Unmarshal(res.UI, node); err != nil {
 		return nil, contracts.WrapError(contracts.Internal, "decode module settings UI", err)

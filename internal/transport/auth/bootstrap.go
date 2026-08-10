@@ -24,7 +24,7 @@ import (
 //
 // It exists because a client without a session has no vocabulary *at all* —
 // definitions and the token set are pushed on connect, and the client
-// deliberately bundles none (ADR 0082). The sign-in screen that was built and
+// deliberately bundles none (contracts#7). The sign-in screen that was built and
 // withdrawn on the same day is what that costs: the Platform served exactly the
 // right tree and the browser drew "SignInPanel — not registered in this Shell",
 // unstyled, because neither half had arrived.
@@ -137,7 +137,7 @@ func (h *Handler) doorwayOutcome(ctx context.Context, client vocabulary.Client) 
 }
 
 // fieldErrorsOutcome answers an Invoke with a rejection that belongs on the
-// fields it came from (ADR 0089), and reports whether the error was one.
+// fields it came from (contracts#13), and reports whether the error was one.
 //
 // This is the pre-session half of the same envelope the session lane pushes.
 // contracts.RejectFields has been routed and uncalled since validation landed;

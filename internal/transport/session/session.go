@@ -28,7 +28,7 @@ import (
 )
 
 // inputDebounce is the server-side coalescing window for search-as-you-type
-// (ADR 0041, preserving ADR 0032's backstop). Rapid SubmitInput intents within
+// (contracts#5, preserving ADR 0032's backstop). Rapid SubmitInput intents within
 // this window collapse to a single render for the latest text, so a fast typist
 // cannot fan out a request per keystroke to the upstream addons. It sits behind
 // the client's own ~220ms debounce and is a touch shorter so it never adds
@@ -50,7 +50,7 @@ const contentRegion = "content"
 // it closes.
 const playerRegion = "player"
 
-// The two payloads a client is handed before it draws anything (ADR 0040) — the
+// The two payloads a client is handed before it draws anything (contracts#4) — the
 // component library and the design tokens — live in the vocabulary package,
 // because the pre-session bootstrap serves the same two to a client that has no
 // session to be pushed to (ADR 0101). These name the Events this lane carries
@@ -65,7 +65,7 @@ const definitionsEvent = "sdui.definitions"
 // what the server said, not what it shipped with.
 const tokensEvent = "sdui.tokens"
 
-// Handler implements the SessionService (ADR 0041). It owns the session store,
+// Handler implements the SessionService (contracts#5). It owns the session store,
 // builds its own screen service (a thin projection wrapper over the application
 // query services), and routes intents to the application command/query services.
 // Construct once and mount its Connect handler on the API mux.
@@ -142,7 +142,7 @@ func (h *Handler) bind(ctx context.Context, credential string) (*liveSession, er
 
 // Attach (re)binds a caller to a session and, if a screen is named, re-asserts
 // it and re-renders the content — the reconnect re-declaration ADR 0032 did over
-// the socket, now an explicit intent (ADR 0041). With no screen it just ensures
+// the socket, now an explicit intent (contracts#5). With no screen it just ensures
 // the session exists.
 func (h *Handler) Attach(ctx context.Context, req *connect.Request[sessionv1.AttachRequest]) (*connect.Response[sessionv1.Ack], error) {
 	r := req.Msg
@@ -221,7 +221,7 @@ func (h *Handler) Invoke(ctx context.Context, req *connect.Request[sessionv1.Inv
 	}
 	outcomes, err := h.dispatch(ctx, s, r.GetAction(), r.GetInput())
 	if err != nil {
-		// A rejection that names fields goes to the fields (ADR 0089). A toast
+		// A rejection that names fields goes to the fields (contracts#13). A toast
 		// saying "that username is taken" is a sentence floating next to the
 		// form rather than a mark on the box that is wrong, and on a form with
 		// four inputs it does not say which.
@@ -283,7 +283,7 @@ func (h *Handler) Subscribe(ctx context.Context, req *connect.Request[sessionv1.
 			s.setCurrent(route{screen: "home"})
 		}
 		// The definition library must be registered before the shell or any
-		// screen that uses it renders, so it goes first on the stream (ADR 0024).
+		// screen that uses it renders, so it goes first on the stream (contracts#2).
 		s.enqueue(tokensMsg())
 		s.enqueue(definitionsMsg(ctx, s))
 		h.pushShell(ctx, s)
@@ -370,7 +370,7 @@ func (h *Handler) onInput(s *liveSession, text string) {
 	})
 }
 
-// --- ServerMessage constructors (encoding option (b), ADR 0044: the typed
+// --- ServerMessage constructors (encoding option (b), contracts#6: the typed
 // mosaic.sdui.v1.UINode rides the envelope directly, no JSON step). ---
 
 // Every node-bearing constructor takes the session and the ctx rather than just
@@ -421,7 +421,7 @@ func toastMsg(message, tone string) *sessionv1.ServerMessage {
 	return &sessionv1.ServerMessage{Body: &sessionv1.ServerMessage_Toast{Toast: &sessionv1.Toast{Message: message, Tone: tone}}}
 }
 
-// definitionsMsg carries the SDUI component-definition library (ADR 0024) as an
+// definitionsMsg carries the SDUI component-definition library (contracts#2) as an
 // Event whose JSON payload is an array of ComponentDefinition. It is pushed once
 // on connect, before the shell, so the client can register the components any
 // screen references.
@@ -433,7 +433,7 @@ func definitionsMsg(ctx context.Context, s *liveSession) *sessionv1.ServerMessag
 	return &sessionv1.ServerMessage{Body: &sessionv1.ServerMessage_Event{Event: &sessionv1.Event{Type: definitionsEvent, Payload: payload}}}
 }
 
-// tokensMsg carries the design tokens (ADR 0040) as an Event whose JSON payload
+// tokensMsg carries the design tokens (contracts#4) as an Event whose JSON payload
 // is the DTCG set. It is pushed BEFORE the definitions and the shell: a client
 // that rendered a screen and then restyled it would flash the skin it shipped
 // with before showing the one it was served.

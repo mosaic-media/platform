@@ -38,7 +38,7 @@ type Error struct {
 	Category ErrorCategory
 	Message  string
 	Err      error
-	// Fields names which submitted fields were rejected and why (ADR 0089).
+	// Fields names which submitted fields were rejected and why (contracts#13).
 	//
 	// It is on the error rather than beside it because a rejection *is* the
 	// error — a command that answers "that username is taken" in a separate

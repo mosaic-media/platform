@@ -680,7 +680,7 @@ func findAll(n sdui.Node, typ string, acc *[]sdui.Node) {
 	}
 }
 
-// prop reads a node's prop from the protobuf Struct (ADR 0044 — props is an open
+// prop reads a node's prop from the protobuf Struct (contracts#6 — props is an open
 // Struct, decoded to a Go map for assertions).
 // findNavItem finds a settings nav row anywhere in the tree by its label. The
 // rows live in the frame's `nav` slot, which is why this walks slots too.

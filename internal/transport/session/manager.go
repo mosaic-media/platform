@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-// Package session is the first-party client session transport (ADR 0041): a
+// Package session is the first-party client session transport (contracts#5): a
 // typed, two-lane Connect/gRPC surface over protobuf. Client intents travel as
 // unary calls (Attach/Navigate/Invoke/SubmitInput); server push travels as one
 // server-streaming Subscribe call. It supersedes the bespoke WebSocket of
@@ -10,7 +10,7 @@
 // resume. The same application services back both this and the auth surface,
 // so this is a transport, not a second application layer.
 //
-// Concurrency follows ADR 0041's outbound-mailbox discipline: unary handlers
+// Concurrency follows contracts#5's outbound-mailbox discipline: unary handlers
 // never touch the stream directly (gRPC Send is not goroutine-safe). They
 // enqueue onto a per-session buffer under the session lock; the single sender
 // goroutine — the live Subscribe stream — drains that buffer to Send. Session
@@ -32,14 +32,14 @@ import (
 
 // historyLimit caps the per-session outbound buffer. Every pushed ServerMessage
 // is retained here so a reconnecting client can resume from its last seq
-// (ADR 0041). A live session's message rate is low, so this bounds memory while
+// (contracts#5). A live session's message rate is low, so this bounds memory while
 // comfortably covering a reconnect window; a client whose cursor falls before
 // the retained window is rebuilt from scratch rather than replayed.
 const historyLimit = 256
 
 // defaultSessionTTL is how long a session with no active Subscribe stream is
 // kept before the reaper discards it. Its live state is disposable — a
-// reconnecting client re-declares its route and the Platform rebuilds (ADR 0041,
+// reconnecting client re-declares its route and the Platform rebuilds (contracts#5,
 // ADR 0032's resume principle), so discarding an idle session costs only a
 // rebuild on the next connect.
 const defaultSessionTTL = 5 * time.Minute
@@ -90,7 +90,7 @@ type liveSession struct {
 	// it. The two declarations arrive on the same call and are never read apart.
 	vocab vocabulary.Client
 
-	// input-debounce state (ADR 0041's server-side coalescing, moved from the
+	// input-debounce state (contracts#5's server-side coalescing, moved from the
 	// ordered read loop of ADR 0032 into session state).
 	inputMu    sync.Mutex
 	inputTimer *time.Timer
@@ -643,7 +643,7 @@ func (m *Manager) StartReaper(ctx context.Context) {
 }
 
 // Shutdown closes every session: the sender goroutines return and their streams
-// end, which a client treats as a reconnect (ADR 0041 stream resume), the way
+// end, which a client treats as a reconnect (contracts#5 stream resume), the way
 // ADR 0032's "going away" close did for the WebSocket. Wire it through
 // http.Server.RegisterOnShutdown so it fires as graceful shutdown begins.
 func (m *Manager) Shutdown() {

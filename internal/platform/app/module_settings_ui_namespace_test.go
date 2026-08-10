@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// The namespace rule, at the one boundary a module's own UI crosses (ADR 0085).
+// The namespace rule, at the one boundary a module's own UI crosses (contracts#9).
 //
 // These call the unexported validator directly rather than driving the whole
 // query, because what is under test is the rule and its message — the query path

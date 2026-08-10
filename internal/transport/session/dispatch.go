@@ -19,7 +19,7 @@ import (
 )
 
 // dispatch routes an Invoke action to the application command service that backs
-// it. ADR 0041 moved the client's mutations off the GraphQL schema ADR 0032's
+// it. contracts#5 moved the client's mutations off the GraphQL schema ADR 0032's
 // socket ran them through and onto the application services directly; ADR 0061
 // then removed that schema, so this switch is now the *only* way a client
 // mutation reaches the Platform. The action's caller is the session's opaque ref
@@ -33,7 +33,7 @@ import (
 // input is the SDUI runtime's action envelope in JSON (ADR 0029), so an action
 // ABI is a property of the action, not of the transport carrying it.
 // An action pushes a *sequence* of updates, not one: the two-lane transport
-// (ADR 0041) exists so the server drives the client's regions unprompted, and a
+// (contracts#5) exists so the server drives the client's regions unprompted, and a
 // single action can legitimately push more than one region update — a player and
 // the "Next episode" control beside it. Most actions push nothing (a nil slice)
 // and re-render the content region instead; playPart is the one that pushes.

@@ -31,7 +31,7 @@ import (
 //
 // The catalog fields come from the action rather than from a form's scope,
 // because they are *which rule this is* rather than something the form
-// collects; the name is the one field a person types. That split is ADR 0096's
+// collects; the name is the one field a person types. That split is contracts#19's
 // merge rule and it is the same shape the new-account form uses for its preset.
 type libraryRuleEnvelope struct {
 	// Creating.
@@ -69,7 +69,7 @@ func (h *Handler) createLibraryRule(ctx context.Context, s *liveSession, caller 
 	})
 	if err != nil {
 		// A name already in use belongs on the field that carries it rather
-		// than in a toast beside a form with one box in it (ADR 0089).
+		// than in a toast beside a form with one box in it (contracts#13).
 		if contracts.CategoryOf(err) == contracts.Conflict {
 			return nil, contracts.RejectFields("That rule could not be created.",
 				contracts.FieldRejection{Field: "ruleName", Message: "There is already a rule with that name."})
