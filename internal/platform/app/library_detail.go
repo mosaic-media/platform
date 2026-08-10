@@ -14,11 +14,11 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Reading a library item's detail out of the object graph (ADR 0107).
+// Reading a library item's detail out of the object graph (platform#62).
 //
 // It is the read the Library screen needed and did not have. A card there opens
 // its node by **id** — the whole point of a screen over the graph is that it
-// still opens when the source is down — and ADR 0034's detail is keyed by a
+// still opens when the source is down — and sdk#3's detail is keyed by a
 // **ref** and re-derived from the provider on every render, so the two never
 // met and the node-id path fell back to a title and a list of children.
 //
@@ -56,7 +56,7 @@ type GetLibraryDetailResult struct {
 	Children []v1.Node
 	// Episodes are the selected season's items, in order. Together with Children
 	// they are the *authority* on what exists, which is why the stored document
-	// deliberately carries no episodes (ADR 0107).
+	// deliberately carries no episodes (platform#62).
 	Episodes []v1.Node
 	// Season is which season Episodes belongs to, resolved from the query — so a
 	// caller rendering a selector knows which one is lit without repeating the
@@ -78,7 +78,7 @@ type GetLibraryDetailResult struct {
 //
 // It authorises `content.read`, the same action every other library read takes:
 // there is one shared library and everybody who may see it may see all of it
-// (ADR 0103).
+// (platform#59).
 func (s *Service) GetLibraryDetail(ctx context.Context, q GetLibraryDetailQuery) (GetLibraryDetailResult, error) {
 	// 1. validate query shape.
 	if q.Caller.Session == "" {
@@ -192,7 +192,7 @@ func SeasonNumbers(children []v1.Node) []int {
 // EpisodesFromTree projects one season's materialised items into the episode
 // preview shape the detail screen renders.
 //
-// **The tree is the authority and the document carries no episodes** (ADR 0107),
+// **The tree is the authority and the document carries no episodes** (platform#62),
 // so this is the one direction the projection runs for a library item. It is
 // exported because the emit-side is what needs it and this is a pure function of
 // its arguments — putting it on the query result would make it look like

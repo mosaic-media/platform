@@ -4,7 +4,7 @@ name: integration
 # reach the live official registry (GitHub Pages) and GitHub releases to install a
 # real extension module at runtime and spawn it — the "a real module runs out of
 # process" proof. It lives here, not in the platform's own test suite, so the
-# platform module never imports an extension module (ADR 0079, ADR 0081): the test
+# platform module never imports an extension module (platform#49, platform#51): the test
 # installs one the way a user would rather than building one from an import.
 #
 # It runs on a schedule and on demand rather than on every push. It validates the

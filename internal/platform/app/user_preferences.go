@@ -132,7 +132,7 @@ func (s *Service) GetUserPreferences(ctx context.Context, q GetUserPreferencesQu
 // It deliberately does not authorise. It is an internal read on behalf of a
 // caller already authenticated by the surface calling it, and gating a
 // visibility hint behind a second permission check is how a toggle becomes an
-// accidental access control (ADR 0058).
+// accidental access control (platform#36).
 func (s *Service) BoolPreference(ctx context.Context, userID domain.UserID, key string, fallback bool) bool {
 	pref, err := s.userPreferences.Get(ctx, userID, key)
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *Service) BoolPreference(ctx context.Context, userID domain.UserID, key 
 // ExpertModeEnabled reports whether the caller has turned expert mode on.
 //
 // It authenticates but does not authorise, and that split is the whole design
-// (ADR 0058): the *permission* decides whether the diagnostics surface may be
+// (platform#36): the *permission* decides whether the diagnostics surface may be
 // reached, and this preference decides whether the person currently wants to
 // see it. Collapsing the two would make a display setting into an access
 // control.
@@ -164,7 +164,7 @@ func (s *Service) ExpertModeEnabled(ctx context.Context, caller v1.Caller) bool 
 }
 
 // LanguagePreferenceFor returns the caller's stored language document
-// (ADR 0112), or nil when there is not one to return.
+// (platform#67), or nil when there is not one to return.
 //
 // **It returns the raw document rather than a parsed preference**, and the
 // reason is the dependency direction rather than laziness: the type that

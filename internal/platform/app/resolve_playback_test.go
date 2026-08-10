@@ -34,7 +34,7 @@ var (
 	}
 )
 
-// TestSelectionPrefersPlayableOverHigherResolution is ADR 0048's argument in one
+// TestSelectionPrefersPlayableOverHigherResolution is platform#27's argument in one
 // assertion: an unplayable 4K release is worth less than a playable 1080p one,
 // so compatibility has to outweigh resolution rather than merely tie-break it.
 func TestSelectionPrefersPlayableOverHigherResolution(t *testing.T) {
@@ -79,7 +79,7 @@ func TestSelectionFallsBackToTheSourceOrder(t *testing.T) {
 // TestSelectionIgnoresUnknownMetadata is the honest case: the module's parse is
 // best-effort and often finds nothing. A candidate with no parsed codecs must
 // not be scored as though it were incompatible — it is merely unknown, and the
-// probe settles it later (ADR 0050).
+// probe settles it later (platform#29).
 func TestSelectionIgnoresUnknownMetadata(t *testing.T) {
 	unknown := v1.Part{ID: "p-?", NaturalOrder: 1}
 	// mpeg4 and eac3 are both outside the browser set, so this one is known-bad
@@ -98,7 +98,7 @@ func TestSelectionIgnoresUnknownMetadata(t *testing.T) {
 }
 
 // TestSelectionAvoidsHDRAClientCannotRender is the purple-and-green case moved
-// one step earlier (ADR 0050). A browser decodes HEVC perfectly well and still
+// one step earlier (platform#29). A browser decodes HEVC perfectly well and still
 // renders an HDR10 stream as nonsense, so the fix is a tone-map, which is a full
 // video re-encode — by far the most expensive outcome selection can cause.
 // Preferring an SDR release of the same quality avoids it entirely.

@@ -12,7 +12,7 @@ import (
 )
 
 // The default selects everything, because a fresh install must work with
-// nothing configured (ADR 0072): the zero-config metadata floor is a core
+// nothing configured (module-cinemeta#1): the zero-config metadata floor is a core
 // module, and a default that dropped it would boot an inert Mosaic.
 func TestSelectAllSelectsEverything(t *testing.T) {
 	s := app.SelectAll()

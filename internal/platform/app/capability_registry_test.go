@@ -15,7 +15,7 @@ import (
 
 // everythingCapability implements every provider interface while declaring
 // whatever its manifest says — which is exactly the shape of an out-of-process
-// module's proxy (ADR 0064).
+// module's proxy (platform#39).
 //
 // The proxy cannot be selective: the registry must not be able to tell it from
 // a local struct, and Go type assertions cannot be made conditional at runtime,
@@ -118,7 +118,7 @@ func TestSingleResolversGateOnTheManifest(t *testing.T) {
 }
 
 // The worst case the manifest gate prevents: a module that fills nothing
-// satisfying the check that a Mosaic can identify and find content (ADR 0035).
+// satisfying the check that a Mosaic can identify and find content (platform#23).
 func TestRequireRolesIsNotSatisfiedByAProxyThatDeclaresNothing(t *testing.T) {
 	reg := app.NewCapabilityRegistry()
 	reg.Register(&everythingCapability{manifest: v1.Manifest{ID: "declares-nothing"}})
@@ -141,7 +141,7 @@ func TestRequireRolesPassesWhenTheRolesAreDeclared(t *testing.T) {
 }
 
 // Unregister makes a module unresolvable across every seam — the runtime
-// uninstall path (ADR 0081): after it, nothing routes to a process being torn
+// uninstall path (platform#51): after it, nothing routes to a process being torn
 // down. A bare Lookup, a role resolution, and the enumerations all stop finding
 // it, and RequireRoles goes back to failing for the role it filled.
 func TestUnregisterMakesACapabilityUnresolvable(t *testing.T) {

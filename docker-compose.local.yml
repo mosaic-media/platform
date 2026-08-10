@@ -18,7 +18,7 @@
 # Only the *core* modules are overlaid: they are compiled into the Platform
 # binary, so a local edit to one reaches the build through the workspace.
 # Extension modules (Stremio, AIOStreams, fanart.tv) are **not** here — they are
-# not platform dependencies (ADR 0081); they are installed at runtime, so a local
+# not platform dependencies (platform#51); they are installed at runtime, so a local
 # change to one is exercised through the install path, not this workspace.
 #
 # **The workspace also pins every required version of the SDK and the contract to
@@ -116,7 +116,7 @@ services:
         condition: service_healthy
       # The index must exist before the Platform boots, because the Platform
       # reads the development key at boot and a missing one is a hard failure
-      # (ADR 0099). `registry` is itself gated on the one-shot build below.
+      # (platform#55). `registry` is itself gated on the one-shot build below.
       registry:
         condition: service_healthy
     volumes:
@@ -144,7 +144,7 @@ services:
       # must not escape into a repository.
       GOWORK: /work/go.work
       # Point the official repository at the local one, and name the key its
-      # index is signed with (ADR 0099). **Both, or the boot fails** — the
+      # index is signed with (platform#55). **Both, or the boot fails** — the
       # override exists to exercise verification against a development key, so
       # half of it is a configuration error rather than a partial override.
       #
@@ -198,11 +198,11 @@ services:
              npm run build --workspace @mosaic-media/sdui-react &&
              exec npm run dev --workspace mosaic-shell -- --host 0.0.0.0 --port 5173 --strictPort --force"
 
-  # ── The local module repository (ADR 0099) ────────────────────────────────
+  # ── The local module repository (platform#55) ────────────────────────────────
   #
   # The three *extension* modules cannot be overlaid the way the core ones are
   # above: they are not Platform dependencies, they are installed at runtime
-  # (ADR 0081), so a local change to one reaches the Platform through the
+  # (platform#51), so a local change to one reaches the Platform through the
   # install path or not at all. Until these two services existed, "not at all"
   # was the honest answer — seeing a one-line change run meant tagging a
   # release, cross-compiling five targets, hand-editing the registry's
@@ -214,7 +214,7 @@ services:
   # Platform then does is unchanged in every respect — fetch the index, verify
   # its signature, authenticate the manifests it carries, download the binary,
   # check it against its signed digest, spawn it, check the handshake. The
-  # override moves *which key and which URL*, and nothing else; see ADR 0099 and
+  # override moves *which key and which URL*, and nothing else; see platform#55 and
   # internal/adapters/extension/devregistry.go for why that is behind a build
   # tag rather than an environment flag on the shipped binary.
   #
@@ -224,7 +224,7 @@ services:
   #
   # then uninstall and reinstall the module from the extensions surface. A
   # rebuilt index does not reach an already-installed module on its own, and
-  # that is ADR 0081 working: boot re-adopts the *pinned* bytes from disk rather
+  # that is platform#51 working: boot re-adopts the *pinned* bytes from disk rather
   # than silently upgrading to whatever a catalogue now lists.
   registry-build:
     build:
@@ -239,7 +239,7 @@ services:
       - ../sdk:/src/sdk
       - ../contracts:/src/contracts
       # The extension checkouts. They are mounted **here and not on the
-      # platform service**, which is the whole shape of ADR 0081: an extension
+      # platform service**, which is the whole shape of platform#51: an extension
       # is built and published like a third party's, then installed at runtime.
       # Mounting one into the Platform's workspace would compile it in and prove
       # nothing about the path a user takes.
@@ -259,7 +259,7 @@ services:
       - mosaic-dev-gobuild:/root/.cache/go-build
     environment:
       # An extension module's project credential is linked by the build that
-      # produces the artefact shipping it (ADR 0105 rule 2), and this loop is
+      # produces the artefact shipping it (supervisor#1 rule 2), and this loop is
       # the local counterpart of that build. Bring-your-own from `.env` or the
       # shell, like TMDB_RAC on the platform service: a GitHub secret reaches
       # only CI runners. Unset links an empty key, which is the shape a release
@@ -273,7 +273,7 @@ services:
     command: ["bash", "/src/platform/tools/localregistry/assemble.sh"]
 
   registry:
-    # Static files over HTTP, which is all a module repository is (ADR 0065: the
+    # Static files over HTTP, which is all a module repository is (platform#40: the
     # signature and the digests are what protect a download, not the host — so
     # the host can be four lines of compose). Plain HTTP rather than TLS for the
     # same reason: a certificate would protect nothing the signature does not,

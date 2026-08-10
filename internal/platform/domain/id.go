@@ -30,5 +30,5 @@ type DeviceID ID
 
 // The content-model identifiers live in the published contract surface
 // (contracts/platform/v1), not here: they cross the module boundary, while
-// these infrastructure identifiers stay internal (ADR 0016). The content ids
-// are UUIDv7 and these remain random UUIDv4 (ADR 0013).
+// these infrastructure identifiers stay internal (platform#12). The content ids
+// are UUIDv7 and these remain random UUIDv4 (platform#9).

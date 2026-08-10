@@ -1,6 +1,6 @@
 -- Migration 0018 — Playback state.
 --
--- Where each viewer got to (ADR 0046). This is the first per-user row in the
+-- Where each viewer got to (platform#26). This is the first per-user row in the
 -- content domain: nodes, parts, relations and source bindings are all
 -- install-global, shared by everyone using one Mosaic, and a position is the one
 -- thing that is genuinely personal.
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS playback_states (
 -- ON DELETE CASCADE on both parents. A position is not a record of anything
 -- that must outlive its subject: removing the user or the item should take it,
 -- and neither removal should be blocked by it. That is the opposite of the
--- content model's own stance (ADR 0013 makes content deletion explicit and
+-- content model's own stance (platform#9 makes content deletion explicit and
 -- restricted), and deliberately so — this is state about watching, not content.
 
 -- The continue-watching query: one user's unfinished items, most recent first.

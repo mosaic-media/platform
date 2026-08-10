@@ -7,7 +7,7 @@ package domain
 import "time"
 
 // InstalledExtension is the durable record that a user installed one extension
-// module from a trusted repository (ADR 0081). It is the Platform's source of
+// module from a trusted repository (platform#51). It is the Platform's source of
 // truth for what to bring up at boot: the identity and provenance, not the
 // bytes. The verified binary on disk is a cache re-acquirable from this record,
 // so the durable truth is "this module, from this repository, at this version,
@@ -22,12 +22,12 @@ type InstalledExtension struct {
 	Repository string
 	// Version is the catalogued version that was installed. A later catalogued
 	// version does not change this until the user acts on it — updating an
-	// installed extension is a decision ADR 0081 leaves open, not a silent boot
+	// installed extension is a decision platform#51 leaves open, not a silent boot
 	// upgrade.
 	Version string
 	// SignedBy is the trusted publisher key that verified the module at install,
 	// kept as provenance for the settings surface and for an admin looking at a
-	// broken import (ADR 0065): a consent clicked months ago is not context; this
+	// broken import (platform#40): a consent clicked months ago is not context; this
 	// is.
 	SignedBy string
 	// InstalledAt is when the user installed it.

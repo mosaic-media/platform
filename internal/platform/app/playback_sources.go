@@ -15,10 +15,10 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The candidate set behind one item, ranked and explained (ADR 0116).
+// The candidate set behind one item, ranked and explained (platform#71).
 //
 // Selection already picks a release and reports what it chose out of how many
-// (ADR 0048). What it could not do is show its working, and that made two
+// (platform#27). What it could not do is show its working, and that made two
 // different situations look identical from a screen: a ranking that picked
 // badly, and an item that only ever had one candidate. **"Nothing changed" is
 // the same picture either way**, which is why the count was added in the first
@@ -80,7 +80,7 @@ type PlaybackSourcesResult struct {
 }
 
 // PlaybackSources lists the candidate releases for an item, ranked for this
-// client (ADR 0116).
+// client (platform#71).
 //
 // It ranks and does not resolve. Resolution is a call per candidate to an
 // aggregator that takes hundreds of milliseconds, so resolving twenty to draw a
@@ -181,7 +181,7 @@ func playability(p v1.Part, prefer PlaybackPreference) (bool, string) {
 //
 // Resolution, codecs and size, in the order somebody scanning a list reads them.
 // Missing fields are omitted rather than rendered as "unknown": a module's parse
-// is best-effort (ADR 0048), so an absent codec is ordinary and a column of
+// is best-effort (platform#27), so an absent codec is ordinary and a column of
 // "unknown" would say only that the parse is best-effort.
 func qualitySummary(p v1.Part) string {
 	var parts []string
@@ -217,7 +217,7 @@ func humanSize(b int64) string {
 }
 
 // PlayableAfterImportQuery asks which release to play for a work that has just
-// been materialised (ADR 0118).
+// been materialised (platform#73).
 type PlayableAfterImportQuery struct {
 	Caller v1.Caller
 	WorkID v1.NodeID
@@ -236,7 +236,7 @@ type PlayableAfterImportResult struct {
 }
 
 // PlayableAfterImport finds the release to start, for a work materialised by a
-// play (ADR 0118).
+// play (platform#73).
 //
 // **A film is one item and a series is many, and the difference is the whole
 // function.** Materialising a film from a Play button should start it; doing the

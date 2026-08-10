@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// What a render says about itself, beside the tree it returns (ADR 0052).
+// What a render says about itself, beside the tree it returns (platform#30).
 //
 // A screen built from a durable snapshot has two things to tell the transport
 // that a `UINode` cannot carry: that it should be revalidated, and that a source

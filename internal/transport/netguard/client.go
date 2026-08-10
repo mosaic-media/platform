@@ -12,7 +12,7 @@ import (
 )
 
 // ModuleClient builds the HTTP client the composition root hands to every
-// module (ADR 0055, seam 9).
+// module (platform#33, seam 9).
 //
 // It closes two holes at once, and the second is the more urgent of the two.
 //

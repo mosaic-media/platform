@@ -2,15 +2,15 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-// Package screens is the Platform's SDUI emit-side (ADR 0029). It builds UINode
+// Package screens is the Platform's SDUI emit-side (platform#19). It builds UINode
 // trees from the application query services using the mosaic-sdui Go producer
 // binding, and serves them through a name-keyed registry. It is a projection
 // surface, exactly like a transport handler: every builder calls application
 // query services and nothing else — no store, no transaction.
 //
 // Screens are Platform-emitted. A module contributes content through its
-// provider roles (ADR 0027); the Platform owns how that content is shown. A
-// screen's Action names an action the session transport dispatches (ADR 0061),
+// provider roles (sdk#2); the Platform owns how that content is shown. A
+// screen's Action names an action the session transport dispatches (platform#37),
 // so the emitted tree and the data its actions drive share one transport.
 //
 // The package is split one screen to a file — home.go, search.go, catalog.go,
@@ -38,17 +38,17 @@ const (
 	screenShell  = "shell"
 	screenHome   = "home"
 	screenSearch = "search"
-	// The expert-mode diagnostics screens (ADR 0058). Reaching any of them
+	// The expert-mode diagnostics screens (platform#36). Reaching any of them
 	// requires telemetry.read; the affordance that leads here is hidden from
 	// anyone without it.
 	screenLogs   = "logs"
 	screenTraces = "traces"
 	screenTrace  = "trace"
-	// screenMetrics is the live instrument list (ADR 0130). It sits with the
+	// screenMetrics is the live instrument list (sdk#9). It sits with the
 	// other two and reads something different from both: logs and traces are
 	// stored events, and this is the current value of a running counter.
 	screenMetrics = "metrics"
-	// The background-work screens (ADR 0017). Same expert-mode group as the
+	// The background-work screens (platform#13). Same expert-mode group as the
 	// telemetry ones and a different permission: `job.read` is what the
 	// install did to itself, `telemetry.read` is what its users did.
 	screenJobs        = "jobs"
@@ -62,26 +62,26 @@ const (
 	// `collections` in the nav and is deliberately not the same screen: one is
 	// this household's shelf, the other is a source's catalogue.
 	screenLibrary = "library"
-	// screenHistory is what this viewer has watched (ADR 0103). It is its own
+	// screenHistory is what this viewer has watched (platform#59). It is its own
 	// screen rather than a settings panel because it is content — a grid of
 	// things you can open — and the settings side of the app is a working
 	// surface with no artwork on it.
 	screenHistory = "history"
-	// screenSources is the candidate releases behind one item (ADR 0116).
+	// screenSources is the candidate releases behind one item (platform#71).
 	screenSources = "sources"
 	// screenExtensions is the browse-and-install surface for extension modules
-	// (ADR 0081). It is its own screen rather than a settings section because
+	// (platform#51). It is its own screen rather than a settings section because
 	// listing what is available reaches the trusted repository over the network,
 	// which should happen when a user opens it, not on every settings render.
 	screenExtensions = "extensions"
 	// setPreferenceMutation is the Invoke action the expert-mode toggle emits.
 	setPreferenceMutation = "setPreference"
 	// installExtensionAction and uninstallExtensionAction are the Invoke actions
-	// the extensions screen emits (ADR 0081). They match the dispatch cases in the
+	// the extensions screen emits (platform#51). They match the dispatch cases in the
 	// session transport.
 	installExtensionAction   = "installExtension"
 	uninstallExtensionAction = "uninstallExtension"
-	// revokeSessionAction ends one device's session (ADR 0102). It is the
+	// revokeSessionAction ends one device's session (platform#58). It is the
 	// tenth action a client can invoke, and the first that is about the
 	// account rather than about content.
 	revokeSessionAction = "revokeSession"
@@ -113,7 +113,7 @@ const (
 	paramText       = "text"
 	// paramMediaType focuses a search on one kind of thing. Distinct from
 	// paramNativeType, which is a *provider's* own word for a type; this is the
-	// Platform's canonical one (ADR 0015).
+	// Platform's canonical one (platform#11).
 	paramMediaType = "mediaType"
 	paramPage      = "page"
 	// paramGenre carries the library facet's selection. One value rather than a
@@ -158,10 +158,10 @@ const (
 )
 
 // importContentMutation is the Platform mutation a detail's Add-to-library action
-// invokes to materialise a virtual ref (ADR 0028).
+// invokes to materialise a virtual ref (platform#18).
 const importContentMutation = "importContent"
 
-// playPartAction is the action a detail's Play button emits (ADR 0047). It
+// playPartAction is the action a detail's Play button emits (web#4). It
 // resolves server-side to a playback ticket and a Player surface rather than to
 // a screen, which is why it is an action name rather than a route.
 const playPartAction = "playPart"
@@ -170,7 +170,7 @@ const playPartAction = "playPart"
 const paramPartID = "partId"
 
 // setWatchedAction marks an item watched or unwatched by explicit request
-// (ADR 0046). The dispatch case has existed since playback state landed; until
+// (platform#26). The dispatch case has existed since playback state landed; until
 // the detail screen's tick emitted it, the only way to finish something was to
 // watch it to the end.
 const setWatchedAction = "setWatched"
@@ -185,19 +185,19 @@ type contentQueries interface {
 	// (roadmap M2.1). It is the first read on this surface that goes to the
 	// object graph rather than through a provider.
 	ListLibrary(context.Context, app.ListLibraryQuery) (app.ListLibraryResult, error)
-	// The library rules and their maintenance (ADR 0104). Reading and previewing
+	// The library rules and their maintenance (platform#60). Reading and previewing
 	// are what the settings panel is built from; the pass itself is triggered by
 	// an action, not by rendering.
 	ListLibraryRules(context.Context, app.ListLibraryRulesQuery) (app.ListLibraryRulesResult, error)
 	// GetLibraryDetail is one work, its tree and what a provider last said about
-	// it (ADR 0107) — the read that lets a library detail render with no
+	// it (platform#62) — the read that lets a library detail render with no
 	// provider call, which is what a screen over the object graph has to be able
 	// to do.
 	GetLibraryDetail(context.Context, app.GetLibraryDetailQuery) (app.GetLibraryDetailResult, error)
 	PreviewLibraryRule(context.Context, app.PreviewLibraryRuleQuery) (app.PreviewLibraryRuleResult, error)
 	ListModuleCatalogs(context.Context, app.ListModuleCatalogsQuery) (app.ListModuleCatalogsResult, error)
 	ListCatalogItems(context.Context, app.ListCatalogItemsQuery) (app.ListCatalogItemsResult, error)
-	// The cache-first browse reads (ADR 0052): the same two questions with a
+	// The cache-first browse reads (platform#30): the same two questions with a
 	// durable snapshot in front of them, and the provenance of the answer so the
 	// screen can say whether it is looking at a live source or the last thing
 	// one said. Home reads these; a drill-down that pages or narrows still asks
@@ -207,12 +207,12 @@ type contentQueries interface {
 	GetContentNode(context.Context, v1.GetContentNodeQuery) (v1.GetContentNodeResult, error)
 	PreviewContent(context.Context, app.PreviewContentQuery) (app.PreviewContentResult, error)
 	ModuleSettingsUI(context.Context, app.ModuleSettingsUIQuery) (app.ModuleSettingsUIResult, error)
-	// ListSettingsModules backs the settings index (ADR 0038). Without it the
+	// ListSettingsModules backs the settings index (sdk#4). Without it the
 	// host has to name one module by constant, which leaves every module that
 	// contributes a screen after the first with no way in.
 	ListSettingsModules(context.Context, app.ListSettingsModulesQuery) (app.ListSettingsModulesResult, error)
 	// ListInstalledExtensions and ListAvailableExtensions back the extensions
-	// screen (ADR 0081): the durable installed set, and what the trusted
+	// screen (platform#51): the durable installed set, and what the trusted
 	// repository offers to install. Available reaches the repository over the
 	// network, which is why the screen that reads it is opened on demand rather
 	// than folded into every settings render.
@@ -220,14 +220,14 @@ type contentQueries interface {
 	ListAvailableExtensions(context.Context, app.ListAvailableExtensionsQuery) ([]app.ExtensionCatalogueEntry, error)
 	// FirstPlayablePart backs the detail screen's Play affordance: a Work has no
 	// bytes of its own, so the emit-side has to look one level down for an item
-	// that does before it can offer Play at all (ADR 0036 — an affordance with
+	// that does before it can offer Play at all (platform#24 — an affordance with
 	// nothing behind it is the dead end this whole thread exists to remove).
 	FirstPlayablePart(context.Context, v1.Caller, v1.NodeID) (v1.Part, bool, error)
 	// GetCurrentUser answers "who am I" for the account panel. Every other user
 	// read takes the id of the user to read, which is useless to a screen that
 	// holds a session and wants to say "you".
 	GetCurrentUser(context.Context, app.GetCurrentUserQuery) (app.GetCurrentUserResult, error)
-	// The People panels (ADR 0069, roadmap M1.3). Every one of these was a
+	// The People panels (platform#44, roadmap M1.3). Every one of these was a
 	// complete application service whose only callers were tests; naming them
 	// here is the first half of the door, and the dispatch cases beside them are
 	// the second.
@@ -236,7 +236,7 @@ type contentQueries interface {
 	GetRolesForUser(context.Context, app.GetRolesForUserQuery) (app.GetRolesForUserResult, error)
 	GetEffectivePermissions(context.Context, app.GetEffectivePermissionsQuery) (app.GetEffectivePermissionsResult, error)
 	// GrantablePermissions is what a grantor may confer, narrowed to what they
-	// hold (ADR 0069). It is the offer side of the delegation rule and the
+	// hold (platform#44). It is the offer side of the delegation rule and the
 	// reason a create-account form can be honest about what it will grant.
 	GrantablePermissions(context.Context, app.GrantablePermissionsQuery) (app.GrantablePermissionsResult, error)
 	// ListNodeParts reads one item's releases. FirstPlayablePart answers the
@@ -244,51 +244,51 @@ type contentQueries interface {
 	// series' seasons to pick an episode; once the screen has picked one itself
 	// this is how it asks what that episode actually holds.
 	ListNodeParts(context.Context, app.ListNodePartsQuery) (app.ListNodePartsResult, error)
-	// GetPlaybackState backs Resume (ADR 0046): a detail screen has to know
+	// GetPlaybackState backs Resume (platform#26): a detail screen has to know
 	// whether this viewer already started this item before it can decide
 	// whether its primary action says Play or Resume.
 	GetPlaybackState(context.Context, v1.GetPlaybackStateQuery) (v1.GetPlaybackStateResult, error)
-	// ListInProgress backs the home's continue-watching rail (ADR 0046): the
+	// ListInProgress backs the home's continue-watching rail (platform#26): the
 	// items this viewer started and did not finish, most recently touched first.
 	ListInProgress(context.Context, v1.ListInProgressQuery) (v1.ListInProgressResult, error)
 	// ListPlaybackStates backs the watched marks on a season's episode rows — one
 	// batched read over the season's nodes rather than a query per row.
 	ListPlaybackStates(context.Context, v1.ListPlaybackStatesQuery) (v1.ListPlaybackStatesResult, error)
-	// ListWatchHistory backs the history screen (ADR 0103): everything this
+	// ListWatchHistory backs the history screen (platform#59): everything this
 	// viewer has watched, finished or not. Deliberately not on the SDK's
 	// ContentService — no module needs to read a person's viewing back, and the
-	// one list ADR 0103 is most emphatic is private should not be on the surface
+	// one list platform#59 is most emphatic is private should not be on the surface
 	// every installed extension holds.
 	ListWatchHistory(context.Context, app.ListWatchHistoryQuery) (app.ListWatchHistoryResult, error)
 
-	// The expert-mode reads (ADR 0058). Each authorises telemetry.read for
+	// The expert-mode reads (platform#36). Each authorises telemetry.read for
 	// itself, so a screen calling one cannot be reached without the grant even
 	// if the affordance leading to it were ever drawn by mistake.
 	QueryTelemetryLogs(context.Context, app.QueryTelemetryLogsQuery) (app.QueryTelemetryLogsResult, error)
 	ListTraces(context.Context, app.ListTracesQuery) (app.ListTracesResult, error)
 	ListMetrics(context.Context, app.ListMetricsQuery) (app.ListMetricsResult, error)
 	GetTrace(context.Context, app.GetTraceQuery) (app.GetTraceResult, error)
-	// The background-work reads (ADR 0017). Each authorises job.read for
+	// The background-work reads (platform#13). Each authorises job.read for
 	// itself, so the screens cannot be reached without the grant however the
 	// affordance was drawn.
 	ListJobs(context.Context, app.ListJobsQuery) (app.ListJobsResult, error)
 	GetJob(context.Context, app.GetJobQuery) (app.GetJobResult, error)
 	// ListSessions backs the Devices section: where this account is signed in,
-	// so a person can end a device they no longer have (ADR 0102).
+	// so a person can end a device they no longer have (platform#58).
 	ListSessions(context.Context, app.ListSessionsQuery) (app.ListSessionsResult, error)
-	// The configuration reads (ADR 0011, roadmap M4.4). Both authorise
+	// The configuration reads (platform#7, roadmap M4.4). Both authorise
 	// `config.read` for themselves. Pending is a separate query rather than a
 	// field on the active result because "nothing is waiting" is the ordinary
 	// answer and has to be sayable without an error.
 	GetActiveConfigVersion(context.Context, app.GetActiveConfigVersionQuery) (app.GetActiveConfigVersionResult, error)
 	GetPendingConfigVersion(context.Context, app.GetPendingConfigVersionQuery) (app.GetPendingConfigVersionResult, error)
-	// The resolution register (ADR 0119): what is wrong with this install, now.
+	// The resolution register (platform#74): what is wrong with this install, now.
 	ListIssues(context.Context, app.ListIssuesQuery) (app.ListIssuesResult, error)
 	// What the three configured background passes are actually running with.
 	//
 	// These take no caller, and naming them here rather than reading the stored
 	// payload is deliberate: each applies its own default for an unset field,
-	// falls back again for an unusable one, and the audit floor (ADR 0057) is
+	// falls back again for an unusable one, and the audit floor (platform#35) is
 	// applied after both. They are the definition of "what is in force", so a
 	// panel formatting the payload instead would show numbers the Platform is
 	// not using. The panel that calls them authorises `config.read` first.
@@ -302,9 +302,9 @@ type contentQueries interface {
 	// ExpertModeEnabled reads the caller's own preference. Separate from
 	// CallerCan because they answer different questions: one is authority, the
 	// other is taste, and collapsing them is how a toggle becomes an access
-	// control (ADR 0058).
+	// control (platform#36).
 	ExpertModeEnabled(context.Context, v1.Caller) bool
-	// HomeCompositionFor reads how this viewer arranged their home (ADR 0103) —
+	// HomeCompositionFor reads how this viewer arranged their home (platform#59) —
 	// which rows they hid and which they ordered. Like the toggle above it is
 	// taste rather than authority, and it cannot fail: an unreadable preference
 	// yields the server's default arrangement rather than an error, because a
@@ -313,13 +313,13 @@ type contentQueries interface {
 	HomeCompositionFor(context.Context, v1.Caller) app.HomeComposition
 
 	// LanguagePreferenceFor reads what this viewer wants to hear and read
-	// (ADR 0112), as the stored document. The bytes travel rather than a parsed
+	// (platform#67), as the stored document. The bytes travel rather than a parsed
 	// value because the type that understands them belongs to the playback
 	// transport, and an application service may not import one.
 	LanguagePreferenceFor(context.Context, v1.Caller) []byte
 
 	// PlaybackSources lists the candidate releases behind one item, ranked for
-	// the calling client (ADR 0116). It ranks and does not resolve: resolving
+	// the calling client (platform#71). It ranks and does not resolve: resolving
 	// every candidate to draw a list would spend a play's whole latency budget
 	// on a screen somebody may only be glancing at.
 	PlaybackSources(context.Context, app.PlaybackSourcesQuery) (app.PlaybackSourcesResult, error)
@@ -327,7 +327,7 @@ type contentQueries interface {
 
 // Service renders named screens. It holds the query surface the builders read
 // from, and an artwork rewriter that routes remote poster/backdrop URLs through
-// the Platform's artwork proxy (ADR 0030); it opens nothing of its own.
+// the Platform's artwork proxy (platform#20); it opens nothing of its own.
 type Service struct {
 	content contentQueries
 	artwork func(string) string
@@ -347,7 +347,7 @@ func NewService(a *app.Service, artwork func(string) string) *Service {
 	return &Service{content: a, artwork: artwork}
 }
 
-// art proxies a non-empty image URL through the artwork rewriter (ADR 0030),
+// art proxies a non-empty image URL through the artwork rewriter (platform#20),
 // passing an empty URL and a Service built without a rewriter through unchanged.
 func (s *Service) art(u string) string {
 	if u == "" || s.artwork == nil {

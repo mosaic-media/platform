@@ -38,7 +38,7 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 		username = "root"
 		password = "a strong bootstrap password"
 	)
-	// The full superuser set, as main.go seeds (ADR 0069). It used to be two
+	// The full superuser set, as main.go seeds (platform#44). It used to be two
 	// permissions, which stopped working once delegation was bounded by what
 	// the grantor holds: an account with only role.create could no longer mint
 	// a role carrying content.read, which is the escalation that check closes.
@@ -197,7 +197,7 @@ func TestBootstrapReconcilesTheSuperuserRole(t *testing.T) {
 //
 // The reconciliation above lives inside EnsureAdmin, which runs only when the
 // environment-variable bootstrap is configured. A server claimed through the
-// setup wizard (ADR 0098) never calls it, so its owner's authority froze at the
+// setup wizard (platform#54) never calls it, so its owner's authority froze at the
 // moment of claiming — and an action added by a later build would then be one
 // nobody on that install could ever hold, because the root of every grant did
 // not have it and cannot delegate what it lacks.

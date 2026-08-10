@@ -11,7 +11,7 @@
 // dialled.
 //
 // It lives here rather than in one proxy because there is now more than one:
-// the artwork proxy (ADR 0030) and the playback origin (ADR 0045) fetch
+// the artwork proxy (platform#20) and the playback origin (platform#25) fetch
 // third-party URLs on the same terms, and a second copy of security-critical
 // code is a second copy to get wrong.
 package netguard

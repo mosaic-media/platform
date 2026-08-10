@@ -34,7 +34,7 @@ type Handoff struct {
 	Lifecycle   *runtime.Lifecycle
 	Migrations  *runtime.MigrationTracker
 	ConfigStore contracts.ConfigStore
-	// UpgradeStore is where a request for a version waits (ADR 0129). Nil is a
+	// UpgradeStore is where a request for a version waits (platform#77). Nil is a
 	// build with no upgrade path, which reports nothing pending.
 	UpgradeStore contracts.UpgradeStore
 }
@@ -97,7 +97,7 @@ func (h *Handoff) handleMigrations(w http.ResponseWriter, _ *http.Request) {
 }
 
 // handleUpgrade reports what somebody asked for, which is the one remedy on the
-// resolution register the Platform cannot perform itself (ADR 0129).
+// resolution register the Platform cannot perform itself (platform#77).
 //
 // Always 200, including "nothing pending": the Supervisor polls this every few
 // seconds and a status code carrying meaning would make an absent request

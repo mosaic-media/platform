@@ -14,9 +14,9 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The consumer for the `subtitles` capability role (ADR 0117).
+// The consumer for the `subtitles` capability role (platform#72).
 //
-// **The role has been fillable since ADR 0037 and nothing ever asked it.** Two
+// **The role has been fillable since module-stremio-addons#1 and nothing ever asked it.** Two
 // modules implement it, the registry could resolve one *by name*, and no code
 // path anywhere knew a name to ask for — so the enumerator that would have made
 // it reachable did not exist either. That is the shape of the gap: not a missing
@@ -26,7 +26,7 @@ import (
 // difference from stream enrichment. A subtitle file is small, external and
 // perishable in the same way a debrid link is; resolving twenty of them into the
 // graph at import buys entries that have been decaying since before anyone
-// wanted them, which is the mistake [ADR 0049](0049) already names for streams.
+// wanted them, which is the mistake [platform#28](0049) already names for streams.
 
 // PlaybackSubtitlesQuery asks the installed subtitle sources what they have for
 // one item.
@@ -46,7 +46,7 @@ type ExternalSubtitle struct {
 	// distinction that made two entries tellable apart.
 	Language string
 	// URL is where the file is. It never reaches a client — the origin fetches
-	// it (ADR 0045: a module resolves, the Platform serves).
+	// it (platform#25: a module resolves, the Platform serves).
 	URL string
 	// ModuleID is who offered it, for telling two sources' answers apart.
 	ModuleID string
@@ -59,7 +59,7 @@ type PlaybackSubtitlesResult struct {
 }
 
 // PlaybackSubtitles asks every installed subtitles provider for this item
-// (ADR 0117).
+// (platform#72).
 //
 // **Best-effort by construction, exactly like stream enrichment.** Every failure
 // here logs and continues: a subtitle source that is down, unconfigured or
@@ -96,7 +96,7 @@ func (s *Service) PlaybackSubtitles(ctx context.Context, q PlaybackSubtitlesQuer
 	}
 
 	// The same shared identities stream enrichment uses, and for the same reason
-	// (ADR 0073): a subtitles provider is asked about content it did not source,
+	// (platform#46): a subtitles provider is asked about content it did not source,
 	// so it is handed a neutral external id rather than a native one it could
 	// not have.
 	identities := sharedIdentitiesOf(work)

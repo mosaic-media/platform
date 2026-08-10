@@ -12,7 +12,7 @@ import (
 )
 
 // The subset is the security property of the one payload an unauthenticated
-// party can enumerate (ADR 0101), and the pressure on it will always be to send
+// party can enumerate (platform#57), and the pressure on it will always be to send
 // the library instead — one line shorter, and it always works. These are what
 // say it did not.
 

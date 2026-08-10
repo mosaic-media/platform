@@ -34,13 +34,13 @@ func NewEngine(permissions contracts.PermissionStore) *Engine {
 // Authorize resolves the subject's roles and returns an allow Decision if any
 // granted role includes action as a permission; otherwise it denies.
 func (e *Engine) Authorize(ctx context.Context, subject Subject, action Action, _ Resource, _ PolicyContext) (Decision, error) {
-	// The system principal (ADR 0017): the Platform acting on its own
+	// The system principal (platform#13): the Platform acting on its own
 	// initiative, which holds every action because there is no grantor above
 	// it to have been given less by. It is checked first because it has no
 	// roles to resolve — there is no user row and there must not be one.
 	//
 	// This is the only unconditional allow in the engine, and it is the one
-	// ADR 0017 called "effectively unbounded authority (acceptable only
+	// platform#13 called "effectively unbounded authority (acceptable only
 	// because trust is established before the build)". The reason it is safe
 	// is not that the rule is narrow; it is that the *subject* is unforgeable,
 	// which is a property of how the flag is set rather than of this branch.

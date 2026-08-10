@@ -13,7 +13,7 @@ import (
 )
 
 // A segment directory is where one transcode writes its HLS segments and the
-// origin reads them back from (ADR 0109, ADR 0111).
+// origin reads them back from (platform#64, platform#66).
 //
 // It sits here rather than in the transport for the same reason the spool does:
 // the Secret Broker's boundary check is a static scan that forbids any transport

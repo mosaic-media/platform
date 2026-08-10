@@ -11,7 +11,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The selection rule (ADR 0074) is where "better artwork" actually happens, and
+// The selection rule (platform#47) is where "better artwork" actually happens, and
 // every way it can be wrong is silent: a worse image is still an image, so
 // nothing fails and nobody is told. These cover the rules the record states.
 
@@ -96,7 +96,7 @@ func TestMergeArtworkIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestMergeArtworkCapsCandidatesPerSlot covers the bound ADR 0074 names in the
+// TestMergeArtworkCapsCandidatesPerSlot covers the bound platform#47 names in the
 // design rather than leaving to be discovered. The document is read on every
 // list render, so an unbounded set makes every rail in the library pay for a
 // picker's completeness.
@@ -144,7 +144,7 @@ func TestMergeArtworkIsDeterministicAcrossSources(t *testing.T) {
 }
 
 // TestMergeArtworkSlotsWithNoFlatFieldStayReachable covers the shape choice in
-// ADR 0074: only four slots get a flat field, and everything else lives in the
+// platform#47: only four slots get a flat field, and everything else lives in the
 // candidate set rather than growing the struct a field per art type.
 func TestMergeArtworkSlotsWithNoFlatFieldStayReachable(t *testing.T) {
 	got := mergeArtwork(v1.Artwork{}, []v1.ArtworkCandidate{

@@ -9,14 +9,14 @@ import (
 	"time"
 )
 
-// The durable form of a probe (ADR 0050).
+// The durable form of a probe (platform#29).
 //
 // A probe describes the bytes. The bytes do not change, so probing the same
 // release twice is pure waste — and it was the expensive kind: with the
 // resolution cache in place, ffprobe against the remote URL became the largest
 // single cost between a click and a first frame.
 //
-// ADR 0050 says probe results live on the Part, and points at the technical
+// platform#29 says probe results live on the Part, and points at the technical
 // columns that were sitting empty waiting for them. **Those columns are not
 // enough**, and the record's own worked example is why: a release with four
 // audio tracks whose first is Hindi. `Part.AudioCodec` is one string; it cannot
@@ -153,13 +153,13 @@ func Decode(raw []byte) (MediaInfo, bool) {
 //
 // It is the codec of the track the *plan* would choose, not the first track in
 // the file, and the difference matters because that column feeds candidate
-// ranking (ADR 0048). Ranking asks "will this release need an audio encode for
+// ranking (platform#27). Ranking asks "will this release need an audio encode for
 // this client", and the only honest answer is about the track that would
 // actually be played — on the Hindi-first release, the first track's codec would
 // answer a question nobody asked.
 func SummaryAudioCodec(info MediaInfo) string {
 	// PreferredLanguages explicitly, and it stays install-wide on purpose now
-	// that language is a person's preference (ADR 0112). This column feeds
+	// that language is a person's preference (platform#67). This column feeds
 	// *candidate ranking*, which asks "will this release need an audio encode at
 	// all" — a coarse question one answer serves. Keying it per viewer is not
 	// possible anyway: it is one column on a Part that four people share, so it

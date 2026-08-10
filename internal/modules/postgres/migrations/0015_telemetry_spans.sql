@@ -1,4 +1,4 @@
--- Migration 0015 — Telemetry spans (ADR 0055, ADR 0058).
+-- Migration 0015 — Telemetry spans (platform#33, platform#36).
 --
 -- Logs say a thing happened; spans say how long it took and what it contained.
 -- That difference is the whole reason this table exists: "the page took nine
@@ -9,7 +9,7 @@
 -- Same shape as telemetry_logs on purpose — partitioned by day, BRIN on time,
 -- dropped rather than deleted — so one maintenance path serves both and there is
 -- one thing to understand rather than two. Spans are shorter-lived than logs
--- (ADR 0058: 72 hours against 14 days), which partitioning makes a matter of
+-- (platform#36: 72 hours against 14 days), which partitioning makes a matter of
 -- when the DROP runs rather than a different mechanism.
 
 CREATE TABLE IF NOT EXISTS telemetry_spans (
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS telemetry_spans (
     -- Empty otherwise. The categories are a Platform contract, so this is safe
     -- verbatim in a way a raw error message would not be.
     error_category text    NOT NULL DEFAULT '',
-    -- Already redacted at construction (ADR 0056), exactly as log fields are:
+    -- Already redacted at construction (platform#34), exactly as log fields are:
     -- a span attribute is not a second, laxer channel.
     attributes jsonb       NOT NULL DEFAULT '{}'
 ) PARTITION BY RANGE (time);

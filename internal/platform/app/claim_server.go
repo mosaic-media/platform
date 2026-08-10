@@ -16,7 +16,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Claiming an unclaimed server (ADR 0098).
+// Claiming an unclaimed server (platform#54).
 //
 // **This is the only write in the Platform that no caller authorises**, and the
 // only one that can be. Every command able to grant the first authority is
@@ -27,7 +27,7 @@ import (
 // What stands in for authorisation is emptiness: the claim refuses the moment
 // any user exists, and it re-checks inside the transaction so two people
 // arriving together produce one owner and one Conflict rather than two owners.
-// ADR 0098 accepts the threat this leaves — on a server reachable before
+// platform#54 accepts the threat this leaves — on a server reachable before
 // somebody sits down to set it up, the first party to find it becomes its
 // owner — and names the two mitigations that were deliberately not taken: a
 // console claim token, and a claim window that closes after start-up. Neither
@@ -48,7 +48,7 @@ import (
 // theatre that pushes people towards worse secrets.
 const minPasswordLength = 8
 
-// ClaimServerCommand is the whole of setup, submitted at once (ADR 0098).
+// ClaimServerCommand is the whole of setup, submitted at once (platform#54).
 //
 // Four steps' worth of fields arrive together because the wizard collects them
 // in the client's own form scope and submits once. That is not a shortcut: a
@@ -56,7 +56,7 @@ const minPasswordLength = 8
 // inside the tree for every step after the one that collected it.
 type ClaimServerCommand struct {
 	// ServerName is what the household calls this machine. It is written outside
-	// PostgreSQL (ADR 0098), so it survives the database being down.
+	// PostgreSQL (platform#54), so it survives the database being down.
 	ServerName string
 	// The owner account.
 	Username        string
@@ -69,7 +69,7 @@ type ClaimServerCommand struct {
 	DeviceID domain.DeviceID
 	// StreamSourceModuleID names the extension module the household chose as its
 	// source of streams, if it chose one. Optional: metadata and catalogs work
-	// on a fresh install with no credential at all (ADR 0072), so skipping this
+	// on a fresh install with no credential at all (module-cinemeta#1), so skipping this
 	// leaves a browsable Mosaic that cannot play, which is an honest state and a
 	// recoverable one.
 	//
@@ -252,7 +252,7 @@ func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (Clai
 
 		// The owner holds everything, because it is the root of every other
 		// grant: an authority withheld here could never be given to anyone
-		// (ADR 0069). This is the one role the boot-time reconciliation keeps
+		// (platform#44). This is the one role the boot-time reconciliation keeps
 		// current as the Platform gains actions; every role created after it is
 		// a snapshot and stays one.
 		perms := permissionsOf(SuperuserActions())
@@ -306,7 +306,7 @@ func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (Clai
 	return result, nil
 }
 
-// recordIdentity writes the server's name to the durable file (ADR 0098),
+// recordIdentity writes the server's name to the durable file (platform#54),
 // returning what was recorded and, if it failed, why.
 //
 // A Platform built without an identity store records nothing and says nothing:

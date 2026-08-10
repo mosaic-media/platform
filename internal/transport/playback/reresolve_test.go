@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// Invalidate-on-read (ADR 0049): a cached upstream address is perishable with no
+// Invalidate-on-read (platform#28): a cached upstream address is perishable with no
 // trustworthy expiry, so the answer to a dead one is to ask the source again
 // rather than to fail the play.
 
@@ -90,7 +90,7 @@ func TestADeadLinkIsReResolvedAndRetried(t *testing.T) {
 	}
 }
 
-// TestAWorkingLinkIsNeverReResolved is the cost bound. ADR 0049 rejects a
+// TestAWorkingLinkIsNeverReResolved is the cost bound. platform#28 rejects a
 // liveness pre-check because it spends a round trip on every play to catch a
 // rare failure; a re-resolve on the happy path would be the same mistake with
 // an extra network hop.

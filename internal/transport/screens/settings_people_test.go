@@ -18,8 +18,8 @@ import (
 // The People panels (roadmap M1.3). Every command behind them was complete and
 // reachable by nobody; these assert the doors, and in particular the two
 // properties that would be quietly wrong: the offer is bounded by what the
-// caller holds (ADR 0069), and an affordance that would be refused is not drawn
-// at all (ADR 0036).
+// caller holds (platform#44), and an affordance that would be refused is not drawn
+// at all (platform#24).
 
 func peopleService(users ...domain.User) *fakeQueries {
 	fake := &fakeQueries{
@@ -92,7 +92,7 @@ func TestSomebodyWhoCannotCreateAccountsIsNotOfferedTo(t *testing.T) {
 	}
 }
 
-// ADR 0069's offer side: the form says what it will actually grant, computed
+// platform#44's offer side: the form says what it will actually grant, computed
 // from the grantor's own authority rather than from the preset.
 func TestTheNewAccountFormNamesWhatItWillGrant(t *testing.T) {
 	fake := peopleService(admin())
@@ -247,7 +247,7 @@ func writeStrings(v any, b *strings.Builder) {
 	}
 }
 
-// An affordance a caller could not exercise is not drawn (ADR 0036).
+// An affordance a caller could not exercise is not drawn (platform#24).
 //
 // The detail screen offered "Add to library" to everybody, because everybody
 // was one account holding everything. The first ordinary account pressed it and

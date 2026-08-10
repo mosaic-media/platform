@@ -118,7 +118,7 @@ func scanSession(row pgx.Row) (domain.Session, error) {
 	return session, nil
 }
 
-// Touch records that the session was used, moving LastSeenAt (ADR 0102). Idle
+// Touch records that the session was used, moving LastSeenAt (platform#58). Idle
 // expiry is measured from that column, and it was written at issue and never
 // again.
 func (s *sessionStore) Touch(ctx context.Context, id domain.SessionID, at time.Time) (domain.Session, error) {
@@ -136,7 +136,7 @@ func (s *sessionStore) Touch(ctx context.Context, id domain.SessionID, at time.T
 }
 
 // ListForUser returns a user's live sessions, newest first — the device list
-// (ADR 0102). Revoked and expired ones are excluded because a list of devices
+// (platform#58). Revoked and expired ones are excluded because a list of devices
 // somebody can no longer be signed in on is a list of things they cannot act
 // on.
 func (s *sessionStore) ListForUser(ctx context.Context, userID domain.UserID, now time.Time) ([]domain.Session, error) {

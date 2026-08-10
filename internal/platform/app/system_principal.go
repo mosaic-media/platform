@@ -14,7 +14,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The system principal — the case ADR 0017 named, reserved, and deliberately
+// The system principal — the case platform#13 named, reserved, and deliberately
 // did not build.
 //
 // Background work has no session to forward. A scheduled sweep is not something
@@ -23,7 +23,7 @@ import (
 // dishonest options: run background work as whichever administrator happened to
 // be seeded (attributing the install's own maintenance to a person), or give
 // the runner a back door around the boundary (a code path that mutates state
-// without authorising, which is the thing ADR 0066 exists to make impossible).
+// without authorising, which is the thing platform#41 exists to make impossible).
 //
 // This is the third. The system principal is a **caller like any other**: it
 // carries a session reference, it goes through `enter`, it is authorised by the
@@ -31,8 +31,8 @@ import (
 // differs is only what the reference resolves to and what the engine says about
 // it.
 //
-// Its authority is unbounded, which ADR 0017 says plainly and this does not
-// soften. That is acceptable on ADR 0007's terms — the code that runs as it is
+// Its authority is unbounded, which platform#13 says plainly and this does not
+// soften. That is acceptable on platform#4's terms — the code that runs as it is
 // compiled into this binary and trusted before the build — and it is why the
 // reference is not a constant.
 
@@ -69,7 +69,7 @@ func newSystemSessionRef() string {
 	return "system:" + hex.EncodeToString(buf)
 }
 
-// SystemCaller returns the principal background work acts as (ADR 0017).
+// SystemCaller returns the principal background work acts as (platform#13).
 //
 // It is exported because the composition root has to hand it to the jobs
 // runner, and a job handler has to forward it to whatever service it calls —

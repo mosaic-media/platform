@@ -64,7 +64,7 @@ services:
       MOSAIC_POSTGRES_DSN: "postgres://mosaic:mosaic@postgres:5432/mosaic?sslmode=disable"
       MOSAIC_API_ADDR: ":8081"
       MOSAIC_HEALTH_ADDR: ":8080"
-      # Where this install writes its name (ADR 0098). In a volume rather than
+      # Where this install writes its name (platform#54). In a volume rather than
       # on the bind mount, so a claimed dev stack keeps its identity across a
       # rebuild and `docker compose down -v` returns it to unclaimed — which is
       # the state the setup wizard is reached from.
@@ -73,7 +73,7 @@ services:
       # which meant a fresh dev stack was already claimed and the setup wizard
       # was unreachable from it — the one screen every real install starts on
       # was the one screen nobody here could see. First boot now shows the
-      # doorway, exactly as a household's would (ADR 0098). The env-var
+      # doorway, exactly as a household's would (platform#54). The env-var
       # bootstrap is untouched and still there for an automated deployment that
       # never puts a human in front of it, and it is now reachable from `.env`
       # or the shell rather than by editing this file.
@@ -90,7 +90,7 @@ services:
       # do; the old one keeps working if it is ever remembered.
       MOSAIC_BOOTSTRAP_ADMIN_USERNAME: "${MOSAIC_BOOTSTRAP_ADMIN_USERNAME:-}"
       MOSAIC_BOOTSTRAP_ADMIN_PASSWORD: "${MOSAIC_BOOTSTRAP_ADMIN_PASSWORD:-}"
-      # The TMDB read token (ADR 0072), from ./.env or your shell — never a
+      # The TMDB read token (module-cinemeta#1), from ./.env or your shell — never a
       # GitHub secret, which reaches only CI, not a local build. Empty is fine.
       TMDB_RAC: "${TMDB_RAC:-}"
     # Link the TMDB token into this dev build with -X, the same way the release
@@ -123,7 +123,7 @@ services:
       # This asks the Supervisor handoff on :8080 rather than the client API,
       # which is what that surface is for: readiness is an operational question
       # and the handoff answers it in one GET. It used to POST a GraphQL
-      # introspection query at :8081; ADR 0061 removed that endpoint, and a
+      # introspection query at :8081; platform#37 removed that endpoint, and a
       # Connect service has no equivalent "are you there" call that does not
       # also need credentials.
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/readyz >/dev/null"]
@@ -212,7 +212,7 @@ volumes:
   mosaic-dev-pgdata18:
   mosaic-dev-gomod:
   mosaic-dev-gobuild:
-  # This install's identity (ADR 0098), deliberately outside the database it is
+  # This install's identity (platform#54), deliberately outside the database it is
   # insurance against.
   mosaic-dev-state:
   mosaic-dev-npm:

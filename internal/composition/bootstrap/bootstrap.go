@@ -8,7 +8,7 @@
 // through the store contracts directly rather than through a command, because
 // there is no authenticated caller yet to authorise the very first grant.
 //
-// This is a deliberate bridge (ADR 0018). The eventual owner of first-admin
+// This is a deliberate bridge (platform#14). The eventual owner of first-admin
 // setup is Supervisor onboarding; EnsureAdmin is the seam that flow will drive,
 // with a credential channel better than a plaintext env var. Expect this to be
 // superseded, not to live here forever.
@@ -22,7 +22,7 @@ import (
 )
 
 // AdminSeed is the first user to provision: its login and the permissions its
-// Superuser role carries (ADR 0069). Username and Password are grouped
+// Superuser role carries (platform#44). Username and Password are grouped
 // into a named pair so the two same-typed strings cannot be transposed at the
 // call site — a swap that would otherwise create the admin with the password as
 // its username, and vice versa, without a compile error.
@@ -35,7 +35,7 @@ type AdminSeed struct {
 // superuserRoleName is what the first user's role is called. It is the string
 // app.RoleNameSuperuser, repeated here rather than imported: this package is
 // composition wiring that writes through store contracts, and it has never
-// depended on the application services (ADR 0018). One constant is a smaller
+// depended on the application services (platform#14). One constant is a smaller
 // price than that dependency.
 const superuserRoleName = "Superuser"
 
@@ -43,7 +43,7 @@ const superuserRoleName = "Superuser"
 // Superuser role carrying seed.Permissions, and a grant binding them — unless a
 // user with the username already exists.
 //
-// The account it creates is the superuser (ADR 0069): the one privileged
+// The account it creates is the superuser (platform#44): the one privileged
 // account established out-of-band, from which all other authority is
 // allocated. Every later account is created *by* this one and starts with
 // less. It is idempotent: an existing

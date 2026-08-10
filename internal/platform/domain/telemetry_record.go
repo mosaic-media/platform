@@ -6,13 +6,13 @@ package domain
 
 import "time"
 
-// The read models for stored telemetry (ADR 0058). These are what the
+// The read models for stored telemetry (platform#36). These are what the
 // expert-mode surface renders; they are deliberately separate from the write
 // side in internal/platform/telemetry, which is about producing records and
 // must stay free of anything that reads them back.
 //
 // Everything here is already redacted. Values were classified at construction
-// and dropped or digested before storage (ADR 0056), so a reader applies no
+// and dropped or digested before storage (platform#34), so a reader applies no
 // masking of its own — which is what makes rendering these into a browser
 // defensible rather than alarming.
 
@@ -57,7 +57,7 @@ type TelemetrySpanRecord struct {
 // TelemetryLogFilter narrows a log query.
 //
 // Every field is optional and they combine with AND. There is deliberately no
-// free-form query language (ADR 0058): filters and a trace lookup are the whole
+// free-form query language (platform#36): filters and a trace lookup are the whole
 // surface, because building a query language is how a diagnostics screen
 // becomes a year of work, and anyone who needs one should export to a tool that
 // already has it.

@@ -4,7 +4,7 @@
 
 //go:build !mosaicdev
 
-// The shipped half of the module-repository override (ADR 0099): there is no
+// The shipped half of the module-repository override (platform#55): there is no
 // override. This file is what an ordinary `go build` compiles, and it is the
 // whole of the mechanism in a release — two functions that read nothing and
 // decide nothing.
@@ -29,7 +29,7 @@ func devRepositoryOverride() (devOverride, bool, error) {
 
 // officialFetcher returns the guarded fetcher — the only one this build has.
 // Module downloads go through netguard's dial guard like every other outbound
-// fetch the Platform makes on a user's behalf (ADR 0080).
+// fetch the Platform makes on a user's behalf (platform#50).
 func officialFetcher() Fetcher {
 	return NewHTTPFetcher()
 }

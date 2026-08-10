@@ -15,7 +15,7 @@ import (
 )
 
 // invocations is the table of live module invocations — the mechanism that
-// makes serializing a Caller safe (ADR 0064).
+// makes serializing a Caller safe (platform#39).
 //
 // # The problem it solves
 //
@@ -27,7 +27,7 @@ import (
 //
 // # Why a handle and not a token
 //
-// ADR 0064 rejected a signed short-TTL bearer token, and the reason is worth
+// platform#39 rejected a signed short-TTL bearer token, and the reason is worth
 // keeping next to the code: **a TTL is a window in which a retained value still
 // works**, and retention is the entire risk. A five-minute token means five
 // minutes during which a module that kept it can act as the user who invoked
@@ -41,7 +41,7 @@ import (
 //
 // It is not authorisation. Resolving a handle yields the Caller the Platform
 // minted it for, and the application service then authenticates and authorises
-// that Caller exactly as it would for any other request (ADR 0017). A live
+// that Caller exactly as it would for any other request (platform#13). A live
 // handle grants no more than the session behind it; it only says *which*
 // session, and only for as long as the invocation lasts.
 type invocations struct {

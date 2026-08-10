@@ -28,7 +28,7 @@ import (
 )
 
 // inputDebounce is the server-side coalescing window for search-as-you-type
-// (contracts#5, preserving ADR 0032's backstop). Rapid SubmitInput intents within
+// (contracts#5, preserving platform#22's backstop). Rapid SubmitInput intents within
 // this window collapse to a single render for the latest text, so a fast typist
 // cannot fan out a request per keystroke to the upstream addons. It sits behind
 // the client's own ~220ms debounce and is a touch shorter so it never adds
@@ -40,11 +40,11 @@ const inputDebounce = 150 * time.Millisecond
 // call's context; it renders against a fresh bounded context instead.
 const debounceRenderTimeout = 15 * time.Second
 
-// contentRegion is the named slot the current screen renders into (ADR 0031).
+// contentRegion is the named slot the current screen renders into (platform#21).
 // A navigate/input replaces this region; the shell frame around it persists.
 const contentRegion = "content"
 
-// playerRegion is where a playback surface is pushed (ADR 0047). It is a region
+// playerRegion is where a playback surface is pushed (web#4). It is a region
 // of its own rather than a replacement for the content region: a player sits
 // *over* the current context, and the screen underneath must still be there when
 // it closes.
@@ -53,7 +53,7 @@ const playerRegion = "player"
 // The two payloads a client is handed before it draws anything (contracts#4) — the
 // component library and the design tokens — live in the vocabulary package,
 // because the pre-session bootstrap serves the same two to a client that has no
-// session to be pushed to (ADR 0101). These name the Events this lane carries
+// session to be pushed to (platform#57). These name the Events this lane carries
 // them on.
 
 // definitionsEvent names the Event that carries the definition library. A client
@@ -81,7 +81,7 @@ type Handler struct {
 var _ sessionv1connect.SessionServiceHandler = (*Handler)(nil)
 
 // NewHandler wires the session transport over the application services and the
-// artwork rewriter (ADR 0030), the same inputs the screen emit-side takes.
+// artwork rewriter (platform#20), the same inputs the screen emit-side takes.
 func NewHandler(svc *app.Service, artwork func(string) string, tickets TicketMinter, prober *playback.Prober) *Handler {
 	h := &Handler{
 		mgr:     NewManager(),
@@ -91,7 +91,7 @@ func NewHandler(svc *app.Service, artwork func(string) string, tickets TicketMin
 		prober:  prober,
 	}
 	// A reaped or shut-down session flushes whatever position it was holding
-	// (ADR 0046). Coalescing is what makes this necessary: without it, closing
+	// (platform#26). Coalescing is what makes this necessary: without it, closing
 	// the lid on a paused film would lose the last few seconds of where you got
 	// to, which is the only part of a position anyone notices.
 	h.mgr.OnRetire(h.flushProgress)
@@ -99,7 +99,7 @@ func NewHandler(svc *app.Service, artwork func(string) string, tickets TicketMin
 }
 
 // TicketMinter seals a resolved upstream location into the opaque ticket a
-// client fetches bytes through (ADR 0045). It is an interface here so the
+// client fetches bytes through (platform#25). It is an interface here so the
 // session transport does not depend on the playback transport: both are
 // transports, and one importing the other would be the wrong direction.
 type TicketMinter interface {
@@ -109,7 +109,7 @@ type TicketMinter interface {
 // Manager exposes the session store for lifecycle wiring (reaper, shutdown).
 func (h *Handler) Manager() *Manager { return h.mgr }
 
-// bind resolves the credential a call presented to its live session (ADR 0102).
+// bind resolves the credential a call presented to its live session (platform#58).
 //
 // This is where the transport authenticates. Every call on this service carries
 // an access token, and until it is resolved there is nothing to key live state
@@ -141,7 +141,7 @@ func (h *Handler) bind(ctx context.Context, credential string) (*liveSession, er
 }
 
 // Attach (re)binds a caller to a session and, if a screen is named, re-asserts
-// it and re-renders the content — the reconnect re-declaration ADR 0032 did over
+// it and re-renders the content — the reconnect re-declaration platform#22 did over
 // the socket, now an explicit intent (contracts#5). With no screen it just ensures
 // the session exists.
 func (h *Handler) Attach(ctx context.Context, req *connect.Request[sessionv1.AttachRequest]) (*connect.Response[sessionv1.Ack], error) {
@@ -204,7 +204,7 @@ func (h *Handler) Navigate(ctx context.Context, req *connect.Request[sessionv1.N
 	return connect.NewResponse(&sessionv1.Ack{}), nil
 }
 
-// Invoke runs a named action (an SDUI Action, ADR 0029) and pushes its outcome.
+// Invoke runs a named action (an SDUI Action, platform#19) and pushes its outcome.
 // A malformed intent — an empty session or an unknown action — fails as a
 // Connect error. A domain failure of a known action (an import that could not
 // source, say) is a user-facing outcome, so it is surfaced as a danger toast on
@@ -293,7 +293,7 @@ func (h *Handler) Subscribe(ctx context.Context, req *connect.Request[sessionv1.
 }
 
 // pushShell renders the app shell for the current route and enqueues it
-// (ADR 0031).
+// (platform#21).
 func (h *Handler) pushShell(ctx context.Context, s *liveSession) {
 	screen := s.currentRoute().screen
 	s.setShellChrome(screen)
@@ -312,7 +312,7 @@ func (h *Handler) pushContent(ctx context.Context, s *liveSession) {
 }
 
 // pushRender renders a screen and replaces the content region with it, or an
-// error node if the render fails (ADR 0029's error surface, unchanged).
+// error node if the render fails (platform#19's error surface, unchanged).
 func (h *Handler) pushRender(ctx context.Context, s *liveSession, screen string, params map[string]any) {
 	// The frame the app wears is a property of the screen being shown, and the
 	// two sides of Mosaic wear different ones. Re-push it when the side changes
@@ -326,11 +326,11 @@ func (h *Handler) pushRender(ctx context.Context, s *liveSession, screen string,
 	}
 
 	// What this client can decode, for the screens that describe a release
-	// rather than play one (ADR 0049). Set here because this is where the live
+	// rather than play one (platform#28). Set here because this is where the live
 	// session is in hand; every screen that does not want it ignores it.
 	ctx = screens.WithClientCodecs(ctx, s.clientProfile().codecs())
 	// What the render learns about its sources comes back beside the tree
-	// (ADR 0052): whether it was built from stored answers, how old they are,
+	// (platform#30): whether it was built from stored answers, how old they are,
 	// and which sources did not answer. Nothing outside the source-backed
 	// screens writes into it.
 	ctx, report := screens.WithReport(ctx)
@@ -458,7 +458,7 @@ func tokensMsg() *sessionv1.ServerMessage {
 // with. Confirming and re-rendering would put an Unauthenticated error into the
 // content region of a screen the client is about to replace with the doorway —
 // a picture of a failure pushed over a success, which is precisely the shape
-// ADR 0102's first defect had.
+// platform#58's first defect had.
 func silentAction(action string) bool {
 	return action == "reportProgress" || action == "recordImpression" || action == "signOut"
 }
@@ -504,7 +504,7 @@ func decodeParams(b []byte) map[string]any {
 }
 
 // errorNode is the ErrorState UINode a failed render puts in the content region
-// (ADR 0029's error surface).
+// (platform#19's error surface).
 func errorNode(message string) sdui.Node {
 	return ui.Component("ErrorState",
 		ui.Prop("category", "Unavailable"), ui.Prop("message", message)).Build()

@@ -15,7 +15,7 @@ import (
 
 // The event envelope has carried CorrelationID and CausationID since it was
 // written, with a comment saying they were "empty until request-scoped
-// propagation exists". These tests are that propagation arriving (ADR 0054):
+// propagation exists". These tests are that propagation arriving (platform#32):
 // the correlation id is the trace id, so an outbox row and the log lines
 // around it share one key with no second identifier invented to get there.
 

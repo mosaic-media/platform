@@ -17,7 +17,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
-// The queryable half of the dual sink (ADR 0058), against a real engine.
+// The queryable half of the dual sink (platform#36), against a real engine.
 // Partitioning, BRIN indexes, CopyFrom and DROP-based retention are all things
 // that either work in PostgreSQL or do not; a fake would only prove the test
 // agrees with itself.
@@ -291,7 +291,7 @@ func TestSpanStoreWritesAWaterfall(t *testing.T) {
 	}
 	// The outermost span here is NOT parentless, and that is the point: an edge
 	// continues the caller's trace rather than starting a new one, so the RPC
-	// span's parent is the client's span (ADR 0054). A parentless root would
+	// span's parent is the client's span (platform#32). A parentless root would
 	// mean the Shell's half of the trace had been thrown away at the wire.
 	if got["Invoke"].parent != tc.SpanIDString() {
 		t.Fatalf("the entry span should hang off the caller's span %q, got %q",

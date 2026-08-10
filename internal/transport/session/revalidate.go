@@ -14,7 +14,7 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/screens"
 )
 
-// Cache-first rendering's push half (ADR 0052).
+// Cache-first rendering's push half (platform#30).
 //
 // A source-backed screen is served from a durable snapshot and revalidated
 // behind it; the live result arrives here, as a `RegionUpdate` on the push lane.
@@ -71,9 +71,9 @@ func (h *Handler) applyReport(ctx context.Context, s *liveSession, rep *screens.
 // revalidate re-renders the current route with every source-backed read forced
 // live, and pushes the result into the content region.
 //
-// It runs **in the requesting session's context** (ADR 0052): there is a real
+// It runs **in the requesting session's context** (platform#30): there is a real
 // caller behind it, so it needs no system principal and every read still
-// authorises as the user who caused it. ADR 0017's reserved gap stays reserved.
+// authorises as the user who caused it. platform#13's reserved gap stays reserved.
 func (h *Handler) revalidate(ctx context.Context, s *liveSession, r route) {
 	if !s.beginRevalidation() {
 		// One at a time per session. Without this, a viewer tapping between two

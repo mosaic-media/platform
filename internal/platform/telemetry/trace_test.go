@@ -28,7 +28,7 @@ func TestTraceparentRoundTrips(t *testing.T) {
 
 // TestParseTraceparentRejectsMalformedInput matters more than the happy path:
 // the header is attacker-controlled, so anything not exactly right must be
-// discarded outright rather than repaired or partially accepted (ADR 0054).
+// discarded outright rather than repaired or partially accepted (platform#32).
 func TestParseTraceparentRejectsMalformedInput(t *testing.T) {
 	cases := map[string]string{
 		"empty":            "",
@@ -129,7 +129,7 @@ func TestStartRequestBindsTheTraceToTheLogger(t *testing.T) {
 	}
 }
 
-// TestUnsampledTraceStillCarriesItsID is ADR 0054's sampling rule: a sampling
+// TestUnsampledTraceStillCarriesItsID is platform#32's sampling rule: a sampling
 // decision governs whether spans are recorded, never whether the id exists —
 // otherwise an unsampled failure is unjoinable to its own logs.
 func TestUnsampledTraceStillCarriesItsID(t *testing.T) {

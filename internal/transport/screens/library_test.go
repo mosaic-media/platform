@@ -165,7 +165,7 @@ func TestTheLibraryScreenWhenThereIsNothingInIt(t *testing.T) {
 		t.Errorf("the empty library said: %s", text)
 	}
 	// The empty state leads somewhere. An empty state with nothing to press is
-	// the dead end ADR 0036 exists to remove, and the library's answer to "how
+	// the dead end platform#24 exists to remove, and the library's answer to "how
 	// do I fill this" is the rules screen.
 	if _, ok := findButton(node, "Library rules"); !ok {
 		t.Error("the empty library does not offer the rules that would fill it")
@@ -226,7 +226,7 @@ func TestLibraryCountLabel(t *testing.T) {
 	}
 }
 
-// A long-running series is read one season at a time (ADR 0107), and the screen
+// A long-running series is read one season at a time (platform#62), and the screen
 // must still say what the *series* is rather than what the read was.
 //
 // This is the defect the worst case in a real library exposed: a programme with

@@ -40,7 +40,7 @@ type PermissionStore interface {
 	FindRoleByName(ctx context.Context, name string) (domain.Role, error)
 	// FindRole returns the role with the given id, or NotFound.
 	//
-	// It exists for the delegation check (ADR 0069): granting a role must be
+	// It exists for the delegation check (platform#44): granting a role must be
 	// bounded by what the grantor holds, and that cannot be decided without
 	// seeing what the role carries.
 	FindRole(ctx context.Context, roleID domain.RoleID) (domain.Role, error)

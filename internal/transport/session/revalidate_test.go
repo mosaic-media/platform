@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// The standing-notice bookkeeping (ADR 0052).
+// The standing-notice bookkeeping (platform#30).
 //
 // A source that is down fails on every render, and a source that recovers stops
 // failing without announcing it. What the client is told has to be derived from

@@ -17,11 +17,11 @@ import (
 // Supervised owns a module process across its whole life: it launches it,
 // watches whether it is still answering, restarts it with backoff when it is
 // not, and gives up on a module that will not stay up — reporting a degraded
-// capability rather than taking the Platform down with it (ADR 0064).
+// capability rather than taking the Platform down with it (platform#39).
 //
 // # Why this owns the process and not the Supervisor
 //
-// ADR 0064 puts runtime supervision in the Platform for two reasons. A module
+// platform#39 puts runtime supervision in the Platform for two reasons. A module
 // crash must be a **degraded capability, not a Generation event** — routing a
 // restart through the Supervisor would make a wedged third-party process a
 // host-lifecycle concern, which is the coupling the tier split exists to break.
@@ -42,10 +42,10 @@ import (
 // # What a degraded capability looks like
 //
 // A call made while the module is down or disabled returns Unavailable, which is
-// exactly how [ADR 0035](0035) and [ADR 0036](0036) expect an absent capability
+// exactly how [platform#23](0035) and [platform#24](0036) expect an absent capability
 // to read: the affordance that depends on it degrades, and nothing crashes.
 // Runtime absence is a degraded state; composition-time absence stays fatal, and
-// that check ran before the serve loop (ADR 0063).
+// that check ran before the serve loop (platform#38).
 type Supervised struct {
 	cfg    Config
 	policy RestartPolicy
@@ -99,7 +99,7 @@ func (s State) String() string {
 	}
 }
 
-// RestartPolicy is the crash-loop policy ADR 0064 left open (backoff ceiling,
+// RestartPolicy is the crash-loop policy platform#39 left open (backoff ceiling,
 // auto-disable, how an admin is told). The defaults are deliberately
 // conservative: a module that crashes should come back quickly the first time
 // and slowly the tenth, and one that never stays up should stop consuming
@@ -147,7 +147,7 @@ func DefaultRestartPolicy() RestartPolicy {
 // cannot start even once is more likely misconfigured than crash-looping, and
 // the caller should see that plainly rather than have it buried in a backoff.
 // Re-acquiring a module that will not start at all — re-download, re-verify — is
-// the extension-management layer's job (ADR 0079), not this monitor's.
+// the extension-management layer's job (platform#49), not this monitor's.
 func Supervise(cfg Config, policy RestartPolicy, tel v1.Telemetry) (*Supervised, error) {
 	m, err := Launch(cfg)
 	if err != nil {
@@ -311,7 +311,7 @@ func (s *Supervised) backoffFor(failures int) time.Duration {
 func (s *Supervised) now() time.Time { return time.Now() }
 
 // emit reports a lifecycle event through telemetry. It is how an admin is told,
-// which is the third of ADR 0064's open crash-loop questions: a module going
+// which is the third of platform#39's open crash-loop questions: a module going
 // down and coming back is Warn, a module being disabled is Error, and both
 // carry the module id so a reader knows which one.
 func (s *Supervised) emit(_ v1.RedactionClass, isError bool, msg string, fields ...v1.Field) {

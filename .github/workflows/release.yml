@@ -1,7 +1,7 @@
 name: release
 
 # Builds and publishes the Platform binary for every supported target on a
-# version tag (ADR 0063, ADR 0080). Installation is downloading this binary —
+# version tag (platform#38, platform#50). Installation is downloading this binary —
 # in a container or on bare metal, Linux, macOS or Windows — so this is the one
 # thing every deployment topology consumes.
 #
@@ -10,7 +10,7 @@ name: release
 # them, and a thin container image built from the same linux binaries rather
 # than a second build.
 #
-# What is deliberately not here yet: **signing** (ADR 0065 — the release binary
+# What is deliberately not here yet: **signing** (platform#40 — the release binary
 # and the checksums should be signed by Mosaic's key before the Supervisor
 # verifies them, and that waits on real key custody), and the **Supervisor**
 # that downloads and activates a release, which does not exist. A user can
@@ -33,7 +33,7 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  # A release must be pre-proven (ADR 0063). This runs the whole container gate —
+  # A release must be pre-proven (platform#38). This runs the whole container gate —
   # license headers, gofmt, vet, build and the tests against a real PostgreSQL —
   # the same command a contributor runs, so a tag cannot publish something that
   # only passed the lighter push gate.
@@ -62,9 +62,9 @@ jobs:
           go-version-file: go.mod
 
       # CGO off, so a target cross-compiles from this one runner rather than
-      # needing a C toolchain per platform — the property ADR 0065 and ADR 0080
+      # needing a C toolchain per platform — the property platform#40 and platform#50
       # depend on for the arm64-NAS install to stay a loop and not a build farm.
-      # The TMDB read access token is linked in here and nowhere else (ADR 0072):
+      # The TMDB read access token is linked in here and nowhere else (module-cinemeta#1):
       # only the workflow that links cmd/mosaic-platform can apply it, and it is
       # optional — an unset secret links an empty token and Cinemeta remains the
       # zero-configuration floor. A `-X` to a symbol that no longer resolves is
@@ -133,9 +133,9 @@ jobs:
 
       # A thin image built FROM the binaries this workflow already produced, for
       # both Linux architectures — a packaging artefact, not a second build, so a
-      # container deployment and a native one run identical bytes (ADR 0080). The
+      # container deployment and a native one run identical bytes (platform#50). The
       # image bundles ffmpeg because the Platform shells out to ffprobe at
-      # runtime (ADR 0050); a bare-metal user installs it themselves, and this is
+      # runtime (platform#29); a bare-metal user installs it themselves, and this is
       # the difference the image papers over.
       - name: Build and push the image
         uses: docker/build-push-action@v6

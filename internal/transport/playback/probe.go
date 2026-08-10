@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// Probing (ADR 0050). What a release *is* cannot be read off its name: the same
+// Probing (platform#29). What a release *is* cannot be read off its name: the same
 // fact lives in a different field per addon, a release title lies, and the
 // container hint has already been found hiding in a query parameter. ffprobe
 // asks the bytes instead — and it range-requests the header rather than

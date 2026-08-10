@@ -17,7 +17,7 @@ import (
 // into it and reads it back whole — so a field the SDK adds costs no migration.
 // That is the same bet `attributes` and `external_ids` already take, made here
 // for a document the Platform *does* interpret, which is why it is a Platform
-// store rather than a module one (ADR 0107).
+// store rather than a module one (platform#62).
 type NodeMetadata struct {
 	NodeID v1.NodeID
 	// Document is the marshalled descriptive metadata.
@@ -32,7 +32,7 @@ type NodeMetadata struct {
 }
 
 // NodeMetadataStore persists the descriptive metadata of materialised content
-// (ADR 0107).
+// (platform#62).
 //
 // It is a cache in the sense that it can be rebuilt from its provider, and
 // durable state in the sense that a library detail renders from it with no

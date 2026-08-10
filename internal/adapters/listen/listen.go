@@ -20,7 +20,7 @@ import (
 // TCP.
 //
 // Both of the Platform's listeners are sockets in the shipped install, so the
-// Supervisor is the only way to reach either (ADR 0120). One setting decides
+// Supervisor is the only way to reach either (platform#75). One setting decides
 // the transport and the address together, rather than an address beside a mode
 // flag that can contradict it.
 func On(addr string) (net.Listener, error) {
@@ -43,7 +43,7 @@ func On(addr string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The socket's own mode is the access control ADR 0120 rests on. Set
+	// The socket's own mode is the access control platform#75 rests on. Set
 	// after binding, because the umask applies to the bind and would
 	// otherwise decide this.
 	if err := os.Chmod(addr, 0o600); err != nil {
@@ -56,7 +56,7 @@ func On(addr string) (net.Listener, error) {
 // IsSocket reports whether an address names a Unix socket rather than a
 // host:port. It is exported because callers need the same answer for reasons
 // beyond binding — whether a forwarded header may be believed turns on it
-// (ADR 0120), and asking the question twice with two rules is how the two
+// (platform#75), and asking the question twice with two rules is how the two
 // answers come to disagree.
 func IsSocket(addr string) bool { return strings.HasPrefix(addr, "/") }
 

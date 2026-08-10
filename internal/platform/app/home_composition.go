@@ -13,7 +13,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Home composition, per user (ADR 0103).
+// Home composition, per user (platform#59).
 //
 // The library is one shared object graph and everything about how a person
 // experiences it is theirs alone. Playback position was the first content state
@@ -21,7 +21,7 @@ import (
 // state that does.
 //
 // It is a preference and not a scope, and the distinction is the one
-// ADR 0067 warns is a defect in opposite directions: a preference that gates is
+// platform#42 warns is a defect in opposite directions: a preference that gates is
 // unenforceable, and a gate that is a preference is a security hole. Hiding a
 // row is taste. The row stays reachable by search, by link and from every other
 // surface.
@@ -169,7 +169,7 @@ func (c HomeComposition) Document() map[string]any {
 // HomeCompositionFor reads how this viewer arranged their home screen.
 //
 // It authenticates and does not authorise, the same split ExpertModeEnabled
-// takes and for the same reason (ADR 0058): a preference decides what a person
+// takes and for the same reason (platform#36): a preference decides what a person
 // is *shown*, and gating a display setting behind a second permission check is
 // how a toggle becomes an accidental access control.
 //

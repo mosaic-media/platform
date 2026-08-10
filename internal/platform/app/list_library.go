@@ -28,7 +28,7 @@ import (
 // are what a browse surface needs and what nothing sourcing content has ever
 // asked for, so they belong to a Platform query rather than growing the surface
 // every installed extension holds. It is the same reasoning that kept watch
-// history off `ContentService` (ADR 0103).
+// history off `ContentService` (platform#59).
 
 // defaultLibraryPageSize is one page of the library browse.
 //
@@ -52,7 +52,7 @@ const maxLibraryPageSize = 600
 type ListLibraryQuery struct {
 	Caller v1.Caller
 	// MediaType optionally narrows to one media type, in the Platform's
-	// canonical vocabulary (ADR 0015). Empty is everything.
+	// canonical vocabulary (platform#11). Empty is everything.
 	MediaType v1.MediaType
 	// Title optionally narrows by title substring. It is here because the store
 	// read carries it and a browse over a large library wants it, not because
@@ -119,7 +119,7 @@ func (r ListLibraryResult) HasMore() bool { return r.Offset+len(r.Works) < r.Tot
 //
 // It authorises `content.read`, the same action every other library read takes:
 // there is one shared library and everybody who may see the library may see all
-// of it (ADR 0103). What differs per person is what they *did* with it, which is
+// of it (platform#59). What differs per person is what they *did* with it, which is
 // a different query.
 func (s *Service) ListLibrary(ctx context.Context, q ListLibraryQuery) (ListLibraryResult, error) {
 	// 1. validate query shape.

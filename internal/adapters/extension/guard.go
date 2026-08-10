@@ -10,7 +10,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The two halves of the handle mechanism (ADR 0064).
+// The two halves of the handle mechanism (platform#39).
 //
 // guardedCapability wraps the module proxy on the way *out*: every method mints
 // a handle for the real Caller, hands the module the handle instead, and revokes

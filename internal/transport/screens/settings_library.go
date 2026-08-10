@@ -19,7 +19,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Settings › Library (ADR 0104) — where an administrator states what the
+// Settings › Library (platform#60) — where an administrator states what the
 // library should contain, and reads what the last run did about it.
 //
 // Two things this panel is arranged around.
@@ -32,7 +32,7 @@ import (
 // **Nothing is created before its consequence is shown.** Choosing a collection
 // opens a confirmation that has evaluated the rule: how many titles it matches,
 // how many the library already has, the first few by name, and what the first
-// run will therefore add. ADR 0104 calls the first run the one most likely to
+// run will therefore add. platform#60 calls the first run the one most likely to
 // surprise its author, and says bounding it and reporting it is part of the
 // surface rather than a refinement.
 
@@ -163,7 +163,7 @@ func libraryRuleSummary(listing app.LibraryRuleListing) string {
 	rule := listing.Rule
 	parts := []string{libraryRuleSubject(rule), fmt.Sprintf("first %d", rule.EffectiveBound())}
 	if !listing.Available {
-		// Degraded and visibly so, never deleted (ADR 0104). The row stays, the
+		// Degraded and visibly so, never deleted (platform#60). The row stays, the
 		// statement stays, and the reason it is doing nothing is on the row
 		// rather than left to be deduced from a run that adds nothing.
 		parts = append(parts, "the "+rule.ModuleID+" module is not installed, so this rule is paused by circumstance")
@@ -191,7 +191,7 @@ func libraryRuleSubject(rule domain.LibraryRule) string {
 }
 
 // lastRunValue is the right-hand column: the account of the last run, in the
-// four numbers ADR 0104 asks every run to record.
+// four numbers platform#60 asks every run to record.
 //
 // A rule that has never run says so. Rendering four zeroes for it would read as
 // a rule that ran and found nothing, which is the opposite fact and the one an
@@ -296,7 +296,7 @@ func (s *Service) newLibraryRulePanel(ctx context.Context, caller v1.Caller, nav
 	body := []sdui.Node{}
 	if previewErr != nil {
 		// A source that will not answer is a reason not to create the rule
-		// blind. Saying so and withholding the control is ADR 0036's rule about
+		// blind. Saying so and withholding the control is platform#24's rule about
 		// affordances with nothing behind them, applied to the one control whose
 		// consequence nobody can see.
 		body = append(body,

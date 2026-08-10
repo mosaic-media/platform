@@ -24,7 +24,7 @@ const redactedPlaceholder = "[REDACTED]"
 const identifierPrefix = "id:"
 
 // Field is one structured field of a record. Redaction is enforced twice, on
-// purpose (ADR 0056):
+// purpose (platform#34):
 //
 //   - **At construction.** Sensitive, Secret and Identifier never carry the
 //     original value forward — it is replaced or digested before the Field
@@ -166,7 +166,7 @@ func (f Field) EmitValue() any {
 // process today, which means digests correlate within a run and not across a
 // restart. Persisting it through the Secret Broker — so correlation survives a
 // restart, and rotating it is a deliberate act rather than an accident of
-// lifecycle — is the intended home and is not built; ADR 0056 records that.
+// lifecycle — is the intended home and is not built; platform#34 records that.
 var (
 	saltOnce  sync.Once
 	saltValue []byte

@@ -13,14 +13,14 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
-// Repository is a source of extension modules (ADR 0065): a signed index over
+// Repository is a source of extension modules (platform#40): a signed index over
 // HTTPS and the key that signs it.
 //
-// Trust is per repository, not per module and not global (ADR 0065). Adding a
+// Trust is per repository, not per module and not global (platform#40). Adding a
 // repository *is* the trust decision — the moment a user takes on the risk that
 // its modules run with the Platform's authority — which is why consent attaches
 // here and not at each install. Mosaic's own repository is trusted by default; a
-// third-party one is added with explicit informed consent (ADR 0079 puts that
+// third-party one is added with explicit informed consent (platform#49 puts that
 // surface in the Platform).
 //
 // One key vouches for everything the repository distributes: it signs the index,
@@ -52,7 +52,7 @@ func (r Repository) keyring() *Keyring {
 }
 
 // Registry is the set of configured repositories. It is populated at composition
-// (the official repository) and by an admin adding one (ADR 0065's consent). A
+// (the official repository) and by an admin adding one (platform#40's consent). A
 // repository added here is one whose modules the user has agreed may run.
 type Registry struct {
 	repos map[string]Repository

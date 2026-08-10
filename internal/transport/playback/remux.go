@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-// Stream-copy remux (ADR 0048's named next step after selection).
+// Stream-copy remux (platform#27's named next step after selection).
 //
 // The constraint it answers is narrow and hard: Media Source Extensions — how
 // every browser plays adaptive video — accepts only fragmented MP4 and WebM.
@@ -39,7 +39,7 @@ import (
 //     neither is pretended at here.
 //
 // It lives on the Platform rather than in the playback module on purpose. A
-// module *resolves* and never serves (ADR 0045); a remux is a transform on the
+// module *resolves* and never serves (platform#25); a remux is a transform on the
 // serving side, so putting it in a module would hand a module the byte path the
 // whole contract keeps away from it — and would put an ffmpeg dependency behind
 // the SDK boundary.
@@ -86,7 +86,7 @@ func (r *Remuxer) Stream(ctx context.Context, upstreamURL string, headers map[st
 }
 
 // StreamFrom is Stream starting at an offset into the release, which is what
-// makes a transcoded stream seekable (ADR 0108).
+// makes a transcoded stream seekable (platform#63).
 //
 // Two flags carry the whole idea and both are load-bearing:
 //
@@ -182,7 +182,7 @@ func reconnectArgs(upstreamURL string) []string {
 }
 
 // Segment starts a transcode that writes HLS segments into dir, beginning at
-// segment index n (ADR 0109, ADR 0111).
+// segment index n (platform#64, platform#66).
 //
 // It returns handles to stop the process and to pause and resume it. The last
 // two are what the throttle needs: an audio-only remux runs at near-copy speed,
@@ -191,7 +191,7 @@ func reconnectArgs(upstreamURL string) []string {
 //
 // Three flags carry the design and each is load-bearing:
 //
-//   - **`-ss` before `-i`, with `-copyts`** — ADR 0108's arithmetic, re-keyed
+//   - **`-ss` before `-i`, with `-copyts`** — platform#63's arithmetic, re-keyed
 //     from a byte offset to a segment index. Together they make segment n begin
 //     at the timestamp its nominal position implies rather than at zero, which
 //     is what lets a client seek into a stream nothing has produced yet.
@@ -262,7 +262,7 @@ func (r *Remuxer) Segment(ctx context.Context, upstreamURL string, headers map[s
 }
 
 // Subtitles extracts one window of one embedded subtitle track as WebVTT
-// (ADR 0113).
+// (platform#68).
 //
 // It is the same arithmetic the video segments use — a start derived from an
 // index, a length, `-copyts` so the cues carry the times the source gave them —
@@ -325,7 +325,7 @@ func (r *Remuxer) Subtitles(ctx context.Context, upstreamURL string, headers map
 }
 
 // StyledSubtitles extracts one subtitle track as the script it was authored as
-// (ADR 0115).
+// (platform#70).
 //
 // **It is not windowed, and it cannot be.** An ASS script is one document: a
 // header, a style table and then the events, and libass needs all of it before
@@ -418,7 +418,7 @@ func serveRemuxed(w http.ResponseWriter, r *http.Request, t ticket, plan Plan, r
 	n, readErr := io.ReadFull(body, first)
 	if n == 0 {
 		// Nothing came out, which a dead upstream link looks exactly like from
-		// here. Re-resolve and try once more (ADR 0049) — still before any byte
+		// here. Re-resolve and try once more (platform#28) — still before any byte
 		// has been written to the client, so the retry is invisible.
 		if fresh, ok := refreshed(r.Context(), t); ok {
 			stop()
@@ -521,7 +521,7 @@ func (p Plan) ffmpegArgs(upstreamURL string) []string {
 
 	// Subtitles never travel in the muxed output. An MKV's are usually SubRip or
 	// ASS, neither of which maps into MP4, and copying them in fails the whole
-	// command. They are resolved as separate tracks instead (ADR 0037).
+	// command. They are resolved as separate tracks instead (module-stremio-addons#1).
 	args = append(args, "-sn")
 	return args
 }
@@ -562,7 +562,7 @@ func (p Plan) videoFilter() string {
 }
 
 // serveSegmented answers the HLS surface for a release that must go through
-// ffmpeg (ADR 0109, ADR 0111).
+// ffmpeg (platform#64, platform#66).
 //
 // Three resources and a closed set: the playlist, the initialisation segment,
 // and a numbered segment. The resource is matched rather than used as a
@@ -584,7 +584,7 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 	// The entry point is a master when there are subtitles to declare and the
 	// media playlist itself when there are not, so a release with none is served
 	// exactly what it was before subtitles existed — no extra round trip bought
-	// for a rendition list that would be empty (ADR 0113).
+	// for a rendition list that would be empty (platform#68).
 	case (resource == "" || resource == PlaylistName) && len(t.Plan.Subtitles) > 0:
 		writePlaylist(w, r, masterPlaylist(
 			masterBandwidth(t.Plan.SourceBytes, t.Plan.Duration), t.Plan.Subtitles))
@@ -654,7 +654,7 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 		body, size, err := sessions.Open(r.Context(), rx, key, t.URL, t.Headers, t.Plan, length, n)
 		if err != nil {
 			// A segment that will not start is the same signal as a pipe that
-			// produced nothing: re-resolve once and try again (ADR 0049). The
+			// produced nothing: re-resolve once and try again (platform#28). The
 			// session key changes with the address, so the retry does not adopt
 			// the failed run's spool.
 			if fresh, ok := refreshed(r.Context(), t); ok {
@@ -673,7 +673,7 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 // PlaylistName is the playlist a client is pointed at. What it holds depends on
 // the release: the video's own segment list when there are no subtitles, and a
 // master declaring the video and each subtitle rendition when there are
-// (ADR 0113). The client asks for the same URL either way.
+// (platform#68). The client asks for the same URL either way.
 //
 // Exported because the transport that mints a ticket has to point the client at
 // it, and a second spelling of the same path is exactly the drift this avoids.
@@ -769,7 +769,7 @@ func serveSubtitleSegment(w http.ResponseWriter, r *http.Request, rx *Remuxer, t
 // boundaries are exactly this. Where it is copied the source's keyframes decide
 // and this is only what ffmpeg is asked for — which the nominal grid tolerates,
 // because a seek restarts at the position the playlist names rather than
-// inheriting where the previous segment happened to end (ADR 0111).
+// inheriting where the previous segment happened to end (platform#66).
 func segmentLengthFor(plan Plan) time.Duration { return encodedSegmentLength }
 
 // segmentIndexOf reads a segment index out of a resource name, accepting only
@@ -805,7 +805,7 @@ func writeSegment(w http.ResponseWriter, r *http.Request, contentType string, si
 }
 
 // ExternalSubtitles fetches a module-resolved subtitle file and converts it to
-// WebVTT (ADR 0117).
+// WebVTT (platform#72).
 //
 // **ffmpeg does the fetch as well as the conversion**, which is not laziness: it
 // already speaks every scheme a module might return, it already carries the

@@ -15,7 +15,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// What the account-creation screen may offer (ADR 0069). The rule these pin:
+// What the account-creation screen may offer (platform#44). The rule these pin:
 // a grantor never sees a permission they do not hold — absent, not disabled.
 
 func holds(t *testing.T, actions []policy.Action, want policy.Action) bool {

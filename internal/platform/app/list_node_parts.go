@@ -64,10 +64,10 @@ func (s *Service) ListNodeParts(ctx context.Context, q ListNodePartsQuery) (List
 // choice rather than a default this should invent — so a series returns nothing
 // and the detail screen offers Play per episode instead.
 //
-// It is an entry point — the screens transport calls it directly (ADR 0036's
+// It is an entry point — the screens transport calls it directly (platform#24's
 // affordance gate) — so it clears the boundary itself, once, and then reads
 // stores directly rather than re-entering GetContentNode and ListNodeParts.
-// Re-entering was the ADR 0066 defect in its most expensive form: a work whose
+// Re-entering was the platform#41 defect in its most expensive form: a work whose
 // playable item is its twentieth child cost twenty-one authenticate-plus-
 // authorize cycles to discover one Part id.
 //

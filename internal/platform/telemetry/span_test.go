@@ -158,7 +158,7 @@ func TestSpanIsSafeWithoutAnySetup(t *testing.T) {
 }
 
 // TestSpanAttributesObeyRedaction — a span attribute is not a second, laxer
-// channel than a log field (ADR 0056).
+// channel than a log field (platform#34).
 func TestSpanAttributesObeyRedaction(t *testing.T) {
 	sink := &captureSpans{}
 	ctx, _ := spanCtx(sink)
@@ -192,7 +192,7 @@ func TestUnendedSpanIsNeverRecorded(t *testing.T) {
 // One journey, end to end, with nothing losing coherence in the middle of it.
 //
 // **This is the property the conversion to OpenTelemetry had to preserve**
-// (ADR 0128), and it is asserted over a whole request rather than a pair of
+// (sdk#8), and it is asserted over a whole request rather than a pair of
 // spans: an inbound traceparent from a client, an entry span, a handler, a
 // module invocation and a SQL statement, with a log record emitted at every
 // level. Every one of them must carry the *same* trace id — a conversion

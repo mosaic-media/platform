@@ -16,7 +16,7 @@ import (
 	"github.com/mosaic-media/platform/internal/adapters/extension"
 )
 
-// The measurement ADR 0064 requires before the callback protocol is fixed.
+// The measurement platform#39 requires before the callback protocol is fixed.
 //
 // That record leaves callback chattiness open on purpose: "A tree import makes
 // many ContentService calls, each now a round trip. A Unix socket is fast enough
@@ -71,12 +71,12 @@ func TestCallbackRoundTripCost(t *testing.T) {
 
 	// Not an assertion about speed — a regression guard with a ceiling loose
 	// enough to survive a loaded CI machine. If a callback ever costs more than
-	// this, the batched-verb question ADR 0064 left open has been answered for
+	// this, the batched-verb question platform#39 left open has been answered for
 	// us and the protocol needs revisiting rather than the test relaxing.
 	const ceiling = 5 * time.Millisecond
 	if marginal > ceiling {
 		t.Errorf("a callback costs %v, over the %v ceiling — "+
-			"ADR 0064's batched-verb question needs answering", marginal, ceiling)
+			"platform#39's batched-verb question needs answering", marginal, ceiling)
 	}
 }
 

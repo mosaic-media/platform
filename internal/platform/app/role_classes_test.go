@@ -20,7 +20,7 @@ import (
 // see fills() — and it is what makes "declares metadata+search" a real test of
 // the required-class check.
 
-// The role-class table is the single in-code copy of ADR 0063's table, so a
+// The role-class table is the single in-code copy of platform#38's table, so a
 // test guards its shape against a careless edit: the three classes, their
 // arities, and which is required.
 func TestRoleClassTableMatchesADR0063(t *testing.T) {
@@ -48,7 +48,7 @@ func TestRoleClassTableMatchesADR0063(t *testing.T) {
 		t.Fatal("the table dropped the metadata_search class")
 	}
 	if !ms.Required {
-		t.Error("metadata_search is required as a class (ADR 0035)")
+		t.Error("metadata_search is required as a class (platform#23)")
 	}
 	if ms.Arity != app.ArityAtLeastOne {
 		t.Error("metadata_search composes: several providers union")
@@ -59,7 +59,7 @@ func TestRoleClassTableMatchesADR0063(t *testing.T) {
 		t.Fatal("the table dropped the playback class")
 	}
 	if pb.Required {
-		t.Error("playback is not required: a deployment with no consumer is discovery-only (ADR 0036), not a failed boot")
+		t.Error("playback is not required: a deployment with no consumer is discovery-only (platform#24), not a failed boot")
 	}
 }
 
@@ -78,7 +78,7 @@ func TestRequireComposedRoleClassesPassesWhenFilled(t *testing.T) {
 }
 
 // It fails, naming the class, when a required class is short — the failure a
-// fresh install must never reach silently (ADR 0035).
+// fresh install must never reach silently (platform#23).
 func TestRequireComposedRoleClassesFailsWhenAClassIsShort(t *testing.T) {
 	reg := app.NewCapabilityRegistry()
 	// Search only: the metadata_search class needs both roles.
@@ -97,7 +97,7 @@ func TestRequireComposedRoleClassesFailsWhenAClassIsShort(t *testing.T) {
 }
 
 // Playback being unfilled is not a boot failure, because it is not required: a
-// deployment with no consumer is discovery-only (ADR 0036), a degraded state
+// deployment with no consumer is discovery-only (platform#24), a degraded state
 // rather than an inert one.
 func TestUnfilledPlaybackIsNotFatal(t *testing.T) {
 	reg := app.NewCapabilityRegistry()
@@ -108,7 +108,7 @@ func TestUnfilledPlaybackIsNotFatal(t *testing.T) {
 	// No playback provider registered.
 
 	if err := reg.RequireComposedRoleClasses(); err != nil {
-		t.Fatalf("a missing playback consumer must not fail boot (ADR 0036): %v", err)
+		t.Fatalf("a missing playback consumer must not fail boot (platform#24): %v", err)
 	}
 }
 

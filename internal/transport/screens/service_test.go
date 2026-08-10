@@ -43,18 +43,18 @@ type fakeQueries struct {
 	results  []v1.SearchResult
 	catalogs []app.ModuleCatalog
 	items    []v1.CatalogItem
-	// The provenance the cache-first browse reads report back (ADR 0052), and
+	// The provenance the cache-first browse reads report back (platform#30), and
 	// whether the render asked for a refresh. Zero values are a live answer,
 	// which is what every screen test that does not care about staleness wants.
 	catalogAnswer app.BrowseAnswer
 	itemAnswer    app.BrowseAnswer
 	catalogsErr   error
 	gotRefresh    bool
-	// compositions is how each viewer arranged their home (ADR 0103), keyed by
+	// compositions is how each viewer arranged their home (platform#59), keyed by
 	// the session the caller presents.
 	compositions map[string]app.HomeComposition
 	languages    map[string][]byte
-	// sources is the candidate set behind a node (ADR 0116), keyed by node id.
+	// sources is the candidate set behind a node (platform#71), keyed by node id.
 	// An absent entry is the no-candidate state, which is a legitimate answer
 	// and not a failure — sourcesErr is how a test asks for the failure.
 	sources    map[string][]app.PlaybackSource
@@ -82,10 +82,10 @@ type fakeQueries struct {
 	inProgress     []v1.InProgressItem
 	playbackStates map[v1.NodeID]v1.PlaybackState
 	// watchHistory is what ListWatchHistory reports — the history screen's
-	// input (ADR 0103).
+	// input (platform#59).
 	watchHistory []app.WatchedItem
 
-	// The library and its rules (ADR 0104, roadmap M2.1–2.2). libraryWorks is
+	// The library and its rules (platform#60, roadmap M2.1–2.2). libraryWorks is
 	// the whole library the fake pages over — not one page — so the screen's
 	// paging is under test rather than assumed.
 	libraryWorks []v1.Node
@@ -96,7 +96,7 @@ type fakeQueries struct {
 	libraryTotal int
 	libraryErr   error
 	libraryRules []app.LibraryRuleListing
-	// The stored detail (ADR 0107): the work's tree, and the document a provider
+	// The stored detail (platform#62): the work's tree, and the document a provider
 	// last answered with.
 	libraryChildren   []v1.Node
 	libraryEpisodes   map[int][]v1.Node
@@ -113,7 +113,7 @@ type fakeQueries struct {
 	// exercised. Absent an entry, GetContentNode falls back to the flat children.
 	childrenByNode map[v1.NodeID][]v1.Node
 
-	// The configuration reads (ADR 0011, roadmap M4.4).
+	// The configuration reads (platform#7, roadmap M4.4).
 	//
 	// activeConfigErr defaults to nil and the zero result stands for "a version
 	// is active and carries nothing", which is not the state a fresh install is
@@ -135,7 +135,7 @@ type fakeQueries struct {
 	// "this caller holds telemetry.read", which is what decides whether the
 	// expert-mode affordance is drawn at all.
 	canReadTelemetry bool
-	// canReadJobs is the same for job.read (ADR 0017). Separate from the one
+	// canReadJobs is the same for job.read (platform#13). Separate from the one
 	// above because the two are separate grants and the nav draws them
 	// separately — a fake that answered one bool for every action could not
 	// tell the difference between "sees both" and "sees the one it holds".
@@ -148,7 +148,7 @@ type fakeQueries struct {
 	traces       []domain.TelemetryTraceSummary
 	spans        []domain.TelemetrySpanRecord
 
-	// userSessions and currentSession back the Devices section (ADR 0102).
+	// userSessions and currentSession back the Devices section (platform#58).
 	userSessions   []domain.Session
 	currentSession domain.SessionID
 
@@ -233,7 +233,7 @@ func (f *fakeQueries) ExpertModeEnabled(context.Context, v1.Caller) bool {
 	return f.expertModeOn
 }
 
-// HomeCompositionFor answers per caller, because the whole point of ADR 0103 is
+// HomeCompositionFor answers per caller, because the whole point of platform#59 is
 // that two viewers of one install get two different answers — a fake returning
 // one composition for everybody would let a screen that ignored the caller pass.
 func (f *fakeQueries) HomeCompositionFor(_ context.Context, caller v1.Caller) app.HomeComposition {
@@ -290,7 +290,7 @@ func (f *fakeQueries) GetPendingConfigVersion(_ context.Context, _ app.GetPendin
 	return f.pendingConfig, nil
 }
 
-// The resolution register (ADR 0119). issues is what the Problems panel draws;
+// The resolution register (platform#74). issues is what the Problems panel draws;
 // issuesErr is how a test makes the read fail.
 func (f *fakeQueries) ListIssues(_ context.Context, _ app.ListIssuesQuery) (app.ListIssuesResult, error) {
 	return app.ListIssuesResult{Issues: f.issues}, f.issuesErr
@@ -401,7 +401,7 @@ func (f *fakeQueries) ListModuleCatalogs(_ context.Context, _ app.ListModuleCata
 	return app.ListModuleCatalogsResult{Catalogs: f.catalogs}, nil
 }
 
-// The cache-first browse reads (ADR 0052). The fake answers live by default and
+// The cache-first browse reads (platform#30). The fake answers live by default and
 // carries the provenance a test sets, so a home-screen test can drive the stale
 // and failed-source paths without a snapshot store behind it.
 func (f *fakeQueries) BrowseCatalogs(_ context.Context, q app.BrowseCatalogsQuery) (app.BrowseCatalogsResult, error) {
@@ -488,7 +488,7 @@ func (f *fakeQueries) ListLibraryRules(_ context.Context, _ app.ListLibraryRules
 }
 
 // GetLibraryDetail answers from the seeded node, its tree and whatever document
-// a test stored (ADR 0107). HasMetadata is driven separately from the document
+// a test stored (platform#62). HasMetadata is driven separately from the document
 // so the "never enriched" branch — a node materialised before the store existed
 // — is reachable, which is the one a fake returning a zero struct would hide.
 func (f *fakeQueries) GetLibraryDetail(_ context.Context, q app.GetLibraryDetailQuery) (app.GetLibraryDetailResult, error) {
@@ -574,7 +574,7 @@ func (f *fakeQueries) FirstPlayablePart(_ context.Context, _ v1.Caller, _ v1.Nod
 
 // playbackState, when set, is what GetPlaybackState reports — the fake's way of
 // saying "this viewer already started this", which is what turns Play into
-// Resume (ADR 0046).
+// Resume (platform#26).
 func (f *fakeQueries) GetPlaybackState(_ context.Context, _ v1.GetPlaybackStateQuery) (v1.GetPlaybackStateResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -838,7 +838,7 @@ func TestHomeScreenEmptyWithoutCatalogs(t *testing.T) {
 	}
 }
 
-// TestHomeScreenDistinguishesADownSourceFromAnEmptyOne is the defect ADR 0052
+// TestHomeScreenDistinguishesADownSourceFromAnEmptyOne is the defect platform#30
 // was written about, at the surface it was seen on. A source that did not answer
 // must never render as an install with nothing configured: the first is a
 // report, the second is advice, and giving the advice sends somebody to fix
@@ -937,7 +937,7 @@ func TestHomeScreenSchedulesRevalidationWhenStale(t *testing.T) {
 	}
 }
 
-// TestTwoViewersGetTwoDifferentHomes is ADR 0103's exit, at the surface. One
+// TestTwoViewersGetTwoDifferentHomes is platform#59's exit, at the surface. One
 // shared library, and everything about how a person experiences it is theirs
 // alone: the same install, the same catalogs, two arrangements.
 func TestTwoViewersGetTwoDifferentHomes(t *testing.T) {
@@ -1043,7 +1043,7 @@ func TestHomeScreenRendersContinueWatchingRail(t *testing.T) {
 			{Ref: v1.ContentRef{Provider: "stremio", NativeID: "tt1", NativeType: "series", MediaType: v1.MediaTVSeries}, Title: "A Series"},
 		},
 		previewMeta: v1.ContentMetadata{Title: "A Series", Backdrop: "http://cdn/bd.jpg"},
-		// The Work the in-progress episode belongs to, with stored art (ADR 0071).
+		// The Work the in-progress episode belongs to, with stored art (platform#45).
 		node: v1.Node{
 			ID: "work-1", WorkID: "work-1", Kind: v1.NodeWork,
 			MediaType: v1.MediaTVSeries, Title: "The Series",
@@ -1094,7 +1094,7 @@ func TestHomeScreenRendersContinueWatchingRail(t *testing.T) {
 		t.Fatalf("card progressLabel = %q, want %q", got, "30 min left")
 	}
 	// The tap resumes rather than navigating — a node cannot open a rich detail
-	// (ADR 0071), so the card carries a play action, not a navigation.
+	// (platform#45), so the card carries a play action, not a navigation.
 	if actionOf(card) == nil {
 		t.Fatal("continue-watching card has no action to resume")
 	}
@@ -1295,7 +1295,7 @@ func TestVirtualDetailOffersPlayAndAdd(t *testing.T) {
 			Backdrop: "http://cdn/bd.jpg", Logo: "http://cdn/logo.png", Rating: 8.0, Runtime: "164 min",
 			Cast: []v1.Person{{Name: "Ryan Gosling"}, {Name: "Harrison Ford"}}, Genres: []string{"Sci-Fi"},
 		},
-		// Curating the library is an administrator's authority (ADR 0069), so
+		// Curating the library is an administrator's authority (platform#44), so
 		// the control is drawn only for a caller who holds it.
 		allow: map[string]bool{string(app.ActionContentImport): true},
 	}
@@ -1307,7 +1307,7 @@ func TestVirtualDetailOffersPlayAndAdd(t *testing.T) {
 		t.Fatalf("preview saw ref %+v, want the card's ref", fake.gotPreviewRef)
 	}
 	// The rich detail is a DetailHero carrying the title, logo and the primary
-	// action; a glass info panel docks in its aside slot (ADR 0034).
+	// action; a glass info panel docks in its aside slot (sdk#3).
 	hero, ok := find(node, "DetailHero")
 	if !ok || prop(hero, "title") != "Blade Runner 2049" {
 		t.Fatalf("hero = %+v, want the previewed title", hero.Props)
@@ -1315,7 +1315,7 @@ func TestVirtualDetailOffersPlayAndAdd(t *testing.T) {
 	if prop(hero, "logo") == nil || prop(hero, "logo") == "" {
 		t.Fatalf("hero has no logo prop; want the clearlogo bound")
 	}
-	// Two library affordances, and Play comes first (ADR 0118): a viewer wants
+	// Two library affordances, and Play comes first (platform#73): a viewer wants
 	// to watch the thing, and adding it is what the Platform does to let them.
 	// Both carry the previewed ref, and both are drawn only for a caller who may
 	// import — because pressing Play here adds it.
@@ -1458,7 +1458,7 @@ func TestCatalogScreenRequiresParams(t *testing.T) {
 }
 
 // A node with no stored document renders what the graph holds — its own title,
-// artwork and contents (ADR 0107's floor). It is what a title materialised
+// artwork and contents (platform#62's floor). It is what a title materialised
 // before the store existed, or by a provider that has never answered since,
 // falls back to.
 func TestDetailScreenRendersTheGraphWhenNothingWasStored(t *testing.T) {
@@ -1495,7 +1495,7 @@ func TestDetailScreenRendersTheGraphWhenNothingWasStored(t *testing.T) {
 	}
 }
 
-// The whole point of ADR 0107: a library detail renders the rich tree from the
+// The whole point of platform#62: a library detail renders the rich tree from the
 // stored document and the materialised tree, with **no provider call**.
 func TestDetailScreenRendersStoredMetadataWithNoProviderCall(t *testing.T) {
 	fake := &fakeQueries{
@@ -1688,7 +1688,7 @@ func TestSettingsSaysWhetherASectionWasAskedFor(t *testing.T) {
 	}
 }
 
-// TestSettingsNavIsGatedPerCaller pins ADR 0058's visibility rule onto the nav: a
+// TestSettingsNavIsGatedPerCaller pins platform#36's visibility rule onto the nav: a
 // caller without the grant is not shown the affordance at all, rather than shown
 // one that fails when they use it.
 func TestSettingsNavIsGatedPerCaller(t *testing.T) {
@@ -1709,7 +1709,7 @@ func TestSettingsNavIsGatedPerCaller(t *testing.T) {
 	}
 }
 
-// TestExtensionsScreenKeepsTheSettingsNav is the ADR 0081 screen inside the ADR
+// TestExtensionsScreenKeepsTheSettingsNav is the platform#51 screen inside the ADR
 // 0038 frame: it stays its own screen (the catalogue is a network read), and
 // opening it does not cost the nav that leads back to everything else.
 func TestExtensionsScreenKeepsTheSettingsNav(t *testing.T) {
@@ -1739,7 +1739,7 @@ func TestExtensionsScreenKeepsTheSettingsNav(t *testing.T) {
 }
 
 // TestExtensionsScreenInstallAndUninstall is the browse-and-install surface
-// (ADR 0081): an installed extension offers Uninstall, an available one that is
+// (platform#51): an installed extension offers Uninstall, an available one that is
 // not installed offers Install, and an available one that IS installed is not
 // offered for install again.
 func TestExtensionsScreenInstallAndUninstall(t *testing.T) {
@@ -1977,7 +1977,7 @@ func TestDetailScreenRequiresNodeId(t *testing.T) {
 	}
 }
 
-// TestDetailPlayAffordanceIsGatedOnAPartExisting is ADR 0036's rule made
+// TestDetailPlayAffordanceIsGatedOnAPartExisting is platform#24's rule made
 // executable on the emit-side: an affordance must never appear with nothing
 // behind it. Being in the library is not enough — a Work has no bytes of its
 // own, and a metadata-only import has none anywhere in its tree, so Play is
@@ -2103,7 +2103,7 @@ func TestRichDetailSurfacesTheMetadataItWasDiscarding(t *testing.T) {
 }
 
 // With a release behind the play button the panel describes that release —
-// the mockups' "This playback". The probe data (ADR 0050) was already being
+// the mockups' "This playback". The probe data (platform#29) was already being
 // resolved for the play action and discarded.
 func TestDetailPanelDescribesTheReleaseBehindThePlayButton(t *testing.T) {
 	ref := v1.ContentRef{Provider: "tmdb", NativeID: "tt1", NativeType: "movie", MediaType: v1.MediaMovie}
@@ -2152,7 +2152,7 @@ func TestDetailPanelDescribesTheReleaseBehindThePlayButton(t *testing.T) {
 	}
 }
 
-// An unprobed release reports no dimensions and no size (ADR 0050 relays
+// An unprobed release reports no dimensions and no size (platform#29 relays
 // unprobed rather than failing). Those rows must be absent, not "0p" and "0 B".
 func TestDetailPanelOmitsUnprobedFacts(t *testing.T) {
 	ref := v1.ContentRef{Provider: "tmdb", NativeID: "tt2", NativeType: "movie", MediaType: v1.MediaMovie}

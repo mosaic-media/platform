@@ -86,7 +86,7 @@ func (s *permissionStore) GrantsForUser(ctx context.Context, userID domain.UserI
 }
 
 // FindRole returns one role, or NotFound. It backs the delegation check
-// (ADR 0069), which has to see a role's permissions before deciding whether the
+// (platform#44), which has to see a role's permissions before deciding whether the
 // grantor may hand them out.
 func (s *permissionStore) FindRole(ctx context.Context, roleID domain.RoleID) (domain.Role, error) {
 	row := s.q.QueryRow(ctx, `SELECT id, name, permissions FROM roles WHERE id = $1`, string(roleID))

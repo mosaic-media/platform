@@ -28,7 +28,7 @@ type SupportBundle struct {
 	ProgramVersion string                   `json:"program_version"`
 	Components     []domain.ComponentHealth `json:"components"`
 	// ModuleEgress records this deployment's layer-3 egress-containment posture
-	// (ADR 0064, ADR 0080): whether the OS denies an extension module direct
+	// (platform#39, platform#50): whether the OS denies an extension module direct
 	// network egress, and the honest sentence behind it. It is a structural fact
 	// of the deployment, not personal data, so it is never redacted — and it is
 	// here because "is module egress enforced?" is exactly a question a support

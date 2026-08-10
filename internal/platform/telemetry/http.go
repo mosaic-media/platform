@@ -13,7 +13,7 @@ import (
 // TraceIDHeader is set on every HTTP response so a client — or a person
 // reading a browser's network tab — can see the trace their request belongs
 // to. A bug report that arrives carrying this value is a lookup rather than an
-// investigation (ADR 0054), which is most of why it is worth a header.
+// investigation (platform#32), which is most of why it is worth a header.
 //
 // It is deliberately a Mosaic-specific name rather than the W3C `traceresponse`
 // draft: that draft is not settled, and this is for a human and a first-party
@@ -22,7 +22,7 @@ const TraceIDHeader = "Mosaic-Trace-Id"
 
 // HTTPMiddleware is the edge seam for every plain HTTP surface — the artwork
 // proxy, the playback origin and the Supervisor handoff
-// (ADR 0055, seams 2 and 3). It continues an inbound trace or starts one,
+// (platform#33, seams 2 and 3). It continues an inbound trace or starts one,
 // binds a logger to it, and echoes the trace id back on the response.
 //
 // It lives here rather than in a transport package because all four surfaces

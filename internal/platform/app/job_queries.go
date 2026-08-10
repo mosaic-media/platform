@@ -79,7 +79,7 @@ type GetJobResult struct {
 // several different ones, and the lines say what the handler was doing. The
 // lines are stored beside the job rather than read back out of telemetry
 // precisely so this still answers after retention has dropped the trace
-// (ADR 0058).
+// (platform#36).
 func (s *Service) GetJob(ctx context.Context, q GetJobQuery) (GetJobResult, error) {
 	if q.JobID == "" {
 		return GetJobResult{}, contracts.NewError(contracts.InvalidArgument, "job id is required")

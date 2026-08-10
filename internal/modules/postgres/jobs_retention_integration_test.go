@@ -86,7 +86,7 @@ func TestARecurringJobRunsWithNoUserAndRetentionRemovesRows(t *testing.T) {
 	}
 
 	// Retention comes from the Active configuration, which is where an
-	// administrator sets it (ADR 0058). Three days for both signals, so the
+	// administrator sets it (platform#36). Three days for both signals, so the
 	// eight-day-old partition is outside it and today's is not. Nothing about
 	// the sweep is told this directly — it reads the policy per run, which is
 	// what makes those fields Hot.

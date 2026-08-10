@@ -17,7 +17,7 @@ import (
 // TestCapabilityImportsOnlyTheSDK is the stop point made executable: the
 // reference capability must use only the published SDK (the mosaic-sdk module)
 // and the standard library. A private Platform import here would mean the
-// contracts are not ready to publish (the roadmap's stop point, ADR 0016).
+// contracts are not ready to publish (the roadmap's stop point, platform#12).
 //
 // Since the surface was extracted into its own module, Go itself would also
 // reject a Platform-internal import — but this parse keeps the intent explicit

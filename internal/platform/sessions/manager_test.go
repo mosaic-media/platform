@@ -15,7 +15,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/sessions"
 )
 
-// The session credential is a bearer pair (ADR 0102). What is worth testing
+// The session credential is a bearer pair (platform#58). What is worth testing
 // hardest is the half that makes a long-lived credential defensible rather than
 // merely convenient: rotation, reuse detection, the device binding, and the two
 // expiries sitting one inside the other. A manager that issued tokens and never
@@ -229,7 +229,7 @@ func TestIssueCreatesASessionAndItsFirstPair(t *testing.T) {
 	if session.UserID != "user-1" || session.DeviceID != "device-1" {
 		t.Fatalf("session = %+v", session)
 	}
-	// The capability set is stamped on at issue time (ADR 0036). It was modelled
+	// The capability set is stamped on at issue time (platform#24). It was modelled
 	// on domain.Session from the beginning and populated by nothing, so a
 	// session that carries what it was given is the whole of what changed.
 	if len(session.Capabilities) != 2 {

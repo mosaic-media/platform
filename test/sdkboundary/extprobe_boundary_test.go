@@ -15,7 +15,7 @@ import (
 
 // TestExtensionProbeImportsOnlyThePublishedSurface holds test/extprobe to what a
 // third-party extension module can actually import: the SDK contract and the
-// harness, and nothing else (ADR 0016, ADR 0064).
+// harness, and nothing else (platform#12, platform#39).
 //
 // **This is a weaker guarantee than the one next door, and deliberately so.**
 // test/sdkprobe is its own Go module, so Go itself refuses an internal/ import

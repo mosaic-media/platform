@@ -3,12 +3,12 @@
 // Linking exception: see LICENSE-EXCEPTION.
 
 // Package moduleproxy is the forward proxy an out-of-process module's egress
-// goes through (ADR 0064).
+// goes through (platform#39).
 //
 // # What it is for
 //
 // An in-process module is handed an *http.Client that routes through
-// netguard's dial guard (ADR 0055, seam 9), so a module fetching a URL a user
+// netguard's dial guard (platform#33, seam 9), so a module fetching a URL a user
 // supplied cannot reach the host's own network — the Platform's PostgreSQL, a
 // service on the LAN, the cloud metadata endpoint at 169.254.169.254. That
 // client cannot cross a process boundary. This is what replaces it: every
@@ -34,7 +34,7 @@
 // path but not yet the *only* path: a module that ignored the proxy and dialled
 // a target directly would not be stopped, because it still has a network. What
 // makes the proxy the only path is denying the module process a network of its
-// own (ADR 0064's layer 3), which is deployment-dependent and lands separately.
+// own (platform#39's layer 3), which is deployment-dependent and lands separately.
 //
 // The distinction matters for what this closes today. It closes the
 // accidental and user-URL SSRF path for a *cooperating* module — which every
@@ -80,7 +80,7 @@ type Options struct {
 	// ModuleID attributes the proxy's telemetry. It is the module's manifest id
 	// when known, or a launch-time label before the handshake.
 	ModuleID string
-	// AllowPrivate is the operator override ADR 0064 requires for the genuine
+	// AllowPrivate is the operator override platform#39 requires for the genuine
 	// case of a module sourcing from a service on the local network. Default
 	// false: loopback, RFC1918 and link-local targets are refused, which is the
 	// posture a fetch of a user-supplied URL needs. Turning it on re-opens the

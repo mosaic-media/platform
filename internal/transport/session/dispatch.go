@@ -19,18 +19,18 @@ import (
 )
 
 // dispatch routes an Invoke action to the application command service that backs
-// it. contracts#5 moved the client's mutations off the GraphQL schema ADR 0032's
-// socket ran them through and onto the application services directly; ADR 0061
+// it. contracts#5 moved the client's mutations off the GraphQL schema platform#22's
+// socket ran them through and onto the application services directly; platform#37
 // then removed that schema, so this switch is now the *only* way a client
 // mutation reaches the Platform. The action's caller is the session's opaque ref
-// (ADR 0017), so every write re-authorises as the invoking user.
+// (platform#13), so every write re-authorises as the invoking user.
 //
 // That makes the switch a real boundary rather than a convenience: an action a
 // client can name and this function cannot map does not exist. Adding one is a
 // deliberate act here, which is the point — the surface a client can reach is
 // enumerated in one readable place instead of inferred from a schema.
 //
-// input is the SDUI runtime's action envelope in JSON (ADR 0029), so an action
+// input is the SDUI runtime's action envelope in JSON (platform#19), so an action
 // ABI is a property of the action, not of the transport carrying it.
 // An action pushes a *sequence* of updates, not one: the two-lane transport
 // (contracts#5) exists so the server drives the client's regions unprompted, and a
@@ -72,7 +72,7 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 			Caller: caller, ModuleID: moduleID,
 		})
 	case "revokeSession":
-		// Ending one device's session (ADR 0102). The target is a session id
+		// Ending one device's session (platform#58). The target is a session id
 		// from the device list; the caller is this connection's own credential,
 		// and the command's own boundary decides whether they may — a viewer
 		// ending their own phone and an administrator ending somebody else's
@@ -94,7 +94,7 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		h.mgr.End(string(target))
 		return nil, nil
 	case "signOut":
-		// Ending *this* session (ADR 0102). It names no target and cannot: the
+		// Ending *this* session (platform#58). It names no target and cannot: the
 		// session it arrives on is the one it revokes, which is what makes it
 		// safe to put on the account cluster of every screen — an affordance
 		// that could be pointed at another device would need to say which.
@@ -116,7 +116,7 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		h.mgr.End(s.ref)
 		return nil, nil
 	case "createAccount":
-		// Provisioning a household member (ADR 0069). Three commands behind one
+		// Provisioning a household member (platform#44). Three commands behind one
 		// action — see accounts.go for why they are three and what a failure
 		// between them leaves behind.
 		return nil, h.createAccount(ctx, caller, input)
@@ -141,7 +141,7 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		// every few seconds would be noise over the film it is reporting on.
 		return nil, h.reportProgress(ctx, s, input)
 	case "recordImpression":
-		// What a screen reported having been *seen* (ADR 0090). It is silent for
+		// What a screen reported having been *seen* (web#6). It is silent for
 		// the same reason reportProgress is — a toast per card scrolled past is
 		// noise over the screen it is about — and it is the only consumer of the
 		// lifecycle triggers today.
@@ -152,7 +152,7 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		// liability rather than an analytics capability.
 		return nil, h.recordImpression(ctx, s, input)
 	case "createLibraryRule":
-		// What the library should contain (ADR 0104). The four library-rule
+		// What the library should contain (platform#60). The four library-rule
 		// cases each return their own surface — the rules list — because the
 		// panel they are invoked from has stopped describing anything true the
 		// moment they succeed.
@@ -164,11 +164,11 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 	case "runLibraryMaintenance":
 		return h.runLibraryMaintenance(ctx, s, caller)
 	case "applySuggestion":
-		// Acting on a finding (ADR 0119). An ordinary action on the ordinary
+		// Acting on a finding (platform#74). An ordinary action on the ordinary
 		// lane: repair is not a privileged back channel.
 		return h.applySuggestion(ctx, s, caller, input)
 	case "applyConfiguration":
-		// What the install is set to do (ADR 0011). One action over draft,
+		// What the install is set to do (platform#7). One action over draft,
 		// validate and activate — see configuration.go for why those three are
 		// not three controls.
 		return h.applyConfiguration(ctx, s, caller, input)
@@ -186,11 +186,11 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 }
 
 // playEnvelope is the playPart action input: the Part to play. The SDUI Play
-// action emits `partId` (ADR 0029's action ABI), so that is the key read here.
+// action emits `partId` (platform#19's action ABI), so that is the key read here.
 type playEnvelope struct {
 	PartID string `json:"partId"`
 	// NodeID is the item being played, and the key playback state is stored
-	// under (ADR 0046). It is what the client reports its position against, so
+	// under (platform#26). It is what the client reports its position against, so
 	// a play without it works and simply remembers nothing.
 	NodeID string `json:"nodeId"`
 	Title  string `json:"title"`
@@ -201,7 +201,7 @@ type playEnvelope struct {
 	// where the viewer had got to until they watch past it.
 	Restart bool `json:"restart"`
 	// AudioIndex and SubtitleIndex override the tracks the preference would have
-	// chosen, for this sitting only (ADR 0116). Both are source stream indexes,
+	// chosen, for this sitting only (platform#71). Both are source stream indexes,
 	// and both are pointers because zero is a real stream: a nil is "no override"
 	// and a zero is "stream 0", and collapsing them would make the first track
 	// unselectable.
@@ -213,14 +213,14 @@ type playEnvelope struct {
 	SubtitleIndex *int `json:"subtitleIndex,omitempty"`
 
 	// Ref materialises the item before playing it, for something not in the
-	// library yet (ADR 0118). It is the same envelope importContent takes,
+	// library yet (platform#73). It is the same envelope importContent takes,
 	// deliberately: pressing Play on something unowned *is* an import, and
 	// giving it a second shape would hide that.
 	Ref *importRef `json:"ref,omitempty"`
 }
 
 // playPart resolves a Part to playable bytes, seals the result into a ticket and
-// returns the Player surface to push (ADR 0045, ADR 0047).
+// returns the Player surface to push (platform#25, web#4).
 //
 // It is the one dispatch case that produces a surface rather than a toast,
 // because playback *is* a surface: the client has to be handed somewhere to
@@ -231,7 +231,7 @@ type playEnvelope struct {
 // receives an opaque handle to the Platform's own origin instead.
 func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([]*sessionv1.ServerMessage, error) {
 	caller := s.currentCaller()
-	// What this client said it can decode, declared on Attach (ADR 0047). It is
+	// What this client said it can decode, declared on Attach (web#4). It is
 	// read once and used twice — to rank candidates and to plan the streams —
 	// because those two must agree: choosing a release for its codecs and then
 	// planning against a different profile would re-encode the thing selection
@@ -244,7 +244,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 			return nil, contracts.NewError(contracts.InvalidArgument, "play part: input is not valid JSON")
 		}
 	}
-	// Playing something unowned adds it first (ADR 0118). The library gains
+	// Playing something unowned adds it first (platform#73). The library gains
 	// things people bounce off after ninety seconds, and that cost is accepted:
 	// the alternative was a Play button that did not exist for anything not
 	// already added.
@@ -276,12 +276,12 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		return nil, err
 	}
 
-	// Probe the winner, then decide per stream (ADR 0050). This is where a 4K
+	// Probe the winner, then decide per stream (platform#29). This is where a 4K
 	// HEVC release with four E-AC3 audio tracks becomes "copy the video, encode
 	// the English audio" rather than either a whole-file transcode or a silent
 	// film. The plan travels sealed inside the ticket, so the origin does not
 	// re-probe on every range request a seeking player makes.
-	// What this viewer wants to hear (ADR 0112). Read here rather than baked
+	// What this viewer wants to hear (platform#67). Read here rather than baked
 	// into the Platform, because language belongs to a person: four people
 	// sharing one library previously got one person's answer from a package
 	// variable, and the parameter that would have carried theirs was passed nil.
@@ -292,7 +292,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	if probed {
 		plan = playback.Decide(info, profile.codecs(), langs.Audio)
 		// A track chosen for this sitting overrides the one the preference
-		// picked (ADR 0116). Applied after Decide rather than inside it, because
+		// picked (platform#71). Applied after Decide rather than inside it, because
 		// the plan's *other* decisions — whether the video is copied, whether
 		// the audio needs an encode — still have to be made for the track that
 		// was actually chosen.
@@ -302,7 +302,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	// names what someone wants when they got the language they asked for; when
 	// they did not, this is where the Platform notices and escalates.
 	subtitles := langs.SubtitlesFor(plan.AudioLanguage)
-	// What the installed subtitle sources have for this item (ADR 0117). Asked
+	// What the installed subtitle sources have for this item (platform#72). Asked
 	// on every play rather than stored, because a subtitle URL is perishable in
 	// the same way a stream address is — and best-effort, so a source that is
 	// down costs the extra tracks and never the playback.
@@ -310,11 +310,11 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	plan.External = external
 
 	// Offered as HLS renditions, which is why subtitles cost no client change
-	// (ADR 0113). Only on the transcoded path: a direct-played release is
+	// (platform#68). Only on the transcoded path: a direct-played release is
 	// relayed byte for byte, so there is no playlist to declare a rendition in.
 	//
 	// A track that cannot be a rendition is burned into the picture instead
-	// (ADR 0114), which forces a video encode — so it can turn a release that
+	// (platform#69), which forces a video encode — so it can turn a release that
 	// would have direct-played into one that does not. That is the whole cost of
 	// typeset fidelity and of a Blu-ray's picture subtitles, and it is why the
 	// preference behind it is opt-in.
@@ -346,11 +346,11 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		// same item can correctly get different releases, and without this the
 		// second one reads as the first one having gone wrong.
 		telemetry.String("capability_class", profile.class),
-		// Whether the aggregator was asked at all (ADR 0049). A cache that has
+		// Whether the aggregator was asked at all (platform#28). A cache that has
 		// silently stopped hitting is indistinguishable from one that was never
 		// warm — both just look like playback being slow.
 		telemetry.Bool("cached", res.Cached),
-		// Whether the bytes had to be probed again (ADR 0050). Once the
+		// Whether the bytes had to be probed again (platform#29). Once the
 		// aggregator call was cached this became the largest remaining cost
 		// between a click and a first frame, so it is the number to watch.
 		telemetry.Bool("probe_reused", probed && len(res.Probe) > 0),
@@ -361,13 +361,13 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		telemetry.String("audio_language", plan.AudioLanguage),
 		telemetry.String("subtitle_mode", string(subtitles.Mode)),
 		telemetry.Bool("subtitle_escalated", subtitles.Escalated),
-		// Whether subtitles forced a video encode (ADR 0114). This is the single
+		// Whether subtitles forced a video encode (platform#69). This is the single
 		// most expensive thing a playback can decide to do, and from the outside
 		// it presents only as a release that suddenly plays badly — so the log
 		// has to be able to answer "was it the subtitles".
 		telemetry.Bool("subtitle_burned", plan.Burn != nil))
 	// The part and the capability class ride sealed in the ticket so the origin
-	// can ask the source again when the address stops working (ADR 0049). A
+	// can ask the source again when the address stops working (platform#28). A
 	// debrid link dies whenever its torrent leaves the provider's cache, so this
 	// is what makes the resolution cache safe rather than merely fast.
 	ticket, err := h.tickets.Mint(res.URL, res.Headers, caller.Session, plan,
@@ -376,7 +376,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		return nil, contracts.WrapError(contracts.Internal, "mint playback ticket", err)
 	}
 
-	// Where this viewer got to (ADR 0046). Read after the ticket is minted
+	// Where this viewer got to (platform#26). Read after the ticket is minted
 	// rather than before, because a resume offset is a refinement and minting
 	// is the thing that can fail — ordering it this way means a state read that
 	// goes wrong costs the offset, never the play.
@@ -394,7 +394,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 
 		ResumeAt: resumeAt,
 		// The authored subtitle scripts, for a client that can draw them
-		// (ADR 0115). A client that cannot ignores this and uses the HLS
+		// (platform#70). A client that cannot ignores this and uses the HLS
 		// renditions, which are in the playlist either way.
 		Subtitles: subtitleTracksFor(ticket, plan),
 		// Which pipeline the client should use, decided before it fetches a
@@ -405,7 +405,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	})
 	msgs := []*sessionv1.ServerMessage{regionMsg(ctx, s, playerRegion, sessionv1.RegionUpdate_REPLACE, node)}
 
-	// What to offer after this one (ADR 0047), pushed as a second region update
+	// What to offer after this one (web#4), pushed as a second region update
 	// beside the player — the two-lane transport driving the region unprompted,
 	// not the client asking. Best-effort and after the mint, so a missing or slow
 	// lookup costs the "Next episode" control, never the play.
@@ -421,11 +421,11 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 }
 
 // mediaInfo answers what the chosen release actually is, from storage when it is
-// already known and from ffprobe when it is not (ADR 0050).
+// already known and from ffprobe when it is not (platform#29).
 //
 // Reusing a stored probe is the whole reason this is worth having. A probe
 // describes bytes and bytes do not change, so the second play of a release was
-// paying for an answer nobody could have got wrong — and once ADR 0049's cache
+// paying for an answer nobody could have got wrong — and once platform#28's cache
 // removed the aggregator call, that payment was the largest thing left between a
 // click and a first frame.
 //
@@ -453,7 +453,7 @@ func (h *Handler) mediaInfo(ctx context.Context, caller v1.Caller, res app.Resol
 // recordProbe stores what the probe learned, so the next play of this release
 // skips it.
 //
-// **It records as the system principal, not as the viewer** (ADR 0017).
+// **It records as the system principal, not as the viewer** (platform#13).
 // Recording writes to the content graph, so it asks for `content.bind`, and a
 // read-only viewer does not have it — so this used to be a correct refusal with
 // a wrong outcome: that viewer played, warmed the cache for nobody, and
@@ -501,7 +501,7 @@ func playbackMimeType(plan playback.Plan) string {
 	if plan.Duration <= 0 {
 		// No duration means no playlist, so the origin serves the unseekable
 		// fragmented-MP4 pipe and the client plays it as a plain progressive
-		// stream (ADR 0111).
+		// stream (platform#66).
 		return "video/mp4"
 	}
 	return playback.HLSMimeType
@@ -510,7 +510,7 @@ func playbackMimeType(plan playback.Plan) string {
 // playbackSrc is what the client fetches.
 //
 // A relayed stream is the ticket itself; a segmented one is the playlist beneath
-// it (ADR 0109). The two are different resources rather than the same one
+// it (platform#64). The two are different resources rather than the same one
 // behaving differently, so the difference is in the URL rather than in a header
 // the client would have to fetch before it knew what it had.
 func playbackSrc(ticket string, plan playback.Plan) string {
@@ -521,12 +521,12 @@ func playbackSrc(ticket string, plan playback.Plan) string {
 }
 
 // styledTracks renders the authored subtitle scripts as the player node carries
-// them (ADR 0115): a URL under the same ticket, what it is, and which one the
+// them (platform#70): a URL under the same ticket, what it is, and which one the
 // preference chose.
 //
 // The URL is the origin's own, never the upstream's, for the same reason the
 // playback source is: the location behind a ticket may carry a debrid credential
-// and stays server-side (ADR 0045).
+// and stays server-side (platform#25).
 func subtitleTracksFor(ticket string, plan playback.Plan) []screens.SubtitleTrack {
 	var out []screens.SubtitleTrack
 	for i, s := range plan.Styled {
@@ -538,7 +538,7 @@ func subtitleTracksFor(ticket string, plan playback.Plan) []screens.SubtitleTrac
 			Default:  s.Default,
 		})
 	}
-	// The module-found files, served as WebVTT by the origin (ADR 0117). They
+	// The module-found files, served as WebVTT by the origin (platform#72). They
 	// are never default: the release's own tracks are the ones a preference was
 	// resolved against, and a file from elsewhere turning itself on would
 	// override a decision nobody asked it to make.
@@ -554,7 +554,7 @@ func subtitleTracksFor(ticket string, plan playback.Plan) []screens.SubtitleTrac
 }
 
 // externalSubtitles asks the installed subtitle sources what they have, and
-// costs the play nothing when they have nothing to say (ADR 0117).
+// costs the play nothing when they have nothing to say (platform#72).
 func (h *Handler) externalSubtitles(ctx context.Context, caller v1.Caller, nodeID string) []playback.ExternalSubtitle {
 	if nodeID == "" {
 		return nil
@@ -587,14 +587,14 @@ func (h *Handler) externalSubtitles(ctx context.Context, caller v1.Caller, nodeI
 }
 
 // importEnvelope is the importContent action input: a content ref to materialise
-// (ADR 0028), under the runtime's `ref` key — the same shape the detail screen's
+// (platform#18), under the runtime's `ref` key — the same shape the detail screen's
 // Add-to-library action emits.
 type importEnvelope struct {
 	Ref importRef `json:"ref"`
 }
 
 // importRef is the ref itself, named rather than anonymous because playPart now
-// carries the same one (ADR 0118): pressing Play on something unowned *is* an
+// carries the same one (platform#73): pressing Play on something unowned *is* an
 // import, and two shapes for one thing would have hidden that.
 type importRef struct {
 	Provider       string `json:"provider"`
@@ -629,8 +629,8 @@ func importRefFromInput(input []byte) (v1.ContentRef, error) {
 }
 
 // configureEnvelope is the configureModule action input: a module id and its
-// opaque settings document (ADR 0021), the shape a module's contributed settings
-// UI (ADR 0038) drives.
+// opaque settings document (platform#17), the shape a module's contributed settings
+// UI (sdk#4) drives.
 type configureEnvelope struct {
 	ModuleID string          `json:"moduleId"`
 	Settings json.RawMessage `json:"settings"`
@@ -638,7 +638,7 @@ type configureEnvelope struct {
 
 // configureFromInput decodes a configureModule action envelope. settings arrives
 // as a JSON object and is carried through opaquely — the Platform stores it
-// without interpreting it (ADR 0021).
+// without interpreting it (platform#17).
 func configureFromInput(input []byte) (string, []byte, error) {
 	var env configureEnvelope
 	if len(input) > 0 {
@@ -653,7 +653,7 @@ func configureFromInput(input []byte) (string, []byte, error) {
 	return env.ModuleID, settings, nil
 }
 
-// extensionEnvelope is the install/uninstall action input (ADR 0081): which
+// extensionEnvelope is the install/uninstall action input (platform#51): which
 // repository a module comes from and its module id. Uninstall reads only the
 // module id.
 type extensionEnvelope struct {
@@ -688,7 +688,7 @@ func extensionModuleIDFromInput(input []byte) (string, error) {
 
 // browserPreference is what a desktop browser can play, in the shape selection
 // ranks on. It is now the *fallback* rather than the answer: a client that
-// declares a profile on Attach (ADR 0047) is ranked against what it said, and
+// declares a profile on Attach (web#4) is ranked against what it said, and
 // this stands in only for one that declares nothing.
 //
 // It mirrors playback.DefaultBrowserCodecs and exists for the same reason: HEVC
@@ -709,7 +709,7 @@ func browserPreference() app.PlaybackPreference {
 // to set it to.
 //
 // The value is json.RawMessage rather than a concrete type because a preference
-// is stored uninterpreted (ADR 0058) — expert mode is a boolean, a theme is a
+// is stored uninterpreted (platform#36) — expert mode is a boolean, a theme is a
 // string, and the transport should not need editing when the second one
 // arrives.
 type preferenceEnvelope struct {
@@ -793,13 +793,13 @@ func sessionIDFromInput(input []byte) (domain.SessionID, error) {
 }
 
 // materialiseForPlay adds an item to the library and reports what to play
-// (ADR 0118).
+// (platform#73).
 //
 // **It is an import, and it authorises as one.** The command it calls is the
 // same one the Add-to-library button invokes, so a viewer without
 // `content.import` is refused here exactly as they are refused there — pressing
 // Play cannot be a way around the authority that curates the library
-// (ADR 0069).
+// (platform#44).
 //
 // An empty part id with no error means the work was added and there is nothing
 // unambiguous to start: a series. Guessing an episode would be worse than

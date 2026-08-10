@@ -18,13 +18,13 @@ name: verify
 # where no person is reading the result: core-module-bump.yml opens dependency
 # bumps with auto-merge on and states that this workflow is what decides, so an
 # automated core module bump was being admitted on the strength of the tree
-# compiling. release.yml keeps its own `gate` job — ADR 0063 wants a release
+# compiling. release.yml keeps its own `gate` job — platform#38 wants a release
 # pre-proven from the tag's own tree, not from a green check on an ancestor.
 #
 # `gate` needs the SDK beside this checkout because docker-compose.test.yml
 # mounts `../sdk`: test/sdkprobe is its own Go module resolving the SDK through
 # a `replace` to that path, and test/sdkboundary compiles it to prove the
-# published surface imports cleanly from outside (ADR 0016). It is checked out
+# published surface imports cleanly from outside (platform#12). It is checked out
 # at the version go.mod requires rather than at its default branch, for two
 # reasons — the probe then stands in for a third party resolving the version
 # this repository actually ships against, and a pull request here cannot go red
@@ -72,7 +72,7 @@ jobs:
       - name: go build
         run: go build ./...
 
-      # The dev stack runs a `-tags mosaicdev` build (ADR 0099), whose source
+      # The dev stack runs a `-tags mosaicdev` build (platform#55), whose source
       # lives in this repository and whose only compiled-in difference is that it
       # can repoint the module repository from the environment. A tag nothing
       # builds is a tag that stops compiling silently, and the first person to

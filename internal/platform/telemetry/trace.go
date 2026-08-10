@@ -16,13 +16,13 @@ import (
 // TraceparentHeader is the W3C Trace Context header every Mosaic edge reads
 // and writes. Using the standard rather than a bespoke header is what makes a
 // future OTLP export, and any off-the-shelf instrumentation, work without a
-// translation layer at each boundary (ADR 0054).
+// translation layer at each boundary (platform#32).
 const TraceparentHeader = "traceparent"
 
 // TraceContext identifies one distributed operation and this process's place
 // in it. The trace id *is* Mosaic's correlation id — there is no second
 // identifier, because two would mean two things to propagate, two to store and
-// exactly one that gets forgotten at some new edge (ADR 0054).
+// exactly one that gets forgotten at some new edge (platform#32).
 type TraceContext struct {
 	// TraceID is stable for the whole operation: a Shell click, the session
 	// intent it sends, the command handler, the module, the SQL, and the
@@ -118,7 +118,7 @@ func (tc TraceContext) Traceparent() string {
 // The value is untrusted input: a client controls it, so a client can forge
 // it. It is parsed strictly and discarded outright if malformed — never
 // repaired, never partially accepted — and it is used for correlation only.
-// Nothing downstream may route, authorise or rate-limit on it (ADR 0054).
+// Nothing downstream may route, authorise or rate-limit on it (platform#32).
 func ParseTraceparent(value string) (TraceContext, bool) {
 	parts := strings.Split(strings.TrimSpace(value), "-")
 	if len(parts) != 4 {
@@ -168,7 +168,7 @@ func TraceInto(ctx context.Context, tc TraceContext) context.Context {
 	// **Both representations, always.** TraceFrom reads Mosaic's and the OTel
 	// tracer reads OpenTelemetry's, so seeding only one would give a span a
 	// parent by one account and none by the other — a tree that looks right in
-	// the record and is rootless in an exported trace (ADR 0128).
+	// the record and is rootless in an exported trace (sdk#8).
 	ctx = trace.ContextWithSpanContext(ctx, tc.SpanContext())
 	return context.WithValue(ctx, traceKey{}, tc)
 }

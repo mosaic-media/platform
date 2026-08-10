@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// The segmented transcode's playlist (ADR 0109).
+// The segmented transcode's playlist (platform#64).
 //
 // **It is computed, not observed**, and that is the whole reason segmenting
 // replaces byte addressing. The origin cannot know how many bytes a transcode
@@ -22,7 +22,7 @@ import (
 // single byte exists, and a player can seek anywhere in it immediately.
 //
 // Nothing here starts a transcode or touches ffmpeg. That separation is
-// deliberate: this is the part of ADR 0109 that is pure arithmetic over a
+// deliberate: this is the part of platform#64 that is pure arithmetic over a
 // duration, and it is the part that can be checked without a decoder — which
 // matters in a slice whose every previous design passed its unit tests and
 // failed in a browser.
@@ -41,7 +41,7 @@ import (
 // keyframes yields ten-second segments however this is set. The nominal grid
 // tolerates that, because a seek restarts at the position the playlist names
 // rather than inheriting where the previous segment happened to end
-// (ADR 0111).
+// (platform#66).
 const encodedSegmentLength = 6 * time.Second
 
 // segmentCount is how many segments a release of this length divides into.
@@ -91,14 +91,14 @@ const mediaPlaylistType = "application/vnd.apple.mpegurl"
 // HLSMimeType is the same value, named for the client rather than the response.
 // It travels on the Player node so a client chooses its pipeline before it
 // fetches anything — Safari plays this natively and everything else needs a
-// media framework (ADR 0070's stated condition).
+// media framework (web#5's stated condition).
 const HLSMimeType = mediaPlaylistType
 
 // mediaPlaylist renders the whole playlist for a release of this length.
 //
 // **There is no master playlist, because there is one rendition.** A master
 // exists to let a client choose between variants, and Mosaic serves exactly one:
-// ADR 0109 puts a real bitrate ladder out of scope, because a menu of unrelated
+// platform#64 puts a real bitrate ladder out of scope, because a menu of unrelated
 // releases cannot supply aligned renditions at any level of effort. Emitting a
 // master anyway would cost a round trip and would require declaring a CODECS
 // string the origin can only guess at before the transcode runs — and a wrong
@@ -125,7 +125,7 @@ func mediaPlaylist(total, length time.Duration, segmentURI func(n int) string) s
 	// a measured keyframe interval is rarely a whole number of seconds, and a
 	// truncated ceiling would sit under the segments it is supposed to bound.
 	//
-	// Sprintf rather than Fprintf throughout, because ADR 0053's gate bans
+	// Sprintf rather than Fprintf throughout, because platform#31's gate bans
 	// every fmt function that emits — deliberately coarsely, since it cannot
 	// tell a strings.Builder from os.Stderr — and Sprintf is the formatter it
 	// leaves alone.
@@ -154,11 +154,11 @@ const initSegment = -1
 // videoPlaylistName is where the video's own media playlist moves to once a
 // master exists above it. Without subtitles there is no master and the media
 // playlist keeps the entry-point name, so a release with none is served exactly
-// the bytes it was before (ADR 0113).
+// the bytes it was before (platform#68).
 const videoPlaylistName = "v.m3u8"
 
 // masterPlaylist declares the video rendition and one subtitle rendition per
-// offered track (ADR 0113).
+// offered track (platform#68).
 //
 // A master is emitted only when there are subtitles to declare. The comment on
 // mediaPlaylist gives the reasons not to have one — a round trip, and a CODECS
@@ -185,7 +185,7 @@ func masterPlaylist(bandwidth int, subtitles []SubtitleDelivery) string {
 		if s.Language != "" {
 			b.WriteString(fmt.Sprintf(",LANGUAGE=%q", s.Language))
 		}
-		// DEFAULT is the whole delivery of ADR 0112: the escalation decided
+		// DEFAULT is the whole delivery of platform#67: the escalation decided
 		// which track comes on, and this attribute is where that decision
 		// reaches the player. AUTOSELECT tracks it, so a client choosing by the
 		// system language does not overrule a choice the viewer already made.

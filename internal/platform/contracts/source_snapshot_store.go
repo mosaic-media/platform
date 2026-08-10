@@ -10,7 +10,7 @@ import (
 )
 
 // SourceSnapshot is the last good answer a source gave to one question, kept so
-// a screen built on that answer can be drawn again without asking (ADR 0052).
+// a screen built on that answer can be drawn again without asking (platform#30).
 //
 // **It holds items, never a rendered tree**, and that is the whole design rather
 // than an efficiency. Artwork URLs are signed with a process-scoped key and
@@ -30,7 +30,7 @@ type SourceSnapshot struct {
 	// and does not interpret the questions.
 	Key string
 	// Document is the answer, marshalled. Opaque for the reason
-	// `node_metadata`'s is (ADR 0107): the shape is the SDK's, and a field the
+	// `node_metadata`'s is (platform#62): the shape is the SDK's, and a field the
 	// SDK adds should cost no migration.
 	Document []byte
 	// TakenAt is when the source gave this answer. It is what "how old is this
@@ -41,7 +41,7 @@ type SourceSnapshot struct {
 }
 
 // SourceSnapshotStore persists the last good answer per source and question
-// (ADR 0052).
+// (platform#30).
 //
 // **Durable, in the Platform's own storage**, because the point is surviving a
 // process restart, which an in-memory cache cannot. It also means a source being

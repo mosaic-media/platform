@@ -16,7 +16,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Manifest is an extension module's non-executing declaration (ADR 0065): the
+// Manifest is an extension module's non-executing declaration (platform#40): the
 // file the Platform reads to learn what a module is *without* running it.
 //
 // Reading it rather than executing the binary is the whole point. The
@@ -41,12 +41,12 @@ type Manifest struct {
 	ID      string `json:"id"`
 	Version string `json:"version"`
 	Name    string `json:"name"`
-	// SDKMajor is the SDK major version the module was built against (ADR 0064).
+	// SDKMajor is the SDK major version the module was built against (platform#39).
 	// Compatibility is a shared major, so a mismatch is refused before the
 	// process is even started — the one compatibility number a user reasons
 	// about, checked without executing anything.
 	SDKMajor int `json:"sdk_major"`
-	// Provides are the roles the module fills (ADR 0027), declared here so a
+	// Provides are the roles the module fills (sdk#2), declared here so a
 	// selection or a capability-gated affordance can reason about the module
 	// before it runs.
 	Provides []v1.Role `json:"provides"`

@@ -16,7 +16,7 @@ import (
 
 // SearchAvailableContentQuery is a free-text search over what the enabled
 // modules can source — the discovery surface that lets a user search Mosaic
-// without a raw provider id (ADR 0028). It is a Platform query, not part of the
+// without a raw provider id (platform#18). It is a Platform query, not part of the
 // published ContentService: it drives the modules, they do not call it.
 type SearchAvailableContentQuery struct {
 	Caller    v1.Caller
@@ -59,7 +59,7 @@ func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableC
 	// skipped (nil, nil) so its plane empties without blanking the others.
 	//
 	// The fallback tier answers only when nothing else found the title. The
-	// Platform still does no cross-provider dedup (ADR 0072 records this), so
+	// Platform still does no cross-provider dedup (module-cinemeta#1 records this), so
 	// two general metadata sources answering one query is the same title twice —
 	// and unlike a catalog row, a duplicate search hit sends the two planes to
 	// different providers for the same film.
@@ -82,7 +82,7 @@ func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableC
 			//
 			// The module's context is bound to a separate variable rather than
 			// shadowing ctx. moduleSpan rebinds the logger and installs the
-			// module's telemetry surface (ADR 0059), so anything the Platform
+			// module's telemetry surface (sdk#5), so anything the Platform
 			// does afterwards under that context is recorded as the module's
 			// work — and, once the span has ended, recorded beneath a parent
 			// that has already closed. The dedup below is Platform work, and
@@ -113,7 +113,7 @@ func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableC
 
 // resolveInLibrary reports whether a virtual item's ref already resolves to a
 // library Work, and that Work's id — the dedup that marks a virtual result as
-// already owned (ADR 0028). It matches on the provider identity the ref carries;
+// already owned (platform#18). It matches on the provider identity the ref carries;
 // a ref without one is never in the library. A lookup error is treated as "not
 // found" so a transient read does not falsely hide an item from search.
 //

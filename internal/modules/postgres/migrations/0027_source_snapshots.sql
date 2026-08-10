@@ -1,5 +1,5 @@
 -- Migration 0027 — The durable snapshot a source-backed screen renders from
--- (ADR 0052).
+-- (platform#30).
 --
 -- Restarting the Platform under a live client produced a home screen reading
 -- "Nothing to show yet — try adding an addon in Settings" on an install with an

@@ -18,7 +18,7 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/auth"
 )
 
-// The pre-session action lane (ADR 0101's lane, carrying ADR 0098's claim).
+// The pre-session action lane (platform#57's lane, carrying platform#54's claim).
 //
 // What is worth testing hardest here is not that a claim works — a handler that
 // created a user would also do that — but the properties that would be
@@ -42,7 +42,7 @@ func invoke(t *testing.T, h *auth.Handler, action string, input any) (*authv1.In
 }
 
 // A well-formed claim on an empty server creates the owner and signs them in,
-// which is the whole of ADR 0098's decision: the person who claimed the server
+// which is the whole of platform#54's decision: the person who claimed the server
 // is signed in by the act of claiming it.
 func TestClaimingAnUnclaimedServerCreatesTheOwnerAndSignsThemIn(t *testing.T) {
 	db := newFakeDB()
@@ -68,7 +68,7 @@ func TestClaimingAnUnclaimedServerCreatesTheOwnerAndSignsThemIn(t *testing.T) {
 	}
 
 	// The owner holds everything, because it is the root of every other grant
-	// (ADR 0069): an authority withheld here could never be given to anybody.
+	// (platform#44): an authority withheld here could never be given to anybody.
 	caps := signed.GetSession().GetCapabilities()
 	if len(caps) == 0 {
 		t.Fatal("the owner's session carries no capability set")
@@ -193,7 +193,7 @@ func TestASignInRefusalDoesNotSayWhichHalfWasWrong(t *testing.T) {
 
 // Signing in through the door is the same command the direct RPC calls, so it
 // must mint the same thing — including the capability set, which is what a
-// client gates its affordances on (ADR 0036).
+// client gates its affordances on (platform#24).
 func TestSigningInThroughTheDoorMintsASessionWithItsCapabilities(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)

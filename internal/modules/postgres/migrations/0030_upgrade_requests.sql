@@ -1,4 +1,4 @@
--- The upgrade request, and the two issue types that surround it (ADR 0129).
+-- The upgrade request, and the two issue types that surround it (platform#77).
 --
 -- **The Platform records what somebody asked for; the Supervisor carries it
 -- out.** The Platform cannot stop and restart itself onto a different
@@ -7,7 +7,7 @@
 -- over the private handoff listener, and settled by comparing the Generation
 -- the Platform is running against the one that was asked for.
 
--- Two new types. The set stays closed and CHECK-constrained for ADR 0015's
+-- Two new types. The set stays closed and CHECK-constrained for platform#11's
 -- reason — Platform code branches on it to choose suggestions — so widening it
 -- is a migration rather than an insert.
 ALTER TABLE operational_issues DROP CONSTRAINT IF EXISTS operational_issues_type_check;

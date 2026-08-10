@@ -10,7 +10,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// RelationStore persists the association graph (ADR 0013).
+// RelationStore persists the association graph (platform#9).
 //
 // Association does not nest, which is why it is a graph and not part of the
 // containment tree. Computing a grouping is a background job writing rows
@@ -18,7 +18,7 @@ import (
 // else, with no second query path.
 //
 // There is no Update. Edges are written once with a confidence score, and
-// ADR 0013 records that nothing yet ages or rechecks them — a changed
+// platform#9 records that nothing yet ages or rechecks them — a changed
 // assessment is a Delete and a Create, which keeps the absence of a decay
 // policy visible rather than implied by a mutable score.
 type RelationStore interface {

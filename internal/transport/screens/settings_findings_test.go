@@ -12,7 +12,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// The Problems panel is what makes the register land at all (ADR 0119), so what
+// The Problems panel is what makes the register land at all (platform#74), so what
 // is worth testing is what a person reads — not that a list rendered.
 
 func findingsText(t *testing.T, svc *Service) string {
@@ -95,7 +95,7 @@ func TestEverySuggestionOfferedHasWords(t *testing.T) {
 			label, _, ok := suggestionControl(suggestion)
 			if suggestion == domain.SuggestionReinstallExtension {
 				// Deliberately undrawn: the service refuses it, so a control
-				// would fail every time it was pressed (ADR 0036).
+				// would fail every time it was pressed (platform#24).
 				if ok {
 					t.Errorf("%s is drawn as a control and the service refuses it", suggestion)
 				}

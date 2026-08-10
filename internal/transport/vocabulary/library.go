@@ -11,7 +11,7 @@ import (
 // The two things a client is handed before it can draw anything (contracts#4):
 // the components, and the skin. They live here rather than in either transport
 // because both transports serve them — the session pushes them on connect, and
-// the pre-session bootstrap (ADR 0101) sends the doorway's share of them to a
+// the pre-session bootstrap (platform#57) sends the doorway's share of them to a
 // client that has no session to be pushed to.
 
 // definitionLibrary is the contract's component library.

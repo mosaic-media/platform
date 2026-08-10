@@ -27,7 +27,7 @@ type ListSessionsResult struct {
 	Current domain.SessionID
 }
 
-// ListSessions returns the caller's own live sessions (ADR 0102).
+// ListSessions returns the caller's own live sessions (platform#58).
 //
 // This is what makes a bearer pair defensible rather than merely convenient: a
 // long-lived credential a user cannot see and cannot end is a long-lived

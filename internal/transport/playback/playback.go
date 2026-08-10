@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-// Package playback is the Platform's media origin (ADR 0045). A playback module
+// Package playback is the Platform's media origin (platform#25). A playback module
 // resolves a Part to an upstream location; this serves those bytes from the
 // Platform's own origin, so a client fetches a same-origin, range-capable URL
 // and never sees where the bytes actually came from.
@@ -15,7 +15,7 @@
 // file, not double. Letting a client fetch upstream directly is a deliberate
 // future opt-out for the local-network case, not the default.
 //
-// The ticket is **sealed, not signed**. The artwork proxy (ADR 0030) signs a URL
+// The ticket is **sealed, not signed**. The artwork proxy (platform#20) signs a URL
 // it puts in the query string, which is fine for a public image; here the
 // payload is exactly the secret being protected, so it is encrypted rather than
 // authenticated-in-the-clear.
@@ -53,7 +53,7 @@ type ticket struct {
 	// today's handler enforces only the expiry, which is stated plainly here
 	// rather than described as binding it does not do.
 	Session string `json:"s,omitempty"`
-	// Plan is the per-stream decision (ADR 0050): which video and audio streams
+	// Plan is the per-stream decision (platform#29): which video and audio streams
 	// travel and whether each is copied or re-encoded. It is decided once, at
 	// mint time, with the probe results in hand — not re-derived on every range
 	// request, which for a seeking player would mean probing dozens of times.
@@ -61,7 +61,7 @@ type ticket struct {
 	Expires int64 `json:"e"`
 
 	// PartID and Class are what the origin needs to ask the source again
-	// (ADR 0049). A cached upstream address is perishable with no trustworthy
+	// (platform#28). A cached upstream address is perishable with no trustworthy
 	// expiry — a debrid link dies the moment its torrent leaves the provider's
 	// cache, whatever its age — so the answer to a dead one is to re-resolve
 	// rather than to fail the play, and re-resolving needs the release and the
@@ -83,7 +83,7 @@ type ticket struct {
 type TicketOption func(*ticket)
 
 // For records which release and capability class an address was resolved for,
-// so the origin can re-ask when it stops working (ADR 0049).
+// so the origin can re-ask when it stops working (platform#28).
 func For(partID, class string) TicketOption {
 	return func(t *ticket) { t.PartID, t.Class = partID, class }
 }
@@ -229,7 +229,7 @@ func Handler(sealer *Sealer, client *http.Client, remuxer *Remuxer) http.Handler
 var resolver Resolver
 
 // SetResolver gives the origin a way to re-ask the source for a dead link
-// (ADR 0049). Called once from the composition root.
+// (platform#28). Called once from the composition root.
 func SetResolver(r Resolver) { resolver = r }
 
 // refreshed re-resolves a ticket's upstream address and reports whether it
@@ -283,7 +283,7 @@ func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, 
 		// Anything the client cannot decode as-is goes through ffmpeg; anything
 		// it can is relayed untouched, which keeps byte-range seeking and costs
 		// no CPU. The branch is here rather than in the module because this is a
-		// transform on the serving side, and a module never serves (ADR 0045).
+		// transform on the serving side, and a module never serves (platform#25).
 		if !t.Plan.DirectPlay {
 			if !remuxer.Available() {
 				http.Error(w, "this release needs re-encoding ("+t.Plan.Reason+") and ffmpeg is not installed", http.StatusNotImplemented)
@@ -294,10 +294,10 @@ func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, 
 		}
 		if resource != "" {
 			// A relayed stream has one sub-resource and only one: a subtitle file
-			// a module found elsewhere (ADR 0117). It is not in the release, so
+			// a module found elsewhere (platform#72). It is not in the release, so
 			// whether the video needed a transcode has no bearing on it — which
 			// is exactly why a direct-played release can have subtitles at all,
-			// where an embedded track cannot (ADR 0113).
+			// where an embedded track cannot (platform#68).
 			if i, ok := externalSubtitleOf(resource); ok && i < len(t.Plan.External) {
 				serveExternalSubtitle(w, r, remuxer, t.Plan.External[i].URL)
 				return
@@ -309,7 +309,7 @@ func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, 
 		}
 
 		// The relayed fetch, retried once against a re-resolved address
-		// (ADR 0049). This is the cleanest place in the origin to do it: the
+		// (platform#28). This is the cleanest place in the origin to do it: the
 		// upstream is contacted before a byte is written to the client, so a
 		// dead link can be repaired with nothing committed to the response.
 		resp, err := relayFetch(r, client, t)

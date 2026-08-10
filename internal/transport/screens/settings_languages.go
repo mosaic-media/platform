@@ -17,7 +17,7 @@ import (
 )
 
 // Settings › Preferences › Language — what a viewer wants to hear and read
-// (ADR 0112).
+// (platform#67).
 //
 // Under Preferences with Home, and for the same reason: it is taste. Four people
 // share one library and disagree about this more than about anything else on the
@@ -154,7 +154,7 @@ func stylingButton(current playback.LanguagePreference, styling playback.Subtitl
 	next.Styling = styling
 	// The field this replaced is cleared on any write, so a document written
 	// before it existed stops carrying an answer that contradicts the new one
-	// (ADR 0115). It is read on the way in and never written on the way out.
+	// (platform#70). It is read on the way in and never written on the way out.
 	next.Typeset = false
 	return ui.Button(label, tone, ui.OnTap(setLanguages(next)))
 }
@@ -165,7 +165,7 @@ func stylingButton(current playback.LanguagePreference, styling playback.Subtitl
 // It reuses `setPreference` rather than growing an action of its own, exactly as
 // the home composition does. The store keeps the value uninterpreted and the
 // playback decision owns its meaning, which is the same rule module settings
-// follow (ADR 0021).
+// follow (platform#17).
 func setLanguages(p playback.LanguagePreference) ui.Action {
 	// Marshalled here because the control has to carry a value, and a document
 	// that will not encode is a control that would silently do nothing. An

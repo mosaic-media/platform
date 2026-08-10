@@ -5,7 +5,7 @@ package playback
 
 import "testing"
 
-// The per-play override (ADR 0116): a preference decides the default, an
+// The per-play override (platform#71): a preference decides the default, an
 // override decides one sitting, and neither writes to the other.
 
 func ptr(v int) *int { return &v }

@@ -35,7 +35,7 @@ type PurgeSessionTokensResult struct {
 }
 
 // PurgeSessionTokens deletes access and refresh tokens that are past their
-// lifetime (ADR 0102).
+// lifetime (platform#58).
 //
 // It exists because the access-token table is the fastest-growing thing in the
 // schema: one row per client per ten minutes, forever, and nothing else would

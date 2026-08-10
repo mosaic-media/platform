@@ -1,12 +1,12 @@
--- Migration 0024 — The stored metadata document (ADR 0107).
+-- Migration 0024 — The stored metadata document (platform#62).
 --
 -- What a metadata provider said about a materialised title, kept so a library
 -- detail renders from the object graph rather than from a live provider call.
--- Before this, a node-id detail had nothing to draw with: ADR 0034 re-derived
+-- Before this, a node-id detail had nothing to draw with: sdk#3 re-derived
 -- everything from the provider on every render, keyed by a ref, and a library
 -- card opens its node by id — so the two never met and the screen was blank.
 --
--- **A table rather than a column on `nodes`** (ADR 0107). Artwork lives on the
+-- **A table rather than a column on `nodes`** (platform#62). Artwork lives on the
 -- node because it is read on every card of every list; this is read on one
 -- screen at a time, and carrying it through every list read that never opens it
 -- would put a document on the hot path to serve the cold one. It also has a
@@ -14,7 +14,7 @@
 -- is — and that belongs to the cache.
 --
 -- **Platform-owned, unlike `nodes.attributes`.** Attributes are module-owned and
--- never interpreted (ADR 0013); this is read by the Platform to draw a screen.
+-- never interpreted (platform#9); this is read by the Platform to draw a screen.
 
 CREATE TABLE IF NOT EXISTS node_metadata (
     node_id    uuid        PRIMARY KEY REFERENCES nodes (id) ON DELETE CASCADE,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS node_metadata (
 );
 
 -- ON DELETE CASCADE, which is deliberate and is the one place in the content
--- model that cascades. Everywhere else deletion is RESTRICT because ADR 0013
+-- model that cascades. Everywhere else deletion is RESTRICT because platform#9
 -- rules that a deletion is a decision a user confirms and never a silent
 -- cascade — but that protects *content*, and this is a cache of something a
 -- provider said. A document surviving the node it describes is a row nothing can

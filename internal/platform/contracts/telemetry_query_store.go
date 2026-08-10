@@ -10,7 +10,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// TelemetryQueryStore reads stored telemetry back (ADR 0058).
+// TelemetryQueryStore reads stored telemetry back (platform#36).
 //
 // It is read-only and it is **not on Tx**, which is the same call the write
 // side made for the opposite reason. Telemetry is written outside any

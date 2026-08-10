@@ -17,7 +17,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// The expert-mode surface (ADR 0058). The visibility rule is the part worth
+// The expert-mode surface (platform#36). The visibility rule is the part worth
 // testing hardest: a user without telemetry.read must not even see the toggle.
 
 func TestExpertModeAffordanceIsHiddenWithoutTheGrant(t *testing.T) {
@@ -204,7 +204,7 @@ func TestTraceScreenKeepsOrphanedSpans(t *testing.T) {
 
 // nodeText renders a screen to its wire JSON, which is what the assertions
 // above match against. Testing the payload rather than a prose rendering is
-// deliberate: the payload is the contract a client renders (ADR 0029), so a
+// deliberate: the payload is the contract a client renders (platform#19), so a
 // label that vanished from it is a label no client can show.
 func nodeText(n sdui.Node) string {
 	raw, err := protojson.Marshal(n)

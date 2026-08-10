@@ -35,7 +35,7 @@ type GrantablePermissionsResult struct {
 }
 
 // GrantablePermissions returns the permissions a grantor may confer, and which
-// of them a preset starts with (ADR 0069).
+// of them a preset starts with (platform#44).
 //
 // The narrowing is the point. **A grantor never sees a permission they do not
 // hold** — not greyed out, not disabled, absent — because the list is computed

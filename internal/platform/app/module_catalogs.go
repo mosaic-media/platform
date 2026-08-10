@@ -14,7 +14,7 @@ import (
 
 // ModuleCatalog is one collection a module exposes, tagged with the module id so
 // a caller can list its items and materialise from it. The catalog itself is
-// virtual — a view the source computes, never persisted (ADR 0028).
+// virtual — a view the source computes, never persisted (platform#18).
 type ModuleCatalog struct {
 	ModuleID string
 	Catalog  v1.Catalog
@@ -127,7 +127,7 @@ type ListCatalogItemsResult struct {
 }
 
 // ListCatalogItems lists a module catalog's entries as virtual candidates an
-// admin can select to publish (ADR 0028), marking each one in-library. It reads
+// admin can select to publish (platform#18), marking each one in-library. It reads
 // only; materialising a selection is a separate command.
 func (s *Service) ListCatalogItems(ctx context.Context, q ListCatalogItemsQuery) (ListCatalogItemsResult, error) {
 	if q.Caller.Session == "" {
@@ -146,11 +146,11 @@ func (s *Service) ListCatalogItems(ctx context.Context, q ListCatalogItemsQuery)
 // catalogItemsPage is ListCatalogItems with the boundary already cleared.
 //
 // It exists because a library rule pages a catalog several times in one
-// evaluation (ADR 0104), and calling the entry point per page would
+// evaluation (platform#60), and calling the entry point per page would
 // re-authenticate and re-authorise for every page of one rule of one run —
 // the exact shape that made a ten-result search cost ten boundary cycles.
 // Requiring an authorized is what says "already inside" in a signature rather
-// than in a comment (ADR 0066).
+// than in a comment (platform#41).
 func (s *Service) catalogItemsPage(ctx context.Context, az authorized, q ListCatalogItemsQuery) (ListCatalogItemsResult, error) {
 	provider, ok := s.capabilityCatalogProvider(q.ModuleID)
 	if !ok {

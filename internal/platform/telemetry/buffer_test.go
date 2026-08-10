@@ -80,7 +80,7 @@ func TestBufferedSinkWritesThrough(t *testing.T) {
 }
 
 // TestBufferedSinkNeverBlocksTheCaller is the rule the whole design exists to
-// enforce (ADR 0058): a user's playback must not wait on a log insert. The
+// enforce (platform#36): a user's playback must not wait on a log insert. The
 // writer here is wedged, so every buffer slot fills and the only correct
 // behaviour is for Write to keep returning promptly and shed load.
 func TestBufferedSinkNeverBlocksTheCaller(t *testing.T) {

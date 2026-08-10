@@ -24,7 +24,7 @@ import (
 const moduleRecordQuota = 512
 
 // moduleTelemetry implements the SDK's v1.Telemetry over the Platform's own
-// logger and spans (ADR 0059).
+// logger and spans (sdk#5).
 //
 // The Platform stamps attribution; the module cannot. Module id, trace context
 // and component are fixed here at the invocation seam, so a module cannot
@@ -57,14 +57,14 @@ func newModuleTelemetry(lg *telemetry.Logger, moduleID string, metrics *telemetr
 }
 
 // NewModuleTelemetry builds the long-lived v1.Telemetry an out-of-process module
-// observes through for its whole life (ADR 0059), attributed to moduleID and
+// observes through for its whole life (sdk#5), attributed to moduleID and
 // forwarding to the Platform logger with the Platform's redaction applied. The
 // composition root hands it to the extension host when it adopts a module.
 //
 // It is deliberately not record-quota-bounded: the per-invocation cap the
 // in-process path uses does not map onto a long-lived process, and how a
 // long-lived out-of-process module's telemetry should be bounded — a rate limit,
-// a sampling policy — is ADR 0077's open question, named here rather than
+// a sampling policy — is sdk#7's open question, named here rather than
 // answered with a guessed cap.
 func NewModuleTelemetry(lg *telemetry.Logger, moduleID string, metrics *telemetry.MetricCollector) v1.Telemetry {
 	return &moduleTelemetry{
@@ -140,7 +140,7 @@ func (m *moduleTelemetry) Span(ctx context.Context, name string, attrs ...v1.Fie
 	return ctx, &moduleSpanAdapter{span: span}
 }
 
-// Count and Measure record a module's own instruments (ADR 0130).
+// Count and Measure record a module's own instruments (sdk#9).
 //
 // **They are not record-quota-bounded, and that is not an omission.** The record
 // quota exists because records accumulate in a store; a metric does not
@@ -183,7 +183,7 @@ func unitAnnotation(u v1.Unit) string {
 //
 // Both cases are ones nothing else would ever surface. An instrument
 // OpenTelemetry refuses is a name mistake that produces no error anywhere — the
-// exact silently-discarding counter ADR 0059 declined to publish — and a series
+// exact silently-discarding counter sdk#5 declined to publish — and a series
 // folded into the overflow dimension still contributes its value while losing
 // its breakdown, which is a correct total that answers a different question than
 // the one that was asked.

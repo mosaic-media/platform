@@ -15,7 +15,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Library rules (ADR 0104) — the durable, administrator-owned statement of what
+// Library rules (platform#60) — the durable, administrator-owned statement of what
 // the library should contain, and the read that evaluates one.
 //
 // The evaluation lives here beside the management commands rather than in the
@@ -28,7 +28,7 @@ import (
 // ActionLibraryRuleRead is reading what the library should contain.
 //
 // Its own action rather than `content.read`, and the distinction is real: the
-// library is shared and everyone who may see it sees all of it (ADR 0103),
+// library is shared and everyone who may see it sees all of it (platform#59),
 // while the rules are the install's *policy* about the library. Who decided
 // that a household owns every episode of something is administrative
 // information about the install, not a fact about the content.
@@ -45,7 +45,7 @@ type LibraryRuleListing struct {
 	// Available is whether the module the rule names is registered and fills
 	// the role the rule needs.
 	//
-	// **A rule survives its module being uninstalled** (ADR 0104): the row
+	// **A rule survives its module being uninstalled** (platform#60): the row
 	// stays, and this is how the surface says so. It is computed per read
 	// rather than stored, because "is that extension installed" is a fact about
 	// now and a stored copy would be wrong from the moment somebody removed
@@ -135,7 +135,7 @@ type CreateLibraryRuleResult struct {
 //
 // It deliberately does **not** evaluate the rule as a side effect of creating
 // it. Materialising a hundred titles because somebody pressed Save is the
-// surprise ADR 0104 names, and the honest arrangement is that saving states an
+// surprise platform#60 names, and the honest arrangement is that saving states an
 // intention and a run acts on it — with a preview in between, which is what
 // PreviewLibraryRule is for.
 func (s *Service) CreateLibraryRule(ctx context.Context, cmd CreateLibraryRuleCommand) (CreateLibraryRuleResult, error) {
@@ -197,7 +197,7 @@ func (s *Service) validateNewLibraryRule(cmd CreateLibraryRuleCommand) (domain.L
 		Text:       cmd.Text,
 		// Canonicalised with the content vocabulary's own function, so a rule
 		// saying "Anime Series" narrows to the nodes stored as anime_series
-		// rather than to nothing at all (ADR 0015).
+		// rather than to nothing at all (platform#11).
 		MediaType: string(v1.NormaliseMediaType(cmd.MediaType)),
 		Bound:     cmd.Bound,
 	}.Trimmed()
@@ -224,7 +224,7 @@ func (s *Service) validateNewLibraryRule(cmd CreateLibraryRuleCommand) (domain.L
 				"a saved search needs some text to search for")
 		}
 	default:
-		// The kinds are closed and there are two of them (ADR 0104). A rule
+		// The kinds are closed and there are two of them (platform#60). A rule
 		// over the library's own contents is a view, not a source.
 		return domain.LibraryRule{}, contracts.NewError(contracts.InvalidArgument,
 			"a library rule is either a collection or a saved search")
@@ -302,7 +302,7 @@ type DeleteLibraryRuleCommand struct {
 
 // DeleteLibraryRule removes the rule and **nothing it materialised**.
 //
-// That is the whole shape of ADR 0104's "rules add and never remove", applied to
+// That is the whole shape of platform#60's "rules add and never remove", applied to
 // the rule itself. Deleting a rule that had pulled in two hundred titles must
 // not delete two hundred titles: a source's churn is not a household's decision,
 // and neither is an administrator tidying up their rules.
@@ -398,7 +398,7 @@ func (s *Service) PreviewLibraryRule(ctx context.Context, q PreviewLibraryRuleQu
 	}
 
 	// Previewed as the person asking, not as the system principal. The run acts
-	// as the install because its writes are the install's (ADR 0017); a preview
+	// as the install because its writes are the install's (platform#13); a preview
 	// writes nothing and is somebody looking at a source, so it is theirs.
 	matches, truncated, err := s.evaluateLibraryRule(ctx, az, q.Caller, rule)
 	if err != nil {

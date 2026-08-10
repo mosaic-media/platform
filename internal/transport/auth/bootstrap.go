@@ -19,7 +19,7 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/vocabulary"
 )
 
-// Bootstrap is the pre-session call (ADR 0101): the skin, the definitions the
+// Bootstrap is the pre-session call (platform#57): the skin, the definitions the
 // doorway needs, and the doorway, in one response.
 //
 // It exists because a client without a session has no vocabulary *at all* —
@@ -35,14 +35,14 @@ import (
 //     is the one payload an unauthenticated party can enumerate, so it describes
 //     a doorway and nothing else. The subset is the security property, not an
 //     optimisation.
-//   - **Negotiation applies unchanged** (ADR 0084). The request carries the same
+//   - **Negotiation applies unchanged** (platform#52). The request carries the same
 //     VocabularyProfile Attach carries, so the doorway is degraded and its
 //     definitions fallback-selected exactly as every screen after it is.
 //   - **It does not vary on identity.** Nothing here reads a username, so
 //     nothing here can be used to learn which usernames exist.
 func (h *Handler) Bootstrap(ctx context.Context, req *connect.Request[authv1.BootstrapRequest]) (*connect.Response[authv1.BootstrapResponse], error) {
 	// Rate-limited because it is the one surface reachable before
-	// authentication (ADR 0101). It is cheap — one store read and some embedded
+	// authentication (platform#57). It is cheap — one store read and some embedded
 	// bytes — so the limit is against volume rather than cost.
 	if !h.bootstrapLimit.allow(peerOf(ctx, req), h.now()) {
 		return nil, connect.NewError(connect.CodeResourceExhausted,
@@ -52,7 +52,7 @@ func (h *Handler) Bootstrap(ctx context.Context, req *connect.Request[authv1.Boo
 	client := vocabulary.From(req.Msg.GetVocabulary())
 	model := h.doorwayModel(ctx)
 
-	// The server picks the tree, unchanged from ADR 0098. The client is not told
+	// The server picks the tree, unchanged from platform#54. The client is not told
 	// which it got: there is no screen name on the wire, because a client that
 	// could ask for the setup tree could ask for it on a claimed server.
 	degraded, subset, err := h.doorway(ctx, model, client)

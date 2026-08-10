@@ -17,10 +17,10 @@ import (
 )
 
 // Installer downloads, verifies and stores an extension module from a trusted
-// repository (ADR 0065, Platform-side per ADR 0079). It is what feeds the
+// repository (platform#40, Platform-side per platform#49). It is what feeds the
 // verification gate: a repository index and a binary come off the network, and
 // an [Installed] record that [Launch] can run comes out — with the provenance
-// ADR 0065 requires kept alongside.
+// platform#40 requires kept alongside.
 //
 // It grants no authority and skips no check. A module reaches an [Installed]
 // only if its repository's index signature verifies, its inline manifest is for
@@ -44,7 +44,7 @@ type Fetcher interface {
 // Installed is a verified, on-disk module and where it came from. The
 // provenance — which repository, verified against whose key — stays with it, so
 // the module list, its settings page and an admin looking at a broken import can
-// all show where it came from (ADR 0065). A consent dialog clicked months ago is
+// all show where it came from (platform#40). A consent dialog clicked months ago is
 // not context; this is.
 type Installed struct {
 	ModuleID   string
@@ -138,12 +138,12 @@ func (i *Installer) installFor(ctx context.Context, repoName, moduleID, goos, go
 	}
 
 	// Persist the authenticated manifest beside the binary. This is what lets a
-	// later boot re-adopt the *pinned* version from disk (ADR 0081): the on-disk
+	// later boot re-adopt the *pinned* version from disk (platform#51): the on-disk
 	// binary is re-verified against this manifest's digest before every spawn,
 	// which confirms the exact bytes without re-fetching an index that may by
 	// then list a newer version. Its trust here is local-disk trust — the
 	// signature authenticated it at download; the install directory is the
-	// Platform's own (ADR 0065: the signature protects the download, not the
+	// Platform's own (platform#40: the signature protects the download, not the
 	// host).
 	if err := writeManifest(moduleDir, entry.Manifest); err != nil {
 		_ = os.Remove(binaryPath)
@@ -159,7 +159,7 @@ func (i *Installer) installFor(ctx context.Context, repoName, moduleID, goos, go
 }
 
 // Catalogue lists the modules a repository offers — its signed index — for a
-// browse-and-install surface (ADR 0081). It fetches the index and its detached
+// browse-and-install surface (platform#51). It fetches the index and its detached
 // signature, verifies the index against the repository's key, and returns the
 // inline manifests. It downloads no binary: browsing is a read, and the digest
 // checks belong to install.
@@ -188,7 +188,7 @@ func (i *Installer) Catalogue(ctx context.Context, repoName string) ([]Manifest,
 	return manifests, nil
 }
 
-// Adopt brings up an already-installed module at boot (ADR 0081). It prefers the
+// Adopt brings up an already-installed module at boot (platform#51). It prefers the
 // on-disk cache: if the verified binary and its manifest are present, it
 // re-verifies the binary against that manifest's digest — the same check the
 // install ran, re-run in the process that grants authority every time it spawns

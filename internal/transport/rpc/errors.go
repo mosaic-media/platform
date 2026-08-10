@@ -6,7 +6,7 @@
 // the Platform's error categories onto status codes (this file) and the
 // telemetry interceptor that seeds a request's trace (telemetry.go).
 //
-// It exists because ADR 0061 made Connect the only client transport. With one
+// It exists because platform#37 made Connect the only client transport. With one
 // transport family there is exactly one place a category becomes a status code
 // and one place a call is instrumented, so both belong here rather than being
 // restated by each service that mounts a handler.
@@ -17,7 +17,7 @@
 // populated. On a typed transport the status code *is* the category.
 //
 // The mapping is total by construction: contracts.ErrorCategory is a closed
-// vocabulary (ADR 0015's "does Platform code branch on it?" test — it does), so
+// vocabulary (platform#11's "does Platform code branch on it?" test — it does), so
 // every category has exactly one code and an unrecognised value is Internal.
 package rpc
 

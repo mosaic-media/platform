@@ -41,7 +41,7 @@ const animeMetadataJSON = `{
 // metadata over HTTP, searches to avoid duplicating, and creates a work, a
 // season, episodes, parts, a source binding and an adaptation edge — all
 // through the published ContentService, against a real database, acting as
-// its invoking user (ADR 0012, 0016, 0017).
+// its invoking user (platform#8, 0016, 0017).
 func TestReferenceCapabilityAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
 
@@ -89,7 +89,7 @@ func TestReferenceCapabilityAgainstPostgres(t *testing.T) {
 	}
 
 	// The provider the capability sources from. The capability owns this
-	// integration entirely (ADR 0007); the Platform offers no HTTP contract.
+	// integration entirely (platform#4); the Platform offers no HTTP contract.
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/work" || r.URL.Query().Get("q") == "" {
 			http.Error(w, "not found", http.StatusNotFound)

@@ -17,18 +17,18 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The maintenance pass (ADR 0104, roadmap M2.3).
+// The maintenance pass (platform#60, roadmap M2.3).
 //
 // It evaluates each enabled rule and reconciles: materialise what is missing,
 // and for what is already there, re-merge artwork and top up Parts through the
-// enrichment pass ADR 0073 already made idempotent. **It adds and never
+// enrichment pass platform#46 already made idempotent. **It adds and never
 // removes.** A title that has left a catalog stays in the library, because a
 // source's churn is not a household's decision and silently deleting something
 // somebody watched half of is the worst thing this feature could do.
 //
 // Three properties are load-bearing and each is here for a stated reason.
 //
-// **It acts as the system principal** (ADR 0017), whoever triggered it. A
+// **It acts as the system principal** (platform#13), whoever triggered it. A
 // maintenance write must not fail because the administrator who wrote the rule
 // was suspended, and a node nobody chose item by item should attribute to the
 // install rather than to somebody who pressed nothing. A manual run is
@@ -76,7 +76,7 @@ type LibraryMaintenanceSettings struct {
 // Six-hourly rather than hourly. A catalog is curated by people and changes on
 // the order of days, so asking four times a day is already generous — and the
 // cost of asking is paid to somebody else's API on a credential a whole
-// household may share (ADR 0105).
+// household may share (supervisor#1).
 var DefaultLibraryMaintenance = LibraryMaintenanceSettings{
 	Interval: 6 * time.Hour,
 	Budget:   200,
@@ -151,7 +151,7 @@ type RunLibraryMaintenanceCommand struct {
 	JobID domain.JobID
 }
 
-// RunLibraryMaintenanceResult is the whole pass in the four numbers ADR 0104
+// RunLibraryMaintenanceResult is the whole pass in the four numbers platform#60
 // asks every run to record, plus what it cost.
 type RunLibraryMaintenanceResult struct {
 	// Rules is how many enabled rules were evaluated.
@@ -293,7 +293,7 @@ func (s *Service) reconcileLibraryRule(ctx context.Context, az authorized, syste
 		// The import is the whole reconcile for one item: the module creates the
 		// tree if it is missing and reports AlreadyKnown if it is not, and the
 		// Platform's enrichment then re-merges artwork and fills Parts for items
-		// that have none (ADR 0073). Both paths are wanted, which is why a
+		// that have none (platform#46). Both paths are wanted, which is why a
 		// title already in the library is still imported rather than skipped.
 		res, err := s.ImportContent(ctx, ImportContentCommand{Caller: system, Ref: match.Ref})
 		switch {

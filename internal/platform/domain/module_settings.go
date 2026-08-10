@@ -8,7 +8,7 @@ import "time"
 
 // ModuleSettings is an optional module's user-managed configuration: a single
 // opaque JSON document keyed by the module's id. The Platform stores it
-// without interpreting it — the module owns its meaning (ADR 0013's
+// without interpreting it — the module owns its meaning (platform#9's
 // unvalidated-JSON rule applied to configuration).
 //
 // It is deliberately not a ConfigVersion. Platform configuration is operator-

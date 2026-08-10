@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// What a viewer wants to hear and read (ADR 0112).
+// What a viewer wants to hear and read (platform#67).
 //
 // The audio half of this is only a list, and the Platform already ranked tracks
 // against one — it was a package variable, so every viewer on an install got one
@@ -46,11 +46,11 @@ type LanguagePreference struct {
 	// SubtitleMode is what to show when the audio preference was met.
 	SubtitleMode SubtitleMode `json:"subtitleMode,omitempty"`
 	// Styling is what to do with a track that carries more than words —
-	// positioned signs, colours, fonts (ADR 0115).
+	// positioned signs, colours, fonts (platform#70).
 	Styling SubtitleStyling `json:"styling,omitempty"`
 
 	// Typeset is the field Styling replaced, read for documents written before
-	// it existed (ADR 0115). It meant "burn it in", which is what a `true` here
+	// it existed (platform#70). It meant "burn it in", which is what a `true` here
 	// still resolves to.
 	//
 	// Kept rather than migrated because a preference document is written by
@@ -61,7 +61,7 @@ type LanguagePreference struct {
 }
 
 // SubtitleStyling is how much of a styled subtitle track a viewer wants, and
-// therefore what the Platform has to spend to give it to them (ADR 0115).
+// therefore what the Platform has to spend to give it to them (platform#70).
 type SubtitleStyling string
 
 const (
@@ -96,7 +96,7 @@ func DefaultLanguagePreference() LanguagePreference {
 		// Styled tracks go to the client as authored, because that costs nothing
 		// and degrades to the flattened rendition on a client that cannot draw
 		// them. The expensive answer — burning — is the one somebody has to
-		// choose (ADR 0115).
+		// choose (platform#70).
 		Styling: StylingClient,
 	}
 }
@@ -187,7 +187,7 @@ type SubtitleIntent struct {
 }
 
 // SubtitlesFor decides what a viewer should read, given the audio they actually
-// got (ADR 0112).
+// got (platform#67).
 //
 // **The escalation is the feature.** A viewer's mode describes a satisfied
 // preference; when the release had no track in a language they asked for, the

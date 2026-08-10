@@ -10,14 +10,14 @@ import (
 	"strings"
 )
 
-// Selection is which core modules a composition wires in (ADR 0063).
+// Selection is which core modules a composition wires in (platform#38).
 //
 // A core module the composition does not select is never constructed and never
 // registered: no registry holds it, it cannot be resolved by role, and it
 // cannot appear in a capability-gated affordance. It is code in the binary that
 // never boots.
 //
-// One honesty about the Go model, since ADR 0063 says "no init runs for it": a
+// One honesty about the Go model, since platform#38 says "no init runs for it": a
 // compiled-in module's *package* is imported, so its package-level init runs
 // regardless — that is unavoidable for anything statically linked. What
 // selection skips is the module's construction (its New) and its registration,
@@ -33,7 +33,7 @@ import (
 type Selection struct {
 	// all is true when no explicit selection was made — every core module the
 	// binary carries is wired in. It is the default because a fresh install must
-	// work with nothing configured (ADR 0072): the zero-configuration metadata
+	// work with nothing configured (module-cinemeta#1): the zero-configuration metadata
 	// floor is a core module, and a default that dropped it would boot an inert
 	// Mosaic.
 	all bool

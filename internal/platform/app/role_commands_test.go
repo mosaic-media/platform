@@ -29,7 +29,7 @@ func roleFixture(t *testing.T) (*app.Service, *fakeDB, *trace, domain.SessionID,
 		domain.Permission(app.ActionRoleCreate),
 		domain.Permission(app.ActionRoleGrant),
 		domain.Permission(app.ActionPermissionRead),
-		// Held because the tests below delegate them. Before ADR 0069 this
+		// Held because the tests below delegate them. Before platform#44 this
 		// fixture created a role carrying content permissions its caller did
 		// not have — which is precisely the escalation the delegation check
 		// now refuses, so the fixture was quietly demonstrating the hole.

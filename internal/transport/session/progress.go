@@ -15,7 +15,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Progress coalescing (ADR 0046).
+// Progress coalescing (platform#26).
 //
 // A playing video reports where it has got to, and the naive wiring makes that a
 // database write per second per viewer for the length of a film. The Platform
@@ -223,7 +223,7 @@ func setWatchedFromInput(input []byte) (v1.SetPlaybackFinishedCommand, error) {
 }
 
 // resumeFor reads where this viewer got to in an item, for the Player node's
-// starting offset (ADR 0047).
+// starting offset (web#4).
 //
 // A missing state, a failed read and a finished item all mean the same thing
 // here — start at the beginning — which is why this returns a bare duration

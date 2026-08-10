@@ -15,11 +15,11 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-// Metrics (ADR 0130), and the one thing about them that is not like a log
+// Metrics (sdk#9), and the one thing about them that is not like a log
 // record or a span.
 //
 // **A metric is state, not an event.** A record and a span are produced, written
-// once and aged out under retention (ADR 0058); a counter is a running total
+// once and aged out under retention (platform#36); a counter is a running total
 // that has no moment of production and nothing to age. That difference decides
 // the shape of everything here: there is no sink, because there is nothing to
 // write when a module calls Count — there is a *reader*, asked for the current
@@ -33,7 +33,7 @@ import (
 // reset when it restarts. Nothing is retained across a Generation, and a
 // counter's history is not recoverable — what a reader gets is the total since
 // boot. That is a genuine gap against a stored time series, and it is a
-// deliberate first step rather than a design: ADR 0059 declined to publish a
+// deliberate first step rather than a design: sdk#5 declined to publish a
 // metric surface the Platform could not back at all, and "backed, in memory,
 // readable now" is what closes that. A retained series is a schema, a retention
 // policy and a rollup, and it is a decision to take on its own evidence.
@@ -41,7 +41,7 @@ import (
 // MetricCollector owns the meter provider and answers for its current values.
 //
 // The composition root builds one and installs it; nothing else constructs one,
-// which is the same ownership the sinks have (ADR 0053). A module reaches a
+// which is the same ownership the sinks have (platform#31). A module reaches a
 // `metric.Meter` and never this — a Meter records, and this is what decides
 // where the recording goes.
 type MetricCollector struct {
@@ -69,7 +69,7 @@ func NewMetricCollector() *MetricCollector {
 
 // MetricSeriesPerScope bounds how many distinct series one scope may create.
 //
-// **This is the metric-shaped version of ADR 0059's record quota, and it needs a
+// **This is the metric-shaped version of sdk#5's record quota, and it needs a
 // different lifetime.** A record quota is per invocation, because a chatty
 // module should degrade its own call and nothing else. A series is not consumed
 // by an invocation — it is created once and lives as long as the process — so a
@@ -127,7 +127,7 @@ func (c *MetricCollector) Admit(scope, key string) (allowed, firstRefusal bool) 
 //
 // Scope is how a series is attributed to whoever recorded it — the module id for
 // a module's own instruments — so attribution is stamped by the caller of this
-// rather than claimed in an instrument name a module chooses (ADR 0059).
+// rather than claimed in an instrument name a module chooses (sdk#5).
 func (c *MetricCollector) Meter(scope string) metric.Meter {
 	if c == nil {
 		return nil
@@ -197,7 +197,7 @@ func (c *MetricCollector) admitted(scope, name string, fields []Field) ([]attrib
 }
 
 // metricAttributes renders fields as attributes, re-applying redaction on the
-// way out exactly as a sink does (ADR 0056), so a Field built as a struct
+// way out exactly as a sink does (platform#34), so a Field built as a struct
 // literal fails closed here too.
 func metricAttributes(fields []Field) []attribute.KeyValue {
 	if len(fields) == 0 {
@@ -266,7 +266,7 @@ type MetricSeries struct {
 	Kind string
 	// Dimensions renders the attribute set, sorted, as `k=v, k=v`. Rendered
 	// rather than structured because the only consumer is a reader: the values
-	// are already redacted (ADR 0056), and a map would be reassembled into
+	// are already redacted (platform#34), and a map would be reassembled into
 	// exactly this string by whatever displayed it.
 	Dimensions string
 	// Total is a counter's accumulated value, or a histogram's sum.
@@ -290,7 +290,7 @@ const (
 // an exponential histogram — would be produced by an instrument nothing here
 // constructs, so it is skipped rather than guessed at: rendering a shape this
 // code does not understand as though it were a counter is worse than not
-// rendering it, in exactly the way ADR 0075's artwork slots are.
+// rendering it, in exactly the way sdk#6's artwork slots are.
 func seriesOf(scope string, m metricdata.Metrics) []MetricSeries {
 	var out []MetricSeries
 	switch data := m.Data.(type) {
@@ -354,7 +354,7 @@ func renderDimensions(set attribute.Set) string {
 }
 
 // meterKey carries the collector through the context, the same ambient rule the
-// logger and the span sink already follow (ADR 0053).
+// logger and the span sink already follow (platform#31).
 type meterKey struct{}
 
 // WithMetrics returns a context whose instruments reach collector.

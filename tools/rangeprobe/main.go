@@ -56,7 +56,7 @@ import (
 // The AIOStreams manifest URL is a credential: its path carries the profile id
 // and the encrypted debrid configuration behind it. It is read from the
 // environment rather than a flag so it does not land in shell history, and it is
-// never printed — only its host is (ADR 0056, ADR 0059).
+// never printed — only its host is (platform#34, sdk#5).
 const manifestEnv = "MOSAIC_DEV_AIOSTREAMS_MANIFEST"
 
 func main() {

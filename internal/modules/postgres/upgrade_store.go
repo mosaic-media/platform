@@ -15,7 +15,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// upgradeStore is the pending-request half of ADR 0129.
+// upgradeStore is the pending-request half of platform#77.
 type upgradeStore struct{ q queryer }
 
 // NewUpgradeStore builds the store over a pool.

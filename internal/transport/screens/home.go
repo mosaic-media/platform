@@ -24,7 +24,7 @@ const (
 	homeMaxRows     = 6
 	homeMaxRowItems = 20
 	// homeContinueItems bounds the continue-watching rail — the most recently
-	// watched, unfinished items. A rail, not an archive (ADR 0046).
+	// watched, unfinished items. A rail, not an archive (platform#26).
 	homeContinueItems = 12
 	// homeUpNextItems bounds the "Up next" filmstrip docked on the hero floor —
 	// the items neighbouring the featured one, drawn from the same first catalog.
@@ -35,7 +35,7 @@ const (
 )
 
 // homeScreen is the default landing surface: a full-viewport cinematic hero
-// over rows of the enabled modules' catalogs (ADR 0028's virtual plane, browsed
+// over rows of the enabled modules' catalogs (platform#18's virtual plane, browsed
 // not materialised — TMDB's, on a keyed deployment, since contracts#18 made the
 // browse roles ranked). Each row is a carousel of cards that open a detail and a
 // heading that opens the whole catalog; the hero rotates through the top item of
@@ -59,7 +59,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		return ui.Screen(s.sourcesEmptyState(cats.Answer)).Build(), nil
 	}
 
-	// How this viewer arranged their home (ADR 0103). **One read, here**, in the
+	// How this viewer arranged their home (platform#59). **One read, here**, in the
 	// same pass that builds the screen — the alternative is asking per row, which
 	// is a round trip per row on the surface every session lands on.
 	//
@@ -156,7 +156,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		// Each row leads to its whole catalog. A rail is a window onto a
 		// collection, and without this the twentieth item is where the collection
 		// ends as far as anyone browsing can tell — the row's own screen already
-		// exists and pages properly (ADR 0028), it simply had nothing pointing at
+		// exists and pages properly (platform#18), it simply had nothing pointing at
 		// it from the surface every session lands on.
 		rows = append(rows, ui.Section(c.Catalog.Name,
 			ui.Gap(4),
@@ -168,7 +168,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 			ui.Carousel(cards...)))
 	}
 	if len(rows) == 0 {
-		// The state ADR 0052 was written about. Every catalog answered emptily or
+		// The state platform#30 was written about. Every catalog answered emptily or
 		// not at all; whether that is a library with nothing in it or a set of
 		// sources that are down is a distinction only the answers can make, and
 		// the screen must not guess.
@@ -256,8 +256,8 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	// Continue watching leads the sheet: the most personal rail, above the
 	// browse rows below it. It is gated by having something in progress — an
 	// install with no playback consumer has nothing here and shows nothing
-	// (ADR 0036) — and then by whether this viewer wants it, which is the order
-	// ADR 0103 requires: **capability omission composes ahead of preference**, so
+	// (platform#24) — and then by whether this viewer wants it, which is the order
+	// platform#59 requires: **capability omission composes ahead of preference**, so
 	// a viewer cannot un-hide something they were never able to use, and a hidden
 	// row is not evidence of a permission.
 	if !composition.Hides(homeRowContinue) {
@@ -325,7 +325,7 @@ func arrangeCatalogs(catalogs []app.ModuleCatalog, composition app.HomeCompositi
 }
 
 // sourcesEmptyState is what home draws when it has no rows: two different
-// states that must never render the same (ADR 0052).
+// states that must never render the same (platform#30).
 //
 // **"Nothing configured" is advice** — an install with no source installed is
 // being told the one thing that will fix it. **"The sources are unreachable" is
@@ -405,7 +405,7 @@ type heroPick struct {
 }
 
 // heroSlide builds one featured banner from an already-enriched pick — the
-// backdrop, logo and synopsis a catalog card lacks (ADR 0034) — tagged with the
+// backdrop, logo and synopsis a catalog card lacks (sdk#3) — tagged with the
 // catalog it leads, and docking the slide that follows it.
 //
 // The hero carries its own copy and controls: the kicker, the title treatment,
@@ -444,8 +444,8 @@ func (s *Service) heroSlide(p heroPick, m v1.ContentMetadata, next *heroPick, ne
 		ui.When(len(pills) > 0, ui.Meta(pills...)),
 		ui.When(m.Overview != "", ui.Overview(m.Overview)),
 		// The hero cannot offer Play itself: a catalog item is a virtual ref, and
-		// there is no Part behind it until it has been materialised (ADR 0028).
-		// An affordance with nothing behind it is the dead end ADR 0036 exists to
+		// there is no Part behind it until it has been materialised (platform#18).
+		// An affordance with nothing behind it is the dead end platform#24 exists to
 		// remove, so the primary says what it actually does — and the secondary
 		// is the one act the hero *can* perform on a virtual item, dropped once
 		// the item is already in the library.
@@ -500,9 +500,9 @@ func (s *Service) upNextTile(p heroPick, m v1.ContentMetadata) ui.El {
 }
 
 // continueWatchingSection renders the home's continue-watching rail from the
-// in-progress list (ADR 0046): the items a viewer has started and not finished,
+// in-progress list (platform#26): the items a viewer has started and not finished,
 // most recently touched first. It returns nil when there is nothing in progress
-// — the rail is a capability-gated affordance (ADR 0036), and an install with no
+// — the rail is a capability-gated affordance (platform#24), and an install with no
 // playback consumer simply has no rail — and when the query fails, so a rail
 // that cannot load never takes the home screen down with it.
 func (s *Service) continueWatchingSection(ctx context.Context, caller v1.Caller) ui.El {
@@ -520,7 +520,7 @@ func (s *Service) continueWatchingSection(ctx context.Context, caller v1.Caller)
 
 	// Each card needs its Work's poster and title, one indexed read apiece — a
 	// database read, not a metadata round-trip, because the art is stored
-	// (ADR 0071). Fetch them concurrently, as the hero enrichment does, so the
+	// (platform#45). Fetch them concurrently, as the hero enrichment does, so the
 	// rail costs one round-trip rather than a sum; a card whose read fails drops
 	// out rather than failing the rail.
 	cards := make([]ui.El, len(res.Items))
@@ -566,9 +566,9 @@ func (s *Service) continueWatchingSection(ctx context.Context, caller v1.Caller)
 //
 // The tap invokes playPart directly rather than opening a detail: a rail item is
 // a node, and a node cannot be turned back into the provider-bearing ref a rich
-// detail needs (ADR 0071), so one-tap resume is both the better affordance and
+// detail needs (platform#45), so one-tap resume is both the better affordance and
 // the only one reachable. The card carries the Part last played and the node the
-// position is keyed to; the Platform reads the offset itself (ADR 0046), so a
+// position is keyed to; the Platform reads the offset itself (platform#26), so a
 // stale offset costs the offset, never the play.
 func (s *Service) continueCard(ctx context.Context, caller v1.Caller, item v1.InProgressItem) ui.El {
 	// Without the release that produced the position there is nothing to resume;
@@ -578,7 +578,7 @@ func (s *Service) continueCard(ctx context.Context, caller v1.Caller, item v1.In
 		return nil
 	}
 	// The poster and title live on the Work, not on the episode or feature item
-	// the position is keyed to (ADR 0013 attaches Parts to items; ADR 0071 stores
+	// the position is keyed to (platform#9 attaches Parts to items; platform#45 stores
 	// art on the work).
 	work, err := s.content.GetContentNode(ctx, v1.GetContentNodeQuery{Caller: caller, NodeID: item.Node.WorkID})
 	if err != nil {

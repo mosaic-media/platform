@@ -12,10 +12,10 @@ import (
 )
 
 // Stream enrichment had no test, which is most of why it silently narrowed
-// every candidate it attached (ADR 0073, and M3 slice 7).
+// every candidate it attached (platform#46, and M3 slice 7).
 
 // TestAResolvedCandidateKeepsWhatItsSourceSaid is the case that was wrong. A
-// module parses the container and both codecs at its own boundary (ADR 0051)
+// module parses the container and both codecs at its own boundary (module-stremio-addons#2)
 // and this pass wrote neither, so a Part materialised through the fan-out knew
 // less than the module that resolved it and the probe was the only thing that
 // ever learned what a release was.

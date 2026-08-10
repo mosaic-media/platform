@@ -14,9 +14,9 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Reading stored telemetry (ADR 0058). The gate matters more than the query:
+// Reading stored telemetry (platform#36). The gate matters more than the query:
 // telemetry records what every user did, so telemetry.read is an escalation an
-// administrator must be granted individually (ADR 0069). The superuser holds
+// administrator must be granted individually (platform#44). The superuser holds
 // it; see roles_test.go for the tier boundary itself.
 
 // TestTelemetryReadIsDeniedWithoutTheGrant is the property the whole

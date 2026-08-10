@@ -1,6 +1,6 @@
 name: core module bump
 
-# ADR 0078: core modules keep their own repositories, and a core module tag
+# platform#48: core modules keep their own repositories, and a core module tag
 # carries its own version bump into this repository instead of a person doing
 # it by hand.
 #
@@ -12,7 +12,7 @@ name: core module bump
 # *after* that proof, so `go get` here is not racing the proxy.
 #
 # **What this deliberately does not do is merge.** It opens a pull request and
-# asks for auto-merge, so `verify.yml` is what decides. ADR 0063's guarantee
+# asks for auto-merge, so `verify.yml` is what decides. platform#38's guarantee
 # that every released binary is pre-proven is a property of the gate having run,
 # and a required check on a PR is where that is enforced mechanically rather
 # than by trusting the ordering of steps in a job — **that required check does
@@ -127,14 +127,14 @@ jobs:
           git add go.mod go.sum
           git commit -m "$(printf '%s\n\n%s\n\n%s' \
             "Bump ${short} to ${version}" \
-            "Dispatched by ${module}'s release workflow, which proved the tag resolvable through the public proxy before firing (ADR 0078)." \
+            "Dispatched by ${module}'s release workflow, which proved the tag resolvable through the public proxy before firing (platform#48)." \
             "Previous version: ${current}.")"
           git push origin "$branch"
 
           gh pr create \
             --title "Bump ${short} to ${version}" \
             --body "$(printf '%s\n\n%s\n\n%s' \
-              "Automated core module bump: \`${current}\` → \`${version}\` (ADR 0078)." \
+              "Automated core module bump: \`${current}\` → \`${version}\` (platform#48)." \
               "Dispatched by [\`${short}\`](https://${module}/releases/tag/${version}) after its release workflow proved the tag resolvable through the public proxy." \
               "\`verify.yml\` decides; merge once it is green.")" \
             --base main \
@@ -154,7 +154,7 @@ jobs:
           # `verify.yml` would not have to pass — it would not even have to have
           # started. That would turn this comment's whole claim ("verify.yml is
           # what actually decides") into a mechanism that decides nothing, and
-          # ADR 0063's guarantee that every released binary is pre-proven would
+          # platform#38's guarantee that every released binary is pre-proven would
           # rest on nobody having looked. Until a ruleset makes `verify.yml`
           # required on `main`, a bump waits for a person to see it green, and
           # that wait is the gate.

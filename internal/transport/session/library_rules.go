@@ -16,7 +16,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The library rules, as a client can reach them (ADR 0104, roadmap M2.2).
+// The library rules, as a client can reach them (platform#60, roadmap M2.2).
 //
 // Four dispatch cases, and one thing they share that the account cases do not:
 // **each returns to the rules list rather than to the panel it was invoked
@@ -57,7 +57,7 @@ func (h *Handler) createLibraryRule(ctx context.Context, s *liveSession, caller 
 		Caller: caller,
 		Name:   env.Name,
 		// Only collection rules have a client path today. A saved provider
-		// search is the other half of ADR 0104's two kinds and it is stored,
+		// search is the other half of platform#60's two kinds and it is stored,
 		// evaluated and run by the same code — what it lacks is a surface to
 		// create one from, which is a gap in the client path rather than in the
 		// mechanism.

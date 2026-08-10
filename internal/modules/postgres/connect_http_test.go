@@ -36,7 +36,7 @@ import (
 // spends that session on SessionService — subscribing to the push lane and
 // navigating to a screen — and asserts the content it seeded comes back rendered.
 //
-// It replaces the GraphQL HTTP test ADR 0061 retired. That test proved the same
+// It replaces the GraphQL HTTP test platform#37 retired. That test proved the same
 // stack through a transport no client used; this one proves it through the only
 // transport there now is, which is why it drives the two lanes rather than
 // posting queries.
@@ -113,7 +113,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	if sessionID == "" {
 		t.Fatal("sign-in returned no session id")
 	}
-	// The credential is the access token, not the session id (ADR 0102): the
+	// The credential is the access token, not the session id (platform#58): the
 	// id is what a device list names and what revocation targets, and it is
 	// not something a caller presents.
 	accessToken := signIn.Msg.GetTokens().GetAccessToken()
@@ -138,7 +138,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	}
 
 	// 2. Put something in the library, as the caller the sign-in just minted.
-	// Content commands have no transport of their own since ADR 0061 — they are
+	// Content commands have no transport of their own since platform#37 — they are
 	// reached through the session's Invoke actions or, as here, by the composed
 	// service directly.
 	const title = "Fullmetal Alchemist: Brotherhood"
@@ -174,7 +174,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	// 4. Read the push lane until the content region arrives, and assert the
 	// screen the Platform rendered is the one holding the seeded work. Reading
 	// until rather than asserting on the first message is deliberate: connect
-	// pushes the definition library and the shell first (contracts#2, ADR 0031),
+	// pushes the definition library and the shell first (contracts#2, platform#21),
 	// and pinning that order here would make this test fail for a change it does
 	// not cover.
 	var sawDefinitions, sawShell bool
@@ -215,7 +215,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 		t.Error("the definition library was not pushed before the content (contracts#2)")
 	}
 	if !sawShell {
-		t.Error("the app shell was not pushed before the content (ADR 0031)")
+		t.Error("the app shell was not pushed before the content (platform#21)")
 	}
 	if !strings.Contains(content, title) {
 		t.Errorf("the rendered detail screen does not contain %q:\n%s", title, content)

@@ -17,7 +17,7 @@ type Subject struct {
 	UserID       domain.UserID
 	AuthStrength domain.AuthStrength
 	// System marks the Platform's own principal — background work with no user
-	// behind it (ADR 0017). It is set by the enforcement point from *how the
+	// behind it (platform#13). It is set by the enforcement point from *how the
 	// caller authenticated*, never from the user id, so it cannot be forged by
 	// naming an identifier.
 	//

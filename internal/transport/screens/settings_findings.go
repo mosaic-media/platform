@@ -17,7 +17,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Settings › Problems — the client path to the resolution register (ADR 0119).
+// Settings › Problems — the client path to the resolution register (platform#74).
 //
 // **The register lands with a screen or it does not land.** Findings with no
 // client path are the exact debt that document exists to stop accruing, so this
@@ -150,7 +150,7 @@ func issueDetail(issue domain.Issue, now time.Time) string {
 
 // suggestionControl turns a suggestion type into a control.
 //
-// **This is the one place a suggestion becomes words** (ADR 0119): the type
+// **This is the one place a suggestion becomes words** (platform#74): the type
 // carries no prose, so a second client renders the same set differently, or in
 // another language, with nothing on the server changing.
 func suggestionControl(s domain.SuggestionType) (label, variant string, ok bool) {
@@ -160,7 +160,7 @@ func suggestionControl(s domain.SuggestionType) (label, variant string, ok bool)
 	case domain.SuggestionApplyUpgrade:
 		// The Platform cannot perform this and says so honestly by wording it as
 		// a request: pressing it records what was asked for, and the Supervisor
-		// carries it out (ADR 0129). "Install it" would promise an immediacy
+		// carries it out (platform#77). "Install it" would promise an immediacy
 		// that crossing a process boundary does not have.
 		return "Install it", "primary", true
 	case domain.SuggestionDismiss:
@@ -168,7 +168,7 @@ func suggestionControl(s domain.SuggestionType) (label, variant string, ok bool)
 	case domain.SuggestionReinstallExtension:
 		// Deliberately not drawn. The service refuses it — the record names the
 		// module and not the repository it came from — and a control that
-		// reported failure every time is worse than no control (ADR 0036).
+		// reported failure every time is worse than no control (platform#24).
 		return "", "", false
 	default:
 		return "", "", false

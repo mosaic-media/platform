@@ -13,15 +13,15 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Setting a node's artwork (ADR 0074).
+// Setting a node's artwork (platform#47).
 //
 // This is the first content command that *updates* a node rather than creating
-// one, and the absence of it is something ADR 0071 wrote down as owed: "there is
+// one, and the absence of it is something platform#45 wrote down as owed: "there is
 // no command that updates a stored work's fields, so a re-import does not
 // refresh its artwork today."
 //
 // Two things need it now. The artwork enrichment pass resolves art for a work a
-// module has already written (ADR 0075), so it has a node and nowhere to put the
+// module has already written (sdk#6), so it has a node and nowhere to put the
 // result. And a user choosing a different poster is by definition an update —
 // the feature storing artwork on the node was the precondition for.
 

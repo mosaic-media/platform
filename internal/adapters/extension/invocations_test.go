@@ -16,7 +16,7 @@ import (
 
 // capturingContent records the Caller each callback arrived with, and keeps the
 // service around so a test can replay a call after the invocation ended — which
-// is the whole point of the handle design (ADR 0064).
+// is the whole point of the handle design (platform#39).
 type capturingContent struct {
 	stubContentService
 
@@ -51,7 +51,7 @@ func TestModuleNeverSeesTheRealSessionReference(t *testing.T) {
 }
 
 // The property the design exists for: a handle stops resolving the instant the
-// invocation returns. There is no window, which is why ADR 0064 refused a
+// invocation returns. There is no window, which is why platform#39 refused a
 // short-TTL token — a TTL *is* a window.
 func TestARetainedHandleStopsResolvingWhenTheInvocationReturns(t *testing.T) {
 	content := &capturingContent{}

@@ -13,7 +13,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
-// RefreshSessionCommand exchanges a refresh token for a new pair (ADR 0102).
+// RefreshSessionCommand exchanges a refresh token for a new pair (platform#58).
 //
 // The device is named as well as the token because the token is bound to it: a
 // refresh presented from a different device is a stolen credential being used,
@@ -39,7 +39,7 @@ type RefreshSessionResult struct {
 // the continuation of one already granted. A user whose permissions were
 // trimmed while they were away gets the same reduced set the moment they use
 // the new token, which is the property that made an opaque token worth its
-// store read (ADR 0068).
+// store read (platform#43).
 //
 // The register's `refreshSession` row stops being *never worked* here.
 func (s *Service) RefreshSession(ctx context.Context, cmd RefreshSessionCommand) (RefreshSessionResult, error) {
@@ -72,7 +72,7 @@ func (s *Service) RefreshSession(ctx context.Context, cmd RefreshSessionCommand)
 			return err
 		}
 
-		// Re-resolve what this account may do (ADR 0036). The stored set is the
+		// Re-resolve what this account may do (platform#24). The stored set is the
 		// snapshot taken when the session was issued, and a session lives ninety
 		// days; a permission granted or withdrawn in that time would otherwise
 		// not reach the client's affordance gate until the next sign-in, which

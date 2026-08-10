@@ -63,7 +63,7 @@ func ParseLevel(s string) Level {
 // holds it.
 type Logger struct {
 	sink Sink
-	// otel is where a record is actually emitted (ADR 0128). It is derived from
+	// otel is where a record is actually emitted (sdk#8). It is derived from
 	// sink rather than configured beside it, so there is no way to have a logger
 	// whose records go somewhere other than the sink it names.
 	otel      log.Logger
@@ -106,7 +106,7 @@ func (l *Logger) For(component string) *Logger {
 
 // ForModule returns a Logger attributed to a module running under component.
 // Module attribution is stamped by the Platform at the invocation seam, never
-// by the module itself (ADR 0059), which is why this is a Platform-side call.
+// by the module itself (sdk#5), which is why this is a Platform-side call.
 func (l *Logger) ForModule(component, module string) *Logger {
 	d := l.derive()
 	d.component = component
@@ -118,7 +118,7 @@ func (l *Logger) ForModule(component, module string) *Logger {
 //
 // The composition root uses it to attach the queryable sink once storage is
 // up: everything logged before that point is the narration of *bringing
-// storage up*, which must not depend on storage existing (ADR 0058). Rebuilding
+// storage up*, which must not depend on storage existing (platform#36). Rebuilding
 // the logger rather than mutating it keeps Logger immutable, so a context
 // seeded earlier is unaffected — which is correct, since those records
 // genuinely predate the sink.
@@ -131,7 +131,7 @@ func (l *Logger) WithSink(sink Sink) *Logger {
 	// Rebuilt with the sink, never left pointing at the old one: WithSink is how
 	// the composition root attaches the queryable sink once storage is up, and a
 	// logger that kept emitting into the boot sink afterwards would lose every
-	// record from that point on with nothing reporting it (ADR 0058).
+	// record from that point on with nothing reporting it (platform#36).
 	d.otel = newLoggerProvider(sink).Logger(tracerName)
 	return d
 }
@@ -139,7 +139,7 @@ func (l *Logger) WithSink(sink Sink) *Logger {
 // WithTrace returns a Logger whose records carry tc. The trace and span ids
 // are first-class columns on a record rather than ordinary fields, because
 // they are what the telemetry store indexes and what the expert-mode viewer
-// joins on (ADR 0058) — burying them in a field map would make the one query
+// joins on (platform#36) — burying them in a field map would make the one query
 // that matters most the awkward one.
 func (l *Logger) WithTrace(tc TraceContext) *Logger {
 	d := l.derive()
@@ -182,7 +182,7 @@ func (l *Logger) Error(message string, fields ...Field) { l.emit(LevelError, mes
 
 // emit assembles and writes one record. message is expected to be a constant:
 // a value interpolated into it has bypassed field classification entirely,
-// which is how a fail-closed scheme is actually defeated in practice (ADR 0056).
+// which is how a fail-closed scheme is actually defeated in practice (platform#34).
 func (l *Logger) emit(level Level, message string, fields []Field) {
 	if l == nil || level < l.min {
 		return
@@ -214,7 +214,7 @@ func (l *Logger) emit(level Level, message string, fields []Field) {
 	// **The trace travels in the context, which is how OpenTelemetry correlates
 	// a record with a span.** Carrying it as two more attributes would work and
 	// would put the ids somewhere no OTLP consumer looks — and the whole point
-	// of the trace id being the correlation id (ADR 0054) is that it is found
+	// of the trace id being the correlation id (platform#32) is that it is found
 	// where a reader expects it.
 	l.otel.Emit(trace.ContextWithSpanContext(context.Background(), l.trace.SpanContext()), record)
 }

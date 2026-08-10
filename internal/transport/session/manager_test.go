@@ -216,7 +216,7 @@ func TestServeSupersededByReconnect(t *testing.T) {
 }
 
 // TestShutdownEndsServe proves Manager.Shutdown ends an in-flight stream so the
-// client reconnects (contracts#5 stream resume, replacing ADR 0032's going-away
+// client reconnects (contracts#5 stream resume, replacing platform#22's going-away
 // close).
 func TestShutdownEndsServe(t *testing.T) {
 	m := NewManager()

@@ -13,7 +13,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
-// queryTracer emits a span per SQL statement (ADR 0055, seam 6).
+// queryTracer emits a span per SQL statement (platform#33, seam 6).
 //
 // This is the seam that most often answers "where did the nine seconds go",
 // and it costs nothing at any call site: pgx offers the hook, so no store, no
@@ -26,7 +26,7 @@ import (
 // so it contains no user data — the values are always bound parameters, and
 // those are *not* recorded. A span that showed the arguments would carry
 // usernames and search terms straight into the telemetry store, which is
-// precisely what ADR 0056 exists to prevent.
+// precisely what platform#34 exists to prevent.
 type queryTracer struct{}
 
 // traceQueryKey carries the in-flight span between the pgx start and end hooks.

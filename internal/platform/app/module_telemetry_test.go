@@ -15,7 +15,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// These cover the Platform half of ADR 0059: what a module emits becomes a
+// These cover the Platform half of sdk#5: what a module emits becomes a
 // Platform record, with attribution the module cannot forge and redaction it
 // cannot opt out of.
 
@@ -183,7 +183,7 @@ func (c *captureModuleSpanRecords) WriteSpan(r telemetry.SpanRecord) {
 
 // A module's counters land in the collector attributed to the module, and the
 // attribution is the Platform's rather than the module's — the same rule the
-// log records follow (ADR 0059, ADR 0130).
+// log records follow (sdk#5, sdk#9).
 func TestModuleMetricsAreAttributedToTheModule(t *testing.T) {
 	var buf bytes.Buffer
 	collector := telemetry.NewMetricCollector()

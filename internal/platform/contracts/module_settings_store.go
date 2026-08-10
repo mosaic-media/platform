@@ -11,7 +11,7 @@ import (
 )
 
 // ModuleSettingsStore persists one settings document per optional module,
-// keyed by module id. It is Platform-owned: a module owns no schema (ADR 0012),
+// keyed by module id. It is Platform-owned: a module owns no schema (platform#8),
 // so its user-managed settings live in a Platform store the module reads
 // through the invocation, never a table the module defines.
 type ModuleSettingsStore interface {

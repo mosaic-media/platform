@@ -6,7 +6,7 @@ package app
 
 import "github.com/mosaic-media/platform/internal/platform/policy"
 
-// Permission presets (ADR 0069).
+// Permission presets (platform#44).
 //
 // **These are starting points, not tiers.** Authority in Mosaic is granular:
 // what an account may do is the set of actions granted to it, and nothing
@@ -57,7 +57,7 @@ func userActions() []policy.Action {
 		ActionSessionCreate,
 		ActionContentRead,
 		ActionContentResolve,
-		// Where they got to (ADR 0046). These belong to the *ordinary* preset
+		// Where they got to (platform#26). These belong to the *ordinary* preset
 		// and not to the administrator one, which is the whole reason they are
 		// separate actions from content.read and content.create: a household
 		// member who may watch everything and change nothing is the normal
@@ -84,13 +84,13 @@ func administratorActions() []policy.Action {
 		ActionConfigDraft, ActionConfigValidate, ActionConfigActivate, ActionConfigRead,
 		ActionContentCreate, ActionContentRelate, ActionContentBind, ActionContentImport,
 		ActionModuleConfigure, ActionModuleRead, ActionExtensionManage,
-		// What the library should contain (ADR 0104). Administrator rather
+		// What the library should contain (platform#60). Administrator rather
 		// than superuser: a rule is curation, which is the thing running a
 		// household install mostly *is*. Reading is separated from managing
 		// because they are different disclosures — one says what the install
 		// decided, the other changes it — even though the preset confers both.
 		ActionLibraryRuleRead, ActionLibraryRuleManage,
-		// The resolution register (ADR 0119). An administrator, because a
+		// The resolution register (platform#74). An administrator, because a
 		// finding is about the install rather than about the person reading:
 		// "an extension will not start" is not one viewer's business, and
 		// acting on it changes what this install is for everybody.
@@ -101,7 +101,7 @@ func administratorActions() []policy.Action {
 // superuserActions adds insight: what everyone did.
 //
 // telemetry.read and its neighbours reveal which screens each user opened and
-// what they searched for. Values are redacted at construction (ADR 0056), but
+// what they searched for. Values are redacted at construction (platform#34), but
 // the shape of a person's activity survives redaction, so it is not something
 // running the install implies. A superuser can still grant it to an
 // administrator individually — that is the whole point of it being an action
@@ -117,12 +117,12 @@ func superuserActions() []policy.Action {
 		// principal and an *administrator* running one by hand would be the
 		// same permission, as they should be.
 		ActionJobRead,
-		// The credential tables' own housekeeping (ADR 0102). Install-level
+		// The credential tables' own housekeeping (platform#58). Install-level
 		// rather than about any one person's session, which is why it is here
 		// and not in the administrator preset beside user.session.revoke.
 		ActionSessionMaintain,
 		// ActionAuditRead and ActionAuditExport join here when the audit store
-		// is built (ADR 0057) — same category, named now so the decision does
+		// is built (platform#35) — same category, named now so the decision does
 		// not need remaking.
 	)
 }

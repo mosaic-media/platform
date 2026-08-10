@@ -52,7 +52,7 @@ type entry struct {
 }
 
 // JSONSink writes records as JSON Lines. This is the durable local sink of
-// ADR 0058: it is crash-survivable, it is the source of truth for a support
+// platform#36: it is crash-survivable, it is the source of truth for a support
 // bundle, and it keeps working when the database this process depends on does
 // not — which is the case where it matters most.
 type JSONSink struct {
@@ -168,7 +168,7 @@ func (s *ConsoleSink) Write(r Record) {
 	_, _ = io.WriteString(s.out, b.String())
 }
 
-// MultiSink fans one record out to several sinks. This is what makes ADR 0058's
+// MultiSink fans one record out to several sinks. This is what makes platform#36's
 // dual-sink rule expressible: a record goes to the durable file *and* to
 // whatever else is configured, with neither optional.
 type MultiSink []Sink

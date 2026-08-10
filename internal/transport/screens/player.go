@@ -10,11 +10,11 @@ import (
 )
 
 // PlayerParams is everything the server decides about a playback surface
-// (ADR 0047). Every field here is a server decision; what the client owns is
+// (web#4). Every field here is a server decision; what the client owns is
 // only the decoding pipeline and the transport controls.
 type PlayerParams struct {
 	// Src is the Platform-origin ticket URL. It is never the upstream location:
-	// that may carry a debrid credential and stays server-side (ADR 0045).
+	// that may carry a debrid credential and stays server-side (platform#25).
 	Src string
 	// Title labels the player's own chrome.
 	Title string
@@ -25,20 +25,20 @@ type PlayerParams struct {
 	// response", which is correct for a relayed stream whose container is
 	// whatever the source had.
 	MimeType string
-	// ResumeAt is the position in seconds to start from (ADR 0046). Zero starts
+	// ResumeAt is the position in seconds to start from (platform#26). Zero starts
 	// at the beginning.
 	ResumeAt float64
 	// NodeID and PartID name what is playing, so the client can report its
-	// position back against them (ADR 0046).
+	// position back against them (platform#26).
 	//
 	// Both are server decisions carried on the node rather than things a client
-	// works out, which keeps ADR 0047's limit where it is: the client owns the
+	// works out, which keeps web#4's limit where it is: the client owns the
 	// decoding pipeline and the transport controls, and reports what it sees.
 	// It does not decide what it is watching.
 	NodeID string
 	PartID string
 	// Subtitles are authored subtitle scripts the client may draw itself
-	// (ADR 0115), each a URL under the same playback ticket.
+	// (platform#70), each a URL under the same playback ticket.
 	//
 	// They do not replace what the playlist already declares. A client that
 	// cannot render a script ignores these entirely and uses the HLS subtitle
@@ -49,7 +49,7 @@ type PlayerParams struct {
 
 // SubtitleTrack is one authored subtitle script offered to the client.
 type SubtitleTrack struct {
-	// Src is the Platform-origin URL, never the upstream's (ADR 0045).
+	// Src is the Platform-origin URL, never the upstream's (platform#25).
 	Src string
 	// Format names what the client will be parsing, so it can choose a renderer
 	// before it fetches. Today always "ass".
@@ -94,7 +94,7 @@ func PlayerNode(p PlayerParams) sdui.Node {
 }
 
 // NextEpisodeNode is the "Next episode" control shown alongside a playing
-// episode — "what comes next" is a server decision (ADR 0047). It is a plain
+// episode — "what comes next" is a server decision (web#4). It is a plain
 // Button node the server pushes into the player region and the host renders
 // through the component vocabulary; the client authors no chrome for it. Taking
 // it is an ordinary playPart, which the Platform resolves and starts at the
@@ -110,7 +110,7 @@ func NextEpisodeNode(label, partID, nodeID, title string) sdui.Node {
 }
 
 // subtitleTrackProps renders the authored subtitle scripts as the props bag the
-// `subtitleTracks` prop carries (ADR 0115).
+// `subtitleTracks` prop carries (platform#70).
 //
 // **Set with ui.Prop rather than a generated builder, and that is deliberate
 // rather than the shortcut the rule warns about.** The prop is specced in

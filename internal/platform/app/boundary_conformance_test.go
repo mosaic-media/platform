@@ -44,7 +44,7 @@ import (
 // itself be the thing to keep in sync. Omission is the failure that happens;
 // this catches omission.
 
-// caller builds the opaque published caller for a session id (ADR 0017).
+// caller builds the opaque published caller for a session id (platform#13).
 func caller(session domain.SessionID) v1.Caller {
 	return v1.Caller{Session: string(session)}
 }
@@ -67,9 +67,9 @@ type boundaryCase struct {
 // is always a stated decision rather than an oversight.
 var boundaryExempt = map[string]string{
 	// CallerCan answers whether an affordance should be *drawn*, not whether
-	// an operation may proceed (ADR 0058). It returns a bool and no
+	// an operation may proceed (platform#36). It returns a bool and no
 	// authorized, so nothing downstream can mistake its answer for the proof
-	// ADR 0066 requires — the screens and services behind every affordance run
+	// platform#41 requires — the screens and services behind every affordance run
 	// the real boundary themselves, and a test asserts telemetry.read is
 	// enforced there.
 	//
@@ -87,17 +87,17 @@ var boundaryExempt = map[string]string{
 	// a test asserts a stored preference cannot surface it without the grant.
 	"ExpertModeEnabled": "display preference; authenticates but does not authorize, returns a bool, and reveals nothing the permission has not already allowed",
 	// HomeCompositionFor reads how the caller arranged their own home screen
-	// (ADR 0103). Exempt on exactly the terms above, and the reasoning matters
+	// (platform#59). Exempt on exactly the terms above, and the reasoning matters
 	// more here than for a toggle: this is a *preference, not a scope*
-	// (ADR 0067). It returns which rows one person chose to hide, it discloses
+	// (platform#42). It returns which rows one person chose to hide, it discloses
 	// no content, and every row it decides the visibility of is separately
 	// reachable by search and by link. Requiring a permission to read your own
 	// taste would make the home screen fail for anyone who lacks it — and
-	// treating the answer as authority is precisely the confusion ADR 0103
+	// treating the answer as authority is precisely the confusion platform#59
 	// forbids, because a hidden row is not evidence of a permission.
 	"HomeCompositionFor": "display preference; authenticates but does not authorize, returns no content, and hides nothing that is not reachable by other means",
 	// LanguagePreferenceFor reads what the caller wants to hear and read
-	// (ADR 0112). Exempt on the same terms as the two rows above: it
+	// (platform#67). Exempt on the same terms as the two rows above: it
 	// authenticates, deliberately does not authorize, and returns the caller's
 	// own stored document and nothing else — no content, no other viewer's
 	// setting, nothing a permission was protecting.
@@ -109,7 +109,7 @@ var boundaryExempt = map[string]string{
 	// thing it decorates. It returns nil on every failure for that reason, and the
 	// transport reads nil as the default.
 	"LanguagePreferenceFor": "playback preference; authenticates but does not authorize, returns only the caller's own stored document, and degrades to the default rather than refusing a play",
-	// SessionForCaller answers "which session is this credential" (ADR 0102).
+	// SessionForCaller answers "which session is this credential" (platform#58).
 	// It authenticates — an unknown credential is Unauthenticated, like
 	// everywhere else — and deliberately does not authorize, because there is
 	// no action to gate: it is a fact about the credential already presented
@@ -131,7 +131,7 @@ var boundaryExempt = map[string]string{
 }
 
 // RefreshSession is not in either list, and cannot be: it carries no caller at
-// all, so the reflection pass never sees it (ADR 0102).
+// all, so the reflection pass never sees it (platform#58).
 //
 // That is the honest shape rather than an omission. Step 2 of its boundary is
 // the refresh token itself, exactly as the password credential plays that role
@@ -212,7 +212,7 @@ func boundaryCases() []boundaryCase {
 		}},
 		// Three results rather than two, so discard does not fit. It is the one
 		// entry point that reports playability as well as an error, because the
-		// screens transport asks it a yes/no question (ADR 0036) and must still
+		// screens transport asks it a yes/no question (platform#24) and must still
 		// be able to tell "no bytes here" from "your session expired".
 		{"FirstPlayablePart", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			_, _, err := s.FirstPlayablePart(ctx, caller(sid), "node-1")
@@ -248,7 +248,7 @@ func boundaryCases() []boundaryCase {
 				Caller: caller(sid), ModuleID: "stremio", CatalogID: "top",
 			}))
 		}},
-		// The cache-first browse reads (ADR 0052). They are on this table for a
+		// The cache-first browse reads (platform#30). They are on this table for a
 		// sharper reason than the two above: they can answer from storage without
 		// asking a source at all, so an unauthorised caller would be served a
 		// stored answer rather than refused — the boundary is the only thing
@@ -283,7 +283,7 @@ func boundaryCases() []boundaryCase {
 			return discard(s.ListSettingsModules(ctx, app.ListSettingsModulesQuery{Caller: caller(sid)}))
 		}},
 		// Installing and uninstalling an extension changes which third-party code
-		// runs with the Platform's authority (ADR 0081), so both refuse an unknown
+		// runs with the Platform's authority (platform#51), so both refuse an unknown
 		// session and an ungranted caller like any other administrator action. The
 		// rejection lands at the boundary, before the injected manager is reached —
 		// the Service in this suite has none, which is exactly why the rejection
@@ -309,7 +309,7 @@ func boundaryCases() []boundaryCase {
 				Caller: caller(sid), PartID: "part-1",
 			}))
 		}},
-		// The origin's correction for a dead cached link (ADR 0049). It is
+		// The origin's correction for a dead cached link (platform#28). It is
 		// called from a transport rather than from a client, which is exactly
 		// why it earns a row instead of an exemption: a ticket proves its own
 		// provenance and nothing else, so the session it names has to clear the
@@ -342,7 +342,7 @@ func boundaryCases() []boundaryCase {
 			}))
 		}},
 
-		// --- playback state (ADR 0046) ---
+		// --- playback state (platform#26) ---
 		//
 		// The first per-user rows in the content domain, and the boundary matters
 		// more here than anywhere above it: these methods resolve *whose* state
@@ -399,7 +399,7 @@ func boundaryCases() []boundaryCase {
 		{"ListTraces", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListTraces(ctx, app.ListTracesQuery{Caller: caller(sid)}))
 		}},
-		// Reads the process rather than the store (ADR 0130), and takes the same
+		// Reads the process rather than the store (sdk#9), and takes the same
 		// gate for the same reason: an instrument's dimensions describe what a
 		// module was asked to do.
 		{"ListMetrics", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
@@ -412,7 +412,7 @@ func boundaryCases() []boundaryCase {
 			return discard(s.PurgeTelemetry(ctx, app.PurgeTelemetryCommand{Caller: caller(sid)}))
 		}},
 
-		// --- background work (ADR 0017) ---
+		// --- background work (platform#13) ---
 		//
 		// These carry an ordinary caller like every row above, which is the
 		// point of them being here: the system principal is a *caller*, not a
@@ -426,7 +426,7 @@ func boundaryCases() []boundaryCase {
 			return discard(s.GetJob(ctx, app.GetJobQuery{Caller: caller(sid), JobID: "job-1"}))
 		}},
 
-		// --- the session's own devices (ADR 0102) ---
+		// --- the session's own devices (platform#58) ---
 		{"ListSessions", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListSessions(ctx, app.ListSessionsQuery{Caller: caller(sid)}))
 		}},
@@ -510,7 +510,7 @@ func boundaryCases() []boundaryCase {
 			return discard(s.GetPendingConfigVersion(ctx, app.GetPendingConfigVersionQuery{CallerSessionID: sid}))
 		}},
 
-		// --- the resolution register (ADR 0119) ---
+		// --- the resolution register (platform#74) ---
 		//
 		// Reading and resolving are separate rows because they are separate
 		// powers: seeing that an extension will not start is diagnostic, and
@@ -527,7 +527,7 @@ func boundaryCases() []boundaryCase {
 			}))
 		}},
 
-		// --- the library and its rules (ADR 0104) ---
+		// --- the library and its rules (platform#60) ---
 		//
 		// RunLibraryMaintenance is the row worth reading twice. It *acts* as the
 		// system principal whoever triggers it, and that must not weaken the
@@ -539,7 +539,7 @@ func boundaryCases() []boundaryCase {
 			return discard(s.ListLibrary(ctx, app.ListLibraryQuery{Caller: caller(sid)}))
 		}},
 		// Reading a title out of the graph rather than from its provider
-		// (ADR 0107). It is a content read like any other and gated as one: the
+		// (platform#62). It is a content read like any other and gated as one: the
 		// library is shared, so everybody who may see it may see all of it, and
 		// nobody who may not gets a description of it either.
 		{"GetLibraryDetail", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {

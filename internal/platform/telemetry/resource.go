@@ -12,7 +12,7 @@ import (
 
 // Resource is the process identity stamped on every record. Mosaic is a
 // single-host system with more than one process — the Platform, the Supervisor
-// when it exists (ADR 0060), and a module's own process if modules ever leave
+// when it exists (supervisor#5), and a module's own process if modules ever leave
 // this one — so *which process said this* is a required dimension, not a
 // decoration. The field names follow OpenTelemetry's resource conventions so
 // an OTLP export later carries them unchanged.
@@ -29,13 +29,13 @@ type Resource struct {
 	GenerationID string
 	// BootID names one start of the process. The Supervisor mints it and hands
 	// it over so its own records and the Platform's stitch into one timeline
-	// (ADR 0060); when nothing hands one over, the process mints its own so a
+	// (supervisor#5); when nothing hands one over, the process mints its own so a
 	// boot is always nameable in the logs.
 	BootID string
 }
 
 // bootIDEnv names the environment variable a Supervisor uses to hand its boot
-// id to the process it is starting. This is the one piece of ADR 0060 that can
+// id to the process it is starting. This is the one piece of supervisor#5 that can
 // exist before the Supervisor does: the Platform adopts an inbound id when
 // given one, so there is something to hand over to when the Supervisor arrives.
 const bootIDEnv = "MOSAIC_BOOT_ID"

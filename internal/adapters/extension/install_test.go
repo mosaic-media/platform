@@ -187,7 +187,7 @@ func TestVerifyRejectsADigestMismatch(t *testing.T) {
 }
 
 // A module built against a different SDK major is refused before it is run — the
-// one compatibility number, checked without executing anything (ADR 0064).
+// one compatibility number, checked without executing anything (platform#39).
 func TestVerifyRejectsAnIncompatibleSDKMajor(t *testing.T) {
 	sp := newSignedProbe(t, func(m *manifestJSON) { m.SDKMajor = 99 })
 	_, err := extension.Verify(sp.manifest, sp.signature, sp.binaryPath, sp.keyring)

@@ -14,7 +14,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// The upgrade request against a real database (ADR 0129).
+// The upgrade request against a real database (platform#77).
 func TestUpgradeRequestLifecycle(t *testing.T) {
 	requirePostgres(t)
 	pool := freshDatabase(t)

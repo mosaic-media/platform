@@ -33,7 +33,7 @@ func NewUnitOfWork(pool *pgxpool.Pool) *UnitOfWork {
 // Any error from fn rolls the whole transaction back, so a partial write is
 // never committed and never observable by another transaction.
 func (u *UnitOfWork) WithinTx(ctx context.Context, fn func(ctx context.Context, tx contracts.Tx) error) error {
-	// One span per transaction (ADR 0055, seam 5), and the grouping layer of
+	// One span per transaction (platform#33, seam 5), and the grouping layer of
 	// the whole waterfall: the per-statement spans the pool's tracer emits
 	// (seam 6) nest inside this one, so a trace shows "this write took 40ms,
 	// and here are the six statements it took to do it" rather than six
@@ -95,7 +95,7 @@ func (t *tx) UserPreferences() contracts.UserPreferenceStore {
 func (t *tx) Credentials() contracts.CredentialStore { return &credentialStore{q: t.q} }
 func (t *tx) Tokens() contracts.TokenStore           { return &tokenStore{q: t.q} }
 
-// The content model (ADR 0013). These share the same pgx.Tx as every store
+// The content model (platform#9). These share the same pgx.Tx as every store
 // above, so a node, its parts and the outbox event announcing it commit
 // atomically or not at all.
 func (t *tx) Nodes() contracts.NodeStore         { return &nodeStore{q: t.q} }
@@ -105,31 +105,31 @@ func (t *tx) SourceBindings() contracts.SourceBindingStore {
 	return &sourceBindingStore{q: t.q}
 }
 
-// PlaybackStates joins the set (ADR 0046) so a position change and its outbox
+// PlaybackStates joins the set (platform#26) so a position change and its outbox
 // event share the one transaction, like every other content write.
 func (t *tx) PlaybackStates() contracts.PlaybackStateStore {
 	return &playbackStateStore{q: t.q}
 }
 
-// ModuleSettings joins the set (ADR 0021) so a module's settings change and
+// ModuleSettings joins the set (platform#17) so a module's settings change and
 // its outbox event share the one transaction.
 func (t *tx) ModuleSettings() contracts.ModuleSettingsStore {
 	return &moduleSettingsStore{q: t.q}
 }
 
-// InstalledExtensions joins the set (ADR 0081) so an install or uninstall and
+// InstalledExtensions joins the set (platform#51) so an install or uninstall and
 // its outbox event share the one transaction.
 func (t *tx) InstalledExtensions() contracts.InstalledExtensionStore {
 	return &installedExtensionStore{q: t.q}
 }
 
-// LibraryRules joins the set (ADR 0104) so writing what the library should
+// LibraryRules joins the set (platform#60) so writing what the library should
 // contain and the event announcing it share the one transaction.
 func (t *tx) LibraryRules() contracts.LibraryRuleStore {
 	return &libraryRuleStore{q: t.q}
 }
 
-// NodeMetadata joins the set (ADR 0107) so a stored provider answer commits
+// NodeMetadata joins the set (platform#62) so a stored provider answer commits
 // with the node it describes.
 func (t *tx) NodeMetadata() contracts.NodeMetadataStore {
 	return &nodeMetadataStore{q: t.q}

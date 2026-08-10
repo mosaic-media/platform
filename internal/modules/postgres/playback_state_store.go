@@ -17,7 +17,7 @@ import (
 )
 
 // playbackStateStore is the PostgreSQL contracts.PlaybackStateStore: one row
-// per (user, node), upserted as a viewer moves through an item (ADR 0046).
+// per (user, node), upserted as a viewer moves through an item (platform#26).
 type playbackStateStore struct {
 	q queryer
 }
@@ -123,7 +123,7 @@ func (s *playbackStateStore) ListInProgress(ctx context.Context, userID domain.U
 	return out, nil
 }
 
-// ListWatched is the watch history (ADR 0103): everything this viewer has a
+// ListWatched is the watch history (platform#59): everything this viewer has a
 // state for, most recently touched first.
 //
 // `position_ms > 0 OR finished` is the whole of the difference from the read

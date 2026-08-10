@@ -6,7 +6,7 @@ package domain
 
 import "time"
 
-// The session credential (ADR 0102).
+// The session credential (platform#58).
 //
 // A session used to be a fixed 24-hour lifetime with no renewal, and the id was
 // the credential. It is now a **pair**: a minutes-long access token presented
@@ -20,7 +20,7 @@ import "time"
 // accepted deliberately.
 
 // SessionCredential is the opaque value a caller presents — an access token
-// since ADR 0102.
+// since platform#58.
 //
 // It is its own type rather than a SessionID because it is no longer one. A
 // credential resolves *to* a session, is minutes-lived where the session is

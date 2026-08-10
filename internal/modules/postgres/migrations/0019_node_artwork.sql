@@ -1,8 +1,8 @@
 -- Migration 0019 — Artwork stored on the node.
 --
 -- The descriptive surface is otherwise re-derived live from the provider on
--- every read (ADR 0034), which is right for a detail screen — one item, one
--- fetch, always current. Artwork is the exception (ADR 0071): it is rendered in
+-- every read (sdk#3), which is right for a detail screen — one item, one
+-- fetch, always current. Artwork is the exception (platform#45): it is rendered in
 -- bulk on list surfaces like the continue-watching rail, where re-deriving is a
 -- provider round-trip per card, and it is the one image a user may later want to
 -- override, which is possible only for something the library owns.

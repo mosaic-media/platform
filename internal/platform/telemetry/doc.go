@@ -6,7 +6,7 @@
 // redaction-classed field vocabulary, a levelled logger, the sinks it writes
 // to, and the process identity every record carries.
 //
-// It is ambient (ADR 0053). Nothing takes a Logger as a constructor
+// It is ambient (platform#31). Nothing takes a Logger as a constructor
 // parameter; an edge binds what it knows with Into and everything downstream
 // reaches it with From. That is what makes one line at a call site carry full
 // correlation, and it is why this package exists rather than a logger being
@@ -25,6 +25,6 @@
 //
 // This package holds the redaction vocabulary that internal/platform/diagnostics
 // used to own, because more than one thing needs it now — the support bundle
-// still, and the module surface across the SDK boundary (ADR 0059) — and one
+// still, and the module surface across the SDK boundary (sdk#5) — and one
 // fail-closed classification is worth more than two that can drift apart.
 package telemetry

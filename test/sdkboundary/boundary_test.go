@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-// Package sdkboundary holds the standing enforcement of ADR 0016: the
+// Package sdkboundary holds the standing enforcement of platform#12: the
 // published contract surface must be importable and self-contained for a
 // Module built outside the Platform's module.
 package sdkboundary_test
@@ -52,6 +52,6 @@ func TestPublishedSurfaceCompilesFromAnExternalModule(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("an external module failed to compile against contracts/platform/v1 "+
-			"— an internal type has leaked into the published surface (ADR 0016):\n%s", out)
+			"— an internal type has leaked into the published surface (platform#12):\n%s", out)
 	}
 }

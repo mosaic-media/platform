@@ -12,14 +12,14 @@ import (
 )
 
 // ServerState is the one thing a caller with no session is told about this
-// install (ADR 0101, carrying ADR 0098's two doorway states unchanged).
+// install (platform#57, carrying platform#54's two doorway states unchanged).
 type ServerState struct {
 	// Claimed is whether anybody owns this server yet. Unclaimed means no
 	// account exists, so the doorway is setup rather than sign-in.
 	Claimed bool
 	// Name is what the household called this server, empty until it has been
 	// named. It is read from the durable file rather than the database
-	// (ADR 0098), which is the one fact here that survives PostgreSQL being
+	// (platform#54), which is the one fact here that survives PostgreSQL being
 	// down.
 	//
 	// Disclosing it to an unauthenticated caller is deliberate and bounded: a

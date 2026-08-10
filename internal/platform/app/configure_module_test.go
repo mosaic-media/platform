@@ -16,7 +16,7 @@ import (
 )
 
 // ConfigureModule and GetModuleSettings are the user-managed module settings
-// path (ADR 0021): a user sets a registered module's settings document, and it
+// path (platform#17): a user sets a registered module's settings document, and it
 // is stored, read back, and forwarded to the module on invocation.
 
 func TestConfigureModule(t *testing.T) {

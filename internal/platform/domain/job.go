@@ -44,7 +44,7 @@ const (
 // Job is one unit of background work.
 //
 // It carries no principal. Background work has no session to forward
-// (ADR 0017), so who a job acts as is decided by the Platform that runs it and
+// (platform#13), so who a job acts as is decided by the Platform that runs it and
 // is not something the row can assert — a payload naming a user would be a
 // privilege escalation written to a queue.
 type Job struct {
@@ -117,7 +117,7 @@ const (
 // than only in telemetry.
 //
 // Both, deliberately. Telemetry is where the trace lives and it is subject to
-// retention (ADR 0058), so a job that failed a fortnight ago would have lost
+// retention (platform#36), so a job that failed a fortnight ago would have lost
 // the record of why by the time anyone asked. These rows outlive that window
 // and are read from the job itself, which is where somebody looking at a
 // dead-letter starts.

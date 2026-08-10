@@ -29,7 +29,7 @@ type AuthenticateLocalUserCommand struct {
 // session has been issued.
 type AuthenticateLocalUserResult struct {
 	Session domain.Session
-	// Tokens is the bearer pair (ADR 0102). Its plaintext exists here and
+	// Tokens is the bearer pair (platform#58). Its plaintext exists here and
 	// nowhere else — nothing stores it, nothing logs it, and there is no way to
 	// read it back, which is what makes a database read of the token tables
 	// useless to whoever performed it.
@@ -121,11 +121,11 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 		// command's only domain rule. The session and its first pair of tokens
 		// are written through the same Tx, because a session with no tokens is
 		// a row nobody can use and tokens with no session are a credential
-		// pointing at nothing (ADR 0102).
+		// pointing at nothing (platform#58).
 		session, pair, err := s.sessionManager.Issue(
 			ctx, tx.Sessions(), tx.Tokens(), user.ID, cmd.DeviceID, domain.AuthStrengthPassword,
 			// What this account may do, resolved now and stamped on the session
-			// so a client can omit what it could not use (ADR 0036). Read
+			// so a client can omit what it could not use (platform#24). Read
 			// outside the delegation path deliberately: this is a projection for
 			// drawing a screen, and every call the client then makes
 			// re-authorises against the grants as they are at that moment.

@@ -413,7 +413,7 @@ func TestRunnerReportsAClaimFailureWithoutCrashing(t *testing.T) {
 // Reclaiming turns on the lease having lapsed and nothing else — `Claim` never
 // compares `leased_by` to the claiming owner. That is worth stating because
 // the owner *is* the boot id, and under the Supervisor a restarted Platform
-// adopts the same boot id its predecessor had (ADR 0060), so a new runner is
+// adopts the same boot id its predecessor had (supervisor#5), so a new runner is
 // no longer necessarily a new owner. This test uses two owners because that is
 // the harder case to get right, not because the code depends on them differing.
 func TestAJobAbandonedByADeadRunnerIsReclaimed(t *testing.T) {

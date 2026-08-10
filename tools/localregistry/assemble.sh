@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Assemble and sign a module index from the sibling extension-module checkouts
-# (ADR 0099) — the local counterpart of the registry repository's
+# (platform#55) — the local counterpart of the registry repository's
 # `scripts/assemble.sh`, which does the same job against published releases.
 #
 # **Read that one first; this is a deliberate near-copy of it.** The two differ
@@ -172,7 +172,7 @@ for repo in "${present[@]}"; do
   version="local-$described"
 
   binary="$cmd-$GOOS_LOCAL-$GOARCH_LOCAL"
-  # A module carrying a project credential (ADR 0105) has it linked in by the
+  # A module carrying a project credential (supervisor#1) has it linked in by the
   # workflow that builds the artefact shipping it — which for an extension is
   # that module's own `release.yml`, not platform's. This loop is the local
   # counterpart of that build, so it applies the same `-X` from the same
@@ -181,7 +181,7 @@ for repo in "${present[@]}"; do
   #
   # Empty is a supported configuration and the interesting one to be able to
   # reach: it is what a build with no secret set produces, so the fallback chain
-  # ADR 0105 names — personal key, project key, zero-configuration floor — can
+  # supervisor#1 names — personal key, project key, zero-configuration floor — can
   # be exercised locally rather than assumed. The symbol path here is the same
   # string the module's own linkercheck gate asserts against a canary.
   ldflags=""
@@ -239,4 +239,4 @@ mv "$WORK/out/index.json" "$WORK/out/index.json.sig" "$SERVE_DIR/"
 
 echo
 echo "published $SERVE_DIR/index.json — ${#present[@]} module(s), signed with $(basename "$KEY")"
-echo "the Platform trusts it through MOSAIC_DEV_REPOSITORY_URL + MOSAIC_DEV_REPOSITORY_KEY (ADR 0099)"
+echo "the Platform trusts it through MOSAIC_DEV_REPOSITORY_URL + MOSAIC_DEV_REPOSITORY_KEY (platform#55)"

@@ -47,7 +47,7 @@ func validateAddContentChildCommand(cmd v1.AddContentChildCommand) error {
 }
 
 // AddContentChild inserts one layer of the containment tree. A child inherits
-// its work id and media type from its parent (ADR 0013), so a season cannot
+// its work id and media type from its parent (platform#9), so a season cannot
 // declare a different media type than its series.
 func (s *Service) AddContentChild(ctx context.Context, cmd v1.AddContentChildCommand) (v1.AddContentChildResult, error) {
 	// 1. validate command shape.

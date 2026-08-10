@@ -22,7 +22,7 @@ type PartitionRetention struct {
 
 // TelemetryMaintenanceStore is the write-side counterpart to
 // TelemetryQueryStore: it creates the partitions records go into and drops the
-// ones retention has run out on (ADR 0058).
+// ones retention has run out on (platform#36).
 //
 // It exists as a contract, rather than the composition root reaching for the
 // concrete PostgreSQL store, because retention is now a *job* — and a job

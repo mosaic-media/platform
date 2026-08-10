@@ -14,7 +14,7 @@ import (
 )
 
 // The installed-extensions store is the durable record the Platform reads at
-// boot to re-adopt what a user installed (ADR 0081). This exercises the whole of
+// boot to re-adopt what a user installed (platform#51). This exercises the whole of
 // it against real PostgreSQL: an empty set is the honest default, an install is
 // recorded and read back, a reinstall replaces rather than duplicates, and an
 // uninstall is idempotent.
@@ -42,7 +42,7 @@ func TestInstalledExtensionStoreRoundTrip(t *testing.T) {
 	}
 
 	// A user installs the Stremio addon source — the shape a real install record
-	// takes (ADR 0081): the module id the binary reports, the repository it came
+	// takes (platform#51): the module id the binary reports, the repository it came
 	// from, the version pinned, and who verified it.
 	when := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	rec := domain.InstalledExtension{

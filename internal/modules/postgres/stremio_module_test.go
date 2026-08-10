@@ -22,10 +22,10 @@ import (
 // ImportContent command, and the capability — handed the Service and the caller
 // — lands a work, its source binding, a season/episode tree and RemoteLocation
 // stream Parts in a real database, every write re-authorising as the invoking
-// user (ADR 0007, 0008, 0017).
+// user (platform#4, 0008, 0017).
 //
 // The capability is a fake import source, not the real Stremio module: the
-// platform module must not import an extension module (ADR 0079/0081). What is
+// platform module must not import an extension module (platform#49/0081). What is
 // under test is the Platform's path — registry -> ImportContent -> capability ->
 // ContentService — and the writes it makes on the module's behalf, not Stremio's
 // addon parsing, which is the module's own test. That the *real* module works
@@ -140,7 +140,7 @@ func TestImportSourceModuleAgainstPostgres(t *testing.T) {
 		t.Fatalf("season has %d episodes, want 2", len(season.Children))
 	}
 
-	// Each episode has a RemoteLocation stream Part — the path ADR 0014 built
+	// Each episode has a RemoteLocation stream Part — the path platform#10 built
 	// and nothing had exercised until now.
 	for _, episode := range season.Children {
 		parts, err := cs.Parts.ListByNode(c, episode.ID)

@@ -12,7 +12,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Artwork enrichment (ADR 0075), and the selection rule (ADR 0074).
+// Artwork enrichment (sdk#6), and the selection rule (platform#47).
 //
 // Artwork used to arrive as a by-product of asking a question about *titles*:
 // whichever module described the content supplied whatever art it happened to
@@ -24,12 +24,12 @@ import (
 // It is the same shape as enrichStreams and differs in one way that matters:
 // **it does not stop at the first provider that answers.** Candidates from
 // several sources union into one set rather than competing for a slot, because
-// ADR 0074 makes them additive and attributable — so there is no first-wins rule
+// platform#47 makes them additive and attributable — so there is no first-wins rule
 // here and no cross-provider dedup problem left open.
 
 // artworkCandidateCap bounds how many candidates are kept per slot per node.
 //
-// ADR 0074 names the cap in the design rather than leaving it to be discovered:
+// platform#47 names the cap in the design rather than leaving it to be discovered:
 // a real artwork database returns dozens of posters per title, the document is
 // read on every list render, and an unbounded set would grow the hot path of
 // every rail in the library to make a picker marginally more complete. Twelve is
@@ -60,13 +60,13 @@ func (s *Service) enrichArtwork(ctx context.Context, caller v1.Caller, workID v1
 
 	// The identities an artwork provider might recognise, read from the work
 	// rather than from the ref: a provider that did not source this content holds
-	// no id of its own for it (ADR 0073).
+	// no id of its own for it (platform#46).
 	identities := sharedIdentitiesOf(work)
 	if len(identities) == 0 {
 		// A source keyed only to itself is unenrichable by design rather than by
 		// oversight. Cinemeta binds only `imdb`, which is enough for films and
 		// not for television at a source that keys series on TVDB — a real and
-		// visible limit, recorded in ADR 0075 rather than papered over.
+		// visible limit, recorded in sdk#6 rather than papered over.
 		return
 	}
 
@@ -204,7 +204,7 @@ func dedupeArtworkCandidates(candidates []v1.ArtworkCandidate) []v1.ArtworkCandi
 // rankArtworkCandidates sorts the set best-first within each slot and applies
 // the per-slot cap.
 //
-// **This is ADR 0074's selection rule, and it is deliberately boring.** The
+// **This is platform#47's selection rule, and it is deliberately boring.** The
 // point of the candidate set is having somewhere to record a *choice*; the rule
 // is what fills the slot until a user makes one. It prefers, in order:
 //

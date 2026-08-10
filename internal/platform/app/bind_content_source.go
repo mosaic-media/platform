@@ -42,7 +42,7 @@ func validateBindContentSourceCommand(cmd v1.BindContentSourceCommand) error {
 }
 
 // BindContentSource records that a source resolves to a node. Identity
-// resolution is a visible act (ADR 0013): a strong match binds confirmed, a
+// resolution is a visible act (platform#9): a strong match binds confirmed, a
 // weak one as pending_review so a person sees it rather than two works
 // silently merging because they share a title.
 func (s *Service) BindContentSource(ctx context.Context, cmd v1.BindContentSourceCommand) (v1.BindContentSourceResult, error) {

@@ -34,7 +34,7 @@ import (
 // whole of it against a genuinely spawned module: an install verifies, spawns and
 // records; the module then resolves through the capability registry exactly as a
 // compiled-in one would; and an uninstall stops it, makes it unresolvable, and
-// drops the record. It is the runtime half of ADR 0081, proven without the SDUI
+// drops the record. It is the runtime half of platform#51, proven without the SDUI
 // surface that will eventually drive it.
 func TestManagerInstallMakesAModuleResolvableAndUninstallRemovesIt(t *testing.T) {
 	reg := app.NewCapabilityRegistry()
@@ -104,7 +104,7 @@ func TestManagerInstallMakesAModuleResolvableAndUninstallRemovesIt(t *testing.T)
 }
 
 // A restart reconstructs the running set from the durable record and the on-disk
-// cache (ADR 0081): a second Manager over the same store and install directory,
+// cache (platform#51): a second Manager over the same store and install directory,
 // with a fresh registry, re-adopts what the first installed — without the
 // repository being reached again.
 func TestManagerReAdoptsTheInstalledSetAcrossARestart(t *testing.T) {

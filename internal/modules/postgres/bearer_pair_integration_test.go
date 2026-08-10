@@ -29,7 +29,7 @@ import (
 	"net/http"
 )
 
-// The bearer pair over the real wire (ADR 0102).
+// The bearer pair over the real wire (platform#58).
 //
 // This is the test the browser had to find first. An expired access token used
 // to reach the screen builders and come back as an error *rendered into the

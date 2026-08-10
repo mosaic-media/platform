@@ -21,7 +21,7 @@ import (
 // tab-bar destination with its OWN search field (the top bar has none), the
 // native pattern. The field is desktop-hidden and carries a stable id so it
 // keeps focus/value across the search-as-you-type re-renders. It runs
-// SearchAvailableContent and renders each result as a card (ADR 0028).
+// SearchAvailableContent and renders each result as a card (platform#18).
 func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
 	text := strings.TrimSpace(stringParam(params, paramText))
 	field := s.searchField(text)
@@ -194,7 +194,7 @@ func (s *Service) searchFilterBar(text string, present []v1.MediaType, active v1
 }
 
 // mediaTypeHeading is a media type as a section heading. The vocabulary is open
-// text canonicalised on write (ADR 0015), so an unknown type is title-cased and
+// text canonicalised on write (platform#11), so an unknown type is title-cased and
 // shown rather than dropped: a module contributing a type the Platform has never
 // heard of should get a heading, not have its results disappear into a section
 // with no name.
@@ -211,7 +211,7 @@ func mediaTypeHeading(mt v1.MediaType) string {
 	case v1.MediaIPTVChannel:
 		return "Live"
 	}
-	// Canonicalised types are snake_case (ADR 0015), so "manga_series" reads as
+	// Canonicalised types are snake_case (platform#11), so "manga_series" reads as
 	// "Manga series" rather than as an identifier.
 	name := strings.ReplaceAll(string(mt), "_", " ")
 	if name == "" {

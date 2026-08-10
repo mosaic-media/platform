@@ -10,7 +10,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// LibraryRuleStore persists what the library should contain (ADR 0104).
+// LibraryRuleStore persists what the library should contain (platform#60).
 //
 // It is on Tx as well as being available as a direct read handle, for the
 // reason every content store is: creating a rule emits an outbox event, and the
@@ -38,7 +38,7 @@ type LibraryRuleStore interface {
 	List(ctx context.Context, filter domain.LibraryRuleFilter) ([]domain.LibraryRule, error)
 
 	// Delete removes one rule. Deleting a rule removes the *statement*, never
-	// the content it materialised: rules add and do not remove (ADR 0104), and
+	// the content it materialised: rules add and do not remove (platform#60), and
 	// that holds when the rule itself goes away — otherwise deleting a rule
 	// would be a bulk deletion of things people have half-watched.
 	//

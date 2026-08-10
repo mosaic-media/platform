@@ -14,15 +14,15 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The policy actions for stored telemetry (ADR 0058).
+// The policy actions for stored telemetry (platform#36).
 //
 // These are a genuine escalation, unlike the preference actions beside them.
 // Telemetry records what every user did — which screens they opened, which
 // titles they searched for — and although values are redacted at construction
-// (ADR 0056), the *shape* of someone's activity is still visible. Granting
+// (platform#34), the *shape* of someone's activity is still visible. Granting
 // telemetry.read is a decision about trust, not a convenience.
 //
-// They belong to the superuser and to nobody else by default (ADR 0069). The
+// They belong to the superuser and to nobody else by default (platform#44). The
 // *first* account holds them — withholding an action from the only account that
 // exists would create a permission nobody could ever be granted — while an
 // administrator it allocates must be given them individually.
@@ -133,7 +133,7 @@ type ListMetricsResult struct {
 	Series []telemetry.MetricSeries
 }
 
-// ListMetrics returns the live value of every counter and histogram (ADR 0130).
+// ListMetrics returns the live value of every counter and histogram (sdk#9).
 //
 // **It reads the process rather than the store, which is the one thing about
 // this query that is not like the three above it.** A log record and a span are
@@ -144,7 +144,7 @@ type ListMetricsResult struct {
 // restart and carry no history.
 //
 // It takes the same telemetry.read gate as the others, and for the same reason
-// ADR 0058 gives — an instrument's dimensions describe what a module was asked
+// platform#36 gives — an instrument's dimensions describe what a module was asked
 // to do, which is the shape of somebody's activity even when every value is
 // redacted.
 func (s *Service) ListMetrics(ctx context.Context, q ListMetricsQuery) (ListMetricsResult, error) {
@@ -184,18 +184,18 @@ func (s *Service) authorizeTelemetryRead(ctx context.Context, caller v1.Caller) 
 // It exists because an affordance nobody may use should not be rendered: the
 // expert-mode toggle is shown only to a caller who holds ActionTelemetryRead,
 // so a normal user never sees a switch for a surface they cannot open. That is
-// a stricter rule than ADR 0058 first wrote, and a better one — the record had
+// a stricter rule than platform#36 first wrote, and a better one — the record had
 // the toggle visible to everyone and the data denied, which means routinely
 // showing people a control that fails.
 //
 // It does not authorise and must never be mistaken for authorisation. It
 // returns no authorized, so nothing downstream can mistake its answer for the
-// proof ADR 0066 requires — the screens and services behind the affordance each
+// proof platform#41 requires — the screens and services behind the affordance each
 // run the real check, and this only suppresses a button. It fails closed, and
 // it deliberately does not require permission.read, because asking "may I?"
 // about oneself is not reading the permission system.
 func (s *Service) CallerCan(ctx context.Context, caller v1.Caller, action policy.Action, resourceType string) bool {
-	// It authenticates rather than taking an authorized (ADR 0066): the
+	// It authenticates rather than taking an authorized (platform#41): the
 	// emit-side holds a v1.Caller and has not entered the boundary for this
 	// action — asking whether it *could* is the whole question.
 	userID, err := s.authenticateCaller(ctx, caller)

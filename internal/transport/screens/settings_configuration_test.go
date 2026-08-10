@@ -16,7 +16,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// Settings › Configuration (ADR 0011, roadmap M4.4).
+// Settings › Configuration (platform#7, roadmap M4.4).
 //
 // The properties guarded here are the ones that would fail quietly. A panel
 // that renders is not a panel that is right about anything: the numbers on it
@@ -63,7 +63,7 @@ func TestTheConfigurationPanelShowsWhatIsInForceNotWhatIsStored(t *testing.T) {
 	}
 }
 
-// The audit floor (ADR 0057) is applied by the reader and not by configuration,
+// The audit floor (platform#35) is applied by the reader and not by configuration,
 // so a panel formatting the stored payload would show whatever an operator
 // asked for while the Platform kept 30 days. Reading through the service is
 // what makes the floor visible.
@@ -224,7 +224,7 @@ func TestEveryOfferedFieldIsOneThePlatformActuallyReads(t *testing.T) {
 
 // A caller who may not read configuration gets no nav row, rather than a row
 // that opens on an error. The panel itself still authorises for itself — this
-// is about not drawing an affordance nobody can use (ADR 0058).
+// is about not drawing an affordance nobody can use (platform#36).
 func TestTheConfigurationRowIsDrawnOnlyForACallerWhoMayReadIt(t *testing.T) {
 	fake := &fakeQueries{allow: map[string]bool{}}
 	svc := &Service{content: fake, clock: time.Now}

@@ -96,18 +96,18 @@ type fakeDB struct {
 	bindings        map[v1.SourceBindingID]v1.SourceBinding
 	moduleSettings  map[string]domain.ModuleSettings
 	userPreferences map[string]domain.UserPreference
-	// playbackStates is the first per-user content state (ADR 0046), so it is
+	// playbackStates is the first per-user content state (platform#26), so it is
 	// the first fake here keyed by a pair rather than by an id.
 	playbackStates map[playbackKey]v1.PlaybackState
-	// libraryRules is what the library should contain (ADR 0104) — the first
+	// libraryRules is what the library should contain (platform#60) — the first
 	// fake here that is neither content nor identity, but a durable statement
 	// about content.
 	libraryRules map[domain.LibraryRuleID]domain.LibraryRule
 	// nodeMetadata is what a provider said about a materialised title
-	// (ADR 0107).
+	// (platform#62).
 	nodeMetadata map[v1.NodeID]contracts.NodeMetadata
 	watchAvail   map[v1.NodeID]contracts.WatchAvailability
-	// snapshots is the last good answer per source and question (ADR 0052),
+	// snapshots is the last good answer per source and question (platform#30),
 	// keyed by the pair the store is keyed by.
 	snapshots map[snapshotKey]contracts.SourceSnapshot
 }
@@ -153,7 +153,7 @@ func newFakeDB() *fakeDB {
 // seedSession seeds a live session **and an access token whose plaintext is the
 // session id**.
 //
-// Since ADR 0102 a caller presents an access token rather than a session id, so
+// Since platform#58 a caller presents an access token rather than a session id, so
 // a fixture that seeded only the session would make every test in this package
 // Unauthenticated. Minting a credential equal to the id keeps the hundred
 // existing call sites — which pass a seeded id as the caller — saying exactly
@@ -269,7 +269,7 @@ func (fakeTelemetryQueryStore) RecentTraces(context.Context, domain.TelemetryTra
 	return nil, nil
 }
 
-// adminRole is the Administrator preset (ADR 0069): everything operational,
+// adminRole is the Administrator preset (platform#44): everything operational,
 // and no insight.
 //
 // Derived from app.AdministratorActions rather than listed by hand, so the
@@ -511,7 +511,7 @@ func (s *fakeSessionStore) Revoke(_ context.Context, id domain.SessionID) error 
 }
 
 // Touch records that the session was used, moving LastSeenAt — the column idle
-// expiry is measured from (ADR 0102).
+// expiry is measured from (platform#58).
 func (s *fakeSessionStore) Touch(_ context.Context, id domain.SessionID, at time.Time) (domain.Session, error) {
 	s.trace.record("sessions.touch")
 	s.db.mu.Lock()
@@ -525,7 +525,7 @@ func (s *fakeSessionStore) Touch(_ context.Context, id domain.SessionID, at time
 	return session, nil
 }
 
-// ListForUser is the device list (ADR 0102): live sessions only.
+// ListForUser is the device list (platform#58): live sessions only.
 func (s *fakeSessionStore) ListForUser(_ context.Context, userID domain.UserID, now time.Time) ([]domain.Session, error) {
 	s.trace.record("sessions.list_for_user")
 	s.db.mu.Lock()
@@ -1037,14 +1037,14 @@ func (tx *fakeTx) NodeMetadata() contracts.NodeMetadataStore {
 	return &fakeNodeMetadataStore{db: tx.db, trace: tx.trace}
 }
 
-// Issues is the resolution register (ADR 0119). Nil rather than a fake: nothing
+// Issues is the resolution register (platform#74). Nil rather than a fake: nothing
 // reached through a transaction raises or reads a finding — the detectors hold
 // the direct handle, because they run on boot paths rather than inside
 // somebody's command.
 func (tx *fakeTx) Issues() contracts.IssueStore { return nil }
 
 // fakeNodeMetadataStore implements contracts.NodeMetadataStore over fakeDB
-// (ADR 0107). Get on a node that was never enriched is NotFound, which is the
+// (platform#62). Get on a node that was never enriched is NotFound, which is the
 // distinction the real store draws and the one a caller renders around.
 type fakeNodeMetadataStore struct {
 	db    *fakeDB
@@ -1071,7 +1071,7 @@ func (s *fakeNodeMetadataStore) Get(_ context.Context, nodeID v1.NodeID) (contra
 }
 
 // fakeSourceSnapshotStore implements contracts.SourceSnapshotStore over fakeDB
-// (ADR 0052) — the last good answer a source gave to one question.
+// (platform#30) — the last good answer a source gave to one question.
 type fakeSourceSnapshotStore struct {
 	db    *fakeDB
 	trace *trace
@@ -1153,7 +1153,7 @@ func (s *fakeWatchAvailabilityStore) ListStale(_ context.Context, limit int) ([]
 }
 
 // fakeLibraryRuleStore implements contracts.LibraryRuleStore over fakeDB
-// (ADR 0104). It enforces the one thing the real schema enforces and the
+// (platform#60). It enforces the one thing the real schema enforces and the
 // application service does not — the case-insensitive uniqueness of a rule's
 // name — because "two rules called Trending" is a Conflict a test must be able
 // to see.
@@ -1441,7 +1441,7 @@ func baseTestDeps(db *fakeDB, tr *trace, now time.Time) app.Deps {
 
 // fakeNodeStore implements contracts.NodeStore over fakeDB. The reads the
 // content query services make are implemented faithfully — including the
-// canonicalisation ADR 0015 requires of any implementation — so an app-level
+// canonicalisation platform#11 requires of any implementation — so an app-level
 // test proves the service, not the adapter.
 type fakeNodeStore struct {
 	db    *fakeDB
@@ -2016,7 +2016,7 @@ func (s fakePermissionStore) FindRoleByName(_ context.Context, name string) (dom
 }
 
 // FindRole resolves a role across every user's roles, mirroring the real
-// store's id lookup. The delegation check (ADR 0069) reads through it, so it
+// store's id lookup. The delegation check (platform#44) reads through it, so it
 // has to return the role's real permissions rather than a stub.
 func (s fakePermissionStore) FindRole(_ context.Context, roleID domain.RoleID) (domain.Role, error) {
 	s.db.mu.Lock()
@@ -2032,7 +2032,7 @@ func (s fakePermissionStore) FindRole(_ context.Context, roleID domain.RoleID) (
 }
 
 // fakePlaybackStateStore implements contracts.PlaybackStateStore over fakeDB
-// (ADR 0046). It reproduces the two behaviours the real store's SQL encodes and
+// (platform#26). It reproduces the two behaviours the real store's SQL encodes and
 // a caller depends on: NotFound for a node never started, and an in-progress
 // list that excludes both finished items and items opened at position zero.
 type fakePlaybackStateStore struct {

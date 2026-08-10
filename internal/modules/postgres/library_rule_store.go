@@ -16,7 +16,7 @@ import (
 )
 
 // libraryRuleStore is the PostgreSQL contracts.LibraryRuleStore: one row per
-// statement of what the library should contain (ADR 0104).
+// statement of what the library should contain (platform#60).
 type libraryRuleStore struct {
 	q queryer
 }

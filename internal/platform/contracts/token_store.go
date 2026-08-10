@@ -11,7 +11,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// TokenStore persists the two halves of a session's bearer pair (ADR 0102).
+// TokenStore persists the two halves of a session's bearer pair (platform#58).
 //
 // It is on Tx as well as reachable directly, and both are load-bearing.
 // Directly, because validating an access token happens on every call and must

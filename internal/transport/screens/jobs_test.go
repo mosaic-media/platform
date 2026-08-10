@@ -14,7 +14,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// The background-work surface (ADR 0017). "Visible in expert mode" is the exit
+// The background-work surface (platform#13). "Visible in expert mode" is the exit
 // criterion, so what is tested is that it is visible to a caller who may see
 // it, invisible to one who may not, and that a dead-letter reads as a failure
 // rather than as a row like any other.

@@ -13,7 +13,7 @@ import (
 
 // Capability sources content from a provider and adds it to the Platform. It
 // owns no schema and holds only its provider port and the published service;
-// everything it does to the graph goes through ContentService (ADR 0012).
+// everything it does to the graph goes through ContentService (platform#8).
 type Capability struct {
 	source MetadataSource
 }
@@ -36,7 +36,7 @@ type ImportResult struct {
 }
 
 // Import sources a work by query and reflects it into the Platform's generic
-// model, acting throughout as the caller it is handed (ADR 0017). It is the
+// model, acting throughout as the caller it is handed (platform#13). It is the
 // whole thesis in one method: source, search to avoid duplicating, create
 // nodes and relations, and — through the commands it issues — cause events.
 func (c *Capability) Import(ctx context.Context, svc v1.ContentService, caller v1.Caller, query string) (ImportResult, error) {
@@ -112,7 +112,7 @@ func (c *Capability) Import(ctx context.Context, svc v1.ContentService, caller v
 	}
 
 	// An anime and its source manga are two Works joined by an edge, not one
-	// tree (ADR 0013). Find or create the source work, then relate to it.
+	// tree (platform#9). Find or create the source work, then relate to it.
 	if meta.Adaptation != nil {
 		sourceID, err := c.findOrCreateAdaptation(ctx, svc, caller, *meta.Adaptation)
 		if err != nil {

@@ -34,7 +34,7 @@ const nodeColumns = `id, work_id, parent_id, node_kind, media_type, container_ty
 func (s *nodeStore) Create(ctx context.Context, node v1.Node) (v1.Node, error) {
 	// Canonicalise on write rather than trusting callers, so the open
 	// vocabularies cannot fragment through a capability that spells a type
-	// differently (ADR 0015).
+	// differently (platform#11).
 	node = node.Canonical()
 	_, err := s.q.Exec(ctx,
 		`INSERT INTO nodes (id, work_id, parent_id, node_kind, media_type, container_type, item_type,

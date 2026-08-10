@@ -16,7 +16,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The two chromes the app wears (ADR 0031).
+// The two chromes the app wears (platform#21).
 //
 // Mosaic is two rooms in one building. The media side is a full-bleed hero with
 // floating glass pills over it and no bar to speak of; the administrative side —
@@ -59,7 +59,7 @@ func breadcrumbFor(screen string) string {
 	}
 }
 
-// shellScreen is the server-emitted application frame (ADR 0031): the chrome the
+// shellScreen is the server-emitted application frame (platform#21): the chrome the
 // current screen wears, and the content region it renders into.
 //
 // It takes the route, which it did not before. The frame used to be emitted once
@@ -118,7 +118,7 @@ func (s *Service) shellScreen(ctx context.Context, caller v1.Caller, screen stri
 // Adam. A shell that says the same thing to four people is the exact failure
 // this milestone exists to end.
 //
-// **Sign out lives here and nowhere else.** ADR 0102's device list ends other
+// **Sign out lives here and nowhere else.** platform#58's device list ends other
 // devices and deliberately draws no control for the one you are looking
 // through, on the grounds that signing yourself out belongs on its own
 // affordance rather than inside a list of devices. This is that affordance: the
@@ -138,7 +138,7 @@ func (s *Service) accountMenu(ctx context.Context, caller v1.Caller) ui.El {
 
 	items := []any{
 		map[string]any{"label": "Collections", "icon": "list", "action": ui.Navigate(screenCollections, nil)},
-		// Where a person's own viewing lives (ADR 0103). It is in the account
+		// Where a person's own viewing lives (platform#59). It is in the account
 		// cluster rather than in the nav rail because it is about you rather than
 		// about the library — the nav is the four rooms everybody shares, and this
 		// is the one screen no two people on the server see the same.

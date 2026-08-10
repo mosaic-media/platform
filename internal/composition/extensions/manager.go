@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-// Package extensions owns the runtime lifecycle of extension modules (ADR 0079,
-// ADR 0081): installing and uninstalling them at a user's request, re-adopting
+// Package extensions owns the runtime lifecycle of extension modules (platform#49,
+// platform#51): installing and uninstalling them at a user's request, re-adopting
 // the installed set at boot, and holding the live supervised processes so an
 // uninstall stops the right one.
 //
@@ -32,7 +32,7 @@ import (
 
 // Manager brings the installed set to life and keeps it in step with a user's
 // install and uninstall actions. Install and uninstall are safe to call while
-// the Platform serves — that is the whole point of ADR 0081's runtime model —
+// the Platform serves — that is the whole point of platform#51's runtime model —
 // so the live-handle map and the compound register-and-track operations are
 // guarded by a mutex, while the capability registry it writes to guards itself.
 type Manager struct {
@@ -58,23 +58,23 @@ type Deps struct {
 	// Registry is where an adopted module's capability is registered so the rest
 	// of the Platform resolves it, and unregistered on uninstall.
 	Registry *app.CapabilityRegistry
-	// Store is the durable record of what is installed (ADR 0081).
+	// Store is the durable record of what is installed (platform#51).
 	Store contracts.InstalledExtensionStore
 	// Content is what an adopted module calls back into — the application service,
-	// so each module write re-authorises as the invoking user (ADR 0017).
+	// so each module write re-authorises as the invoking user (platform#13).
 	Content v1.ContentService
 	// Clock stamps an install record's time.
 	Clock contracts.Clock
 	// Policy is the supervisor's crash-loop policy.
 	Policy extension.RestartPolicy
-	// Root is the telemetry root; per-module telemetry (ADR 0059) and the
+	// Root is the telemetry root; per-module telemetry (sdk#5) and the
 	// manager's own diagnostics are derived from it.
 	Root *telemetry.Logger
 	// Metrics is where an adopted module's counters and histograms land
-	// (ADR 0130). Optional: nil discards them, which is what a Manager built
+	// (sdk#9). Optional: nil discards them, which is what a Manager built
 	// without one did before the surface existed.
 	Metrics *telemetry.MetricCollector
-	// Findings is the resolution register (ADR 0119). Optional: a Manager
+	// Findings is the resolution register (platform#74). Optional: a Manager
 	// built without one logs and skips, which is what it did before the
 	// register existed.
 	Findings Findings
@@ -125,7 +125,7 @@ func (m *Manager) InstalledExtensions(ctx context.Context) ([]domain.InstalledEx
 }
 
 // Available lists what the official repository offers, for a browse-and-install
-// surface (ADR 0081). It reaches the repository over the network — the caller is
+// surface (platform#51). It reaches the repository over the network — the caller is
 // a user opening the extensions surface — and returns the catalogue projected to
 // what that surface shows.
 func (m *Manager) Available(ctx context.Context) ([]app.ExtensionCatalogueEntry, error) {
@@ -152,7 +152,7 @@ func (m *Manager) Available(ctx context.Context) ([]app.ExtensionCatalogueEntry,
 }
 
 // Findings is the slice of the resolution register this package needs
-// (ADR 0119): somewhere to state that a capability is missing, and somewhere to
+// (platform#74): somewhere to state that a capability is missing, and somewhere to
 // withdraw that statement when it comes back.
 //
 // An interface rather than the Service, so this package keeps depending on the
@@ -162,12 +162,12 @@ type Findings interface {
 	ClearIssueSituation(ctx context.Context, t domain.IssueType, c domain.IssueContext, reference string) error
 }
 
-// AdoptInstalled brings up every installed extension at boot (ADR 0081). Each is
+// AdoptInstalled brings up every installed extension at boot (platform#51). Each is
 // re-verified against its cached manifest and spawned; a failure is a degraded
 // capability — never fatal, because extensions fill no required role class. It
 // is called once, before the serve loop.
 //
-// **A failure is also recorded** (ADR 0119). It used to be logged and skipped,
+// **A failure is also recorded** (platform#74). It used to be logged and skipped,
 // which is the exact shape that document exists to stop: the capability is
 // simply absent, nothing fails, nothing is said, and the line scrolls away
 // before anybody wonders why their addons stopped working. A success withdraws
@@ -208,7 +208,7 @@ func (m *Manager) AdoptInstalled(ctx context.Context) error {
 }
 
 // Install fetches, verifies and spawns a module from a trusted repository, then
-// records it in the durable set (ADR 0081). Verify-and-spawn happen first, so a
+// records it in the durable set (platform#51). Verify-and-spawn happen first, so a
 // module that cannot be brought up fails the install without leaving a record;
 // then the record is written, so a durable install only ever names a module that
 // ran. A persist failure tears the just-spawned process back down, so a failed
@@ -233,7 +233,7 @@ func (m *Manager) Install(ctx context.Context, repository, moduleID string) (dom
 		ModuleID:   installed.ModuleID,
 		Repository: installed.Repository,
 		Version:    installed.Version,
-		// One key vouches for everything a repository distributes (ADR 0065), so
+		// One key vouches for everything a repository distributes (platform#40), so
 		// the repository is the signer identity in this model.
 		SignedBy:    installed.Repository,
 		InstalledAt: m.clock.Now(),
@@ -248,7 +248,7 @@ func (m *Manager) Install(ctx context.Context, repository, moduleID string) (dom
 }
 
 // Uninstall stops a module, makes it unresolvable, and drops its record
-// (ADR 0081). It is idempotent — uninstalling one that is not installed stops
+// (platform#51). It is idempotent — uninstalling one that is not installed stops
 // nothing and removes nothing and is not an error. The order is the reverse of
 // install: unregister first so nothing new routes to it, stop the process, then
 // remove the record.

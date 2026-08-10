@@ -13,7 +13,7 @@ import (
 )
 
 // Retention is read from Active configuration each sweep, which is what makes
-// the fields Hot (ADR 0058). The audit floor is the part that must not bend.
+// the fields Hot (platform#36). The audit floor is the part that must not bend.
 
 func TestRetentionFallsBackToDefaultsWithNoActiveConfig(t *testing.T) {
 	svc, _, _, _ := importFixture(t)

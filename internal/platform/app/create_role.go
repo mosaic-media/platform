@@ -54,7 +54,7 @@ func (s *Service) CreateRole(ctx context.Context, cmd CreateRoleCommand) (Create
 	}
 
 	// 3b. a caller may not create a role carrying authority they lack
-	// (ADR 0069). Without this, role.create is equivalent to every permission:
+	// (platform#44). Without this, role.create is equivalent to every permission:
 	// mint a role holding anything, grant it to yourself.
 	if err := s.ensureCanDelegate(ctx, az, toPermissions(cmd.Permissions)); err != nil {
 		return CreateRoleResult{}, err

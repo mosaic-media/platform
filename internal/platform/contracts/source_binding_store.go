@@ -10,7 +10,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// SourceBindingStore persists identity resolution (ADR 0013).
+// SourceBindingStore persists identity resolution (platform#9).
 //
 // The point of the table is that resolution is explicit and inspectable. A
 // weak match is a row a user can see and act on, not a silent merge of two

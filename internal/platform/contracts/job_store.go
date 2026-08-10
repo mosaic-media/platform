@@ -11,7 +11,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// JobStore is the queue of background work (ADR 0017's no-user case).
+// JobStore is the queue of background work (platform#13's no-user case).
 //
 // It is deliberately **not on Tx**, and the reason is the opposite of the
 // telemetry store's. Telemetry is off the transaction because it must never

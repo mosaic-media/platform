@@ -10,7 +10,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// upNext is the episode to offer after the one now playing (ADR 0047).
+// upNext is the episode to offer after the one now playing (web#4).
 type upNext struct {
 	label, partID, nodeID, title string
 }
@@ -19,7 +19,7 @@ type upNext struct {
 // to a play input, or returns nil when there is nothing to offer: the current
 // node is not an episode, it is the last one, or the next has no playable bytes.
 //
-// "Next" is the containment tree, not a relation — ADR 0013 keeps series →
+// "Next" is the containment tree, not a relation — platform#9 keeps series →
 // season → episode as the node tree, and the association graph carries no
 // episode order. So this walks the tree: the next sibling in the season, else
 // the first episode of a later season. Every read that fails yields no next-up

@@ -10,7 +10,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// IssueStore persists the resolution register (ADR 0119): what is wrong with
+// IssueStore persists the resolution register (platform#74): what is wrong with
 // this install, now.
 //
 // **Raise is idempotent on the situation, not on the detection.** A module that

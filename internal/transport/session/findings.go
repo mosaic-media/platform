@@ -16,7 +16,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Acting on a finding (ADR 0119).
+// Acting on a finding (platform#74).
 //
 // **Applying a suggestion is an ordinary action on the ordinary lane.** Repair
 // is not a privileged back channel: it authorises like every other command, its

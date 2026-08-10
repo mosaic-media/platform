@@ -28,7 +28,7 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/vocabulary"
 )
 
-// The pre-session bootstrap (ADR 0101). What is worth testing hardest is not
+// The pre-session bootstrap (platform#57). What is worth testing hardest is not
 // that it answers — a handler returning the whole library would also answer —
 // but the three properties that are easy to lose: the subset stays a subset,
 // negotiation applies, and nothing here varies on identity.
@@ -74,7 +74,7 @@ func TestBootstrapAnswersWithTheSkinTheDefinitionsAndTheTree(t *testing.T) {
 	}
 }
 
-// A doorway has two states and the server picks. This is ADR 0098's decision,
+// A doorway has two states and the server picks. This is platform#54's decision,
 // carried unchanged.
 func TestBootstrapServesSetupWhileUnclaimedAndSignInOnceClaimed(t *testing.T) {
 	unclaimed := bootstrap(t, auth.NewHandler(newTestService(newFakeDB(), testNow)), nil)
@@ -137,7 +137,7 @@ func TestBootstrapServesADefinitionSubsetAndNotTheLibrary(t *testing.T) {
 	}
 }
 
-// ADR 0084's negotiation applies to the doorway exactly as it applies to every
+// platform#52's negotiation applies to the doorway exactly as it applies to every
 // screen after it, because the request carries the same declaration Attach
 // carries. A client that declares nothing is an older client and gets
 // everything, which is the compatibility guarantee.
@@ -239,7 +239,7 @@ func TestBootstrapBurstIsSpendableAndRefills(t *testing.T) {
 // the chain that produces it exists: the middleware resolves an address, the
 // handler keys a bucket on it, and neither half is meaningful alone.
 //
-// It matters more since ADR 0120 than it did before. Every request now arrives
+// It matters more since platform#75 than it did before. Every request now arrives
 // from the Supervisor over a Unix socket, which has no peer address at all, so
 // without the forwarded address one household shares one bucket and any member
 // of it can spend everyone's.

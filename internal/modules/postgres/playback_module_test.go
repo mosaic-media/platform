@@ -30,7 +30,7 @@ import (
 // *different*, separately-compiled module — the first consumer, remote playback —
 // which resolves it to something playable. The consumer is the real core module;
 // the source is a fake, because the platform module must not import an extension
-// module (ADR 0079/0081) and what is under test is the Platform's read-back and
+// module (platform#49/0081) and what is under test is the Platform's read-back and
 // consumer hand-off, not the source's addon parsing.
 func TestPlaybackResolutionAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
@@ -126,7 +126,7 @@ func TestPlaybackResolutionAgainstPostgres(t *testing.T) {
 	}
 }
 
-// TestPlaybackResolutionWithNoConsumerInstalled pins ADR 0036's inert library:
+// TestPlaybackResolutionWithNoConsumerInstalled pins platform#24's inert library:
 // with only source modules registered, resolving playback must fail with a
 // plain "nothing installed" rather than looking like a broken stream.
 func TestPlaybackResolutionWithNoConsumerInstalled(t *testing.T) {
@@ -222,7 +222,7 @@ func seedPlaybackUser(t *testing.T, c context.Context, cs *postgres.ContractSet,
 }
 
 // TestPlaybackResolutionCacheAgainstPostgres proves the durable/perishable split
-// does what it is for (ADR 0049): the second play of the same release, for a
+// does what it is for (platform#28): the second play of the same release, for a
 // client of the same capability class, does not ask the source at all.
 //
 // The proof is the absence of the module rather than a timing measurement. A
@@ -327,9 +327,9 @@ func TestPlaybackResolutionCacheAgainstPostgres(t *testing.T) {
 }
 
 // TestPartProbeIsDurableAgainstPostgres proves the second play of a release does
-// not re-derive what the first one learned (ADR 0050).
+// not re-derive what the first one learned (platform#29).
 //
-// The probe is what remained expensive once ADR 0049's cache removed the
+// The probe is what remained expensive once platform#28's cache removed the
 // aggregator call, and it is pure waste: a probe describes bytes, and the bytes
 // do not change. This walks the storage path without ffmpeg — recording a probe
 // as the transport would, then reading it back through ResolvePlayback exactly
@@ -373,7 +373,7 @@ func TestPartProbeIsDurableAgainstPostgres(t *testing.T) {
 		t.Fatalf("AddContentChild: %v", err)
 	}
 	// Attached with what a release *name* suggested, which is what the module's
-	// dialect table produces and what ADR 0050 demoted to a ranking hint. Both
+	// dialect table produces and what platform#29 demoted to a ranking hint. Both
 	// of these are about to be contradicted by the bytes.
 	attached, err := svc.AttachContentPart(c, v1.AttachContentPartCommand{
 		Caller: caller, NodeID: item.Node.ID, Role: v1.PartEdition,
@@ -472,7 +472,7 @@ func TestPartProbeIsDurableAgainstPostgres(t *testing.T) {
 }
 
 // TestPlaybackStateAgainstPostgres exercises the per-user store against real SQL
-// (ADR 0046).
+// (platform#26).
 //
 // The fake in the app package encodes the same rules in Go, which is exactly why
 // this is worth having: the two can agree with each other and both be wrong
@@ -594,7 +594,7 @@ func TestPlaybackStateAgainstPostgres(t *testing.T) {
 		t.Error("an item at position zero has no state to return, but one came back")
 	}
 
-	// The watch history over the same rows (ADR 0103), and the one way its
+	// The watch history over the same rows (platform#59), and the one way its
 	// predicate differs from the rail's: a finished item belongs in a history
 	// and is deliberately absent from a continue-watching list. Asserted
 	// together with the rail above, because the whole risk of a third read over

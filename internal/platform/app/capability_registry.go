@@ -18,7 +18,7 @@ import (
 //
 // Core modules are registered once, at composition. Extension modules are
 // registered and unregistered *while the Platform serves* — a user installs or
-// uninstalls one at runtime (ADR 0081) — so the map is guarded by a RWMutex: a
+// uninstalls one at runtime (platform#51) — so the map is guarded by a RWMutex: a
 // resolution during serving takes the read lock, an install or uninstall the
 // write lock. It was a bare map until extensions became runtime-managed, which
 // was correct only while every registration happened before the first request.
@@ -50,19 +50,19 @@ func (r *CapabilityRegistry) Register(c v1.Capability) {
 // RegisterFallback adds a capability that fills its read roles only when no
 // ordinary provider could — the guarantee-clause floor rather than a peer.
 //
-// It exists because "one or more providers per role class" (ADR 0063) was being
+// It exists because "one or more providers per role class" (platform#38) was being
 // read as "union them all", and for the *browse* roles that is wrong in a way
-// nothing reported: ADR 0072 registered Cinemeta and TMDB as complementary, the
+// nothing reported: module-cinemeta#1 registered Cinemeta and TMDB as complementary, the
 // catalog fan-out unioned both, and a home screen drew Cinemeta's Popular Films
 // beside TMDB's — the same titles twice, from two sources, ordered by module id
 // so the credential-free floor happened to win. Ranking them is not a
-// contradiction of ADR 0072's arity: both are still registered, both still fill
+// contradiction of module-cinemeta#1's arity: both are still registered, both still fill
 // the class, and the guarantee still holds, because a deployment with no TMDB
 // key gets exactly what it got before.
 //
 // A fallback is *not* a module the Platform trusts less. It is a statement about
 // which source should be visible when both can answer, and it stays a
-// composition decision (ADR 0007) rather than a property a module asserts about
+// composition decision (platform#4) rather than a property a module asserts about
 // itself — a module claiming primacy over its peers is a claim no module is in a
 // position to make.
 func (r *CapabilityRegistry) RegisterFallback(c v1.Capability) {
@@ -84,7 +84,7 @@ func (r *CapabilityRegistry) register(c v1.Capability, fallback bool) {
 }
 
 // Unregister removes the capability under id, if any. It is how a runtime
-// uninstall (ADR 0081) makes a module unresolvable: after it returns, no lookup
+// uninstall (platform#51) makes a module unresolvable: after it returns, no lookup
 // or role enumeration finds the module, so nothing routes to a process that is
 // being torn down. Removing an id that is not present is a no-op.
 func (r *CapabilityRegistry) Unregister(id string) {
@@ -115,7 +115,7 @@ func (r *CapabilityRegistry) Manifests() []v1.Manifest {
 }
 
 // Verify checks that every capability implements the provider roles it declares
-// in Manifest.Provides (ADR 0027). A role named but not backed by the matching
+// in Manifest.Provides (sdk#2). A role named but not backed by the matching
 // interface is a composition error, caught here at boot rather than as a nil
 // provider at invocation. The composition root calls this after registering.
 func (r *CapabilityRegistry) Verify() error {
@@ -133,7 +133,7 @@ func (r *CapabilityRegistry) Verify() error {
 }
 
 // RequireRoles fails when no registered capability fills every role in required
-// (ADR 0035, re-expressed by ADR 0063 over the composed set — core and extension
+// (platform#23, re-expressed by platform#38 over the composed set — core and extension
 // together). Metadata and search are a required capability *class*: a Mosaic
 // that cannot identify or find content is not a degraded Mosaic, it is inert,
 // and the honest signal is refusing to serve rather than serving something that
@@ -186,7 +186,7 @@ func declares(c v1.Capability, role v1.Role) bool {
 //
 // It stops being correct the moment one is not. An out-of-process module is
 // reached through a proxy that implements *every* provider interface
-// unconditionally (ADR 0064: the registry must not be able to tell a proxy from
+// unconditionally (platform#39: the registry must not be able to tell a proxy from
 // a local struct, and Go type assertions cannot be made conditional at runtime).
 // Against that proxy `c.(v1.StreamProvider)` always succeeds, so a
 // metadata-only extension module would be enumerated by StreamProviders and
@@ -264,7 +264,7 @@ func (r *CapabilityRegistry) SearchProviders() []SearchProviderEntry {
 // SearchProvider returns the search provider registered under id, if that
 // capability fills RoleSearch.
 //
-// The singular form exists for a saved provider search (ADR 0104): a query rule
+// The singular form exists for a saved provider search (platform#60): a query rule
 // is a durable statement addressed to *one* source, not a fan-out. Fanning a
 // saved rule across every installed search provider would silently change what
 // the rule means whenever somebody installed an extension, which is the one
@@ -293,7 +293,7 @@ type StreamProviderEntry struct {
 // StreamProviders returns every registered capability that fills RoleStream, in
 // stable module-id order.
 //
-// It is the enumeration ADR 0073 needs: materialising asks *every* stream
+// It is the enumeration platform#46 needs: materialising asks *every* stream
 // provider for playable locations, not only the module that sourced the
 // metadata, because the two are different jobs and a metadata module fills no
 // stream role at all.
@@ -323,9 +323,9 @@ type SubtitlesProviderEntry struct {
 // RoleSubtitles, in stable module-id order.
 //
 // The plural was missing while the singular was not, and that is the shape of
-// the gap ADR 0117 closes: `SubtitlesProvider(id)` could resolve one *by name*
+// the gap platform#72 closes: `SubtitlesProvider(id)` could resolve one *by name*
 // and nothing ever knew a name to ask for. Subtitles fan out for the same reason
-// streams do (ADR 0073) — a provider is asked about content it did not source,
+// streams do (platform#46) — a provider is asked about content it did not source,
 // so every installed one is asked rather than only the module that supplied the
 // metadata.
 func (r *CapabilityRegistry) SubtitlesProviders() []SubtitlesProviderEntry {
@@ -352,7 +352,7 @@ type ArtworkProviderEntry struct {
 // ArtworkProviders returns every registered capability that fills RoleArtwork,
 // in stable module-id order.
 //
-// Like StreamProviders it is a fan-out enumeration (ADR 0075): artwork is
+// Like StreamProviders it is a fan-out enumeration (sdk#6): artwork is
 // resolved for content the provider did not source, so the module that supplied
 // the metadata has no special claim. Unlike stream enrichment, the caller keeps
 // asking after the first provider answers — artwork candidates from several
@@ -432,7 +432,7 @@ func (r *CapabilityRegistry) MetadataProvider(id string) (v1.MetadataProvider, b
 }
 
 // SubtitlesProvider returns the subtitles provider registered under id, if that
-// capability fills RoleSubtitles (ADR 0037). The consumer is a future player; the
+// capability fills RoleSubtitles (module-stremio-addons#1). The consumer is a future player; the
 // resolver exists so that consumer has a seam to reach it, like the others.
 func (r *CapabilityRegistry) SubtitlesProvider(id string) (v1.SubtitlesProvider, bool) {
 	r.mu.RLock()
@@ -449,7 +449,7 @@ func (r *CapabilityRegistry) SubtitlesProvider(id string) (v1.SubtitlesProvider,
 }
 
 // SettingsUIProvider returns the settings-UI provider registered under id, if
-// that capability fills RoleSettingsUI (ADR 0038) — how the module-settings host
+// that capability fills RoleSettingsUI (sdk#4) — how the module-settings host
 // resolves a module's contributed settings screen.
 func (r *CapabilityRegistry) SettingsUIProvider(id string) (v1.SettingsUIProvider, bool) {
 	r.mu.RLock()
@@ -473,12 +473,12 @@ type PlaybackProviderEntry struct {
 }
 
 // PlaybackProviders returns every registered capability that fills RolePlayback
-// (ADR 0045), in stable module-id order. It is the first *consumer* enumeration
+// (platform#25), in stable module-id order. It is the first *consumer* enumeration
 // here — every other one above resolves a source.
 //
 // It returns a list rather than the single provider today's install has because
 // the question it answers has two callers with different needs: playback
-// resolution wants one provider, and ADR 0036's affordance gate wants to know
+// resolution wants one provider, and platform#24's affordance gate wants to know
 // whether *any* consumer is installed.
 func (r *CapabilityRegistry) PlaybackProviders() []PlaybackProviderEntry {
 	r.mu.RLock()
@@ -522,7 +522,7 @@ type SettingsUIProviderEntry struct {
 }
 
 // SettingsUIProviders returns every registered capability that fills
-// RoleSettingsUI (ADR 0038), in stable module-id order.
+// RoleSettingsUI (sdk#4), in stable module-id order.
 //
 // It is what turns a module's settings screen from something the Platform can
 // render into something a user can reach. The settings host used to name one

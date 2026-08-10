@@ -16,7 +16,7 @@ import (
 // seedCredential mints an access token for a seeded session whose plaintext is
 // the session id.
 //
-// Since ADR 0102 a caller presents an access token rather than a session id, so
+// Since platform#58 a caller presents an access token rather than a session id, so
 // an integration fixture that creates only the session would make every call in
 // these tests Unauthenticated. Issuing a credential equal to the id keeps the
 // existing call sites — which pass a seeded session id as the caller — saying

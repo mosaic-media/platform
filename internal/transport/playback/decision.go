@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// The per-stream playback decision (ADR 0050).
+// The per-stream playback decision (platform#29).
 //
 // The framing this replaces was "remux or transcode", treating a file as wholly
 // playable or wholly not. A real release disproved it: 4K HEVC video Chrome
@@ -83,7 +83,7 @@ type Plan struct {
 	DirectPlay bool
 
 	// Subtitles are the embedded tracks this playback offers, and which of them
-	// comes on by itself (ADR 0112, ADR 0113). Empty when the release has none,
+	// comes on by itself (platform#67, platform#68). Empty when the release has none,
 	// when it was not probed, or when the stream is relayed untouched — a
 	// direct-played release is the upstream's own bytes, and the origin adds no
 	// wrapper it could hang a rendition off.
@@ -93,7 +93,7 @@ type Plan struct {
 	// cannot change under a playback that is already running.
 	Subtitles []SubtitleDelivery `json:"s,omitempty"`
 
-	// Burn names a subtitle track to render into the picture (ADR 0114), or nil
+	// Burn names a subtitle track to render into the picture (platform#69), or nil
 	// for the ordinary case. It is set only when a rendition cannot carry the
 	// track — a graphic one, or a typeset one this viewer asked to see as
 	// authored — and it forces Video to ActionEncode, because frames being
@@ -104,13 +104,13 @@ type Plan struct {
 	Burn *BurnedSubtitle `json:"b,omitempty"`
 
 	// Styled are the tracks offered to the client as the scripts they were
-	// authored as, for a client that can draw them (ADR 0115). They ride beside
+	// authored as, for a client that can draw them (platform#70). They ride beside
 	// Subtitles rather than replacing it, so a client that cannot render a script
 	// uses the flattened rendition and one that can puts the signs where the
 	// author put them.
 	Styled []StyledSubtitle `json:"y,omitempty"`
 
-	// External are subtitle files a module resolved for this item (ADR 0117).
+	// External are subtitle files a module resolved for this item (platform#72).
 	// They are not in the release; they were found elsewhere, and the origin
 	// fetches them so the module's URL — which may carry a credential and always
 	// carries the viewer's identity to a third party — never reaches a client.
@@ -122,7 +122,7 @@ type Plan struct {
 }
 
 // ClientCodecs is what the calling client can decode. It is the shape a declared
-// capability profile reduces to for this decision (ADR 0047); until clients
+// capability profile reduces to for this decision (web#4); until clients
 // declare one, DefaultBrowserCodecs stands in.
 type ClientCodecs struct {
 	Video map[string]bool
@@ -306,7 +306,7 @@ func chooseAudio(tracks []AudioTrack, preferred []string) (AudioTrack, bool) {
 }
 
 // WithAudioOverride replaces the audio track a preference chose with one the
-// viewer named for this playback (ADR 0116).
+// viewer named for this playback (platform#71).
 //
 // **It re-decides rather than re-labels**, which is the whole reason it is a
 // function and not a field assignment. Whether audio is copied or encoded is a

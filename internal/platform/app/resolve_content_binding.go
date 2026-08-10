@@ -38,7 +38,7 @@ func validateResolveContentBindingCommand(cmd v1.ResolveContentBindingCommand) e
 
 // ResolveContentBinding settles one entry in the review queue. A merge is
 // Confirm, a decline is Reject, and a split is Confirm with MoveToNodeID —
-// the binding moves and the source's identity is never re-resolved (ADR 0013).
+// the binding moves and the source's identity is never re-resolved (platform#9).
 func (s *Service) ResolveContentBinding(ctx context.Context, cmd v1.ResolveContentBindingCommand) (v1.ResolveContentBindingResult, error) {
 	// 1. validate command shape.
 	if err := validateResolveContentBindingCommand(cmd); err != nil {
@@ -66,7 +66,7 @@ func (s *Service) ResolveContentBinding(ctx context.Context, cmd v1.ResolveConte
 
 		// 6. apply the resolution. State transitions are Platform operations,
 		// so they are performed here rather than by a method on the published
-		// model (ADR 0016). A split moves first — the target must exist — then
+		// model (platform#12). A split moves first — the target must exist — then
 		// confirms, keeping the source's identity (method, confidence)
 		// untouched.
 		switch cmd.Resolution {

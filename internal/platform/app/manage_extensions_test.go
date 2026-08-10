@@ -16,7 +16,7 @@ import (
 )
 
 // InstallExtension/UninstallExtension are the authorized entry points to the
-// runtime extension lifecycle (ADR 0081). Their boundary — refusing an unknown
+// runtime extension lifecycle (platform#51). Their boundary — refusing an unknown
 // or ungranted caller — is asserted by the boundary conformance suite; these
 // tests assert the other half: an authorized call delegates to the injected
 // manager, the result is mapped back, input is validated, and a Platform built

@@ -17,11 +17,11 @@
 # boot, so a browser will warn; that warning is the accurate description of it.
 #
 # Note what is NOT in that `up`: the `platform` service. The Supervisor starts
-# the Platform itself here, which is the whole point — it is the shape ADR 0004
-# describes and the one where ADR 0060's boot id is honoured end to end, since
+# the Platform itself here, which is the whole point — it is the shape supervisor#1
+# describes and the one where supervisor#5's boot id is honoured end to end, since
 # a process compose started mints its own id and cannot adopt anybody's. The
 # Both children listen on Unix sockets under /run/mosaic inside this container
-# (ADR 0120), so the front door is not merely the address you are given — it is
+# (platform#75), so the front door is not merely the address you are given — it is
 # the only path that exists. Nothing is published but :8443.
 #
 # **This is an overlay, not the default dev loop.** `docker-compose.dev.yml`
@@ -45,7 +45,7 @@ services:
   # rather than `go run`. That matters here beyond speed: `go run` compiles on
   # every start, so a restart would take minutes and the restart path — the
   # thing this overlay exists to exercise — would be untestable. It is also
-  # what a release does (ADR 0063).
+  # what a release does (platform#38).
   platform-build:
     build:
       context: .
@@ -85,7 +85,7 @@ services:
 
   supervisor:
     # Dockerfile.dev rather than a plain Go image: the Supervisor needs none of
-    # ffmpeg, but the Platform it starts as a child does (ADR 0050), and a
+    # ffmpeg, but the Platform it starts as a child does (platform#29), and a
     # child inherits its parent's container.
     build:
       context: .
@@ -104,7 +104,7 @@ services:
     environment:
       MOSAIC_SUPERVISOR_ADDR: ":8443"
       # No upstream URLs: every child defaults to a socket under the runtime
-      # directory, which is the shipped shape (ADR 0120). The Supervisor
+      # directory, which is the shipped shape (platform#75). The Supervisor
       # creates the directory and tells each child which socket to bind, so
       # the two halves cannot disagree about the path.
       MOSAIC_RUNTIME_DIR: "/run/mosaic"
@@ -114,7 +114,7 @@ services:
 
       # The Platform's own configuration. It reaches the child because a child
       # inherits the Supervisor's environment — which is the Supervisor booting
-      # the Platform (ADR 0004), not a leak.
+      # the Platform (supervisor#1), not a leak.
       MOSAIC_POSTGRES_DSN: "postgres://mosaic:mosaic@postgres:5432/mosaic?sslmode=disable"
       # No MOSAIC_API_ADDR or MOSAIC_HEALTH_ADDR: the Supervisor sets both on
       # the child, to the sockets it is going to dial.
@@ -124,7 +124,7 @@ services:
     volumes:
       - ${MOSAIC_SUPERVISOR_SRC:-../supervisor}:/src/supervisor:ro
       # The Platform's source, for the extension install directory it resolves
-      # relative to its working directory (ADR 0081).
+      # relative to its working directory (platform#51).
       - .:/src/platform
       # The Shell binary, read-only: the Supervisor executes it, never writes
       # to it.

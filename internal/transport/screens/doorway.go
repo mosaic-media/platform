@@ -11,7 +11,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/app"
 )
 
-// The doorway (ADR 0101, carrying ADR 0098's two states).
+// The doorway (platform#57, carrying platform#54's two states).
 //
 // It is a screen like any other — composed from the vocabulary that already
 // exists, emitted by the Platform, drawn by a client that bundles nothing. What
@@ -133,7 +133,7 @@ func signInDoorway(state app.ServerState) sdui.Node {
 
 // degradedDoorway is what a server that cannot read its own accounts shows.
 //
-// It is the third state and it is not one ADR 0098 named, because the answer it
+// It is the third state and it is not one platform#54 named, because the answer it
 // replaces did not exist to be wrong yet: ServerState falls back to "claimed"
 // when the user store will not answer, so before this a database outage drew a
 // sign-in form that refused every attempt with "invalid credentials". A door
@@ -149,7 +149,7 @@ func degradedDoorway(state app.ServerState) sdui.Node {
 	).Build()
 }
 
-// setupDoorway is what an unclaimed server shows: ADR 0098's four steps.
+// setupDoorway is what an unclaimed server shows: platform#54's four steps.
 //
 // **The steps are one tree with one scope, not four trees.** Each step is a Box
 // that renders only while the scope's `step` variable names it, and Continue is
@@ -158,10 +158,10 @@ func degradedDoorway(state app.ServerState) sdui.Node {
 // travelling back down inside the tree for steps three and four, which is a
 // worse property than any amount of client-side branching.
 //
-// Six steps became four in ADR 0098 and four is what is here. The concept's
+// Six steps became four in platform#54 and four is what is here. The concept's
 // library and playback steps are gone because Mosaic has no filesystem scanner
 // and decides playback per stream, and there is no metadata credential to
-// collect because official builds carry project credentials (ADR 0105) over a
+// collect because official builds carry project credentials (supervisor#1) over a
 // Cinemeta floor that needs none. What is left is genuinely everything a
 // household must decide.
 func setupDoorway(model DoorwayModel) sdui.Node {
@@ -208,7 +208,7 @@ var setupSteps = []struct{ key, label string }{
 // a differently-worded one: the rail's job is to say how much is left, and a
 // rail that only showed the step you are on would not do it. It is not
 // navigable — a step you have not filled in is not somewhere you can jump to,
-// and drawing a control that refuses is the dead end ADR 0036 exists to remove.
+// and drawing a control that refuses is the dead end platform#24 exists to remove.
 func setupRail() ui.El {
 	pills := make([]ui.El, 0, len(setupSteps)*2)
 	for i, step := range setupSteps {
@@ -309,7 +309,7 @@ func setupAdministratorStep() ui.El {
 //
 // It is the only step that reads anything, and the only one that can offer
 // nothing. Metadata and catalogs work on a fresh install with no credential at
-// all (ADR 0072), so a household that skips this gets a Mosaic it can browse
+// all (module-cinemeta#1), so a household that skips this gets a Mosaic it can browse
 // and cannot play — which is a real state, reached deliberately, and recoverable
 // from Settings. Saying that is better than making the step mandatory over a
 // repository that might not be reachable during setup.

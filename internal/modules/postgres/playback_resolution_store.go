@@ -15,7 +15,7 @@ import (
 )
 
 // playbackResolutionStore is the PostgreSQL contracts.PlaybackResolutionStore:
-// one row per (part, capability class), upserted on write (ADR 0049).
+// one row per (part, capability class), upserted on write (platform#28).
 type playbackResolutionStore struct {
 	q queryer
 }

@@ -15,7 +15,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// A user's own settings (ADR 0058). Expert mode is the first; the store is
+// A user's own settings (platform#36). Expert mode is the first; the store is
 // general because it will not be the last.
 
 func TestSetAndReadUserPreference(t *testing.T) {
@@ -147,7 +147,7 @@ func TestBoolPreferenceFallsBackRatherThanFailing(t *testing.T) {
 }
 
 // TestLanguagePreferenceIsTheCallersOwnAndCannotFailAPlay covers the two claims
-// the boundary exemption for LanguagePreferenceFor rests on (ADR 0112), because
+// the boundary exemption for LanguagePreferenceFor rests on (platform#67), because
 // an exemption written in a comment and never exercised is an assertion rather
 // than a property.
 //

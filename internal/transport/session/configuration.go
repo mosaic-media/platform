@@ -19,7 +19,7 @@ import (
 )
 
 // The configuration activation state machine, as a client can reach it
-// (ADR 0011, roadmap M4.4).
+// (platform#7, roadmap M4.4).
 //
 // **Three services, one action.** Draft, validate and activate are the
 // machinery of the reload-class model, not a workflow: somebody changing how

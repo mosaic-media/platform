@@ -11,7 +11,7 @@ import (
 )
 
 // PlaybackResolutionStore caches where a release's bytes are, per capability
-// class (ADR 0049).
+// class (platform#28).
 //
 // It exists for one measurement: ranking is free, minting a ticket is free, and
 // the aggregator call the answer comes from is not — an addon that fans out to
@@ -21,7 +21,7 @@ import (
 //
 // It is deliberately *not* on Tx. Every other store there is joined to a
 // transaction because its write must commit with an outbox event; this one has
-// no event and nothing to be atomic with. More to the point, ADR 0049 requires
+// no event and nothing to be atomic with. More to the point, platform#28 requires
 // the write not to block the stream — a user waiting on a database write in
 // order to watch a film is the wrong trade in the one place latency was the
 // whole point — so it is written after serving begins, outside any unit of work.

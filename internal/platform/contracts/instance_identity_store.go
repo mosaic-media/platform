@@ -10,7 +10,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// InstanceIdentityStore persists what this install calls itself (ADR 0098).
+// InstanceIdentityStore persists what this install calls itself (platform#54).
 //
 // It is the one store deliberately **not** reached through Tx, and not because
 // it was overlooked. Everything on Tx is there so that state and its outbox

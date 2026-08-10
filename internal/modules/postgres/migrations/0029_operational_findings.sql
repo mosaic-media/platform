@@ -1,4 +1,4 @@
--- Migration 0029 — The resolution register (ADR 0119).
+-- Migration 0029 — The resolution register (platform#74).
 --
 -- What is wrong with this install, now. Every operational failure Mosaic has is
 -- a log line that scrolls away: nothing survives a restart, nothing is addressed
@@ -22,14 +22,14 @@
 --
 -- **`reference` is plain text with no foreign key**, for the same reason the
 -- library rules' module_id is: an extension is installed and removed at runtime
--- (ADR 0081) and is not a row anywhere to reference, a Generation belongs to the
+-- (platform#51) and is not a row anywhere to reference, a Generation belongs to the
 -- Supervisor and is not in this database at all, and a finding must outlive the
 -- thing it is about — that is most of its value.
 
 CREATE TABLE IF NOT EXISTS operational_issues (
     id          text        PRIMARY KEY,
     -- CHECK-constrained because Platform code branches on it to choose which
-    -- suggestions to offer, which is ADR 0015's test for a closed vocabulary.
+    -- suggestions to offer, which is platform#11's test for a closed vocabulary.
     -- A fifth type is a decision, not a row.
     type        text        NOT NULL CHECK (type IN (
                     'extension_unavailable',

@@ -13,10 +13,10 @@ import (
 // The client's declared decoding ability, carried to the emit-side.
 //
 // A detail screen says how a release will be delivered — direct play, or which
-// stream has to be re-encoded and why (ADR 0050). That answer is not a property
+// stream has to be re-encoded and why (platform#29). That answer is not a property
 // of the release alone: the same file direct-plays on one client and is remuxed
 // for another, so stating it needs what the *asking* client declared on Attach
-// (ADR 0049). Until now that declaration lived only on the live session and was
+// (platform#28). Until now that declaration lived only on the live session and was
 // read only at play time, so the plan was computed, used to mint one ticket and
 // discarded — and the screen that would have shown it had no way to ask.
 //

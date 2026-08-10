@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-// Package logging_test holds the standing gate behind ADR 0053: the Platform
+// Package logging_test holds the standing gate behind platform#31: the Platform
 // observes through internal/platform/telemetry, and unstructured printing does
 // not come back.
 //
@@ -120,7 +120,7 @@ func checkImports(t *testing.T, rel string, file *ast.File) {
 			continue
 		}
 		if path == "log" {
-			t.Errorf("%s imports the standard log package; use internal/platform/telemetry via telemetry.From(ctx) (ADR 0053)", rel)
+			t.Errorf("%s imports the standard log package; use internal/platform/telemetry via telemetry.From(ctx) (platform#31)", rel)
 		}
 	}
 }
@@ -160,7 +160,7 @@ func checkCalls(t *testing.T, fset *token.FileSet, rel string, file *ast.File) {
 			return true
 		}
 		if forbiddenPrinters[sel.Sel.Name] {
-			t.Errorf("%s:%d calls %s.%s; emit through internal/platform/telemetry instead (ADR 0053)",
+			t.Errorf("%s:%d calls %s.%s; emit through internal/platform/telemetry instead (platform#31)",
 				rel, fset.Position(call.Pos()).Line, pkg.Name, sel.Sel.Name)
 		}
 		return true

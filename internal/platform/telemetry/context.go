@@ -27,7 +27,7 @@ func Into(ctx context.Context, l *Logger) context.Context {
 //
 // It never returns nil and never panics. A call site is meant to read
 // telemetry.From(ctx).Info(…) with no nil check and no error handling — that
-// is the ergonomic claim ADR 0053 makes, and it only holds if the unseeded
+// is the ergonomic claim platform#31 makes, and it only holds if the unseeded
 // case is silent rather than fatal. A library path, a test, or a goroutine
 // started from context.Background() degrades to writing nothing.
 func From(ctx context.Context) *Logger {

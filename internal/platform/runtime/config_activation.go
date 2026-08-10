@@ -20,8 +20,8 @@ type ConfigActivationStatus struct {
 	ActivatedAt      time.Time
 	// PendingVersionID and PendingReloadClass describe a version a user
 	// asked for that this process cannot apply to itself. They are what the
-	// Supervisor reads to know an escalation is owed (ADR 0120's front door
-	// is how it is reached, ADR 0004 is why it is the Supervisor's job):
+	// Supervisor reads to know an escalation is owed (platform#75's front door
+	// is how it is reached, supervisor#1 is why it is the Supervisor's job):
 	// empty means nothing is waiting.
 	PendingVersionID   string
 	PendingReloadClass string

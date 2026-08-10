@@ -17,7 +17,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Library rules and the maintenance pass (ADR 0104, roadmap M2.2–2.3).
+// Library rules and the maintenance pass (platform#60, roadmap M2.2–2.3).
 //
 // The properties under test are the ones the record is emphatic about and that
 // nothing else would catch: a second run adds no duplicates, a rule survives its
@@ -62,7 +62,7 @@ func (m *catalogModule) Import(ctx context.Context, svc v1.ContentService, req v
 	}
 
 	// Dedup before writing, under the shared external id — what every real
-	// module does, and what makes a re-import the idempotent no-op ADR 0028
+	// module does, and what makes a re-import the idempotent no-op platform#18
 	// promises.
 	found, err := svc.FindContentByExternalID(ctx, v1.FindContentByExternalIDQuery{
 		Caller: req.Caller, Scheme: "imdb", Value: req.Ref.ExternalID,
@@ -196,7 +196,7 @@ func TestCreateLibraryRule(t *testing.T) {
 			t.Fatalf("CreatedBy = %q, want the administrator who wrote it", rule.CreatedBy)
 		}
 		// Saving states an intention; a run acts on it. Materialising on save is
-		// the surprise ADR 0104 names, and this is the assertion that keeps it
+		// the surprise platform#60 names, and this is the assertion that keeps it
 		// from creeping back in.
 		if len(mod.imported) != 0 {
 			t.Fatalf("creating a rule imported %v, want nothing until a run", mod.imported)
@@ -218,7 +218,7 @@ func TestCreateLibraryRule(t *testing.T) {
 		requireCategory(t, err, contracts.InvalidArgument)
 	})
 
-	// The two kinds are closed (ADR 0104): a rule over the library's own
+	// The two kinds are closed (platform#60): a rule over the library's own
 	// contents is a view, not a source.
 	t.Run("a third kind is refused", func(t *testing.T) {
 		svc, _, session := rulesFixture(t, &catalogModule{id: "stremio"})
@@ -338,7 +338,7 @@ func TestRunLibraryMaintenance(t *testing.T) {
 		}
 	})
 
-	// ADR 0017's whole reason for the system principal: the write must not be
+	// platform#13's whole reason for the system principal: the write must not be
 	// attributed to, or fail because of, whoever wrote the rule.
 	t.Run("materialises as the system principal, not as the caller", func(t *testing.T) {
 		mod := &catalogModule{id: "stremio", titles: []string{"Arrival"}}
@@ -446,7 +446,7 @@ func TestRunLibraryMaintenance(t *testing.T) {
 }
 
 // A rule survives its module being uninstalled: degraded and visibly so, never
-// deleted (ADR 0104). This is the case an extension being removable at runtime
+// deleted (platform#60). This is the case an extension being removable at runtime
 // makes ordinary rather than exotic.
 func TestALibraryRuleSurvivesItsModule(t *testing.T) {
 	ctx := context.Background()

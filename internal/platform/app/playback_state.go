@@ -14,7 +14,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Playback state (ADR 0046) — the first per-user surface on the content
+// Playback state (platform#26) — the first per-user surface on the content
 // service.
 //
 // Everything else here operates on an install-global graph. These five methods
@@ -53,7 +53,7 @@ const finishedFraction = 0.95
 // marks itself finished the instant it starts.
 const minFinishedDuration = 30 * time.Second
 
-// RecordPlaybackProgress records where a viewer has got to (ADR 0046).
+// RecordPlaybackProgress records where a viewer has got to (platform#26).
 //
 // It is called repeatedly during playback, so it is an upsert and it is cheap.
 // The transport coalesces bursts before they arrive here; this end assumes it

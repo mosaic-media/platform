@@ -12,7 +12,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// moduleSpan brackets a call into a module (ADR 0055, seam 8).
+// moduleSpan brackets a call into a module (platform#33, seam 8).
 //
 // This is the seam that does the most work, because the module boundary is
 // also a *repository* boundary: a trace that stopped here left the hardest
@@ -20,12 +20,12 @@ import (
 // pain that started the telemetry thread.
 //
 // It attributes the span to the module, and that attribution is stamped by the
-// Platform rather than claimed by the module (ADR 0059). A module that never
+// Platform rather than claimed by the module (sdk#5). A module that never
 // mentions telemetry is still fully covered: its span exists because the
 // Platform started one, the context it receives already carries the trace, and
 // the HTTP client the composition root hands it propagates that trace onward.
 //
-// Modules are statically composed today (ADR 0007). If they ever move out of
+// Modules are statically composed today (platform#4). If they ever move out of
 // process, this is replaced by an interceptor at the same seam rather than
 // duplicated beside it — which is why the call sites take a context back
 // rather than reaching for a package-level tracer.
@@ -35,7 +35,7 @@ func moduleSpan(ctx context.Context, moduleID, operation string) (context.Contex
 	lg := telemetry.From(ctx).ForModule("module", moduleID)
 	ctx = telemetry.Into(ctx, lg)
 
-	// Install the module's own telemetry surface (ADR 0059). This is the only
+	// Install the module's own telemetry surface (sdk#5). This is the only
 	// place it is installed, which is what makes attribution unforgeable: the
 	// module id is fixed here from the registry, not taken from anything the
 	// module said, and the SDK's context key is unexported so a module cannot

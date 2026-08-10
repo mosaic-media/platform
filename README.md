@@ -38,7 +38,7 @@ less than it appears to.
 
 The container expects the sibling `sdk` checkout present at `../sdk` (mounted
 read-only): `test/sdkboundary` compiles `test/sdkprobe` against it to prove the
-published surface imports cleanly from outside (ADR 0016), and that nested
+published surface imports cleanly from outside ([platform#12](docs/adr/0012-published-contract-surface.md)), and that nested
 module's `go.mod` resolves the SDK through a relative `replace`.
 
 ### Running the Platform
@@ -103,11 +103,11 @@ internal/
     filesystem/
     crypto/
   transport/
-    auth/                # Connect AuthService — mints a session (ADR 0061)
+    auth/                # Connect AuthService — mints a session ([platform#37](docs/adr/0037-one-client-transport.md))
     session/             # Connect SessionService — the two-lane live session ([contracts#5](https://github.com/mosaic-media/contracts/blob/main/docs/adr/0005-cross-client-transport-two-lane-rpc.md))
-    screens/             # The SDUI emit-side (ADR 0029)
-    artwork/             # The artwork proxy (ADR 0030)
-    playback/            # The media origin (ADR 0045)
+    screens/             # The SDUI emit-side ([platform#19](docs/adr/0019-sdui-emit-side.md))
+    artwork/             # The artwork proxy ([platform#20](docs/adr/0020-artwork-proxy-and-cache.md))
+    playback/            # The media origin ([platform#25](docs/adr/0025-playback-consumer-and-media-origin.md))
     rpc/                 # Shared Connect plumbing: error codes, telemetry seam
     health/
   composition/
@@ -123,7 +123,7 @@ test/
 
 - **Core Platform** (`internal/platform/*`) — fully trusted, compiled in, defines the rules everything else follows.
 - **Built-in module** (`internal/modules/*`) — required infrastructure (Postgres first) that satisfies Platform contracts through the same shape a future external Module would use, but compiled in and fully trusted.
-- **Optional (external-shaped) module** — product/domain capability packs, each its **own Go module in its own repository**, importing only the SDK and composed into the binary (the first is [`module-stremio-addons`](https://github.com/mosaic-media/module-stremio-addons)). Runtime discovery and distribution are still future; the composition mechanism exists (ADR 0019–0021).
+- **Optional (external-shaped) module** — product/domain capability packs, each its **own Go module in its own repository**, importing only the SDK and composed into the binary (the first is [`module-stremio-addons`](https://github.com/mosaic-media/module-stremio-addons)). Runtime discovery and distribution are still future; the composition mechanism exists ([platform#15](docs/adr/0015-module-capability-and-invocation.md)–0021).
 
 See `CLAUDE.md` for the full tier model and the current state of the build.
 

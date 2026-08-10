@@ -20,7 +20,7 @@ import (
 // and end to end, with zero compile-time dependency on any extension module.
 //
 // This is where the decoupling moved the "a real module runs out of process"
-// proof (ADR 0079, ADR 0081): the platform module must not import an extension
+// proof (platform#49, platform#51): the platform module must not import an extension
 // module, so instead of building one from an import, the Platform *installs* one
 // at runtime the way a user would — fetching the signed index from the official
 // registry, verifying it against the key compiled into this binary, downloading
@@ -72,7 +72,7 @@ func TestRuntimeInstallFromOfficialRegistry(t *testing.T) {
 			}
 
 			// Spawn the verified binary and confirm it serves. The handshake makes
-			// the final check ADR 0064 describes — the running binary agrees with
+			// the final check platform#39 describes — the running binary agrees with
 			// the manifest that was verified — so a successful Launch is that
 			// agreement.
 			cfg := installed.Config

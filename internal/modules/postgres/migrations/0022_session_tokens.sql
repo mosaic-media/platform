@@ -1,4 +1,4 @@
--- Migration 0022 — the session credential becomes a bearer pair (ADR 0102).
+-- Migration 0022 — the session credential becomes a bearer pair (platform#58).
 --
 -- A session was a fixed 24-hour lifetime with no renewal, and the client held
 -- its id in memory. It is now a session row plus two token families: a

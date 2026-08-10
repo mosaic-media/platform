@@ -4,7 +4,7 @@
 
 //go:build mosaicdev
 
-// The development half of the module-repository override (ADR 0099). **This
+// The development half of the module-repository override (platform#55). **This
 // file is compiled only into a build made with `-tags mosaicdev`**; the shipped
 // binary gets devregistry_off.go instead, which reads no environment and can
 // return no override.

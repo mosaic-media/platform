@@ -15,7 +15,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Cache-first browse reads (ADR 0052).
+// Cache-first browse reads (platform#30).
 //
 // The behaviour under test is the one the empty home screen came from: a source
 // that does not answer must not be able to make a full library look unconfigured.
@@ -73,7 +73,7 @@ func snapshotFixture(t *testing.T, cap v1.Capability, now time.Time) (*app.Servi
 
 // serviceAt rebuilds a Service over the same fake storage at a different moment,
 // which is how a stored answer is aged without waiting. The session is re-seeded
-// at the same moment, because the credential is minutes-lived (ADR 0102) and
+// at the same moment, because the credential is minutes-lived (platform#58) and
 // travelling an hour forward would otherwise expire it — a real client refreshes
 // across that gap, and this is the fixture's version of the same thing.
 func serviceAt(db *fakeDB, cap v1.Capability, now time.Time) *app.Service {

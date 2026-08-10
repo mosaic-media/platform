@@ -17,7 +17,7 @@ import (
 
 // MetadataSource is the capability's own port to an external provider. The
 // Platform offers no HTTP contract and needs none: a capability compiles into
-// the binary with trust established before the build (ADR 0007), so it owns
+// the binary with trust established before the build (platform#4), so it owns
 // its provider integration outright. HTTPSource below is one implementation;
 // a test supplies another.
 type MetadataSource interface {
@@ -39,7 +39,7 @@ type WorkMetadata struct {
 	ExternalIDs map[string]string
 	Seasons     []SeasonMetadata
 	// Adaptation, when set, is a separate source work this one adapts — an
-	// anime and its source manga are two Works joined by an edge (ADR 0013),
+	// anime and its source manga are two Works joined by an edge (platform#9),
 	// which this capability must honour rather than fold into one tree.
 	Adaptation *AdaptationMetadata
 }
@@ -129,7 +129,7 @@ func (s *HTTPSource) Fetch(ctx context.Context, query string) (WorkMetadata, err
 }
 
 // encodeExternalIDs renders a scheme→id map as the flat JSON document
-// Node.ExternalIDs expects (ADR 0013). An empty map becomes an empty object.
+// Node.ExternalIDs expects (platform#9). An empty map becomes an empty object.
 func encodeExternalIDs(ids map[string]string) []byte {
 	if len(ids) == 0 {
 		return []byte(`{}`)

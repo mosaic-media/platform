@@ -23,7 +23,7 @@ type PreviewContentQuery struct {
 
 // PreviewContentResult carries the previewed metadata, plus whether the ref
 // already resolves to a library Work (and that Work's node id). The metadata is
-// filled for a virtual and an in-library ref alike (ADR 0034), so one ref-based
+// filled for a virtual and an in-library ref alike (sdk#3), so one ref-based
 // detail builder serves both planes; InLibrary only switches the primary action.
 type PreviewContentResult struct {
 	Metadata  v1.ContentMetadata
@@ -32,9 +32,9 @@ type PreviewContentResult struct {
 }
 
 // PreviewContent reads a ref's descriptive metadata through the MetadataProvider
-// the ref names (ADR 0027's RoleMetadata, used here for a read rather than a
+// the ref names (sdk#2's RoleMetadata, used here for a read rather than a
 // materialise), and reports whether the ref already resolves to a library Work.
-// It resolves both regardless of plane (ADR 0034): a detail screen renders from
+// It resolves both regardless of plane (sdk#3): a detail screen renders from
 // the metadata whether the item is virtual or in-library, and reads InLibrary
 // only to choose between an Add-to-library action and an in-library marker. A
 // library item's detail is therefore re-derived live from the provider rather
@@ -55,7 +55,7 @@ func (s *Service) PreviewContent(ctx context.Context, q PreviewContentQuery) (Pr
 
 	// Resolve the library plane, but do not short-circuit: an in-library ref
 	// still gets its metadata below, so its detail is as rich as a virtual one
-	// (ADR 0034). InLibrary only changes the primary action the caller renders.
+	// (sdk#3). InLibrary only changes the primary action the caller renders.
 	inLib, nodeID := s.resolveInLibrary(ctx, az, q.Ref)
 
 	provider, ok := s.capabilityMetadataProvider(q.Ref.Provider)

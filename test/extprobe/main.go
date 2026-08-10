@@ -3,7 +3,7 @@
 // Linking exception: see LICENSE-EXCEPTION.
 
 // Command extprobe is a trivial out-of-process module, and the first thing to
-// cross the extension boundary for real (ADR 0064's build order, step 1: "a
+// cross the extension boundary for real (platform#39's build order, step 1: "a
 // trivial in-repo module implementing one role — nothing user-visible;
 // establishes the wire, the handshake and the handle").
 //
@@ -34,18 +34,18 @@ import (
 )
 
 // probeSettings is how a test asks the probe to do more work. It rides the
-// ordinary settings document (ADR 0021), which the Platform stores and hands
+// ordinary settings document (platform#17), which the Platform stores and hands
 // back uninterpreted — so using it here costs no special mechanism.
 type probeSettings struct {
 	// Children makes Import add this many child nodes after the work. It exists
-	// for the callback-cost measurement ADR 0064 requires before the protocol is
+	// for the callback-cost measurement platform#39 requires before the protocol is
 	// fixed: a tree import's cost is (calls per import) × (cost per call), and
 	// this is what lets the second be measured without the first being guessed.
 	Children int `json:"children"`
 
 	// FetchURL makes the probe issue an HTTP GET during Import, using an ordinary
 	// default-transport client — the shape a real module uses. It exists for the
-	// egress tests (ADR 0064): the fetch must go through the Platform's proxy, so
+	// egress tests (platform#39): the fetch must go through the Platform's proxy, so
 	// a URL resolving to a private address is refused unless the operator override
 	// is on. The probe records the outcome in the import's returned counts.
 	FetchURL string `json:"fetch_url"`
@@ -72,12 +72,12 @@ func (probe) Manifest() v1.Manifest {
 }
 
 // Import writes one Work through the ContentService it reaches over the
-// callback stream, acting as the Caller it was handed (ADR 0017). The write is
+// callback stream, acting as the Caller it was handed (platform#13). The write is
 // the point: it is the only way to prove the callback direction works, and the
 // counts it returns are what the test asserts against.
 func (probe) Import(ctx context.Context, svc v1.ContentService, req v1.ImportRequest) (v1.ImportResult, error) {
 	// Telemetry is reached ambiently off the context, exactly as in process
-	// (ADR 0059) — a module never holds one.
+	// (sdk#5) — a module never holds one.
 	v1.TelemetryFrom(ctx).Info("extprobe import",
 		v1.String("native_id", req.Ref.NativeID),
 		v1.Int("settings_bytes", len(req.Settings)),
@@ -193,7 +193,7 @@ func (probe) Subtitles(_ context.Context, req v1.SubtitlesRequest) (v1.Subtitles
 }
 
 func main() {
-	// Controlled death, for the lifecycle tests (ADR 0064's step 3). A real
+	// Controlled death, for the lifecycle tests (platform#39's step 3). A real
 	// module has no such switch; this exists only so the Platform's restart,
 	// backoff and crash-loop policy can be exercised against a process that
 	// actually dies rather than one whose crash is imagined.

@@ -27,7 +27,7 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 		return nil, contracts.WrapError(contracts.InvalidArgument, "parse postgres dsn", err)
 	}
 
-	// A span per statement (ADR 0055, seam 6). Set on the pool config so every
+	// A span per statement (platform#33, seam 6). Set on the pool config so every
 	// query the Platform issues is covered — through a UnitOfWork or a direct
 	// pooled read alike — with no change at any call site.
 	config.ConnConfig.Tracer = queryTracer{}

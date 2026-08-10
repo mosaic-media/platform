@@ -16,7 +16,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// Log records become OpenTelemetry's (ADR 0128), and the Sink stays.
+// Log records become OpenTelemetry's (sdk#8), and the Sink stays.
 //
 // The same containment as the span half: a record is *produced* as an
 // OpenTelemetry record, and a finished one is handed to the same `Sink` the
@@ -30,7 +30,7 @@ import (
 // OpenTelemetry correlates a record with a span, rather than as two more
 // attributes. That is what keeps a journey coherent across the conversion: the
 // ids on a log record and the ids on the span it happened inside are the same
-// values arriving by the same route (ADR 0054).
+// values arriving by the same route (platform#32).
 
 // logRecordExporter rebuilds Mosaic's Record from an OpenTelemetry one and
 // writes it to the sink.
@@ -103,7 +103,7 @@ func recordOf(record *logsdk.Record) Record {
 // — and one no test asserting "the field is present" would catch.
 //
 // The class is RedactionNone because classification was applied on the way *in*
-// (ADR 0056): the value here is already what a sink is allowed to see, so
+// (platform#34): the value here is already what a sink is allowed to see, so
 // marking it none makes EmitValue a no-op rather than redacting a second time.
 func fieldOf(kv attribute.KeyValue) Field {
 	field := Field{Key: string(kv.Key), Redaction: domain.RedactionNone}

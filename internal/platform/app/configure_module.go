@@ -19,7 +19,7 @@ import (
 const ActionModuleConfigure policy.Action = "module.configure"
 
 // ConfigureModuleCommand sets the settings document for a registered optional
-// module (ADR 0021). Settings is an opaque JSON document the Platform stores
+// module (platform#17). Settings is an opaque JSON document the Platform stores
 // and hands back to the module without interpreting — an addon list, an API
 // key, whatever the module reads.
 type ConfigureModuleCommand struct {

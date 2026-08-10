@@ -31,7 +31,7 @@ import (
 )
 
 // M2a's exit criterion, over the real wire and against real PostgreSQL
-// (ADR 0104, roadmap M2.1–2.3).
+// (platform#60, roadmap M2.1–2.3).
 //
 // It is the acceptance baseline's end-to-end shape applied to this milestone:
 // sign in over `AuthService`, spend the session on `SessionService`, and assert

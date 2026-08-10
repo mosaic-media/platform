@@ -4,7 +4,7 @@
 
 // Package jobs is the Platform's background-work runner and its scheduler.
 //
-// It is the answer to the case ADR 0017 reserved and did not build: work with
+// It is the answer to the case platform#13 reserved and did not build: work with
 // no user behind it. A handler here is invoked by the Platform on its own
 // initiative, so there is no session to forward and no principal to inherit —
 // which is why the runner is handed a caller minted by the application service

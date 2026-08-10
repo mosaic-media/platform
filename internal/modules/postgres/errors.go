@@ -65,7 +65,7 @@ func categoryForSQLState(code string) contracts.ErrorCategory {
 	case "23001": // restrict_violation
 		// PostgreSQL reports an explicit ON DELETE RESTRICT as 23001 rather
 		// than 23503. The content model relies on RESTRICT to refuse a
-		// cascading delete (ADR 0013: deletion is a decision a user confirms),
+		// cascading delete (platform#9: deletion is a decision a user confirms),
 		// so this arrives whenever a node still has children, parts or source
 		// bindings behind it — the state of the world conflicts with the
 		// request, exactly as for a foreign-key violation.

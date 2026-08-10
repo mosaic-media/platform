@@ -15,7 +15,7 @@ import (
 
 // ContentService is the published surface (contracts/platform/v1) these
 // handlers implement. The assertion fails to compile if a method drifts from
-// the contract a capability depends on (ADR 0016).
+// the contract a capability depends on (platform#12).
 var _ v1.ContentService = (*Service)(nil)
 
 // ActionContentCreate is the policy action evaluated for adding catalogue

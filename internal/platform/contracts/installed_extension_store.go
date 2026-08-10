@@ -11,13 +11,13 @@ import (
 )
 
 // InstalledExtensionStore persists the set of extension modules a user has
-// installed from a trusted repository (ADR 0081). It is Platform-owned durable
+// installed from a trusted repository (platform#51). It is Platform-owned durable
 // state and default-empty: a fresh Platform composes only its core modules, and
 // every row here is an extension someone chose. The Platform reads the whole set
 // at boot to re-adopt each — verify then spawn — and mutates it on install and
 // uninstall.
 //
-// It holds identity and provenance, not the binary (ADR 0012: a module owns no
+// It holds identity and provenance, not the binary (platform#8: a module owns no
 // schema, so its install record is a Platform store, not a table it defines).
 // This is deliberately distinct from ModuleSettingsStore: whether the Platform
 // *has* a module and how a module it has is *configured* are different

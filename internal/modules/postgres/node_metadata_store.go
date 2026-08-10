@@ -14,7 +14,7 @@ import (
 )
 
 // nodeMetadataStore is the PostgreSQL contracts.NodeMetadataStore: one stored
-// provider answer per node (ADR 0107).
+// provider answer per node (platform#62).
 type nodeMetadataStore struct {
 	q queryer
 }

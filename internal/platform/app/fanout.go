@@ -66,7 +66,7 @@ func fanOut[T, R any](ctx context.Context, items []T, fn func(context.Context, T
 // "Produced nothing" rather than "errored" is deliberate, and it is the case
 // that matters: a TMDB with no API key does not fail, it answers emptily. A
 // fallback keyed on errors would never have fired on the install that needs it
-// most — which is the whole population ADR 0072's guarantee clause is for.
+// most — which is the whole population module-cinemeta#1's guarantee clause is for.
 //
 // A fatal error in the first tier aborts without consulting the second: the
 // query failed, and the floor is for a source that had nothing to say, not for

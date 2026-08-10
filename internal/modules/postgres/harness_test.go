@@ -127,7 +127,7 @@ func freshDatabase(t *testing.T) *pgxpool.Pool {
 
 	// postgres.Connect rather than pgxpool.New, so tests exercise the pool the
 	// Platform actually builds. It was pgxpool.New until the query tracer
-	// (ADR 0055, seam 6) landed, and the difference was invisible until a test
+	// (platform#33, seam 6) landed, and the difference was invisible until a test
 	// asserted on statement spans and found none: the tracer is attached in
 	// Connect, so a pool built any other way is silently untraced.
 	pool, err := postgres.Connect(ctx, dsnForDatabase(name))

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-// Package artwork is the Platform's artwork proxy (ADR 0030). Module metadata
+// Package artwork is the Platform's artwork proxy (platform#20). Module metadata
 // carries poster/backdrop URLs on third-party CDNs; serving those to a client
 // directly is fragile — a CDN without CORS headers breaks the artlight canvas
 // and can break the image entirely, and it leaks the viewer's IP to the CDN.
@@ -10,7 +10,7 @@
 // origin with permissive CORS, so a client always gets a same-origin (or
 // CORS-enabled) URL.
 //
-// This is the *virtual-plane* half (ADR 0028): nothing is stored durably, so
+// This is the *virtual-plane* half (platform#18): nothing is stored durably, so
 // uncurated artwork never accumulates. Durable caching of a materialised item's
 // chosen artwork is a separate slice.
 //

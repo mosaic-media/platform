@@ -17,7 +17,7 @@ import (
 	"github.com/mosaic-media/platform/internal/adapters/extension"
 )
 
-// **The guard on the development override (ADR 0099), asserted in the build that
+// **The guard on the development override (platform#55), asserted in the build that
 // ships.** Setting both variables — with a key file that is a perfectly valid
 // ed25519 public key, so nothing here passes for an incidental reason — must
 // leave this Platform trusting the compiled-in URL and the compiled-in key.

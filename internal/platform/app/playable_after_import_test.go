@@ -12,7 +12,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Choosing what to start after a play materialised something (ADR 0118).
+// Choosing what to start after a play materialised something (platform#73).
 
 // TestAFilmStartsAndASeriesDoesNot is the whole distinction. A film is one item,
 // so playing it is unambiguous; a series is many, and guessing an episode is

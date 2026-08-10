@@ -17,7 +17,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The content-model contract suite (ADR 0013). Like the rest of this package
+// The content-model contract suite (platform#9). Like the rest of this package
 // it imports only contracts and domain, so the same tests bind to any
 // implementation of the object graph.
 
@@ -100,7 +100,7 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-// The published models carry no state-transition methods (ADR 0016), so the
+// The published models carry no state-transition methods (platform#12), so the
 // suite constructs transitions directly. These mirror what the resolve and
 // orphan commands do internally.
 func orphaned(n v1.Node, at time.Time) v1.Node {
@@ -216,7 +216,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	})
 
 	// The float sort key exists so an insertion does not renumber its
-	// siblings. This is the behaviour ADR 0013 specifies; the fractional
+	// siblings. This is the behaviour platform#9 specifies; the fractional
 	// scheme at large scale is deliberately left open and nothing rebalances.
 	t.Run("a fractional order inserts without renumbering siblings", func(t *testing.T) {
 		d := newDeps(t)
@@ -284,7 +284,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 		}
 	})
 
-	// The open vocabularies are unconstrained text (ADR 0015), so spelling
+	// The open vocabularies are unconstrained text (platform#11), so spelling
 	// variants of one concept must converge on write or a library silently
 	// splits in two. Any implementation of the contract owes this.
 	t.Run("type vocabularies are stored canonically", func(t *testing.T) {
@@ -435,7 +435,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 	// Containment over the module-owned attributes document. This is a
 	// storage-engine obligation rather than a Postgres convenience: the SDK
 	// promises any StorageAdapter answers it, because it is the only filter that
-	// can be asked of a document the Platform never interprets (ADR 0013).
+	// can be asked of a document the Platform never interprets (platform#9).
 	t.Run("search filters on attribute containment", func(t *testing.T) {
 		d := newDeps(t)
 		c := ctx(t)
@@ -1370,7 +1370,7 @@ func RunSourceBindingStoreContract(t *testing.T, newDeps Factory) {
 	})
 }
 
-// RunContentNonUniformityContract pins ADR 0013's four deliberate
+// RunContentNonUniformityContract pins platform#9's four deliberate
 // non-uniformities.
 //
 // Forcing every media type through one shape is its own bug, so four cases are
@@ -1635,7 +1635,7 @@ func RunContentNonUniformityContract(t *testing.T, newDeps Factory) {
 // transaction they are reached through, and share it with the outbox.
 //
 // One transaction spans one context's stores plus the shared event outbox
-// (ADR 0014), which is the whole reason Tx enumerates stores by name. A
+// (platform#10), which is the whole reason Tx enumerates stores by name. A
 // failure part-way through must leave nothing behind — not the node, not its
 // part, and not the event announcing it.
 func RunContentAtomicityContract(t *testing.T, newDeps Factory) {

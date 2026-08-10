@@ -16,7 +16,7 @@ import (
 )
 
 // Settings › Preferences › Home — where a viewer arranges their own home screen
-// (ADR 0103).
+// (platform#59).
 //
 // It sits under Preferences rather than under Server because it is taste: the
 // library is one shared object graph and this decides nothing about it, only
@@ -34,7 +34,7 @@ import (
 // shows them, each with a switch and a pair of move controls.
 func (s *Service) homeRowsPanel(ctx context.Context, caller v1.Caller, nav settingsNavModel) (sdui.Node, error) {
 	// The same read home makes, so the panel offers exactly the rows home would
-	// draw. Cache-first (ADR 0052), so opening settings while a source is down
+	// draw. Cache-first (platform#30), so opening settings while a source is down
 	// still lists that source's rows rather than quietly losing the arrangement
 	// they are part of.
 	cats, err := s.content.BrowseCatalogs(ctx, app.BrowseCatalogsQuery{Caller: caller})
@@ -43,7 +43,7 @@ func (s *Service) homeRowsPanel(ctx context.Context, caller v1.Caller, nav setti
 	}
 	composition := s.content.HomeCompositionFor(ctx, caller)
 
-	// Capability omission composes first (ADR 0036), which here means the panel
+	// Capability omission composes first (platform#24), which here means the panel
 	// offers a row only if the caller could have it: the continue-watching rail
 	// is listed because every signed-in viewer has playback state of their own,
 	// and the catalog rows are whatever the installed sources actually offer. A
@@ -145,7 +145,7 @@ func homeMoveButton(label string, composition app.HomeComposition, keys []string
 //
 // It reuses `setPreference` rather than growing an action of its own, and that
 // is the honest shape: the value is a preference, the store keeps it
-// uninterpreted, and the surface that reads it owns its meaning (ADR 0021's
+// uninterpreted, and the surface that reads it owns its meaning (platform#17's
 // rule for module settings, which is the same rule). A `moveHomeRow` action
 // would need the Platform to recompute the row list inside a command — a
 // provider fan-out per press, to answer a question the screen that drew the

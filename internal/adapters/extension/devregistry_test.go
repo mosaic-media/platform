@@ -4,7 +4,7 @@
 
 //go:build mosaicdev
 
-// The development-override tests (ADR 0099). They run only under
+// The development-override tests (platform#55). They run only under
 // `-tags mosaicdev`, which the test gate runs as a second pass — the override
 // exists in exactly one build configuration, so it is tested in that one rather
 // than left as the untested half of a tag split.

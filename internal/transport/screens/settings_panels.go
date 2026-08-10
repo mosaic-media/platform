@@ -23,7 +23,7 @@ import (
 // preferences nothing reads, and Sources, Storage, Transcoding, Server and
 // Metrics have no backing at all — no filesystem scanner, no disk accounting, no
 // transcoding configuration, no jobs runner, no metrics store. A nav row leading
-// to a panel that cannot answer anything is the dead end ADR 0036 exists to
+// to a panel that cannot answer anything is the dead end platform#24 exists to
 // remove, so those rows are not drawn either.
 
 // accountPanel says who this viewer is signed in as.
@@ -70,7 +70,7 @@ func (s *Service) accountPanel(ctx context.Context, caller v1.Caller, nav settin
 }
 
 // devicesSection lists where this account is signed in, with a way to end each
-// one (ADR 0102).
+// one (platform#58).
 //
 // It is the affordance that makes a long-lived credential defensible rather
 // than merely convenient: a refresh token that lives for months and that a user

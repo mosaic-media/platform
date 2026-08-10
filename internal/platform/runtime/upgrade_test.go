@@ -63,7 +63,7 @@ func TestAPendingRequestIsReported(t *testing.T) {
 	}
 }
 
-// **Settlement is a comparison, not an acknowledgement** (ADR 0129). The
+// **Settlement is a comparison, not an acknowledgement** (platform#77). The
 // process that would have reported success has been replaced by the upgrade, so
 // what closes the request is the Platform being able to say it *is* the version
 // that was asked for.

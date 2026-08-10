@@ -18,7 +18,7 @@ import (
 // button: what it is, how it will be delivered, and where its description came
 // from.
 //
-// Every answer here already existed and was thrown away. The probe (ADR 0050) is
+// Every answer here already existed and was thrown away. The probe (platform#29) is
 // stored on the Part and read only by the per-stream encode decision; the
 // delivery plan is computed at play time, used to mint one ticket and dropped;
 // the provider that answered is in the ref. The screen that would tell a viewer
@@ -185,7 +185,7 @@ func (f releaseFacts) videoCard() ui.El {
 
 // videoCodecName is the codec as a viewer would recognise it, preferring the
 // probe's answer over whatever the module parsed out of a release name — which
-// is ADR 0050's whole point.
+// is platform#29's whole point.
 func (f releaseFacts) videoCodecName() string {
 	c := f.part.VideoCodec
 	if f.probed && f.probe.Video.Codec != "" {
@@ -238,7 +238,7 @@ func (f releaseFacts) audioCard() ui.El {
 }
 
 // deliveryCard states what will happen to the bytes on the way to this client
-// (ADR 0050) — the answer that decides whether playback will be instant or will
+// (platform#29) — the answer that decides whether playback will be instant or will
 // cost a re-encode, and the one a viewer can act on by choosing another release.
 //
 // It is stated against what *this* client declared it can decode, not against a

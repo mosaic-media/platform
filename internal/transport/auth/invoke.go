@@ -23,7 +23,7 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/vocabulary"
 )
 
-// Invoke runs a doorway action (ADR 0101's lane, carrying ADR 0098's claim).
+// Invoke runs a doorway action (platform#57's lane, carrying platform#54's claim).
 //
 // The switch below is the complete enumeration of what a client with no session
 // can ask this Platform to do. That is the same property the session
@@ -32,7 +32,7 @@ import (
 // map does not exist, and adding one is a deliberate act in a place a reader
 // will find.
 //
-// Two cases, and they are the two doors ADR 0098 named. Neither returns
+// Two cases, and they are the two doors platform#54 named. Neither returns
 // anything about the other's outcome — a claim on a claimed server and a
 // sign-in with a wrong password both answer with the door, not with a
 // description of why.
@@ -160,7 +160,7 @@ func (h *Handler) doorwaySignIn(ctx context.Context, r *authv1.InvokeRequest, cl
 			}), nil
 		case contracts.PermissionDenied:
 			// A suspended account authenticates and is then refused the session
-			// (ADR 0069). It is a different sentence because it is a different
+			// (platform#44). It is a different sentence because it is a different
 			// situation: the credentials were right and there is nothing to
 			// retype, which "check your password" would send somebody off to do.
 			return connect.NewResponse(&authv1.InvokeResponse{

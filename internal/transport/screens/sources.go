@@ -17,7 +17,7 @@ import (
 )
 
 // The source picker, and the honest answer when there is nothing to pick
-// (ADR 0116).
+// (platform#71).
 //
 // **`SourcePicker` has been in the contract the whole time and nothing emitted
 // it.** That is the shape this screen fixes: a definition exists, a client can
@@ -82,7 +82,7 @@ func summaryFor(res app.PlaybackSourcesResult) string {
 	}
 }
 
-// noSources is the honest empty state (ADR 0116).
+// noSources is the honest empty state (platform#71).
 //
 // It is not an error and must not read as one. An item with no candidate is a
 // perfectly ordinary thing — a metadata-only import, or a source that has

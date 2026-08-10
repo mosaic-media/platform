@@ -19,18 +19,18 @@ import (
 //
 // It names a Part rather than a node because a node has no bytes. That Part is
 // the item's entry point rather than a verdict: an import stores every release a
-// source offered (ADR 0049), and which of them actually plays is chosen here,
-// against the calling client's Prefer (ADR 0048).
+// source offered (platform#28), and which of them actually plays is chosen here,
+// against the calling client's Prefer (platform#27).
 type ResolvePlaybackQuery struct {
 	Caller v1.Caller
 	PartID v1.PartID
 	// Prefer describes what the calling client can play. It is the shape a
-	// declared capability profile reduces to (ADR 0047); an empty value means
+	// declared capability profile reduces to (web#4); an empty value means
 	// "no preference expressed", and selection falls back to the source's own
 	// ranking rather than inventing one.
 	Prefer PlaybackPreference
 	// CapabilityClass is the stable digest of that same profile, and the key the
-	// resolution cache is read and written under (ADR 0049).
+	// resolution cache is read and written under (platform#28).
 	//
 	// It is passed in rather than derived here because deriving it is the
 	// transport's job — the transport is what receives the declaration — and two
@@ -70,7 +70,7 @@ func (p PlaybackPreference) Empty() bool {
 }
 
 // ResolvePlaybackResult is the upstream location a playback provider resolved,
-// for the Platform's own origin to relay from (ADR 0045).
+// for the Platform's own origin to relay from (platform#25).
 //
 // It is deliberately *not* something to hand a client. URL and Headers may
 // carry a debrid credential, and keeping them server-side is half the reason
@@ -104,7 +104,7 @@ type ResolvePlaybackResult struct {
 	// hitting looks exactly like a cache that was never warm.
 	Cached bool
 
-	// Probe is the stored probe document for the chosen release (ADR 0050),
+	// Probe is the stored probe document for the chosen release (platform#29),
 	// empty when it has never been probed. It rides the result rather than being
 	// re-read because the transport must not touch a store, and re-reading the
 	// Part to fetch one attribute would be a second query for something this
@@ -113,7 +113,7 @@ type ResolvePlaybackResult struct {
 }
 
 // ResolvePlayback turns a Part into a playable upstream location by asking the
-// installed playback provider (ADR 0045's RolePlayback). Nothing here writes,
+// installed playback provider (platform#25's RolePlayback). Nothing here writes,
 // and nothing here opens a transaction.
 //
 // It runs at play time, every time. The Part's stored location is what a source
@@ -141,7 +141,7 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 		return ResolvePlaybackResult{}, err
 	}
 
-	// Which release actually plays is chosen here, not at import (ADR 0048).
+	// Which release actually plays is chosen here, not at import (platform#27).
 	// The source offers dozens for one item and they differ in ways that decide
 	// whether a given client can play them at all; import stored the set
 	// precisely so this choice could be made with the caller in view. The Part
@@ -152,7 +152,7 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 	}
 
 	// The cache is read after selection, not before it, and the order is the
-	// whole point (ADR 0049). Selection is a ranking over Parts already in the
+	// whole point (platform#28). Selection is a ranking over Parts already in the
 	// database — free, and it names *which* release this client should get. Only
 	// then is there a key to look up. Reading the cache first would mean caching
 	// the choice as well as the address, and the choice is cheap to remake and
@@ -172,7 +172,7 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 
 	entry, ok := s.playbackProvider()
 	if !ok {
-		// This is ADR 0036's inert library, reported honestly rather than as a
+		// This is platform#24's inert library, reported honestly rather than as a
 		// failure to play: nothing is installed that can consume what
 		// materialising created.
 		return ResolvePlaybackResult{}, contracts.NewError(contracts.NotFound, "no playback module is installed")
@@ -236,7 +236,7 @@ func probeAttribute(part v1.Part) []byte {
 }
 
 // cachedResolution reads a previously resolved location for this part and class
-// (ADR 0049).
+// (platform#28).
 //
 // There is deliberately no liveness check. Pre-checking would spend a round trip
 // on every single play to catch a failure that is rare — which is the exact
@@ -260,7 +260,7 @@ func (s *Service) cachedResolution(ctx context.Context, part v1.Part, class stri
 // the same class to reuse.
 //
 // It writes on the request's own goroutine rather than in the background, and
-// that is a smaller compromise than it looks: ADR 0049's requirement is that the
+// that is a smaller compromise than it looks: platform#28's requirement is that the
 // cache write must not block the *stream*, and nothing has started streaming
 // yet — the client has not even been handed a ticket. What it must not do is
 // fail the play, so a write error is logged and swallowed. Being unable to make
@@ -290,7 +290,7 @@ func (s *Service) cacheResolution(ctx context.Context, partID v1.PartID, class, 
 // It takes the first in stable module-id order. That is a real choice and worth
 // naming: precedence *between* two installed playback modules is undecided, and
 // with one installed the question does not arise. It is the consumer-side twin
-// of ADR 0027's open provider-precedence seam, and it should be settled with
+// of sdk#2's open provider-precedence seam, and it should be settled with
 // that one rather than invented here.
 func (s *Service) playbackProvider() (PlaybackProviderEntry, bool) {
 	if s.capabilities == nil {
@@ -305,16 +305,16 @@ func (s *Service) playbackProvider() (PlaybackProviderEntry, bool) {
 
 // selectPlayable picks the candidate to play from the item's Parts.
 //
-// The ordering is deliberate and is the whole of ADR 0048's argument. A
+// The ordering is deliberate and is the whole of platform#27's argument. A
 // candidate the client can decode outright beats one needing work, because
 // re-encoding costs latency the viewer sees and forfeits byte-range seeking.
 // Among equals, the source's own ranking wins — it knows its ecosystem better
 // than a guess made here does.
 //
 // It is best-effort by construction: the metadata it ranks on was parsed from
-// release text at the module boundary (ADR 0051) and can be wrong or absent.
+// release text at the module boundary (module-stremio-addons#2) and can be wrong or absent.
 // That is acceptable *because* it only orders a list — what the chosen release
-// actually contains is settled by probing the bytes before they play (ADR 0050),
+// actually contains is settled by probing the bytes before they play (platform#29),
 // so a bad parse costs a suboptimal choice rather than a failed play.
 // It returns how many candidates it had to choose from, which is the difference
 // between "ranking picked this" and "there was nothing else".
@@ -406,7 +406,7 @@ func playbackScore(p v1.Part, prefer PlaybackPreference) int {
 }
 
 // ReresolvePlayback asks the source again where a release's bytes are, and
-// overwrites the cached answer (ADR 0049's invalidate-on-read).
+// overwrites the cached answer (platform#28's invalidate-on-read).
 //
 // **It is the cache's correction, and it deliberately does not read the cache.**
 // The origin calls this precisely because the cached address did not work, so

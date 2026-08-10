@@ -6,7 +6,7 @@
 // typed, two-lane Connect/gRPC surface over protobuf. Client intents travel as
 // unary calls (Attach/Navigate/Invoke/SubmitInput); server push travels as one
 // server-streaming Subscribe call. It supersedes the bespoke WebSocket of
-// ADR 0032 as the client transport and folds ADR 0033's handover into stream
+// platform#22 as the client transport and folds supervisor#4's handover into stream
 // resume. The same application services back both this and the auth surface,
 // so this is a transport, not a second application layer.
 //
@@ -40,7 +40,7 @@ const historyLimit = 256
 // defaultSessionTTL is how long a session with no active Subscribe stream is
 // kept before the reaper discards it. Its live state is disposable — a
 // reconnecting client re-declares its route and the Platform rebuilds (contracts#5,
-// ADR 0032's resume principle), so discarding an idle session costs only a
+// platform#22's resume principle), so discarding an idle session costs only a
 // rebuild on the next connect.
 const defaultSessionTTL = 5 * time.Minute
 
@@ -52,8 +52,8 @@ type route struct {
 	params map[string]any
 }
 
-// liveSession is one client session, keyed by its **session id** (ADR 0017,
-// ADR 0102). It owns the outbound mailbox (history + seq), the current route and
+// liveSession is one client session, keyed by its **session id** (platform#13,
+// platform#58). It owns the outbound mailbox (history + seq), the current route and
 // the input-coalescing state. Its zero value is not usable; build it with
 // newLiveSession.
 //
@@ -91,13 +91,13 @@ type liveSession struct {
 	vocab vocabulary.Client
 
 	// input-debounce state (contracts#5's server-side coalescing, moved from the
-	// ordered read loop of ADR 0032 into session state).
+	// ordered read loop of platform#22 into session state).
 	inputMu    sync.Mutex
 	inputTimer *time.Timer
 	pendingIn  string
 
 	// The standing notices this session is currently showing, and whether a
-	// background revalidation is already running for it (ADR 0052).
+	// background revalidation is already running for it (platform#30).
 	//
 	// Per session rather than per process, because a source's health is global
 	// and "has this viewer been told" is not: diffing a failure against a
@@ -110,7 +110,7 @@ type liveSession struct {
 	notices     map[string]bool
 	revalidmark bool
 
-	// progress-coalescing state (ADR 0046). Separate from the input lock
+	// progress-coalescing state (platform#26). Separate from the input lock
 	// because the two coalesce independently: someone can be typing in the
 	// search field while a player behind the overlay reports its position, and
 	// one timer must not be able to block the other.
@@ -302,7 +302,7 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 	s.mu.Unlock()
 
 	// Bind the session identity once; every line below inherits it. The ref is
-	// an opaque session reference (ADR 0017) — credential-adjacent, and never
+	// an opaque session reference (platform#13) — credential-adjacent, and never
 	// safe to write verbatim — so it is digested rather than dropped, which
 	// keeps two records about one session tied together without the log
 	// holding the reference itself.
@@ -470,7 +470,7 @@ func (s *liveSession) setShellChrome(screen string) {
 	s.routeMu.Unlock()
 }
 
-// setProfile records what the client declared it can decode (ADR 0047).
+// setProfile records what the client declared it can decode (web#4).
 func (s *liveSession) setProfile(p clientProfile) {
 	s.profileMu.Lock()
 	s.profile = p
@@ -492,7 +492,7 @@ func (s *liveSession) clientProfile() clientProfile {
 	return s.profile
 }
 
-// setVocabulary records what the client declared it can render (ADR 0084).
+// setVocabulary records what the client declared it can render (platform#52).
 func (s *liveSession) setVocabulary(v vocabulary.Client) {
 	s.profileMu.Lock()
 	s.vocab = v
@@ -520,7 +520,7 @@ type Manager struct {
 	// onRetire runs once per session as it is discarded — reaped or shut down.
 	//
 	// It exists because coalescing creates a way to lose the one write that
-	// matters (ADR 0046): a pending position is held for a few seconds, and
+	// matters (platform#26): a pending position is held for a few seconds, and
 	// being reaped or shut down inside that window would drop the position a
 	// viewer actually stopped at. The Manager cannot write it itself — it owns
 	// sessions, not services — so the Handler supplies this.
@@ -644,7 +644,7 @@ func (m *Manager) StartReaper(ctx context.Context) {
 
 // Shutdown closes every session: the sender goroutines return and their streams
 // end, which a client treats as a reconnect (contracts#5 stream resume), the way
-// ADR 0032's "going away" close did for the WebSocket. Wire it through
+// platform#22's "going away" close did for the WebSocket. Wire it through
 // http.Server.RegisterOnShutdown so it fires as graceful shutdown begins.
 func (m *Manager) Shutdown() {
 	m.mu.Lock()

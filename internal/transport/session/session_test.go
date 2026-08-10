@@ -31,7 +31,7 @@ func TestSafeAction(t *testing.T) {
 }
 
 // TestImportRefFromInput proves the importContent action envelope decodes to the
-// ContentRef the application command takes — the action ABI (ADR 0029) the
+// ContentRef the application command takes — the action ABI (platform#19) the
 // dispatch reads off the wire, unchanged by which client sent it.
 func TestImportRefFromInput(t *testing.T) {
 	input := []byte(`{"ref":{"provider":"stremio","nativeId":"tt0111161","nativeType":"movie","mediaType":"movie","externalScheme":"imdb","externalId":"tt0111161"}}`)
@@ -57,7 +57,7 @@ func TestImportRefFromInput(t *testing.T) {
 }
 
 // TestConfigureFromInput proves the configureModule action envelope decodes to a
-// module id and an opaque settings document carried through verbatim (ADR 0021).
+// module id and an opaque settings document carried through verbatim (platform#17).
 func TestConfigureFromInput(t *testing.T) {
 	input := []byte(`{"moduleId":"stremio","settings":{"addons":["https://example.com/manifest.json"]}}`)
 	id, settings, err := configureFromInput(input)
@@ -110,7 +110,7 @@ func TestDecodeParams(t *testing.T) {
 }
 
 // TestErrorNode proves a failed render produces the ErrorState UINode the
-// content region shows (ADR 0029's error surface).
+// content region shows (platform#19's error surface).
 func TestErrorNode(t *testing.T) {
 	node := errorNode("boom")
 	if node.GetType() != "ErrorState" {

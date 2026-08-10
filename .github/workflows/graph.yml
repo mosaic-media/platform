@@ -50,7 +50,7 @@ on:
   workflow_dispatch:
   repository_dispatch:
     # Fired by each core module's release.yml once its own release has completed
-    # (ADR 0078). A release is the moment a module's branch becomes something
+    # (platform#48). A release is the moment a module's branch becomes something
     # this repository will require, so it is the moment worth re-checking the
     # whole graph.
     types: [graph-check]
@@ -98,7 +98,7 @@ jobs:
           path: module-cinemeta
 
       # The three extension modules are deliberately absent. They are not go.mod
-      # dependencies of this repository at all (ADR 0081) — a user installs one
+      # dependencies of this repository at all (platform#51) — a user installs one
       # at runtime — so they share no dependency graph with this build and a
       # workspace has nothing to prove about them. integration.yml is what
       # exercises those, against a real published release.

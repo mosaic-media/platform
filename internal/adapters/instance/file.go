@@ -3,7 +3,7 @@
 // Linking exception: see LICENSE-EXCEPTION.
 
 // Package instance stores this install's identity in a file on disk
-// (ADR 0098).
+// (platform#54).
 //
 // It is in internal/adapters rather than internal/modules because it is not
 // module-shaped: it implements one small port over the filesystem, it has no

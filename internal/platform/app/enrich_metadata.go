@@ -15,9 +15,9 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Metadata enrichment and the tree top-up (ADR 0107).
+// Metadata enrichment and the tree top-up (platform#62).
 //
-// The third pass beside streams (ADR 0073) and artwork (ADR 0075), and it exists
+// The third pass beside streams (platform#46) and artwork (sdk#6), and it exists
 // because the first two revealed the shape: the Platform asks a provider a
 // question, renders the answer and keeps none of it. So a library detail opened
 // by node id had nothing to draw with, and a series that gained a season never
@@ -33,7 +33,7 @@ import (
 //
 // A provider answering with a decade of a daily show would otherwise turn one
 // maintenance item into thousands of writes inside a single job attempt, which
-// is the "a rule can produce a large library quickly" surprise ADR 0104 names,
+// is the "a rule can produce a large library quickly" surprise platform#60 names,
 // arriving one level further down than anybody was watching. Hitting it is
 // reported rather than silent, and the next run continues from where this one
 // stopped because the pass only ever adds what is missing.
@@ -61,7 +61,7 @@ func (s *Service) enrichMetadata(ctx context.Context, caller v1.Caller, ref v1.C
 // arriving through the mechanism built to prevent it.
 func (s *Service) enrichMetadataErr(ctx context.Context, caller v1.Caller, ref v1.ContentRef, workID v1.NodeID) error {
 	if s.nodeMetadata == nil || workID == "" {
-		// No store is the pre-ADR-0107 behaviour: nothing is kept, and a detail
+		// No store is the pre-platform#62 behaviour: nothing is kept, and a detail
 		// renders from the node alone. A Service built without one is a test
 		// service, and it should not silently start writing.
 		return nil
@@ -101,7 +101,7 @@ func (s *Service) enrichMetadataErr(ctx context.Context, caller v1.Caller, ref v
 // silently so. A module writes genres on `AddContentWork`, and every module
 // dedups before writing — so a title already in the library is never re-added
 // and never gains them. That is the same shape as the stale-artwork follow-up
-// ADR 0071 recorded as owed, arriving for a field where the consequence is
+// platform#45 recorded as owed, arriving for a field where the consequence is
 // worse: a poster that never refreshes is visibly the old poster, and a genre
 // that never arrives is a chip nobody is offered.
 //
@@ -191,8 +191,8 @@ func (s *Service) storeMetadata(ctx context.Context, moduleID string, workID v1.
 
 // topUpTree adds the seasons and episodes a work is missing.
 //
-// This is the Platform building a tree, which ADR 0028 gave to the materialising
-// capability, and ADR 0107 takes part of back on ADR 0073's ground: **season and
+// This is the Platform building a tree, which platform#18 gave to the materialising
+// capability, and platform#62 takes part of back on platform#46's ground: **season and
 // episode are facts about television that the Platform already models.** Nothing
 // here composes a provider's own addressing — it reads two integers the SDK
 // carries neutrally and writes them through the same public commands a module
@@ -270,7 +270,7 @@ func (s *Service) topUpTree(ctx context.Context, caller v1.Caller, workID v1.Nod
 		if !ok {
 			container, err := s.AddContentChild(ctx, v1.AddContentChildCommand{
 				// No media type: a child inherits it from its parent
-				// (ADR 0013), so a season cannot declare a different one than
+				// (platform#9), so a season cannot declare a different one than
 				// its series and this pass cannot invent one.
 				Caller: caller, ParentID: workID, Kind: v1.NodeContainer,
 				ContainerType: v1.ContainerSeason,
@@ -295,7 +295,7 @@ func (s *Service) topUpTree(ctx context.Context, caller v1.Caller, workID v1.Nod
 			ItemType:     v1.ItemEpisode,
 			Title:        episodeTitle(preview),
 			NaturalOrder: float64(preview.Episode),
-			// The still, stored on the node like every other image (ADR 0071)
+			// The still, stored on the node like every other image (platform#45)
 			// so an episode row draws without a provider round trip.
 			Artwork: v1.Artwork{Landscape: preview.Thumbnail},
 		})
@@ -320,7 +320,7 @@ func (s *Service) topUpTree(ctx context.Context, caller v1.Caller, workID v1.Nod
 // fillEpisodeStill gives an existing episode the still it is missing.
 //
 // **Only when it has none.** An episode whose art was set by its module, or
-// chosen by the artwork pass (ADR 0074), is left exactly as it is — this fills a
+// chosen by the artwork pass (platform#47), is left exactly as it is — this fills a
 // gap and never overrules a choice, which is what keeps the pass safe to run on
 // a schedule.
 func (s *Service) fillEpisodeStill(ctx context.Context, caller v1.Caller, node v1.Node, thumbnail string) {

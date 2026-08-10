@@ -14,13 +14,13 @@ import (
 )
 
 // TelemetryInterceptor is the edge seam for the first-party client transport
-// (ADR 0055, seam 1) — and the most important one, because this is where a
+// (platform#33, seam 1) — and the most important one, because this is where a
 // user's action enters the Platform. It continues the trace the Shell started
 // or begins one, binds a logger to it, and records the outcome of each call.
 //
 // component names the surface in every record it produces ("auth", "session"),
 // so a record says which service answered rather than only that Connect did.
-// Since ADR 0061 those two are the whole client API, and both mount this.
+// Since platform#37 those two are the whole client API, and both mount this.
 //
 // Both call shapes are covered, and they are covered differently on purpose
 // (contracts#5 gives them different lifetimes):
@@ -51,7 +51,7 @@ func (i *telemetryInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFu
 		// call reaches — the command handler, its transaction, the module it
 		// invokes, that module's HTTP calls — nests inside this one, which is
 		// what turns "the intent took nine seconds" into a shape that says
-		// where the nine seconds went (ADR 0055).
+		// where the nine seconds went (platform#33).
 		ctx, span := telemetry.Start(ctx, req.Spec().Procedure,
 			telemetry.String("rpc.system", "connect"))
 		defer span.End()

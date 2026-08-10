@@ -17,7 +17,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Account administration, as a client can reach it (ADR 0069, roadmap M1.3).
+// Account administration, as a client can reach it (platform#44, roadmap M1.3).
 //
 // Three dispatch cases over six application commands. Everything they call was
 // complete before this file existed and none of it had a caller outside a test.
@@ -58,7 +58,7 @@ func (h *Handler) createAccount(ctx context.Context, caller v1.Caller, input []b
 
 	session := domain.SessionID(caller.Session)
 	// What this grantor may actually confer for the preset they chose
-	// (ADR 0069). Asked here rather than trusted from the form: the form is an
+	// (platform#44). Asked here rather than trusted from the form: the form is an
 	// offer and this is the submission, and nothing stops a submission arriving
 	// without one.
 	offer, err := h.svc.GrantablePermissions(ctx, app.GrantablePermissionsQuery{
@@ -126,7 +126,7 @@ func (h *Handler) createAccount(ctx context.Context, caller v1.Caller, input []b
 // account provisioned today still never gains an action added tomorrow.
 //
 // The set is only used when the role is being created. An existing one is
-// granted as it stands, bounded by what the grantor holds (ADR 0069), so a
+// granted as it stands, bounded by what the grantor holds (platform#44), so a
 // reduced administrator granting a wider existing role is refused with the
 // permissions named rather than silently handed a narrower one.
 func (h *Handler) presetRole(ctx context.Context, caller v1.Caller, preset string, perms []string) (domain.RoleID, error) {

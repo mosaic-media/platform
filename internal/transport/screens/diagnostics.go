@@ -21,14 +21,14 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The expert-mode surface (ADR 0058): stored telemetry rendered as ordinary
+// The expert-mode surface (platform#36): stored telemetry rendered as ordinary
 // SDUI, so a second client gets the diagnostics screens for free the same way
-// it gets the content ones (ADR 0029).
+// it gets the content ones (platform#19).
 //
-// Everything here reads data that was redacted at construction (ADR 0056), so
+// Everything here reads data that was redacted at construction (platform#34), so
 // no screen masks anything of its own. What it must still do is treat the text
 // as *untrusted*: a message or a field can originate in a third-party module
-// (ADR 0059) or in an upstream provider's error, so it is rendered as text and
+// (sdk#5) or in an upstream provider's error, so it is rendered as text and
 // never as anything a renderer would interpret.
 //
 // Reaching any of this requires `telemetry.read`, enforced by the application
@@ -358,7 +358,7 @@ func traceColor(t domain.TelemetryTraceSummary) string {
 //
 // The tree is drawn by depth from the parent chain rather than by indentation
 // the store computed, because the entry span's parent is the *client's* span
-// and lives outside this process (ADR 0054). Anything whose parent is not in
+// and lives outside this process (platform#32). Anything whose parent is not in
 // the result set is a root here.
 func (s *Service) traceScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
 	nav, navErr := s.settingsNav(ctx, caller)
@@ -435,7 +435,7 @@ func traceRootName(spans []domain.TelemetrySpanRecord) string {
 	for _, sp := range spans {
 		// Anything whose parent is not in the set is a root here: the entry
 		// span's parent is the *client's* span and lives outside this process
-		// (ADR 0054).
+		// (platform#32).
 		if sp.Parent == "" || !byID[sp.Parent] {
 			return sp.Name
 		}
@@ -632,7 +632,7 @@ func traceTone(t domain.TelemetryTraceSummary) string {
 // line, keys sorted so two records of the same shape line up.
 //
 // It renders values as text and nothing else. The document can hold anything a
-// module chose to record (ADR 0059), so this must not become a place where a
+// module chose to record (sdk#5), so this must not become a place where a
 // value is interpreted.
 func renderFields(raw []byte) string {
 	if len(raw) == 0 {

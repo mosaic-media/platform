@@ -20,7 +20,7 @@ import (
 //
 // This check used to live in internal/transport/graphql, which was the
 // Platform's original transport and so the place the rule was first written
-// down. ADR 0061 retired that package; the rule is unchanged and it is stated
+// down. platform#37 retired that package; the rule is unchanged and it is stated
 // here now, alongside the sibling copy in internal/transport/health.
 var forbiddenImportPrefixes = []string{
 	"github.com/mosaic-media/platform/internal/modules/postgres",

@@ -40,7 +40,7 @@ func validateRelateContentCommand(cmd v1.RelateContentCommand) error {
 }
 
 // RelateContent writes one edge of the association graph. Association is a
-// graph and does not nest (ADR 0013); this is where three of the four
+// graph and does not nest (platform#9); this is where three of the four
 // deliberate non-uniformities are expressed — an artist joined to its albums,
 // a collected edition to what it collects, an anime to its source manga.
 func (s *Service) RelateContent(ctx context.Context, cmd v1.RelateContentCommand) (v1.RelateContentResult, error) {

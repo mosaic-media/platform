@@ -32,7 +32,7 @@ func (mockTx) Config() contracts.ConfigStore          { return mockConfigStore{}
 func (mockTx) Outbox() contracts.EventOutbox          { return mockEventOutbox{} }
 func (mockTx) Credentials() contracts.CredentialStore { return mockCredentialStore{} }
 
-// The content-model stores (ADR 0013) are nil here. This mock exists only to
+// The content-model stores (platform#9) are nil here. This mock exists only to
 // assert that contracts.Tx is satisfiable; no test calls through it, and a
 // nil return fails loudly if that ever stops being true.
 func (mockTx) Nodes() contracts.NodeStore                     { return nil }

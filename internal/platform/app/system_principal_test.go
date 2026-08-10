@@ -15,7 +15,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The system principal is unbounded authority (ADR 0017), so what is worth
+// The system principal is unbounded authority (platform#13), so what is worth
 // testing is not that it works — a handler that let everything through would
 // also pass that — but that nothing else can become it.
 

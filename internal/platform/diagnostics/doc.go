@@ -5,7 +5,7 @@
 // Package diagnostics aggregates real component health (registry.go) and
 // builds an anonymised support bundle (support_bundle.go).
 //
-// Structured logging moved out to internal/platform/telemetry (ADR 0053).
+// Structured logging moved out to internal/platform/telemetry (platform#31).
 // It went because it had two callers and one of them — everything that wants
 // to say something during a request — could not reach it without a
 // constructor parameter. The redaction vocabulary went with it, so the

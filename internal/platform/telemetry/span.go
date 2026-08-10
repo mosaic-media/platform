@@ -60,7 +60,7 @@ func (discardSpanSink) WriteSpan(SpanRecord) {}
 
 // spanSinkKey carries the sink through the context, so the composition root
 // configures it once and no layer takes it as a parameter — the same ambient
-// rule the logger follows (ADR 0053).
+// rule the logger follows (platform#31).
 type spanSinkKey struct{}
 
 // WithSpanSink returns a context whose spans are written to sink.
@@ -71,7 +71,7 @@ func WithSpanSink(ctx context.Context, sink SpanSink) context.Context {
 	ctx = context.WithValue(ctx, spanSinkKey{}, sink)
 	// The tracer travels with the sink rather than being configured separately,
 	// so there is exactly one thing to set up and no way to have a tracer whose
-	// spans go somewhere other than the sink beside it (ADR 0128).
+	// spans go somewhere other than the sink beside it (sdk#8).
 	return context.WithValue(ctx, tracerKey{}, newTracerProvider(sink).Tracer(tracerName))
 }
 
@@ -143,7 +143,7 @@ func Start(ctx context.Context, name string, attrs ...Field) (context.Context, *
 
 // attributeOf renders a Field as an OpenTelemetry attribute, applying redaction
 // on the way out exactly as a sink does — a span attribute is not a laxer
-// channel than a log field (ADR 0056).
+// channel than a log field (platform#34).
 func attributeOf(f Field) attribute.KeyValue {
 	value := f.EmitValue()
 	switch v := value.(type) {
@@ -177,7 +177,7 @@ func resourceAttributes(r Resource) []attribute.KeyValue {
 
 // SetAttributes adds attributes to a span in flight. They are redaction-classed
 // like any other field, so an attribute is subject to exactly the same rules as
-// a log field (ADR 0056) rather than being a second, laxer channel.
+// a log field (platform#34) rather than being a second, laxer channel.
 func (s *Span) SetAttributes(attrs ...Field) {
 	if s == nil || len(attrs) == 0 {
 		return

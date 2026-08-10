@@ -24,11 +24,11 @@ import (
 
 // detailScreen renders a rich content detail — a cinematic hero over an episode
 // browser, the cast, the technical facts of the release behind the play button,
-// and what to watch next (ADR 0034). It is ref-based and serves both planes: a
+// and what to watch next (sdk#3). It is ref-based and serves both planes: a
 // virtual item and an in-library one render from the same metadata, differing in
 // the primary action and in how much they can say about bytes they may not have.
 // A nodeId navigation renders the same tree from the object graph instead
-// (ADR 0107): the stored document, the node's own artwork and the materialised
+// (platform#62): the stored document, the node's own artwork and the materialised
 // tree, with no provider call at all.
 func (s *Service) detailScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
 	if refMap, ok := params[paramRef].(map[string]any); ok {
@@ -59,7 +59,7 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 // resolved.
 //
 // It is split from the fetch because the two planes now resolve differently and
-// must still render identically (ADR 0107): a **virtual** item asks its provider
+// must still render identically (platform#62): a **virtual** item asks its provider
 // live, and a **library** item reads the stored document and its own tree. A
 // second renderer for the second plane is how the library detail would quietly
 // become the poorer one.
@@ -126,7 +126,7 @@ func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.Con
 			chips = append(chips, ui.PersonChip(p.Name,
 				ui.When(p.Role != "", ui.Role(p.Role)),
 				// Through the artwork proxy like every other remote image
-				// (ADR 0030): a headshot on a third-party CDN would otherwise
+				// (platform#20): a headshot on a third-party CDN would otherwise
 				// leak the viewer's IP and depend on that CDN's CORS.
 				ui.When(p.Photo != "", ui.Avatar(s.art(p.Photo)))))
 		}
@@ -169,7 +169,7 @@ func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.Con
 // It takes the resolved season *order* rather than an episode list. Counting
 // distinct seasons among the episodes on hand was correct while a detail always
 // held every episode of a series, and became wrong the moment a library detail
-// began reading one season at a time (ADR 0107): a seventy-five-season programme
+// began reading one season at a time (platform#62): a seventy-five-season programme
 // announced itself as "Series · 1 season".
 func kickerLabel(ref v1.ContentRef, seasons []int) string {
 	kind := mediaTypeWord(string(ref.MediaType))
@@ -300,7 +300,7 @@ func joinNames(names []string) string {
 // The design draws a download control beside them. There is none here: Mosaic
 // has no offline capability at all — no role in the SDK declares one and nothing
 // stores bytes for later — so the control is absent rather than drawn inert,
-// which is the dead-end affordance ADR 0036 exists to prevent.
+// which is the dead-end affordance platform#24 exists to prevent.
 func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.PreviewContentResult,
 	ref v1.ContentRef, m v1.ContentMetadata, title string, playing *v1.Part, season seasonView) ui.El {
 
@@ -308,14 +308,14 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 	// a Part, so it never goes through playPart — it opens on the site that
 	// hosts it. Offered only when a URL can actually be built, because a Trailer
 	// carries a site and a key rather than a link, and a site nobody can address
-	// is an affordance with nothing behind it (ADR 0036).
+	// is an affordance with nothing behind it (platform#24).
 	trailer, hasTrailer := trailerAction(m.Trailers)
 
 	els := make([]ui.El, 0, 5)
 
 	// Curating the library is an administrator's authority, not a viewer's
-	// (ADR 0069), so the control that does it is drawn only for a caller who
-	// holds it (ADR 0036). It was drawn for everybody while everybody was the
+	// (platform#44), so the control that does it is drawn only for a caller who
+	// holds it (platform#24). It was drawn for everybody while everybody was the
 	// same account; the first ordinary account pressed it and got nothing —
 	// which is the dead end the paragraph above this function is about, on the
 	// same screen.
@@ -323,11 +323,11 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 
 	if !res.InLibrary {
 		if canImport {
-			// Play comes first and Add second, which is the ordering ADR 0118
+			// Play comes first and Add second, which is the ordering platform#73
 			// argues for: a viewer wants to watch the thing, and adding it is
 			// what the Platform has to do to let them. Both are drawn only for a
 			// caller who may import, because **pressing Play here adds it** —
-			// the same authority, honestly gated (ADR 0069).
+			// the same authority, honestly gated (platform#44).
 			els = append(els, ui.Button("Play", "primary", ui.IconName("play"),
 				ui.OnTap(ui.Invoke(playPartAction, map[string]any{
 					paramRef: refInput(ref),
@@ -344,7 +344,7 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 	}
 
 	if playing != nil {
-		// Where this viewer got to, if anywhere (ADR 0046). The state is keyed
+		// Where this viewer got to, if anywhere (platform#26). The state is keyed
 		// on the *item* that has the bytes rather than on the work above it,
 		// because that is what a viewer resumes — an episode, not a series.
 		state, stateErr := s.content.GetPlaybackState(ctx, v1.GetPlaybackStateQuery{
@@ -387,7 +387,7 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 		els = append(els, ui.Button(label, "primary", ui.IconName("play"),
 			ui.OnTap(ui.Invoke(playPartAction, playInput))))
 
-		// The way to the candidate set (ADR 0116). Offered beside Play rather
+		// The way to the candidate set (platform#71). Offered beside Play rather
 		// than instead of it: the ranking is right often enough that making
 		// everyone choose would be a worse default than choosing for them, and
 		// wrong often enough that there has to be a way through.
@@ -415,7 +415,7 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 		els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
 	}
 
-	// The square pills. Watched is a real toggle over playback state (ADR 0046)
+	// The square pills. Watched is a real toggle over playback state (platform#26)
 	// — the dispatch case has existed since the state store landed and no screen
 	// had ever emitted it, so the only way to mark something watched was to
 	// watch it.
@@ -483,7 +483,7 @@ func playbackPanel(m v1.ContentMetadata, ref v1.ContentRef, facts releaseFacts, 
 	// Seasons rather than episodes, and read from the season *order* rather than
 	// from the episodes on hand.
 	//
-	// A library detail reads one season at a time (ADR 0107), so counting
+	// A library detail reads one season at a time (platform#62), so counting
 	// `m.Episodes` here said "Episodes 6" over a selector offering seventy-five
 	// seasons — a number that was true of the read and false of the series. The
 	// season count is the one this panel can state honestly without reading a
@@ -726,9 +726,9 @@ func (s *Service) seasonView(ctx context.Context, caller v1.Caller, res app.Prev
 // fillSeasonProgress bridges the provider's episode preview to the materialised
 // tree and reads this viewer's state over it.
 //
-// The episode list on screen is the provider's live preview (ADR 0034), which
+// The episode list on screen is the provider's live preview (sdk#3), which
 // carries season and episode numbers but no node ids; playback state is keyed by
-// node (ADR 0046). A series' children are its seasons and a season's children
+// node (platform#26). A series' children are its seasons and a season's children
 // its episodes, each carrying its number as NaturalOrder, so the tree maps
 // (season, episode) back to the node the position is stored under. It reads only
 // the selected season — one season walk and one batched state read — because
@@ -889,7 +889,7 @@ func titleWords(s string) string {
 
 // libraryDetail renders a materialised node: its header, and its direct children
 // as cards that open their own detail (one level per screen, since the tree is
-// of variable depth — ADR 0013). A film's child is its feature item; a series'
+// of variable depth — platform#9). A film's child is its feature item; a series'
 // children are its seasons.
 func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID string, params map[string]any) (sdui.Node, error) {
 	// The season the screen is on, read here so the query fetches that season's
@@ -909,7 +909,7 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 	n := res.Node
 
 	if !res.HasMetadata {
-		// Never enriched — materialised before ADR 0107, or by a provider that
+		// Never enriched — materialised before platform#62, or by a provider that
 		// has never been reachable since. It still has a title, artwork and a
 		// tree, so it renders as those rather than as an error or an apology;
 		// the next maintenance run fills the rest in.
@@ -918,13 +918,13 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 
 	m := res.Metadata
 	// The tree is the authority on what episodes exist, and the stored document
-	// deliberately carries none (ADR 0107). Projecting them back here is what
+	// deliberately carries none (platform#62). Projecting them back here is what
 	// lets one renderer serve both planes.
 	m.Episodes = app.EpisodesFromTree(res.Season, res.Episodes)
 
 	// The node fills what the document does not. Artwork is the case that
-	// matters: it is stored on the node (ADR 0071) and re-ranked by the artwork
-	// pass (ADR 0074), so the node's copy is the *better* one and the document's
+	// matters: it is stored on the node (platform#45) and re-ranked by the artwork
+	// pass (platform#47), so the node's copy is the *better* one and the document's
 	// is what its metadata provider happened to carry.
 	if p := n.Artwork.Poster; p != "" {
 		m.Poster = p
@@ -942,7 +942,7 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 	// The ref the document was fetched under, so the actions that need one — a
 	// franchise rail, a trailer — still work. Its media type comes from the node
 	// when the document has none, because the graph's is the canonical one
-	// (ADR 0015) and the kicker reads it.
+	// (platform#11) and the kicker reads it.
 	ref := m.Ref
 	if ref.MediaType == "" {
 		ref.MediaType = n.MediaType
@@ -956,7 +956,7 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 // structuralDetail is what a node with no stored description renders as: what
 // the graph itself holds, which is a title, its artwork and its contents.
 //
-// It was the *only* library detail before ADR 0107 and is now the floor beneath
+// It was the *only* library detail before platform#62 and is now the floor beneath
 // it. It draws the children's posters, which the version it replaces did not —
 // a grid of blank cards was the visible half of the same omission.
 func (s *Service) structuralDetail(n v1.Node, children []v1.Node) sdui.Node {
@@ -1040,7 +1040,7 @@ func trailerURL(t v1.Trailer) string {
 // dropping the work being described and returning nil when nothing is left.
 //
 // Each card opens the ref-based detail, exactly as a catalog or search card
-// does: a related item is a virtual item (ADR 0028), and opening one is a read.
+// does: a related item is a virtual item (platform#18), and opening one is a read.
 //
 // The heading carries a pinned link onward into a catalog of the same kind. It
 // is pinned rather than hover-revealed because a rail's heading is the only way

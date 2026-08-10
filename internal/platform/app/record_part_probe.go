@@ -15,11 +15,11 @@ import (
 )
 
 // ProbeAttribute is the key a probe document is stored under in a Part's
-// attributes (ADR 0050).
+// attributes (platform#29).
 //
 // The Platform owns the top-level namespacing of that document and the playback
 // transport owns what lives under this key. That split is deliberate: attributes
-// are unvalidated by design (ADR 0013), so the only thing worth enforcing here
+// are unvalidated by design (platform#9), so the only thing worth enforcing here
 // is that one writer's document cannot silently erase another's.
 const ProbeAttribute = "probe"
 
@@ -27,7 +27,7 @@ const ProbeAttribute = "probe"
 // to be stored on the Part it describes.
 //
 // The scalar fields and Probe are not alternatives. The scalars are the summary
-// that candidate ranking and a detail screen read (ADR 0048); Probe is the whole
+// that candidate ranking and a detail screen read (platform#27); Probe is the whole
 // track list, which the scalars cannot express and the per-stream decision
 // cannot do without.
 type RecordPartProbeCommand struct {
@@ -43,12 +43,12 @@ type RecordPartProbeCommand struct {
 	SizeBytes  int64
 
 	// Probe is the opaque probe document. The Platform stores it without
-	// interpreting it, exactly as it does a module's settings (ADR 0021).
+	// interpreting it, exactly as it does a module's settings (platform#17).
 	Probe []byte
 }
 
 // PartProbe is the stored probe document on a Part, nil when it has none
-// (ADR 0050). It is the read half of what RecordPartProbe writes, exported
+// (platform#29). It is the read half of what RecordPartProbe writes, exported
 // because the emit-side describes a release it is not about to play: a detail
 // screen states what a release *is* — codecs, tracks, languages — and those
 // answers are already sitting in the Part, decoded by nobody.
@@ -62,7 +62,7 @@ type RecordPartProbeResult struct {
 	Part v1.Part
 }
 
-// RecordPartProbe writes a probe result onto the Part it describes (ADR 0050).
+// RecordPartProbe writes a probe result onto the Part it describes (platform#29).
 //
 // This is what makes a probe worth running. A probe describes bytes, and bytes
 // do not change: the second play of a release re-derived exactly the same answer
@@ -77,7 +77,7 @@ type RecordPartProbeResult struct {
 // `content.bind`, because writing to the content graph is a write — which used
 // to mean a read-only viewer could not warm this cache, and re-probed on every
 // play forever. **The playback transport now records as the system principal**
-// (ADR 0017): this handler is unchanged, the gate is unchanged, and what
+// (platform#13): this handler is unchanged, the gate is unchanged, and what
 // changed is who the caller is. The event's actor is the system rather than the
 // viewer, which is the honest attribution — nobody asked for this write.
 func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeCommand) (RecordPartProbeResult, error) {
@@ -111,7 +111,7 @@ func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeComman
 		// 6. apply domain rules.
 		//
 		// The probe is authoritative and overwrites whatever the module parsed
-		// from the release name — that is the entire point of ADR 0050, which
+		// from the release name — that is the entire point of platform#29, which
 		// demoted parsing to a ranking hint after it read a container out of a
 		// query parameter and got it wrong. An empty field is still left alone:
 		// a probe that could not determine something has not learned that the
@@ -173,7 +173,7 @@ func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeComman
 //
 // Merging rather than replacing, even though nothing else writes Part attributes
 // today. Attributes are the open extension point of the content model
-// (ADR 0013), so something else writing one is a matter of time, and the failure
+// (platform#9), so something else writing one is a matter of time, and the failure
 // if it does — a second writer silently erasing the first — is the kind that
 // shows up as missing data long after the change that caused it.
 func mergeAttribute(existing []byte, key string, value []byte) ([]byte, error) {

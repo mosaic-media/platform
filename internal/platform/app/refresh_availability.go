@@ -51,7 +51,7 @@ type AvailabilitySettings struct {
 	// Budget is how many works one run may re-ask about. It is a budget rather
 	// than "all of them" for the reason the maintenance pass has one: this turns
 	// a household's upstream load from human-triggered into continuous, and the
-	// credential paying for it may be one a whole household shares (ADR 0105).
+	// credential paying for it may be one a whole household shares (supervisor#1).
 	Budget int
 }
 
@@ -125,7 +125,7 @@ type RefreshAvailabilityResult struct {
 // RefreshAvailability re-asks the metadata provider about the works whose
 // answers are oldest, and stores what it is told.
 //
-// It **acts as the system principal** (ADR 0017), like the maintenance pass and
+// It **acts as the system principal** (platform#13), like the maintenance pass and
 // for the same reason: a refresh must not fail because the person who last
 // signed in has since been suspended, and nothing here is anybody's decision.
 func (s *Service) RefreshAvailability(ctx context.Context, cmd RefreshAvailabilityCommand) (RefreshAvailabilityResult, error) {
@@ -187,10 +187,10 @@ func (s *Service) RefreshAvailability(ctx context.Context, cmd RefreshAvailabili
 
 // storedRefFor recovers the ref a work was last described by.
 //
-// **This is the answer to the problem ADR 0071 named**: a materialised node
+// **This is the answer to the problem platform#45 named**: a materialised node
 // cannot be turned back into a provider-bearing ref, because the node records
 // the external *scheme* and id but not the module that served it nor that
-// module's native type vocabulary. What changed is that ADR 0107 stores the
+// module's native type vocabulary. What changed is that platform#62 stores the
 // provider's whole answer, and `ContentMetadata.Ref` is part of it — so a work
 // that has ever been enriched carries the ref it was enriched by, written by the
 // provider itself rather than reconstructed by the Platform.

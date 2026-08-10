@@ -30,7 +30,7 @@ type TelemetryRetention struct {
 }
 
 // auditRetentionFloor is the shortest audit retention this Platform will honour,
-// whatever the Active configuration says (ADR 0057).
+// whatever the Active configuration says (platform#35).
 //
 // It is a compile-time constant on purpose. "Set audit retention to an hour, do
 // the thing, wait" is the standard way to defeat an audit log, so the floor must

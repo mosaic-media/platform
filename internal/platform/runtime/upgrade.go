@@ -12,7 +12,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
-// The upgrade request, as the Supervisor reads it (ADR 0129).
+// The upgrade request, as the Supervisor reads it (platform#77).
 //
 // **The Platform records what somebody asked for and cannot carry it out.** It
 // cannot stop and restart itself onto a different Generation, so the request

@@ -41,7 +41,7 @@ type GetRoleByNameResult struct {
 // and their effective set — because it answers the same kind of question about
 // the same objects. It is deliberately not gated on `role.create`: reading what
 // a role carries is not the authority to hand it out, and the grant itself is
-// bounded by what the grantor holds whatever this returns (ADR 0069).
+// bounded by what the grantor holds whatever this returns (platform#44).
 func (s *Service) GetRoleByName(ctx context.Context, q GetRoleByNameQuery) (GetRoleByNameResult, error) {
 	// 1. validate query shape.
 	if q.Caller.Session == "" {

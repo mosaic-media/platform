@@ -15,7 +15,7 @@ import (
 //
 // It exists because the session transport keys its live state — the outbound
 // mailbox, the replay cursor, the current route — by *session*, and since
-// ADR 0102 the value a client presents is not one. An access token rotates
+// platform#58 the value a client presents is not one. An access token rotates
 // every few minutes; a live session keyed by it would be orphaned on every
 // refresh, taking its cursor and its route with it, and the client would see a
 // reconnect it did not ask for each time its credential turned over.

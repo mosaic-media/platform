@@ -17,8 +17,8 @@ import (
 )
 
 // These tests cover the Platform's read-side fan-out to module provider roles
-// (ADR 0027) — search and catalog browse — and the union that marks a virtual
-// result in-library (ADR 0028). A fake capability fills the read roles; the
+// (sdk#2) — search and catalog browse — and the union that marks a virtual
+// result in-library (platform#18). A fake capability fills the read roles; the
 // Platform drives it.
 
 // fakeProviderCapability fills the search and catalog roles with canned data and

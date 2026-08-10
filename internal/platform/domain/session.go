@@ -15,7 +15,7 @@ const (
 	// AuthStrengthPassword marks a Session produced by password verification.
 	AuthStrengthPassword AuthStrength = "password"
 	// AuthStrengthPasswordTOTP marks a Session produced by a password *and* a
-	// time-based second factor (ADR 0132).
+	// time-based second factor (platform#79).
 	//
 	// It is a distinct value rather than a flag beside AuthStrengthPassword
 	// because the whole point of recording strength is that a policy can one

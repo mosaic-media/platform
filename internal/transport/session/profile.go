@@ -15,7 +15,7 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/playback"
 )
 
-// The client capability profile, and the class it reduces to (ADR 0047, 0049).
+// The client capability profile, and the class it reduces to (web#4, 0049).
 //
 // A client declares what it can decode on Attach. Before that existed the
 // Platform hard-coded a desktop browser's abilities at the playPart call site,
@@ -70,7 +70,7 @@ func profileFrom(p *sessionv1.ClientProfile) clientProfile {
 const defaultEncodeHeight = 1080
 
 // codecs is the same profile in the shape the per-stream decision takes
-// (ADR 0050). The two types exist separately because they answer different
+// (platform#29). The two types exist separately because they answer different
 // questions — one ranks candidates, the other plans ffmpeg — and collapsing them
 // would tie the decision to selection's notion of a preference.
 func (c clientProfile) codecs() playback.ClientCodecs {

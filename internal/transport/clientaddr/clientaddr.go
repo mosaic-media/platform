@@ -6,10 +6,10 @@
 // which is not always the address it arrived from.
 //
 // Behind the Supervisor's front door every request arrives from the Supervisor
-// (ADR 0120), so the connection's peer identifies the proxy rather than the
+// (platform#75), so the connection's peer identifies the proxy rather than the
 // caller — and over a Unix socket there is no peer address at all. Anything
 // that distinguishes callers, such as the pre-session rate limit
-// (ADR 0101), needs the address the *front door* saw.
+// (platform#57), needs the address the *front door* saw.
 package clientaddr
 
 import (
@@ -76,7 +76,7 @@ func resolve(r *http.Request, trustForwarded bool) string {
 // forgeable: a client that sends `X-Forwarded-For: 1.2.3.4` has the front door
 // append its real address after it, so the leftmost value is whatever the
 // client felt like claiming. With exactly one trusted proxy in front — which
-// is what ADR 0120 guarantees — the last entry is the only one the front door
+// is what platform#75 guarantees — the last entry is the only one the front door
 // wrote, and the only one worth believing.
 func rightmostForwarded(values []string) string {
 	// Multiple header lines are equivalent to one comma-joined line, so flatten

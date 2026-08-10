@@ -31,21 +31,21 @@ type Deps struct {
 	Outbox      contracts.EventOutbox
 	Credentials contracts.CredentialStore
 
-	// The content model (ADR 0013).
+	// The content model (platform#9).
 	Nodes          contracts.NodeStore
 	Parts          contracts.PartStore
 	Relations      contracts.RelationStore
 	SourceBindings contracts.SourceBindingStore
 
 	// NodeMetadata is what a provider said about a materialised title
-	// (ADR 0107). Optional, like the rules below.
+	// (platform#62). Optional, like the rules below.
 	NodeMetadata contracts.NodeMetadataStore
 
 	// WatchAvailability is the queryable projection of where a work can be
 	// watched (roadmap M2.5). Optional, like the two below.
 	WatchAvailability contracts.WatchAvailabilityStore
 
-	// LibraryRules is what the library should contain (ADR 0104). Optional:
+	// LibraryRules is what the library should contain (platform#60). Optional:
 	// when nil the rule subtests skip, so an implementation that has not built
 	// it yet is not made to fail the whole suite.
 	LibraryRules contracts.LibraryRuleStore
@@ -394,7 +394,7 @@ func RunCredentialStoreContract(t *testing.T, newDeps Factory) {
 
 		// Enrolment begins unconfirmed. An unconfirmed factor must never gate a
 		// sign-in, so the flag has to survive the round trip rather than being
-		// inferred from the row existing (ADR 0132).
+		// inferred from the row existing (platform#79).
 		if err := d.Credentials.SaveTOTP(c, domain.TOTPCredential{
 			UserID: uid, Secret: "JBSWY3DPEHPK3PXP", CreatedAt: now,
 		}); err != nil {

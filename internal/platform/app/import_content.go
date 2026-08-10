@@ -15,11 +15,11 @@ import (
 // ActionContentImport is the policy action evaluated for invoking a capability
 // to import content. It gates who may trigger an import at all. The capability
 // then acts as the same caller, so each node it creates is authorised again
-// under the content actions (ADR 0017) — this gate is the outer one.
+// under the content actions (platform#13) — this gate is the outer one.
 const ActionContentImport policy.Action = "content.import"
 
 // ImportContentCommand materialises one virtual content item — a ContentRef a
-// search or catalog browse produced (ADR 0028) — into the graph. It names no
+// search or catalog browse produced (platform#18) — into the graph. It names no
 // capability id of its own: the ref carries its Provider, the module that can
 // materialise it. It is a Platform command a transport issues (the session
 // importContent mutation), deliberately not part of the published
@@ -46,7 +46,7 @@ func validateImportContentCommand(cmd ImportContentCommand) error {
 // graph. It follows the command boundary up to authorization, then hands the
 // capability the Service itself as its ContentService and the original Caller,
 // so every write the capability makes re-enters the same command order and is
-// authorised as the invoking user (ADR 0017).
+// authorised as the invoking user (platform#13).
 //
 // It opens no UnitOfWork of its own: the capability's service calls each open
 // theirs, one transaction per write. A capability that fails partway leaves
@@ -72,7 +72,7 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 	}
 
 	// 5. read the module's user-managed settings so it is invoked with the
-	// configuration a user set for it (ADR 0021). Absent settings read back as
+	// configuration a user set for it (platform#17). Absent settings read back as
 	// an empty document, never an error.
 	settings, err := s.readModuleSettings(ctx, cmd.Ref.Provider)
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 	// passing the Service as the ContentService it drives.
 	//
 	// The module's context is a separate variable, not a shadow of ctx: it
-	// carries the module's logger and telemetry surface (ADR 0059) and dies
+	// carries the module's logger and telemetry surface (sdk#5) and dies
 	// with the span below, so Platform work after the call must not inherit it.
 	mctx, span := moduleSpan(ctx, cmd.Ref.Provider, "import")
 	result, err := capability.Import(mctx, s, v1.ImportRequest{
@@ -95,7 +95,7 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 		return v1.ImportResult{}, err
 	}
 
-	// 6b. fill in what plays (ADR 0073). The capability the ref named built the
+	// 6b. fill in what plays (platform#46). The capability the ref named built the
 	// tree; a metadata module fills no stream role, so without this a title
 	// described by TMDB or Cinemeta would sit in the library permanently
 	// unplayable while a stream source registered alongside it was never asked.
@@ -104,7 +104,7 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 	// path: it is best-effort, and an import that produced a tree has succeeded
 	// whether or not anything could be found to play.
 	if result.WorkID != "" {
-		// 6b0. fill in what it *is*, and what shape it is (ADR 0107). It runs
+		// 6b0. fill in what it *is*, and what shape it is (platform#62). It runs
 		// first of the three because both of the others read the tree: the
 		// stream pass fills items with no Parts, so an episode this adds is
 		// enriched in the same import rather than waiting a whole run, and the
@@ -113,12 +113,12 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 		// It is also what makes a re-import worth anything. Every module dedups
 		// before writing and returns AlreadyKnown, so without this the second
 		// import of a title refreshed everything about it except its shape and
-		// its description — which is the failure ADR 0107 was written for.
+		// its description — which is the failure platform#62 was written for.
 		s.enrichMetadata(ctx, cmd.Caller, cmd.Ref, result.WorkID)
 
 		s.enrichStreams(ctx, cmd.Caller, result.WorkID, &result)
 
-		// 6c. fill in what it looks like (ADR 0075). Same shape and same reasons
+		// 6c. fill in what it looks like (sdk#6). Same shape and same reasons
 		// as the stream pass: a dedicated artwork source fills no metadata role
 		// and is never named by a ref, so without this it would sit registered
 		// and never be asked about the title it has the best art for.

@@ -14,7 +14,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// ModuleSettingsUIQuery asks a module for its own settings screen (ADR 0038).
+// ModuleSettingsUIQuery asks a module for its own settings screen (sdk#4).
 type ModuleSettingsUIQuery struct {
 	Caller   v1.Caller
 	ModuleID string
@@ -27,7 +27,7 @@ type ModuleSettingsUIResult struct {
 	UI       []byte
 }
 
-// ModuleSettingsUI resolves a module's contributed settings screen (ADR 0038): a
+// ModuleSettingsUI resolves a module's contributed settings screen (sdk#4): a
 // module that fills RoleSettingsUI renders its own configuration UI as SDUI, and
 // the Platform hosts it. Like every query it authenticates and authorises (a
 // settings read — ActionModuleRead), reads the module's current settings so the
@@ -121,7 +121,7 @@ func (s *Service) capabilitySettingsUIProvider(id string) (v1.SettingsUIProvider
 }
 
 // validateUINode confines a module-supplied settings screen to a well-formed,
-// correctly namespaced UINode tree before the Platform hosts it (ADR 0038,
+// correctly namespaced UINode tree before the Platform hosts it (sdk#4,
 // contracts#9): the bytes must be a JSON object carrying a non-empty string "type",
 // and **every** node in the tree must name a type this module may emit.
 //

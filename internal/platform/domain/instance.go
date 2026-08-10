@@ -6,7 +6,7 @@ package domain
 
 import "time"
 
-// InstanceIdentity is what one installation of Mosaic calls itself (ADR 0098).
+// InstanceIdentity is what one installation of Mosaic calls itself (platform#54).
 //
 // **It lives outside PostgreSQL, and that is the whole reason it is a type of
 // its own rather than a row.** A household names its server during setup, and
@@ -28,7 +28,7 @@ type InstanceIdentity struct {
 	// Name is what the household called it.
 	Name string
 	// ClaimedAt is when somebody first took ownership. It is the one fact about
-	// the claim recorded today: the audit record ADR 0098 asks for is a later
+	// the claim recorded today: the audit record platform#54 asks for is a later
 	// increment, and a timestamp with no actor and no address is not it.
 	ClaimedAt time.Time
 }

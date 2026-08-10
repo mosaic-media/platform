@@ -15,7 +15,7 @@ import (
 )
 
 // uuidV7Generator emits time-ordered version-7 UUIDs (RFC 9562 §5.7) for the
-// content model (ADR 0013).
+// content model (platform#9).
 //
 // It exists alongside the version-4 generator rather than replacing it. The
 // infrastructure tables keep their random ids in text columns and are not

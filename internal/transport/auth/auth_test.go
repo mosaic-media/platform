@@ -33,7 +33,7 @@ func signedInUser(db *fakeDB) domain.UserID {
 
 // TestSignInIssuesASession is the whole reason this transport exists: a client
 // with nothing but a username and password ends up holding the opaque session
-// ref every SessionService call requires (ADR 0061).
+// ref every SessionService call requires (platform#37).
 func TestSignInIssuesASession(t *testing.T) {
 	db := newFakeDB()
 	userID := signedInUser(db)
@@ -133,7 +133,7 @@ func TestSignOutRevokesTheSession(t *testing.T) {
 	}
 	id := in.Msg.GetSession().GetId()
 	// The caller presents its access token; the target is a session id. Since
-	// ADR 0102 they are different values and this call carries both.
+	// platform#58 they are different values and this call carries both.
 	access := in.Msg.GetTokens().GetAccessToken()
 
 	out, err := handler.SignOut(context.Background(), connect.NewRequest(&authv1.SignOutRequest{

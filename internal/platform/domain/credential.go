@@ -49,7 +49,7 @@ type PasswordVerifier interface {
 }
 
 // TOTPCredential is one user's time-based one-time-password factor
-// (ADR 0132).
+// (platform#79).
 //
 // **It is a factor, not a credential, whatever this type is called for
 // symmetry with the two above it.** A password verifies identity and a passkey
@@ -61,7 +61,7 @@ type PasswordVerifier interface {
 // A code is computed from it, so it must be recoverable, which makes it unlike
 // PasswordCredential.Hash in the way that matters most: anyone who reads it can
 // mint valid codes forever. It is classified Secret wherever it travels
-// (ADR 0056) — never logged, never rendered after enrolment, never returned by
+// (platform#34) — never logged, never rendered after enrolment, never returned by
 // a read that a client can reach.
 type TOTPCredential struct {
 	UserID UserID

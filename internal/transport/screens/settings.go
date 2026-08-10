@@ -26,9 +26,9 @@ import (
 // module called "extensions" must not light up the Extensions nav item.
 const (
 	sectionAccount = "account"
-	// sectionHomeRows is where a viewer arranges their own home (ADR 0103).
+	// sectionHomeRows is where a viewer arranges their own home (platform#59).
 	sectionHomeRows = "home"
-	// sectionLanguages is what a viewer wants to hear and read (ADR 0112).
+	// sectionLanguages is what a viewer wants to hear and read (platform#67).
 	sectionLanguages  = "language"
 	sectionPeople     = "people"
 	sectionExtensions = "extensions"
@@ -47,7 +47,7 @@ type settingsNavEntry struct {
 	label string
 	icon  string
 	// action is what tapping the row emits. Most navigate to a section of the
-	// settings screen; extensions navigates to its own screen (ADR 0081).
+	// settings screen; extensions navigates to its own screen (platform#51).
 	action ui.Action
 	// panel is false for a row that leaves the settings screen entirely. Such a
 	// row is never auto-selected — there is no panel body to render for it here.
@@ -75,7 +75,7 @@ type settingsNavGroup struct {
 type settingsNavModel struct {
 	groups []settingsNavGroup
 	// showExpertMode is whether the control is drawn at all — a caller who
-	// could not use what it reveals is not shown it (ADR 0058).
+	// could not use what it reveals is not shown it (platform#36).
 	showExpertMode bool
 	expertModeOn   bool
 	// selected is whether a section was asked for rather than defaulted to. The
@@ -85,7 +85,7 @@ type settingsNavModel struct {
 }
 
 // settingsScreen is the settings surface: a Platform-owned nav beside a panel
-// that carries the open section (ADR 0038).
+// that carries the open section (sdk#4).
 //
 // The nav is the Platform's on every render, including a module's section — a
 // module fills the panel and cannot draw the nav, because a module does not know
@@ -138,7 +138,7 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 // settingsNav builds the nav for this caller: the install-level sections they
 // can use, then a row per module that contributes a settings screen.
 //
-// The modules group is the one ADR 0038 exists for. It used to be a list on an
+// The modules group is the one sdk#4 exists for. It used to be a list on an
 // index screen, which meant a module's settings were two navigations deep and
 // the way back was a button the host drew; as nav rows they are one tap from
 // each other and from everything else here.
@@ -153,7 +153,7 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 	//
 	// Home is here beside it, and deliberately not under Server: the library is
 	// one shared graph and this decides nothing about it, only about how one
-	// person sees it (ADR 0103). It needs no permission gate for the same
+	// person sees it (platform#59). It needs no permission gate for the same
 	// reason — a viewer arranging their own screen has authority over nobody.
 	groups = append(groups, settingsNavGroup{label: "Preferences", entries: []settingsNavEntry{{
 		key:    sectionAccount,
@@ -189,7 +189,7 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 			panel:  true,
 		})
 	}
-	// What the library should contain (ADR 0104). It is in Server rather than
+	// What the library should contain (platform#60). It is in Server rather than
 	// Preferences because a rule is the install's policy and not a person's
 	// taste: everybody sees the same library, and one person decides what goes
 	// in it.
@@ -202,7 +202,7 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 			panel:  true,
 		})
 	}
-	// What the install itself is set to do (ADR 0011). It sits in Server beside
+	// What the install itself is set to do (platform#7). It sits in Server beside
 	// Library for the same reason: it is the install's own policy rather than a
 	// person's taste, and one person decides it for everybody.
 	if s.content.CallerCan(ctx, caller, app.ActionConfigRead, "config") {
@@ -214,7 +214,7 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 			panel:  true,
 		})
 	}
-	// What is wrong with this install, now (ADR 0119). In Server because it is
+	// What is wrong with this install, now (platform#74). In Server because it is
 	// about the install rather than the person reading, and last in the group
 	// because it is the row somebody goes looking for rather than one they
 	// browse.
@@ -280,7 +280,7 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 	}
 
 	// The expert-mode level, and what it reveals: the diagnostics sections
-	// appear as their own group only while it is on (ADR 0058).
+	// appear as their own group only while it is on (platform#36).
 	//
 	// The control is drawn only for a caller who could use what it reveals — a
 	// normal user does not see the switch at all, rather than seeing it and being
@@ -295,7 +295,7 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 	}
 	// Each row inside the group is gated on its own permission, because they
 	// are different disclosures: the queue is what the install did to itself,
-	// telemetry is what its users did (ADR 0017). A caller granted one and not
+	// telemetry is what its users did (platform#13). A caller granted one and not
 	// the other sees exactly the rows they can open. Expert mode stays the
 	// *level* control over the group and never the gate — each screen
 	// authorises for itself.
@@ -338,7 +338,7 @@ func openSection(groups []settingsNavGroup, moduleID, section string) string {
 	return ""
 }
 
-// moduleSettingsPanel hosts a module's own contributed settings UI (ADR 0038).
+// moduleSettingsPanel hosts a module's own contributed settings UI (sdk#4).
 // The Platform owns the frame; the module fills the panel — validated by the app
 // service, decoded here, and rendered as it was returned.
 func (s *Service) moduleSettingsPanel(ctx context.Context, caller v1.Caller, nav settingsNavModel, moduleID string) (sdui.Node, error) {
@@ -373,7 +373,7 @@ func (s *Service) moduleSettingsPanel(ctx context.Context, caller v1.Caller, nav
 // So the Screen's own container is dropped and its title becomes the panel
 // heading. **What the module contributed is untouched** — every child renders in
 // the order it was returned, and any other root is hosted verbatim. The Platform
-// is replacing its own outer container, which is the half of the tree ADR 0038
+// is replacing its own outer container, which is the half of the tree sdk#4
 // already says belongs to the host.
 func modulePanel(node sdui.Node) (string, []sdui.Node) {
 	if node.GetType() != sdui.TypeScreen {
@@ -417,7 +417,7 @@ func settingsFrame(nav settingsNavModel, active, heading, lead string, body ...s
 }
 
 // expertModeFooter is the level control at the foot of the nav: a switch that
-// governs how much of the nav exists (ADR 0058), not a place to navigate to.
+// governs how much of the nav exists (platform#36), not a place to navigate to.
 //
 // The switch carries the value it is moving TO, because the Switch primitive
 // emits the action it was given and does not author one — the server decides
@@ -440,7 +440,7 @@ func expertModeFooter(nav settingsNavModel) ui.El {
 
 // settingsNavSlot renders the nav rows into the frame's nav slot, highlighting
 // the open one. The Platform decides which row is active because it is the side
-// that knows the params (ADR 0039) — the client has nothing to compare, since
+// that knows the params (web#2) — the client has nothing to compare, since
 // every section here is the same screen.
 func settingsNavSlot(groups []settingsNavGroup, active string) ui.El {
 	els := make([]ui.El, 0, len(groups))
@@ -470,7 +470,7 @@ func noSectionPanel(groups []settingsNavGroup) sdui.Node {
 }
 
 // extensionsScreen is the browse-and-install surface for extension modules
-// (ADR 0081): what a user has installed, with a way to remove each, and what the
+// (platform#51): what a user has installed, with a way to remove each, and what the
 // trusted repository offers, with a way to install each. It is its own screen
 // because listing what is available reaches the repository over the network, so
 // it happens when a user opens this rather than on every settings render — and
@@ -521,7 +521,7 @@ func (s *Service) extensionsScreen(ctx context.Context, caller v1.Caller) (sdui.
 
 // installOverlay is the install confirmation for one offered extension: what it
 // is, what it would be able to do once it runs, where its bytes come from — and
-// the control that actually installs it (ADR 0081).
+// the control that actually installs it (platform#51).
 //
 // It is an **overlay over the catalogue**, not a screen. Installing is running
 // somebody else's signed binary on this machine, and the decision belongs to the
@@ -570,7 +570,7 @@ func capabilitiesSection(provides []string) *ui.Element {
 }
 
 // provenanceSection is where the bytes come from. It is not decoration: the
-// trust model (ADR 0065) is a signed index from a named repository, and the
+// trust model (platform#40) is a signed index from a named repository, and the
 // person consenting to run the binary is entitled to see which one.
 func provenanceSection(e app.ExtensionCatalogueEntry) *ui.Element {
 	return ui.Section("Where it comes from", ui.Stack("vertical", 2,
@@ -605,7 +605,7 @@ type capability struct {
 	detail string
 }
 
-// capabilities is the closed vocabulary of provider roles (ADR 0027) in plain
+// capabilities is the closed vocabulary of provider roles (sdk#2) in plain
 // words. A role with no entry still renders — under its own name, because an
 // unknown capability must be visible rather than quietly dropped from the list
 // somebody is about to consent to.
@@ -699,7 +699,7 @@ func joinWords(words []string) string {
 
 // installedExtensionsSection lists each installed extension as a card carrying
 // what it does and where its bytes came from. The empty state is the ordinary
-// one for a fresh install (ADR 0081: nothing is installed by default).
+// one for a fresh install (platform#51: nothing is installed by default).
 func installedExtensionsSection(installed []app.InstalledExtension, provides map[string][]string, descriptions map[string]string) *ui.Element {
 	if len(installed) == 0 {
 		return ui.Section("Installed",

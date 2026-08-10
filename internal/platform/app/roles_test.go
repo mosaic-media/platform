@@ -15,7 +15,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Permission presets (ADR 0069). They are starting points a grantor edits, not
+// Permission presets (platform#44). They are starting points a grantor edits, not
 // tiers — the boundary that actually holds is the delegation check, which is
 // tested in delegation_test.go. What these assert is that the presets nest, so
 // picking one never confers something the next one down lacks by accident.
@@ -70,7 +70,7 @@ func TestAdministratorPresetOmitsInsight(t *testing.T) {
 	}
 	// It *does* include granting. An administrator managing accounts is the
 	// normal case, and it is safe precisely because the delegation check bounds
-	// what they can pass on by what they hold (ADR 0069).
+	// what they can pass on by what they hold (platform#44).
 	if !held[app.ActionRoleGrant] {
 		t.Fatal("an administrator should be able to manage accounts")
 	}

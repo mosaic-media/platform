@@ -21,7 +21,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// TestCrossProviderStreamEnrichmentAgainstPostgres is ADR 0073 end to end: a real
+// TestCrossProviderStreamEnrichmentAgainstPostgres is platform#46 end to end: a real
 // metadata module (TMDB, core), a real database, and a stream source standing in
 // for an extension one.
 //
@@ -33,7 +33,7 @@ import (
 // `ref.Provider`.
 //
 // The stream source is a fake, not the real Stremio module: the platform module
-// must not import an extension module (ADR 0079/0081), and the Platform bridge is
+// must not import an extension module (platform#49/0081), and the Platform bridge is
 // what is under test, not Stremio's addon parsing. The double answers *only* for
 // the IMDB identity the Platform must have carried across from the TMDB tree, so
 // the assertion stays real — Parts appear on those episodes only if the Platform

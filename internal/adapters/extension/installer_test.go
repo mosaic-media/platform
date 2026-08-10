@@ -160,7 +160,7 @@ func TestInstallRejectsAnIndexFromTheWrongKey(t *testing.T) {
 // Boot re-adoption reads the on-disk cache and does NOT touch the network: after
 // an install, a fresh installer over the same directory — whose fetcher fails if
 // it is called at all — adopts the module and launches it. This is the
-// durable-across-restart property (ADR 0081): a restart reconstructs the running
+// durable-across-restart property (platform#51): a restart reconstructs the running
 // set from what a previous install left on disk, so it neither depends on the
 // repository being reachable nor silently upgrades to whatever an index now
 // lists.

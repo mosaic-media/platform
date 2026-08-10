@@ -21,7 +21,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Watch history — the per-user pass over a shared library (ADR 0103).
+// Watch history — the per-user pass over a shared library (platform#59).
 //
 // **A household never shares this screen.** The library beneath it is one
 // object graph and everybody sees the same titles; what each person did with it

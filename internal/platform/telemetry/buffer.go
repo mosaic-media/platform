@@ -38,7 +38,7 @@ const (
 // blocking and a background goroutine drains them to a BatchWriter.
 //
 // The rule it exists to enforce is that **telemetry never blocks a request**
-// (ADR 0058). A user's playback must not wait on a log insert, and a telemetry
+// (platform#36). A user's playback must not wait on a log insert, and a telemetry
 // subsystem able to stall the Platform is a liability rather than an asset. So
 // Write never blocks and never returns an error; when the buffer is full it
 // discards the *oldest* record and counts the loss.

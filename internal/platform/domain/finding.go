@@ -6,7 +6,7 @@ package domain
 
 import "time"
 
-// Operational findings (ADR 0119): what is wrong with this install, now.
+// Operational findings (platform#74): what is wrong with this install, now.
 //
 // **An Issue is a fact about the present, and that is what separates it from
 // everything else Mosaic already records.** Telemetry answers "what happened at
@@ -23,7 +23,7 @@ import "time"
 
 // IssueType is what is wrong, as a closed vocabulary.
 //
-// Closed by [ADR 0015](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0015-open-and-closed-vocabularies.md)'s
+// Closed by [platform#11](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0015-open-and-closed-vocabularies.md)'s
 // test — Platform code branches on it to decide which Suggestions to offer, and
 // a client branches on it to choose words. An open set would let a subsystem
 // state a problem no client can render and no code can act on, which fails open
@@ -41,7 +41,7 @@ const (
 	// that the situation is now stated rather than repeated.
 	IssueChildUnrecoverable IssueType = "child_unrecoverable"
 	// IssueGenerationRolledBack is an upgrade that was applied, failed its
-	// health check and was reverted. **This is the case ADR 0119 was written
+	// health check and was reverted. **This is the case platform#74 was written
 	// for**: the install is working, it is working on the version it had
 	// before, and without a record the user's report is "it didn't update".
 	IssueGenerationRolledBack IssueType = "generation_rolled_back"
@@ -49,7 +49,7 @@ const (
 	// Generation. Nothing is running, so nothing else can report it.
 	IssueProvisionFailed IssueType = "provision_failed"
 	// IssueUpgradeAvailable is a newer release the signed catalogue offers and
-	// this install has not taken (ADR 0129).
+	// this install has not taken (platform#77).
 	//
 	// **It is the one entry here that is not a fault**, and it is a finding
 	// anyway because the register is already the surface for "something needs
@@ -105,7 +105,7 @@ const (
 	// the install stops carrying a capability it does not have.
 	SuggestionUninstallExtension SuggestionType = "uninstall_extension"
 	// SuggestionApplyUpgrade asks the Supervisor to install the version this
-	// Issue is about (ADR 0129).
+	// Issue is about (platform#77).
 	//
 	// **The Platform cannot perform it**, which is why the whole channel
 	// exists: pressing this records a request naming the version, the handoff
@@ -207,7 +207,7 @@ func SuggestionsFor(t IssueType) []SuggestionType {
 	case IssueChildUnrecoverable, IssueGenerationRolledBack, IssueProvisionFailed, IssueUpgradeFailed:
 		// Nothing this build can *do* about these from a screen — restarting a
 		// child and re-running an upgrade are the Supervisor's, and it has no
-		// action lane (ADR 0123 gave it a read surface and no more). Offering a
+		// action lane (supervisor#7 gave it a read surface and no more). Offering a
 		// control that did nothing would be worse than offering none, so the
 		// honest offer is to acknowledge it.
 		return []SuggestionType{SuggestionDismiss}
@@ -216,7 +216,7 @@ func SuggestionsFor(t IssueType) []SuggestionType {
 	}
 }
 
-// UpgradeRequest is somebody asking for a version to be installed (ADR 0129).
+// UpgradeRequest is somebody asking for a version to be installed (platform#77).
 //
 // **It names a version and never "latest".** The Platform does not hold the
 // release catalogue, so it asks for the version it was offered — and the

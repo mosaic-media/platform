@@ -14,7 +14,7 @@ import (
 )
 
 // issueStore is the PostgreSQL contracts.IssueStore: the resolution register
-// (ADR 0119).
+// (platform#74).
 type issueStore struct {
 	q queryer
 }

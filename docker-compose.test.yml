@@ -10,7 +10,7 @@
 #   - **PostgreSQL.** The contract tests in internal/modules/postgres skip,
 #     with a reason, when no database is reachable. A host run with no database
 #     prints `ok` and has tested none of the storage layer.
-#   - **ffprobe.** Playback probing shells out to it (ADR 0050). Without it the
+#   - **ffprobe.** Playback probing shells out to it (platform#29). Without it the
 #     Platform relays unprobed rather than failing.
 #
 # A skipped test is not a passed test — the CLAUDE.md push rule turns on
@@ -73,7 +73,7 @@ services:
       # /src/platform/test/sdkprobe is /src/sdk. That nested module stands in
       # for a third party's Module and is compiled by test/sdkboundary
       # (TestPublishedSurfaceCompilesFromAnExternalModule) to prove the
-      # published surface imports cleanly (ADR 0016). Without this mount the
+      # published surface imports cleanly (platform#12). Without this mount the
       # build fails with "replacement directory ../../../sdk does not exist"
       # and the boundary test — one of the standing gates — cannot run. It is
       # read-only because the test only *builds against* the SDK; it never
@@ -109,7 +109,7 @@ services:
         go vet ./...
         go build ./...
         go test ./...
-        # The development-registry build (ADR 0099). `-tags mosaicdev` compiles a
+        # The development-registry build (platform#55). `-tags mosaicdev` compiles a
         # different half of the extension package — the one that can repoint the
         # module repository from the environment — and the dev stack runs it, so
         # it is a build this repository ships the source of and must keep green.

@@ -12,7 +12,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
-// The trace id is Mosaic's correlation id (ADR 0054), so the conversion has to
+// The trace id is Mosaic's correlation id (platform#32), so the conversion has to
 // preserve *the same* id rather than produce one — a distinction any test
 // asserting "an id exists" would miss entirely.
 func TestTraceContextRoundTripsThroughOpenTelemetry(t *testing.T) {
@@ -64,7 +64,7 @@ func TestARootTracesZeroSpanIDSurvivesTheConversion(t *testing.T) {
 }
 
 // The sampling decision governs whether spans are recorded and never whether
-// the ids exist (ADR 0054), so both settings have to cross intact.
+// the ids exist (platform#32), so both settings have to cross intact.
 func TestTheSamplingDecisionCrossesBothWays(t *testing.T) {
 	for _, sampled := range []bool{true, false} {
 		tc := telemetry.NewTraceContext()

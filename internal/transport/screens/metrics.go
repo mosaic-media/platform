@@ -18,11 +18,11 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The instrument viewer (ADR 0130).
+// The instrument viewer (sdk#9).
 //
 // **This screen is the reason the metric surface counts as built.** A capability
 // with no client path is owed rather than done, and a metric nobody can look at
-// is the specific thing ADR 0059 refused to publish — a module author
+// is the specific thing sdk#5 refused to publish — a module author
 // instruments against it, gets no data, and has nothing telling them why. So the
 // surface and the screen land together.
 //
@@ -82,7 +82,7 @@ func (s *Service) metricsScreen(ctx context.Context, caller v1.Caller) (sdui.Nod
 // and by how many scopes.
 //
 // The series count is the one worth showing, because it is the number that has a
-// cap on it (ADR 0130) and the only way a reader finds out they are approaching
+// cap on it (sdk#9) and the only way a reader finds out they are approaching
 // one before the fold happens.
 func metricTotals(series []telemetry.MetricSeries) *ui.Element {
 	counters, histograms := 0, 0

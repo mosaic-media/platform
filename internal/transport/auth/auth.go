@@ -3,7 +3,7 @@
 // Linking exception: see LICENSE-EXCEPTION.
 
 // Package auth is the Connect transport that mints and revokes sessions
-// (ADR 0061). It is the only first-party surface a caller reaches without
+// (platform#37). It is the only first-party surface a caller reaches without
 // already holding a session, and it is what a client calls before it can open
 // the two-lane SessionService of contracts#5.
 //
@@ -33,7 +33,7 @@ import (
 type Handler struct {
 	svc *app.Service
 	// bootstrapLimit bounds the one call reachable before authentication
-	// (ADR 0101). It is per-handler rather than global because there is one
+	// (platform#57). It is per-handler rather than global because there is one
 	// handler per process; a second would be a second Platform.
 	bootstrapLimit *limiter
 	// now is the clock the limiter reads, injectable so a test can spend a
@@ -115,7 +115,7 @@ func sessionMessage(s domain.Session) *authv1.Session {
 }
 
 // capabilityStrings projects the session's capability set onto the wire
-// (ADR 0036).
+// (platform#24).
 //
 // nil for an empty set rather than an empty slice, so "this Platform did not
 // resolve a capability set" and "this account holds nothing" are the same
@@ -133,7 +133,7 @@ func capabilityStrings(perms []domain.Permission) []string {
 	return out
 }
 
-// Refresh exchanges a refresh token for a new pair, rotating it (ADR 0102).
+// Refresh exchanges a refresh token for a new pair, rotating it (platform#58).
 //
 // It is unauthenticated in the session sense and authenticated in every sense
 // that matters: the refresh token is the credential, and presenting a spent one

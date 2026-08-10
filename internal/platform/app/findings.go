@@ -13,7 +13,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/policy"
 )
 
-// The resolution register's application surface (ADR 0119).
+// The resolution register's application surface (platform#74).
 //
 // Three entry points and one internal one, and the split matters: **raising is
 // not a caller's act.** A finding is created by the code that detected it,
@@ -83,7 +83,7 @@ type ApplySuggestionResult struct {
 
 // ApplySuggestion runs a named action against an Issue.
 //
-// **It is an ordinary authorised command** (ADR 0119): repair is not a
+// **It is an ordinary authorised command** (platform#74): repair is not a
 // privileged back channel, and applying a suggestion goes through the same gate
 // as any other change to this install.
 //
@@ -130,7 +130,7 @@ func (s *Service) ApplySuggestion(ctx context.Context, cmd ApplySuggestionComman
 	case domain.SuggestionApplyUpgrade:
 		// **Recorded, not performed.** The Platform cannot stop and restart
 		// itself onto a different Generation, so this writes down what was asked
-		// for and the Supervisor reads it over the handoff (ADR 0129). The
+		// for and the Supervisor reads it over the handoff (platform#77). The
 		// version comes from the Issue rather than from the caller, so a client
 		// cannot ask for a version nobody was offered — and the Supervisor
 		// resolves even that name against the signed catalogue.

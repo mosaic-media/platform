@@ -10,11 +10,11 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The role-class table (ADR 0063).
+// The role-class table (platform#38).
 //
 // A core module fills a *role class*, and the class — not the module — declares
 // how many implementations may be selected and what changing the selection
-// costs. ADR 0063 is emphatic that this table lives in Platform code and **not**
+// costs. platform#38 is emphatic that this table lives in Platform code and **not**
 // in module manifests: arity is a property of the class, not of any module that
 // fills it, and a module has no business asserting "I am the only one of me" —
 // a manifest that could would be a manifest that could lie. A module declares
@@ -40,18 +40,18 @@ const (
 )
 
 // Mutability is what changing a class's selection costs. It is carried for
-// onboarding rather than enforced here: ADR 0063 requires that the storage
+// onboarding rather than enforced here: platform#38 requires that the storage
 // choice be presented as one the user should get right and not imply a switch
 // is coming, and a UI needs to read this to say so.
 type Mutability int
 
 const (
 	// MutabilityDestructive is a change that loses data today — the storage
-	// engine, where no migration exists (ADR 0063 declines to call it
+	// engine, where no migration exists (platform#38 declines to call it
 	// permanently irreversible, but it is destructive now).
 	MutabilityDestructive Mutability = iota
 	// MutabilityGeneration is a change the Supervisor applies by activating a new
-	// Generation of the same binary with a different selection (ADR 0063). It is
+	// Generation of the same binary with a different selection (platform#38). It is
 	// Generation-class in the reload-class vocabulary.
 	MutabilityGeneration
 )
@@ -60,13 +60,13 @@ const (
 type RoleClass struct {
 	// Name is the class's stable identifier, for diagnostics and onboarding.
 	Name string
-	// Arity and Mutability are the class's properties, per ADR 0063.
+	// Arity and Mutability are the class's properties, per platform#38.
 	Arity      Arity
 	Mutability Mutability
 	// Required is whether a serving Mosaic must have this class filled. Metadata
-	// and search are required as a class (ADR 0035): a Mosaic that cannot
+	// and search are required as a class (platform#23): a Mosaic that cannot
 	// identify or find content is inert, not degraded. Playback is not required
-	// — a deployment with no consumer is discovery-only (ADR 0036), a degraded
+	// — a deployment with no consumer is discovery-only (platform#24), a degraded
 	// state rather than a failed boot.
 	Required bool
 	// Roles are the capability roles this class comprises, each of which must be
@@ -85,7 +85,7 @@ type RoleClass struct {
 func (c RoleClass) registryBacked() bool { return len(c.Roles) > 0 }
 
 // RoleClasses is the table. It intentionally lists storage even though this
-// package does not validate it, so the one authoritative copy of ADR 0063's
+// package does not validate it, so the one authoritative copy of platform#38's
 // table is complete rather than a subset that silently drops the row a reader
 // most expects to find.
 var RoleClasses = []RoleClass{
@@ -114,7 +114,7 @@ var RoleClasses = []RoleClass{
 
 // RequireComposedRoleClasses fails when a required, registry-backed role class
 // is not filled over the composed capability set — core and extension together
-// (ADR 0063 re-expressing ADR 0035 over the selected set). It runs before the
+// (platform#38 re-expressing platform#23 over the selected set). It runs before the
 // serve loop; a guarantee-clause core module means it passes on a fresh install
 // with no configuration.
 //

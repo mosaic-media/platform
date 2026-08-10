@@ -404,7 +404,7 @@ func TestSessionIssuedValidatedAndRevoked(t *testing.T) {
 
 	// Validate: the pair issued with the session authenticates a subsequent
 	// call (GetUserByID's own authenticate step). The credential is the access
-	// token rather than the session id since ADR 0102 — the id is what a
+	// token rather than the session id since platform#58 — the id is what a
 	// device list names and what revocation targets, and it is not a
 	// credential.
 	if auth.Tokens.AccessToken == "" || auth.Tokens.RefreshToken == "" {
@@ -491,7 +491,7 @@ func TestRevokeSessionDeniedByPolicyDoesNotMutateState(t *testing.T) {
 	})
 }
 
-// Ending your own session needs no grant. It is the half of ADR 0102's
+// Ending your own session needs no grant. It is the half of platform#58's
 // revocation that a household member has to be able to do — an account that
 // could not sign out is an account nobody can hand a shared television back
 // from — and it was refused for every ordinary account, because the action was

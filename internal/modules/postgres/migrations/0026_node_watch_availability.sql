@@ -13,7 +13,7 @@
 --
 -- **The Platform keeps its own copy, from the value the SDK models.** A
 -- provider's answer already carries `ContentMetadata.Watch` — a typed field, not
--- a module's dialect — and ADR 0107's enrichment pass already fetches it on
+-- a module's dialect — and platform#62's enrichment pass already fetches it on
 -- every refresh. Projecting *that* is not the Platform learning a module's
 -- attribute key: it is the Platform storing a field the contract defines,
 -- exactly as it already stores `Artwork` from the same answer. `tmdbWatch` stays
@@ -23,7 +23,7 @@
 -- by and a screen has something to be honest with. It is the stamp the module's
 -- own records have carried all along for a refresh that did not exist.
 --
--- A table rather than a column on `nodes`, for ADR 0107's reason: this has a
+-- A table rather than a column on `nodes`, for platform#62's reason: this has a
 -- lifecycle the node does not — a region, a moment it was true — and a node
 -- carrying it would put a fact with an expiry date on every list read that never
 -- asks about it. Genre went on the node in 0025 because a genre does not expire.

@@ -15,7 +15,7 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/clientaddr"
 )
 
-// The rate limit on the pre-session surface (ADR 0101).
+// The rate limit on the pre-session surface (platform#57).
 //
 // It is a token bucket per peer, and it is deliberately the smallest thing that
 // answers the requirement rather than a general-purpose limiter. A general one

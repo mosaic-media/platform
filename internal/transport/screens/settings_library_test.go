@@ -16,7 +16,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Settings › Library (ADR 0104, roadmap M2.2).
+// Settings › Library (platform#60, roadmap M2.2).
 //
 // The two properties worth guarding on this panel are the ones that would fail
 // quietly: a rule whose module has gone must *say* it is degraded rather than
@@ -59,7 +59,7 @@ func TestTheLibrarySectionListsTheRulesAndWhatEachLastDid(t *testing.T) {
 	if !strings.Contains(text, "Top films") {
 		t.Errorf("the rule is not listed: %s", text)
 	}
-	// The four numbers ADR 0104 asks every run to record, where the
+	// The four numbers platform#60 asks every run to record, where the
 	// administrator managing the rules will read them — not only in a job log
 	// behind expert mode.
 	if !strings.Contains(text, "12 added · 26 refreshed · 1 skipped · 1 failed") {
@@ -83,7 +83,7 @@ func TestARuleThatHasNeverRunSaysSo(t *testing.T) {
 }
 
 // A rule survives its module being uninstalled: degraded and *visibly* so
-// (ADR 0104). Without this it looks exactly like a rule whose catalog is empty.
+// (platform#60). Without this it looks exactly like a rule whose catalog is empty.
 func TestARuleWhoseModuleIsGoneReadsAsDegraded(t *testing.T) {
 	fake := rulesService(collectionRule("Top films", false, domain.LibraryRuleRun{}))
 	node := render(t, &Service{content: fake}, "settings", map[string]any{"section": "library"})
@@ -100,7 +100,7 @@ func TestARuleWhoseModuleIsGoneReadsAsDegraded(t *testing.T) {
 
 // Every affordance on this panel is administrator authority. Somebody who may
 // read the rules and not change them is shown the rules and no controls, rather
-// than controls that will be refused (ADR 0036).
+// than controls that will be refused (platform#24).
 func TestAViewerIsOfferedNoRuleControls(t *testing.T) {
 	fake := rulesService(collectionRule("Top films", true, domain.LibraryRuleRun{}))
 	fake.allow[string(app.ActionLibraryRuleManage)] = false
@@ -133,7 +133,7 @@ func TestTheSettingsNavOffersLibraryOnlyToSomebodyWhoMayReadRules(t *testing.T) 
 	}
 }
 
-// The trap ADR 0104 names: the first run of a new rule is the one most likely to
+// The trap platform#60 names: the first run of a new rule is the one most likely to
 // surprise its author. The confirmation must have evaluated it.
 func TestFollowingACollectionSaysWhatTheFirstRunWillDo(t *testing.T) {
 	fake := rulesService()

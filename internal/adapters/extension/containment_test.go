@@ -11,7 +11,7 @@ import (
 )
 
 // The layer-3 posture is decided from the platform and the deployment's
-// attestation (ADR 0064, ADR 0080). These pin the honest cases: enforcement is
+// attestation (platform#39, platform#50). These pin the honest cases: enforcement is
 // only ever reported where the OS can deliver it AND the deployment says it did,
 // and a claim on a platform that has no mechanism is downgraded rather than
 // believed.

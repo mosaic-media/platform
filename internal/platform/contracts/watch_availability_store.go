@@ -15,7 +15,7 @@ import (
 // moment.
 //
 // It is a **projection** of `ContentMetadata.Watch`, which the metadata
-// enrichment pass already fetches (ADR 0107). The document that answer is stored
+// enrichment pass already fetches (platform#62). The document that answer is stored
 // in holds more — per-offer terms, deep links, the attribution TMDB's licence
 // requires — and is read one screen at a time; this is the flat set a facet can
 // be indexed on, written from the same fetch so the two cannot disagree about
@@ -39,7 +39,7 @@ type WatchAvailability struct {
 // WatchAvailabilityStore persists that projection.
 //
 // **Platform-owned, unlike the module's own `tmdbWatch` attribute.** That one is
-// a module's document, stored uninterpreted (ADR 0013), and nothing here reads
+// a module's document, stored uninterpreted (platform#9), and nothing here reads
 // it — this is written from the typed value the SDK carries, so any metadata
 // provider that fills `Watch` populates the facet and no module's key reaches
 // the Platform.

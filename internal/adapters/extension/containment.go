@@ -5,14 +5,14 @@
 package extension
 
 // EgressContainment describes whether an extension module's process is denied
-// *direct* network egress by the operating system — [ADR 0064](0064)'s layer 3,
+// *direct* network egress by the operating system — [platform#39](0064)'s layer 3,
 // the control that turns the forward proxy from the easy path into the only one.
 //
 // The Platform cannot make this true on its own. Denying a subprocess a network
 // of its own is an OS mechanism — a network namespace, a dedicated uid with a
 // firewall owner rule, or seccomp on connect(2) — that needs privileges a
 // non-root Platform does not have, and on macOS and Windows there is no low-cost
-// mechanism at all ([ADR 0080](0080)). So the guarantee is a property of the
+// mechanism at all ([platform#50](0080)). So the guarantee is a property of the
 // *deployment*, and the honest thing the Platform can do is know and report which
 // posture it is in rather than claim enforcement uniformly. That report is this
 // type: it is what an admin surface shows as "module egress is enforced" versus
@@ -48,7 +48,7 @@ const egressEnforcedValue = "enforced"
 // environment.
 //
 // The platform is decisive first: macOS and Windows have no OS-level egress
-// control worth relying on (ADR 0080), so a declaration of enforcement there is a
+// control worth relying on (platform#50), so a declaration of enforcement there is a
 // mistake to surface rather than honour — reporting enforced where it is not is
 // exactly what this exists to prevent. On Linux (and other unixes where a
 // mechanism can exist) the deployment's attestation is honoured, because there
@@ -60,7 +60,7 @@ func DetermineEgressContainment(goos, declared string) EgressContainment {
 			return EgressContainment{
 				Enforced: false,
 				Detail: EgressEnforcementEnv + "=" + egressEnforcedValue + " was set, but " + goos +
-					" has no OS-level egress control (ADR 0080); reporting attributed-only rather than a guarantee that is not there",
+					" has no OS-level egress control (platform#50); reporting attributed-only rather than a guarantee that is not there",
 			}
 		}
 		return EgressContainment{
@@ -77,7 +77,7 @@ func DetermineEgressContainment(goos, declared string) EgressContainment {
 		return EgressContainment{
 			Enforced: false,
 			Detail: "not declared: a cooperating module routes through the proxy, but a hostile one could dial out directly. Set " +
-				EgressEnforcementEnv + "=" + egressEnforcedValue + " only where the OS denies it (ADR 0080)",
+				EgressEnforcementEnv + "=" + egressEnforcedValue + " only where the OS denies it (platform#50)",
 		}
 	}
 }

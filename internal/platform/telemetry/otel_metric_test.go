@@ -171,7 +171,7 @@ func TestRedactionAppliesToDimensions(t *testing.T) {
 }
 
 // An instrument OpenTelemetry refuses returns an error rather than discarding in
-// silence — the failure ADR 0059 declined to publish a metric surface over.
+// silence — the failure sdk#5 declined to publish a metric surface over.
 func TestARefusedInstrumentReturnsAnError(t *testing.T) {
 	c := telemetry.NewMetricCollector()
 
@@ -201,7 +201,7 @@ func TestANilCollectorDiscards(t *testing.T) {
 }
 
 // The collector travels in the context, the same ambient rule the logger and the
-// span sink follow (ADR 0053), so no layer takes it as a parameter.
+// span sink follow (platform#31), so no layer takes it as a parameter.
 func TestTheCollectorIsAmbient(t *testing.T) {
 	c := telemetry.NewMetricCollector()
 	ctx := telemetry.WithMetrics(context.Background(), c)

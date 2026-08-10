@@ -25,7 +25,7 @@ func validateGetContentNodeQuery(query v1.GetContentNodeQuery) error {
 // GetContentNode reads one position in the containment tree.
 //
 // It deliberately does not resolve a whole work: nothing may assume a node's
-// children are containers or that the tree has a fixed depth (ADR 0013), so
+// children are containers or that the tree has a fixed depth (platform#9), so
 // a caller descends one indexed step at a time rather than being handed a
 // shape it then has to guess the meaning of.
 func (s *Service) GetContentNode(ctx context.Context, query v1.GetContentNodeQuery) (v1.GetContentNodeResult, error) {

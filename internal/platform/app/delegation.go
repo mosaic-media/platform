@@ -14,7 +14,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
-// Privilege cannot escalate through delegation (ADR 0069).
+// Privilege cannot escalate through delegation (platform#44).
 //
 // **Nobody may grant authority they do not themselves hold.** It is the one
 // rule that makes granular permissions safe to delegate: without it,
@@ -66,7 +66,7 @@ func (p permissionSet) sorted() []domain.Permission {
 }
 
 // sessionCapabilities resolves what to stamp on a session being issued
-// (ADR 0036).
+// (platform#24).
 //
 // A failure costs the capability set and never the sign-in. The set is what
 // lets a client omit an affordance it could not use; without it a client draws

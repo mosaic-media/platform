@@ -14,7 +14,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// Privilege cannot escalate through delegation (ADR 0069). Without this rule
+// Privilege cannot escalate through delegation (platform#44). Without this rule
 // role.create is equivalent to every permission — mint a role holding anything,
 // grant it to yourself — so these are the tests that make granular permissions
 // safe to hand out at all.

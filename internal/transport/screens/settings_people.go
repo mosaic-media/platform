@@ -17,14 +17,14 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The People section: the doors on multi-user (ADR 0069, roadmap M1.3).
+// The People section: the doors on multi-user (platform#44, roadmap M1.3).
 //
 // Every command behind these panels — CreateLocalUser, ListUsers, GetUserByID,
 // SetUserStatus, CreateRole, GrantRole, GetRolesForUser, GetGrantsForUser,
 // GetEffectivePermissions — was complete, tested, transactional and reachable
 // by nobody. This file is the doors.
 //
-// **The offer is computed from what the caller holds** (ADR 0069). A grantor
+// **The offer is computed from what the caller holds** (platform#44). A grantor
 // never sees a permission they do not have — not greyed out, absent — because
 // the list comes from their own grants rather than from a filter applied to
 // every permission the Platform knows. That is the offer side; CreateRole's own
@@ -115,7 +115,7 @@ func (s *Service) peoplePanel(ctx context.Context, caller v1.Caller, nav setting
 // It asks the Platform which presets it may confer rather than listing the
 // three it knows about, so an administrator who cannot create roles sees no
 // invitation to try. A control that leads to a form whose submit will be
-// refused is the dead end ADR 0036 exists to remove, and it is worse on this
+// refused is the dead end platform#24 exists to remove, and it is worse on this
 // screen than anywhere else: being told you may not create an account *after*
 // typing somebody's password in is the version of that failure people remember.
 func (s *Service) addAccountSection(ctx context.Context, caller v1.Caller) *ui.Element {
@@ -190,7 +190,7 @@ func (s *Service) newAccountPanel(ctx context.Context, caller v1.Caller, nav set
 	// What the preset asks for and this grantor cannot give. Named rather than
 	// omitted: an administrator creating another administrator should be able to
 	// see that the account will be narrower than their own idea of the word,
-	// which is the whole consequence of ADR 0069's intersection and is otherwise
+	// which is the whole consequence of platform#44's intersection and is otherwise
 	// invisible.
 	var withheld []ui.El
 	if full, ok := app.Preset(preset); ok {

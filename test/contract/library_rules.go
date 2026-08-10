@@ -15,7 +15,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The library-rule contract (ADR 0104) and the paged, counted library read that
+// The library-rule contract (platform#60) and the paged, counted library read that
 // the Library screen is built on (roadmap M2.1).
 //
 // Both are here rather than in an adapter's own tests because both carry
@@ -346,7 +346,7 @@ func RunLibraryBrowseContract(t *testing.T, newDeps Factory) {
 	})
 }
 
-// RunNodeMetadataStoreContract exercises the stored provider answer (ADR 0107).
+// RunNodeMetadataStoreContract exercises the stored provider answer (platform#62).
 func RunNodeMetadataStoreContract(t *testing.T, newDeps Factory) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 

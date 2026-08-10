@@ -16,7 +16,7 @@ import (
 	"github.com/mosaic-media/platform/internal/adapters/extension"
 )
 
-// The lifecycle tests (ADR 0064 step 3). They run a module that actually dies —
+// The lifecycle tests (platform#39 step 3). They run a module that actually dies —
 // extprobe self-destructs on command — and assert the Platform's response:
 // restart with backoff, recovery, crash-loop disable, and a degraded capability
 // rather than a Platform crash while the module is down.
@@ -105,7 +105,7 @@ func TestModuleThatCrashLoopsIsDisabled(t *testing.T) {
 		t.Fatal("a disabled module answered a call")
 	}
 
-	// The admin was told, which is the third of ADR 0064's open crash-loop
+	// The admin was told, which is the third of platform#39's open crash-loop
 	// questions.
 	if !tel.sawError("module disabled after crash-looping") {
 		t.Error("no telemetry error reported the disable")

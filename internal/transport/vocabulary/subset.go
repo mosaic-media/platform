@@ -12,7 +12,7 @@ import (
 )
 
 // Subset returns the definitions a tree needs and no more, transitively closed
-// (ADR 0101).
+// (platform#57).
 //
 // **The subset is a security property, not an optimisation.** The bootstrap
 // response is the one payload an unauthenticated party can enumerate, so it
@@ -25,7 +25,7 @@ import (
 // ExtensionCard expands into a Badge, RelatedRail into a Carousel. A one-level
 // pass would serve a tree whose components resolve and whose components'
 // components do not, which renders as an Unknown placeholder in the middle of
-// an otherwise correct screen — the exact failure ADR 0101 exists to stop,
+// an otherwise correct screen — the exact failure platform#57 exists to stop,
 // arrived at from the other end.
 //
 // A type the library does not define is not an error: it is a primitive, or a

@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-// TOTP, the second factor that works everywhere (ADR 0132).
+// TOTP, the second factor that works everywhere (platform#79).
 //
 // RFC 6238 over RFC 4226: the code is a truncation of HMAC(secret, counter),
 // where the counter is the number of whole periods since the Unix epoch. There

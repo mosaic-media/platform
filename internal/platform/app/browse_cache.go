@@ -16,7 +16,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Cache-first browse reads (ADR 0052).
+// Cache-first browse reads (platform#30).
 //
 // Every source-backed screen used to be rendered by calling an aggregator live,
 // and that call takes seconds when it works — measured at 9.6s cold and 2.6s

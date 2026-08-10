@@ -36,7 +36,7 @@ go.work.sum
 # embedded at internal/adapters/extension/mosaic-official.pub.
 *.key.pub
 
-# The extension-module install directory (ADR 0081). MOSAIC_EXTENSIONS_DIR
+# The extension-module install directory (platform#51). MOSAIC_EXTENSIONS_DIR
 # defaults to this path relative to the working directory, so running the dev
 # stack leaves verified third-party binaries and their cached manifests here.
 # They are downloaded artefacts, not source, and a signed binary committed to a

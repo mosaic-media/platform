@@ -10,9 +10,9 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// PartStore persists the bytes-bearing Parts of item nodes (ADR 0013).
+// PartStore persists the bytes-bearing Parts of item nodes (platform#9).
 //
-// A Part points at bytes and never contains them (ADR 0014), so nothing
+// A Part points at bytes and never contains them (platform#10), so nothing
 // here moves, copies or rewrites media.
 type PartStore interface {
 	// Create is InvalidArgument when the target node is not an item — a

@@ -7,7 +7,7 @@ package domain
 import "time"
 
 // PlaybackResolution is one cached answer to "where are this release's bytes,
-// for a client that can decode this" (ADR 0049).
+// for a client that can decode this" (platform#28).
 //
 // It is the *perishable* half of the durable/perishable split. The candidate it
 // belongs to — the release, its codecs, its size — is a Part and never expires.
@@ -20,7 +20,7 @@ type PlaybackResolution struct {
 	// half: the Part outlives any number of resolutions of it.
 	PartID string
 	// CapabilityClass is the digest of what the asking client can decode
-	// (ADR 0049). It is the other half of the key, and the reason a phone and a
+	// (platform#28). It is the other half of the key, and the reason a phone and a
 	// television do not share an answer.
 	//
 	// Not a user and not a device. A resolved URL is a property of the bytes and

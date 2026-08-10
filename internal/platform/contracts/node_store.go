@@ -10,7 +10,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// NodeStore persists the containment tree (ADR 0013).
+// NodeStore persists the containment tree (platform#9).
 //
 // Every traversal here is by parent, never by an assumed level: variable
 // depth is the property that lets a film be Work → Item and a series be
@@ -20,7 +20,7 @@ import (
 //
 // Implementations must store the open type vocabularies canonically —
 // v1.Node.Canonical() — so that "Anime Series", "anime-series" and
-// "anime_series" are one media type rather than three (ADR 0015). Writes
+// "anime_series" are one media type rather than three (platform#11). Writes
 // return the canonical value, which may therefore differ from what was
 // passed in.
 type NodeStore interface {
@@ -86,11 +86,11 @@ type NodeStore interface {
 	// identifier, so scheme "anilist" and value "1234" match a node carrying
 	// {"anilist": "1234"}. More than one node may share an external id: an
 	// anime and its source manga can carry the same provider reference, and
-	// ADR 0013 keeps those as two Works rather than merging them.
+	// platform#9 keeps those as two Works rather than merging them.
 	FindByExternalID(ctx context.Context, scheme, value string) ([]v1.Node, error)
 
 	// Delete removes one node. It is Conflict when the node still has
-	// children or parts: ADR 0013 rules that deletion is a decision a user
+	// children or parts: platform#9 rules that deletion is a decision a user
 	// confirms, never a silent cascade, so the store refuses rather than
 	// taking a subtree with it. Callers delete depth-first.
 	Delete(ctx context.Context, id v1.NodeID) error
@@ -101,7 +101,7 @@ type NodeStore interface {
 //
 // Only genres today. The streaming-service facet is not here and is not an
 // omission: availability lives in a module's own attributes document, which the
-// Platform stores uninterpreted (ADR 0013), so the Platform cannot enumerate the
+// Platform stores uninterpreted (platform#9), so the Platform cannot enumerate the
 // services in it without learning a module's key. That set is built from what
 // the Platform *does* model — see the availability index — rather than by
 // reaching into somebody else's document.
@@ -155,7 +155,7 @@ type NodeQuery struct {
 	// this JSON document. Empty means no filter.
 	//
 	// Containment rather than a typed filter because attributes are
-	// module-owned and the Platform never interprets them (ADR 0013). It is
+	// module-owned and the Platform never interprets them (platform#9). It is
 	// the same question FindByExternalID asks of the neighbouring document,
 	// and it is answered by the same kind of index.
 	//

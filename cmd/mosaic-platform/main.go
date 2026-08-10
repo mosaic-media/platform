@@ -70,7 +70,7 @@ const healthAddrEnv = "MOSAIC_HEALTH_ADDR"
 
 // A socket, not a port: this surface carries Generation, migration and
 // config-activation state and deliberately skips the policy gate, so it must
-// be reachable only by the Supervisor (ADR 0120). A `host:port` still works
+// be reachable only by the Supervisor (platform#75). A `host:port` still works
 // and is what the plain dev stack uses.
 const defaultHealthAddr = "/run/mosaic/platform-handoff.sock"
 
@@ -84,7 +84,7 @@ const apiAddrEnv = "MOSAIC_API_ADDR"
 
 // A socket for the same reason, so the front door is the only way a client
 // reaches the Platform rather than merely the address they are told about
-// (ADR 0120).
+// (platform#75).
 const defaultAPIAddr = "/run/mosaic/platform.sock"
 
 // bootstrapAdminUserEnv and bootstrapAdminPasswordEnv name the credentials for
@@ -102,7 +102,7 @@ const (
 const logLevelEnv = "MOSAIC_LOG_LEVEL"
 
 // moduleSelectionEnv names the environment variable carrying the module
-// selection (ADR 0063): a comma-separated list of core module ids to wire in.
+// selection (platform#38): a comma-separated list of core module ids to wire in.
 // Unset means every module the binary carries, so an unconfigured deployment
 // gets the full set. Set-but-empty selects nothing, which
 // RequireComposedRoleClasses then refuses if it leaves a required class empty.
@@ -112,7 +112,7 @@ const logLevelEnv = "MOSAIC_LOG_LEVEL"
 const moduleSelectionEnv = "MOSAIC_MODULES"
 
 // extensionsDirEnv names the directory the Platform stores installed extension
-// modules under (ADR 0081): their verified binaries and cached manifests, read
+// modules under (platform#51): their verified binaries and cached manifests, read
 // back at boot to re-adopt what a user installed. It must be a persistent,
 // writable location for installs to survive a restart; the default is relative
 // to the working directory, which a container deployment overrides with a
@@ -123,7 +123,7 @@ const extensionsDirEnv = "MOSAIC_EXTENSIONS_DIR"
 const defaultExtensionsDir = "mosaic-extensions"
 
 // instanceFileEnv names the file this install's identity is written to
-// (ADR 0098): the server name a household chose, kept **outside PostgreSQL** so
+// (platform#54): the server name a household chose, kept **outside PostgreSQL** so
 // it still answers when the database does not.
 //
 // It is an infrastructure path read from the environment, like the DSN and the
@@ -138,7 +138,7 @@ const defaultInstanceFile = "mosaic-instance.json"
 // serviceName and serviceVersion identify this process on every record it
 // emits. Mosaic is one host running more than one process — this one, the
 // Supervisor when it exists — so which process spoke is a required dimension
-// rather than a decoration (ADR 0053).
+// rather than a decoration (platform#31).
 const (
 	serviceName    = "mosaic-platform"
 	serviceVersion = "0.1.0"
@@ -146,11 +146,11 @@ const (
 
 // telemetryLogPath is the durable local sink. It is the one that survives a
 // crash and keeps working when PostgreSQL does not, which is the case it
-// exists for (ADR 0058).
+// exists for (platform#36).
 const telemetryLogPath = "logs/mosaic-platform.log"
 
 // superuserPermissions is the authority the first user receives: every action
-// the application services check (ADR 0069).
+// the application services check (platform#44).
 //
 // The set lives in the app package beside the action constants, so adding an
 // action is a compile-time decision about which tier holds it rather than
@@ -167,19 +167,19 @@ func superuserPermissions() []domain.Permission {
 // registerCapabilities wires the *core* module capabilities compiled into this
 // binary into the registry the Platform resolves through. It is the one place
 // that names concrete core modules — the composition-root equivalent of the
-// Build Pipeline's generated imports (ADR 0007).
+// Build Pipeline's generated imports (platform#4).
 //
-// All three are core modules under ADR 0062's guarantee clause: Cinemeta and
-// TMDB back the metadata/search class ADR 0035 requires, and remote playback
+// All three are core modules under platform#3's guarantee clause: Cinemeta and
+// TMDB back the metadata/search class platform#23 requires, and remote playback
 // backs the consumer class without which the library is inert. **Extension
 // modules are no longer here** — Stremio, AIOStreams and fanart.tv used to be
-// registered beside the core three, but under ADR 0081 an extension is not
+// registered beside the core three, but under platform#51 an extension is not
 // composed into the binary at all: it is installed at runtime by a user and
 // adopted by the extension Manager, which registers its proxy into this same
 // registry indistinguishably from a compiled-in module. So a fresh install
 // carries only the core three, and everything else is chosen, not shipped.
 //
-// Selection (ADR 0063) applies to these core modules. A module the selection
+// Selection (platform#38) applies to these core modules. A module the selection
 // does not name is never constructed — its New is not called, no resource it
 // holds is opened, and the registry never sees it. The default is every core
 // module, so an unconfigured deployment gets the metadata floor; a selection is
@@ -208,7 +208,7 @@ type moduleDescriptor struct {
 	// fallback marks a module the browse roles reach only when no ordinary
 	// provider answered — the guarantee-clause floor rather than a peer. It is
 	// declared here because which source a user should see is a composition
-	// decision (ADR 0007), not something a module can assert about its peers.
+	// decision (platform#4), not something a module can assert about its peers.
 	fallback  bool
 	construct func() v1.Capability
 }
@@ -217,11 +217,11 @@ type moduleDescriptor struct {
 // names the concrete *core* modules compiled into this binary, the
 // composition-root equivalent of the Build Pipeline's generated imports (ADR
 // 0007). Extension modules are not here: they are installed at runtime and
-// adopted by the extension Manager (ADR 0081), not composed in.
+// adopted by the extension Manager (platform#51), not composed in.
 func moduleDescriptors(httpClient *http.Client) []moduleDescriptor {
 	return []moduleDescriptor{
 		// The Cinemeta metadata module — the zero-configuration floor under the
-		// required metadata/search class (ADR 0072). It is what makes a fresh
+		// required metadata/search class (module-cinemeta#1). It is what makes a fresh
 		// install work with nothing set: no key, no URL, no settings document at
 		// all, so there is nothing about it a deployment can get wrong. This is
 		// why the default selection includes everything — dropping it from the
@@ -238,10 +238,10 @@ func moduleDescriptors(httpClient *http.Client) []moduleDescriptor {
 		{cinemeta.CapabilityID, true, func() v1.Capability { return cinemeta.New(httpClient) }},
 		// The TMDB metadata module — the richer provider of the same class, for a
 		// deployment willing to hold an API key. It needs one, set through its own
-		// settings screen (ADR 0038), and every role reports that plainly until
+		// settings screen (sdk#4), and every role reports that plainly until
 		// one exists; Cinemeta is what keeps the class satisfied in the meantime.
 		{tmdb.CapabilityID, false, func() v1.Capability { return tmdb.New(httpClient) }},
-		// The remote playback module — the first *consumer* capability (ADR 0045).
+		// The remote playback module — the first *consumer* capability (platform#25).
 		// Registering it is what lets a snapshotted stream location be turned back
 		// into playable bytes; it is core because a library that cannot play what
 		// it holds is inert.
@@ -276,8 +276,8 @@ func main() {
 func run() error {
 	// Telemetry is constructed before anything else, because every line after
 	// this one has something worth saying and the only alternative available
-	// to it would be fmt.Printf (ADR 0053). Two sinks, neither optional
-	// (ADR 0058): the console keeps the boot narration legible to a human at a
+	// to it would be fmt.Printf (platform#31). Two sinks, neither optional
+	// (platform#36): the console keeps the boot narration legible to a human at a
 	// terminal, and the file is the durable record that survives a crash and
 	// still works when the database does not.
 	resource := telemetry.NewResource(serviceName, serviceVersion)
@@ -299,7 +299,7 @@ func run() error {
 	}
 	// The boot id names this start of the process. It is minted here today and
 	// adopted from the environment when something started us and supplied one
-	// — which is the single piece of ADR 0060 that can exist before the
+	// — which is the single piece of supervisor#5 that can exist before the
 	// Supervisor does, so there is something to hand over to when it arrives.
 	boot.Info("booting",
 		telemetry.String("environment", cfg.Environment),
@@ -325,7 +325,7 @@ func run() error {
 		// a DSN is provided by another means.
 		// This exits 0, which is indistinguishable from a healthy boot to
 		// anything watching exit codes — so it must at least be unmistakable in
-		// the log. ADR 0060 names this as one of the failures only a
+		// the log. supervisor#5 names this as one of the failures only a
 		// supervising process can properly report.
 		boot.Warn("storage not configured; skipping storage bootstrap",
 			telemetry.String("expected_env", postgresDSNEnv))
@@ -395,7 +395,7 @@ func run() error {
 	diagRegistry.Register("event-bus", bus)
 	diagRegistry.Register("outbox-worker", worker, "postgres", "event-bus")
 
-	// The second sink (ADR 0058). The file above is durable and survives the
+	// The second sink (platform#36). The file above is durable and survives the
 	// database; this one makes records *queryable*, which is what the
 	// expert-mode viewer needs and what a flat file cannot serve. Neither is
 	// optional and neither replaces the other.
@@ -406,7 +406,7 @@ func run() error {
 	telemetryStore := postgres.NewTelemetryStore(set.Pool)
 	// Once at boot, before the jobs runner exists, because the very first
 	// records this process writes are the ones describing its own start-up.
-	// From here on the same work is a scheduled job (ADR 0058) and this call is
+	// From here on the same work is a scheduled job (platform#36) and this call is
 	// not repeated.
 	partitionCtx, partitionCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	err = telemetryStore.EnsurePartitions(partitionCtx, time.Now().UTC(), app.TelemetryPartitionsAhead)
@@ -423,7 +423,7 @@ func run() error {
 	})
 	boot = root.For("composition-root")
 
-	// Spans go only to the queryable sink (ADR 0055). A span is a shape — a
+	// Spans go only to the queryable sink (platform#33). A span is a shape — a
 	// tree with durations — and rendering one into a flat log file produces
 	// noise a human cannot reassemble, so unlike log records there is nothing
 	// gained by a second copy on disk. A trace that matters is reconstructed
@@ -442,7 +442,7 @@ func run() error {
 	// first time the composition root constructs app.Service: every dependency
 	// it needs is already on the ContractSet, plus the ABAC policy engine, the
 	// event bus as the audit publisher, and the Argon2id password hasher.
-	// Which modules to wire in (ADR 0063). Read from the environment, the same
+	// Which modules to wire in (platform#38). Read from the environment, the same
 	// bridge the DSN and log level take until a config pipeline owns it, and
 	// unset means every module — so an unconfigured deployment gets the full set
 	// and works out of the box. A selection is validated against what the binary
@@ -458,19 +458,19 @@ func run() error {
 	}
 
 	// Register the selected module capabilities the Platform can invoke. This is
-	// the composition-root stand-in for ADR 0007's build-time module selection:
+	// the composition-root stand-in for platform#4's build-time module selection:
 	// modules are registered here explicitly rather than discovered, until the
 	// Supervisor activates a Generation with a selection.
 	capRegistry := app.NewCapabilityRegistry()
 	registerCapabilities(capRegistry, selection, moduleClient, boot)
 	// Fail boot if a capability declares a provider role it does not implement
-	// (ADR 0027): a role named but unbacked would otherwise surface as a nil
+	// (sdk#2): a role named but unbacked would otherwise surface as a nil
 	// provider at invocation, not at composition.
 	if err := capRegistry.Verify(); err != nil {
 		return fmt.Errorf("capability registry invalid: %w", err)
 	}
 	// Every required role class must be filled over the composed set — core and
-	// extension together (ADR 0063 re-expressing ADR 0035). A Mosaic that cannot
+	// extension together (platform#38 re-expressing platform#23). A Mosaic that cannot
 	// identify or find content is inert rather than degraded, so this is the same
 	// class of fatal startup error as a missing required built-in module. The
 	// required roles come from the role-class table (app.RoleClasses) rather than
@@ -490,8 +490,8 @@ func run() error {
 	}
 
 	// Establish the default extension-module trust: the official repository,
-	// trusted by default with the key compiled into this binary (ADR 0065,
-	// ADR 0079). Building it here validates the embedded key at boot — a corrupt
+	// trusted by default with the key compiled into this binary (platform#40,
+	// platform#49). Building it here validates the embedded key at boot — a corrupt
 	// or empty key fails now rather than at a user's first install — and records
 	// which repository the deployment trusts. Nothing installs from it yet: the
 	// runtime install trigger is an admin action whose surface does not exist, so
@@ -503,7 +503,7 @@ func run() error {
 	}
 	if repo, ok := extRegistry.Lookup(extension.OfficialRepositoryName); ok {
 		// A repository under the official *name* that is not Official is a
-		// development override (ADR 0099) — only a build made with `-tags
+		// development override (platform#55) — only a build made with `-tags
 		// mosaicdev` can produce one, and only from the two MOSAIC_DEV_REPOSITORY_*
 		// variables. It is logged at Warn, naming the URL and the fingerprint of
 		// the key now vouching for every module this Platform will download and
@@ -526,7 +526,7 @@ func run() error {
 		}
 	}
 
-	// The layer-3 egress-containment posture (ADR 0064, ADR 0080). The Platform
+	// The layer-3 egress-containment posture (platform#39, platform#50). The Platform
 	// cannot enforce OS-level egress denial from inside its own non-root process,
 	// so it reports which posture this deployment is in rather than claim the
 	// guarantee uniformly: enforced only where the OS can deny a module direct
@@ -539,11 +539,11 @@ func run() error {
 		telemetry.String("detail", egressContainment.Detail))
 
 	// The extension Manager owns the whole runtime lifecycle of extension modules
-	// (ADR 0081): adopt the installed set at boot, install and uninstall while
+	// (platform#51): adopt the installed set at boot, install and uninstall while
 	// serving on a user's authorized request, stop every process on shutdown. It
 	// is built before the Service because the Service drives it — install and
 	// uninstall are authorized Service methods that delegate here — while the
-	// Service is what an adopted module calls back into (ADR 0017). That mutual
+	// Service is what an adopted module calls back into (platform#13). That mutual
 	// need is a construction cycle, broken by handing the Service to the Manager
 	// after both exist (SetContent), before anything is adopted or installed.
 	extensionsDir := os.Getenv(extensionsDirEnv)
@@ -554,7 +554,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("extension installer: %w", err)
 	}
-	// This install's identity (ADR 0098). Constructed before the Service because
+	// This install's identity (platform#54). Constructed before the Service because
 	// the Service reads it on the one call made before a client has anything —
 	// the pre-session bootstrap, which puts the server's name on its own door.
 	instanceFile := os.Getenv(instanceFileEnv)
@@ -563,7 +563,7 @@ func run() error {
 	}
 	instanceIdentity := instance.NewFile(instanceFile)
 
-	// Where every module's counters and histograms land (ADR 0130). One
+	// Where every module's counters and histograms land (sdk#9). One
 	// collector for the process, built here because the composition root is the
 	// only thing that decides where a recording goes — a module receives a
 	// meter and nothing that configures one.
@@ -600,24 +600,24 @@ func run() error {
 		UserPreferences:  set.UserPreferences,
 		TelemetryQueries: set.TelemetryQueries,
 		Metrics:          metrics,
-		// The session's bearer pair (ADR 0102). Direct, because validating an
+		// The session's bearer pair (platform#58). Direct, because validating an
 		// access token happens on every call and must not open a transaction.
 		Tokens: set.Tokens,
 		// The retention sweep's storage side, and the queue that drives it
-		// (ADR 0017, ADR 0058). Both reached as contracts, so the application
+		// (platform#13, platform#36). Both reached as contracts, so the application
 		// service never names a PostgreSQL type.
 		TelemetryMaintenance: set.TelemetryMaintenance,
 		Jobs:                 set.Jobs,
-		// What the library should contain (ADR 0104). The rules are read here
+		// What the library should contain (platform#60). The rules are read here
 		// and written through the UnitOfWork above, like every other state.
 		LibraryRules: set.LibraryRules,
-		// What a provider said about a materialised title (ADR 0107), so a
+		// What a provider said about a materialised title (platform#62), so a
 		// library detail renders from the graph rather than from a live call.
 		NodeMetadata: set.NodeMetadata,
-		// The resolution register (ADR 0119).
+		// The resolution register (platform#74).
 		Issues:   set.Issues,
 		Upgrades: set.Upgrades,
-		// The last good answer each source gave (ADR 0052), so a restart under a
+		// The last good answer each source gave (platform#30), so a restart under a
 		// live client renders the library it had rather than an empty state
 		// telling a configured install to configure itself.
 		Snapshots:         set.Snapshots,
@@ -626,7 +626,7 @@ func run() error {
 		PlaybackResolutions: set.PlaybackResolutions,
 		PlaybackStates:      set.PlaybackStates,
 
-		// The one store that is not PostgreSQL, on purpose (ADR 0098).
+		// The one store that is not PostgreSQL, on purpose (platform#54).
 		Instance: instanceIdentity,
 	})
 
@@ -635,12 +635,12 @@ func run() error {
 	// above the registry can tell the difference. An extension that fails to adopt
 	// is a degraded capability the Manager logs and skips, never a boot failure:
 	// extensions fill no required role class (that is core's guarantee,
-	// ADR 0035/0072), so one being absent is the ordinary degraded state, not the
+	// platform#23/0072), so one being absent is the ordinary degraded state, not the
 	// inert Platform RequireComposedRoleClasses refuses. Default-empty: a fresh
 	// install has adopted nothing.
 	// A configuration change that needed a restart got one: this *is* the
 	// restart it was waiting for, so apply it before anything reads config
-	// (ADR 0004's escalation, recorded as Pending when the user asked). A
+	// (supervisor#1's escalation, recorded as Pending when the user asked). A
 	// Generation-class change is left alone — a restart was never going to
 	// carry it, and the Supervisor is what can.
 	// Its own context: bootCtx belongs to the connect-and-migrate phase and is
@@ -672,13 +672,13 @@ func run() error {
 	}
 	adoptCancel()
 
-	// The Supervisor's own findings, adopted once (ADR 0119). Best-effort by
+	// The Supervisor's own findings, adopted once (platform#74). Best-effort by
 	// design: a Platform that refused to start because it could not read the
 	// *diagnostics* would be the machinery defeating what it is for, and an
 	// install with no Supervisor has no file to read.
 	adoptSupervisorFindings(context.Background(), svc, os.Getenv(supervisorFindingsEnv), root)
 
-	// The artwork proxy (ADR 0030) re-serves remote poster/backdrop images from
+	// The artwork proxy (platform#20) re-serves remote poster/backdrop images from
 	// the Platform's origin, so a client gets same-origin (CORS-clean) artwork.
 	// Its signing key is process-scoped: emitted screens are re-fetched, so a
 	// signature need not outlive the process.
@@ -688,7 +688,7 @@ func run() error {
 	}
 	artworkSigner := artwork.NewSigner(artworkKey)
 
-	// The playback origin (ADR 0045) relays a resolved stream from the
+	// The playback origin (platform#25) relays a resolved stream from the
 	// Platform's own origin, so a client never holds the upstream URL — which
 	// for a debrid link carries a credential. Its key is process-scoped for the
 	// same reason the artwork signer's is, and more so: a ticket is minted when
@@ -702,7 +702,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("build playback sealer failed: %w", err)
 	}
-	// Stream-copy remux (ADR 0048). MSE takes only fMP4/WebM, so a Matroska
+	// Stream-copy remux (platform#27). MSE takes only fMP4/WebM, so a Matroska
 	// release is unplayable in a browser whatever codec is inside; rewriting the
 	// container costs almost nothing since the streams are copied, not encoded.
 	// ffmpeg is optional — without it the Platform still boots and direct-plays,
@@ -720,13 +720,13 @@ func run() error {
 	// which is also what removes their segment directories.
 	playbackSessions := playback.NewSegmentSessions(playback.DefaultSegmentDir)
 
-	// Keep the install owner's authority current (ADR 0069).
+	// Keep the install owner's authority current (platform#44).
 	//
 	// Every other role is a snapshot and stays one — an account created before
 	// an action existed does not silently gain it — and the owner's is the one
 	// that must not be, because it is the root of every other grant. Run
 	// unconditionally, before and independently of the environment-variable
-	// bootstrap below: a server claimed through the setup wizard (ADR 0098) has
+	// bootstrap below: a server claimed through the setup wizard (platform#54) has
 	// an owner that bootstrap never sees, and leaving it out meant an upgrade
 	// could add an action nobody on the install could ever hold.
 	ownerCtx, cancelOwner := context.WithTimeout(context.Background(), 30*time.Second)
@@ -778,7 +778,7 @@ func run() error {
 	serveCtx, stopServe := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopServe()
 	// Seed the root logger into the serving context. This is the composition
-	// root doing its one job as an edge (ADR 0053): everything started from
+	// root doing its one job as an edge (platform#31): everything started from
 	// serveCtx — the outbox worker's poll loop, the session reaper, and every
 	// request handler beneath them — reaches telemetry through the context it
 	// already receives, and nothing below needs a logger parameter.
@@ -792,12 +792,12 @@ func run() error {
 	bufferedSink.Start(serveCtx)
 	spanSink.Start(serveCtx)
 
-	// Background work (ADR 0017's system principal, ADR 0058's retention
+	// Background work (platform#13's system principal, platform#36's retention
 	// sweep). The runner claims from PostgreSQL with `FOR UPDATE SKIP LOCKED`
 	// and the scheduler enqueues each recurring kind's current occurrence under
 	// an idempotency key, so starting it at boot is also how a restart resumes:
 	// there is no state held here to recover.
-	// The library pass's schedule is configuration (ADR 0104) and its field is
+	// The library pass's schedule is configuration (platform#60) and its field is
 	// Restart-class, so it is read once, here, where there is a boot context to
 	// read it with. The budget is not read here: it is Hot, and the run reads it
 	// for itself every time.
@@ -851,7 +851,7 @@ func run() error {
 	if apiAddr == "" {
 		apiAddr = defaultAPIAddr
 	}
-	// The client API is Connect, and only Connect (ADR 0061). Two services:
+	// The client API is Connect, and only Connect (platform#37). Two services:
 	// AuthService mints the session, then the two-lane SessionService (contracts#5)
 	// carries everything else — unary intents (Navigate/Invoke/SubmitInput/
 	// Attach) and one server-streaming Subscribe per session for push. Between
@@ -870,7 +870,7 @@ func run() error {
 	// can end an abandoned one is a ticker.
 	playbackSessions.StartReaper(serveCtx)
 	// The session interceptor is the first and most important edge seam
-	// (ADR 0055): it is where a user's action enters the Platform, so it is
+	// (platform#33): it is where a user's action enters the Platform, so it is
 	// where the Shell's trace is continued and where everything downstream —
 	// handlers, application services, modules — inherits its telemetry.
 	sessionPath, sessionConnect := sessionv1connect.NewSessionServiceHandler(
@@ -882,7 +882,7 @@ func run() error {
 	// Each plain-HTTP surface is wrapped at its own seam and names itself, so a
 	// record says which surface produced it rather than only that it was HTTP.
 	apiMux.Handle("/artwork", telemetry.HTTPMiddleware("artwork", artwork.Handler(artworkSigner, artwork.GuardedClient())))
-	// The origin's way back to the source for a link that has died (ADR 0049).
+	// The origin's way back to the source for a link that has died (platform#28).
 	// Wired here rather than constructed in the transport, because a transport
 	// calls application services and does not reach for one itself.
 	playback.SetResolver(playbackResolver{svc: svc})
@@ -896,7 +896,7 @@ func run() error {
 	// Behind the front door every request arrives from the Supervisor, so the
 	// address to attribute a caller to is the one the front door observed and
 	// forwarded — and over a Unix socket there is no peer address at all
-	// (ADR 0120). The header is believed only on a socket, which is the
+	// (platform#75). The header is believed only on a socket, which is the
 	// listener nothing can reach except through that door; on TCP it would be
 	// a claim by whoever connected.
 	trustForwarded := listen.IsSocket(apiAddr)
@@ -906,7 +906,7 @@ func run() error {
 	}
 	// On graceful shutdown, close every session so its Subscribe stream ends and
 	// the client reconnects rather than erroring (contracts#5 stream resume, as
-	// ADR 0032's "going away" close did for the socket).
+	// platform#22's "going away" close did for the socket).
 	apiServer.RegisterOnShutdown(sessionHandler.Manager().Shutdown)
 	// And stop every running transcode, so a restart does not leave ffmpeg
 	// processes holding upstream connections open and spool files behind them.
@@ -925,7 +925,7 @@ func run() error {
 
 	// Bound before either is served, so a socket that cannot be created is a
 	// refusal to start rather than a Platform that is up and unreachable.
-	// listen.On decides the transport from the address (ADR 0120).
+	// listen.On decides the transport from the address (platform#75).
 	handoffListener, err := listen.On(healthAddr)
 	if err != nil {
 		return fmt.Errorf("listening on the handoff surface %s: %w", healthAddr, err)
@@ -1003,7 +1003,7 @@ func run() error {
 }
 
 // playbackResolver adapts the application service to the origin's Resolver
-// (ADR 0049).
+// (platform#28).
 //
 // The adapter exists so the playback transport names a two-method-wide interface
 // in primitives instead of importing the whole application service — the same
@@ -1025,7 +1025,7 @@ func (p playbackResolver) ReresolvePlayback(ctx context.Context, session, partID
 const supervisorFindingsEnv = "MOSAIC_SUPERVISOR_FINDINGS"
 
 // adoptSupervisorFindings takes over what the Supervisor recorded while the
-// Platform was not running (ADR 0119).
+// Platform was not running (platform#74).
 //
 // **Every failure here is logged and none is returned.** The whole point of the
 // spool is the boot where something already went wrong; refusing to start

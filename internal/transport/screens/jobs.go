@@ -18,7 +18,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The background-work surface (ADR 0017's no-user case), inside expert mode
+// The background-work surface (platform#13's no-user case), inside expert mode
 // beside the telemetry screens.
 //
 // It is here rather than nowhere because a queue with no surface fails

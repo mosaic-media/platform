@@ -15,7 +15,7 @@ import (
 )
 
 // playbackFixture builds a Service with a caller granted the ordinary-account
-// actions, which is the tier playback state belongs to (ADR 0046) — a household
+// actions, which is the tier playback state belongs to (platform#26) — a household
 // member who may watch everything and change nothing.
 func playbackFixture(t *testing.T) (context.Context, *app.Service, *fakeDB, v1.Caller) {
 	t.Helper()

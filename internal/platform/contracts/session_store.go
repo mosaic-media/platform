@@ -19,14 +19,14 @@ type SessionStore interface {
 
 	// Touch records that the session was used, moving LastSeenAt.
 	//
-	// It exists because idle expiry sits inside absolute expiry (ADR 0102),
+	// It exists because idle expiry sits inside absolute expiry (platform#58),
 	// and idle is measured from this column. It was written at issue and never
 	// again, so a session that had been used every day for a month looked
 	// exactly as idle as one nobody had touched since it was minted.
 	Touch(ctx context.Context, id domain.SessionID, at time.Time) (domain.Session, error)
 
 	// ListForUser returns a user's live sessions, newest first — the device
-	// list ADR 0102 calls "the affordance that makes a bearer pair defensible
+	// list platform#58 calls "the affordance that makes a bearer pair defensible
 	// rather than merely convenient". Revoked and expired sessions are not
 	// included: a list of devices somebody can no longer be signed in on is a
 	// list of things they cannot act on.

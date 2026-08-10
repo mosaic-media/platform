@@ -16,7 +16,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Home composition, per user (ADR 0103).
+// Home composition, per user (platform#59).
 //
 // The property every one of these is really testing is the same: what is stored
 // is the *decisions* a viewer made, so a row nobody has decided about appears.

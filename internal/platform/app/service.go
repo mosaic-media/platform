@@ -33,7 +33,7 @@ type Service struct {
 	moduleSettings   contracts.ModuleSettingsStore
 	userPreferences  contracts.UserPreferenceStore
 	telemetryQueries contracts.TelemetryQueryStore
-	// metrics is the live meter collector (ADR 0130). Nil in a Service built
+	// metrics is the live meter collector (sdk#9). Nil in a Service built
 	// without one, which is every test that does not exercise diagnostics.
 	metrics          *telemetry.MetricCollector
 	tokens           contracts.TokenStore
@@ -53,28 +53,28 @@ type Service struct {
 	configManager    *config.Manager
 
 	// telemetryMaintenance creates and drops the partitions stored telemetry
-	// lives in (ADR 0058). Optional: a Service built without one refuses
+	// lives in (platform#36). Optional: a Service built without one refuses
 	// PurgeTelemetry with Unavailable, which is what a test service or a
 	// deployment with no queryable sink should do rather than pretending a
 	// sweep happened.
 	telemetryMaintenance contracts.TelemetryMaintenanceStore
-	// jobs is the background-work queue (ADR 0017's no-user case). Optional
+	// jobs is the background-work queue (platform#13's no-user case). Optional
 	// for the same reason.
 	jobs contracts.JobStore
 	// libraryRules is the direct read handle for what the library should
-	// contain (ADR 0104). Writes go through the UnitOfWork like every other
+	// contain (platform#60). Writes go through the UnitOfWork like every other
 	// mutation. Optional: a Service built without one reports no rules and
 	// refuses to write any, which is the honest answer for a test service —
 	// and it is what makes the maintenance handler a no-op rather than a panic
 	// in a build with no store.
 	libraryRules contracts.LibraryRuleStore
 	// nodeMetadata is the direct read handle for what a provider said about a
-	// materialised title (ADR 0107). Optional: a Service built without one
+	// materialised title (platform#62). Optional: a Service built without one
 	// renders a library detail from the node alone, which is what every detail
 	// did before the store existed.
 	nodeMetadata contracts.NodeMetadataStore
 	// snapshots is the direct handle for the last good answer a source gave
-	// (ADR 0052) — what a source-backed screen renders from when the source is
+	// (platform#30) — what a source-backed screen renders from when the source is
 	// slow, cold or down. Optional: a Service built without one asks its
 	// providers on every render and shows an empty screen when they all fail,
 	// which is what every build did before the store existed and is the
@@ -86,7 +86,7 @@ type Service struct {
 	// offers no streaming-service facet, which is what every build did before
 	// the store existed.
 	watchAvailability contracts.WatchAvailabilityStore
-	// issues is the resolution register (ADR 0119) — what is wrong with this
+	// issues is the resolution register (platform#74) — what is wrong with this
 	// install, now. Optional on the same terms as the stores above: a Service
 	// built without one reports an empty register and records nothing, which
 	// is what every build did before it existed and is honest for a test
@@ -94,11 +94,11 @@ type Service struct {
 	// detectors are boot paths and background work, not somebody's command.
 	issues contracts.IssueStore
 	// upgrades records what somebody asked the Supervisor to install
-	// (ADR 0129). The Platform cannot perform an upgrade, so this is a request
+	// (platform#77). The Platform cannot perform an upgrade, so this is a request
 	// rather than an action.
 	upgrades contracts.UpgradeStore
 	// instance is what this install calls itself, held outside PostgreSQL
-	// (ADR 0098). Optional: a Service built without one has no name to report
+	// (platform#54). Optional: a Service built without one has no name to report
 	// and records none when a server is claimed, which is what a test service
 	// or a deployment with no writable path should do.
 	instance contracts.InstanceIdentityStore
@@ -130,14 +130,14 @@ type Deps struct {
 	Nodes       contracts.NodeStore
 	// Parts is the direct read handle for an item's playable parts. Writes
 	// still go through the UnitOfWork; this exists because playback resolution
-	// is a read that must not open a transaction (ADR 0045).
+	// is a read that must not open a transaction (platform#25).
 	Parts contracts.PartStore
 	// PlaybackResolutions caches resolved locations per capability class
-	// (ADR 0049). Optional: a Service built without one simply resolves through
+	// (platform#28). Optional: a Service built without one simply resolves through
 	// the provider every time, which is what happened before the cache existed.
 	PlaybackResolutions contracts.PlaybackResolutionStore
 	// PlaybackStates is the direct read handle for where a viewer got to
-	// (ADR 0046). Writes go through the UnitOfWork like every other mutation.
+	// (platform#26). Writes go through the UnitOfWork like every other mutation.
 	PlaybackStates   contracts.PlaybackStateStore
 	Clock            contracts.Clock
 	IDs              contracts.IDGenerator
@@ -146,7 +146,7 @@ type Deps struct {
 	Events           contracts.EventPublisher
 	PasswordVerifier domain.PasswordVerifier
 	Capabilities     *CapabilityRegistry
-	// Extensions is the runtime extension-module lifecycle (ADR 0081), injected
+	// Extensions is the runtime extension-module lifecycle (platform#51), injected
 	// by the composition root. Optional: a Service built without one refuses
 	// install and uninstall with Unavailable and reports no installed set, which
 	// is the right behaviour for a test service or a build with extensions off.
@@ -156,12 +156,12 @@ type Deps struct {
 	// Writes go through the UnitOfWork like every other mutation.
 	UserPreferences contracts.UserPreferenceStore
 	// TelemetryQueries reads stored telemetry back for the expert-mode
-	// surface (ADR 0058). Read-only and outside any transaction, like the
+	// surface (platform#36). Read-only and outside any transaction, like the
 	// write side and for the mirror-image reason.
 	TelemetryQueries contracts.TelemetryQueryStore
-	// Metrics is the process's meter collector, read by ListMetrics (ADR 0130).
+	// Metrics is the process's meter collector, read by ListMetrics (sdk#9).
 	Metrics *telemetry.MetricCollector
-	// Tokens is the direct read handle for a session's bearer pair (ADR 0102):
+	// Tokens is the direct read handle for a session's bearer pair (platform#58):
 	// validating an access token happens on every call and must not open a
 	// transaction. Writes go through the UnitOfWork, where a pair and the
 	// session it belongs to commit together.
@@ -170,29 +170,29 @@ type Deps struct {
 	// and drops the ones retention has run out on. It is what PurgeTelemetry
 	// drives, and PurgeTelemetry is what the retention job calls.
 	TelemetryMaintenance contracts.TelemetryMaintenanceStore
-	// Jobs is the background-work queue (ADR 0017). Optional: a Service built
+	// Jobs is the background-work queue (platform#13). Optional: a Service built
 	// without one reports no jobs and refuses the job queries with
 	// Unavailable, which is the honest answer for a build with no runner.
 	Jobs contracts.JobStore
 	// LibraryRules is the direct read handle for what the library should
-	// contain (ADR 0104). Optional, like Jobs, and for the same reason.
+	// contain (platform#60). Optional, like Jobs, and for the same reason.
 	LibraryRules contracts.LibraryRuleStore
-	// Issues is the resolution register (ADR 0119).
+	// Issues is the resolution register (platform#74).
 	Issues contracts.IssueStore
 	// Upgrades is where a request for a version is recorded for the Supervisor
-	// to carry out (ADR 0129). Nil is a build with no upgrade path, where the
+	// to carry out (platform#77). Nil is a build with no upgrade path, where the
 	// suggestion is refused rather than silently doing nothing.
 	Upgrades contracts.UpgradeStore
 	// NodeMetadata is the direct read handle for stored descriptive metadata
-	// (ADR 0107). Optional: without it nothing is stored and nothing is read,
+	// (platform#62). Optional: without it nothing is stored and nothing is read,
 	// and a detail falls back to what the node itself carries.
 	NodeMetadata contracts.NodeMetadataStore
 	// Snapshots is the direct handle for the last good answer a source gave
-	// (ADR 0052). Optional: without it every source-backed screen asks its
+	// (platform#30). Optional: without it every source-backed screen asks its
 	// providers live and renders nothing when they all fail.
 	Snapshots         contracts.SourceSnapshotStore
 	WatchAvailability contracts.WatchAvailabilityStore
-	// Instance is the durable identity file (ADR 0098) — the one store that is
+	// Instance is the durable identity file (platform#54) — the one store that is
 	// deliberately not PostgreSQL, so a server's name outlives its database.
 	// Optional, and an absent one is a Platform with no name rather than a
 	// failure.
@@ -247,7 +247,7 @@ func NewService(d Deps) *Service {
 // queries: it runs before any policy or state check, and failure stops
 // processing immediately.
 //
-// The credential is an **access token** since ADR 0102, not a session id: it
+// The credential is an **access token** since platform#58, not a session id: it
 // resolves to a session, is minutes-lived where the session is months-lived,
 // and rotates where the session does not.
 func (s *Service) authenticate(ctx context.Context, credential domain.SessionCredential) (domain.UserID, error) {
@@ -259,7 +259,7 @@ func (s *Service) authenticate(ctx context.Context, credential domain.SessionCre
 }
 
 // authenticateCaller is authenticate for the published content surface: a
-// v1.Caller carries an opaque session reference (ADR 0017), which resolves to
+// v1.Caller carries an opaque session reference (platform#13), which resolves to
 // the same internal session identity as any other caller. The Caller is only
 // as authoritative as that session, which this validates.
 //
@@ -283,7 +283,7 @@ func (s *Service) authenticateCaller(ctx context.Context, caller v1.Caller) (dom
 // a UnitOfWork or reading state.
 func (s *Service) authorize(ctx context.Context, subject policy.Subject, action policy.Action, resource policy.Resource, policyContext policy.PolicyContext) error {
 	// The one point every command and query passes through, so it is where the
-	// *operation* gets named in a trace (ADR 0055, seam 4). A Connect span says
+	// *operation* gets named in a trace (platform#33, seam 4). A Connect span says
 	// "Invoke"; this says which action Invoke dispatched to, which is the
 	// difference between knowing a request happened and knowing what it did.
 	//
@@ -337,14 +337,14 @@ func (s *Service) authorize(ctx context.Context, subject policy.Subject, action 
 //
 // The caller is retained rather than discarded because forwarding it into a
 // module is legitimate and must stay possible: a module's own writes
-// re-authorise as the invoking user (ADR 0017), which is the whole reason it
+// re-authorise as the invoking user (platform#13), which is the whole reason it
 // is handed a Caller and not a Service with the boundary pre-cleared. That is
 // a deliberate act at a module seam, not something a helper does by accident.
 type authorized struct {
 	userID domain.UserID
 	caller v1.Caller
 	// system marks work the Platform did on its own initiative rather than for
-	// a person (ADR 0017). A handler reads it only to describe what it did —
+	// a person (platform#13). A handler reads it only to describe what it did —
 	// an event actor, a log line — never to decide what it may do, which is
 	// the policy decision point's answer and was already given.
 	system bool
@@ -360,7 +360,7 @@ func (s *Service) enter(ctx context.Context, caller v1.Caller, action policy.Act
 		return authorized{}, err
 	}
 	// The system principal goes through the same authorize call as anyone
-	// else, carrying a flag the engine reads (ADR 0017). It is not a branch
+	// else, carrying a flag the engine reads (platform#13). It is not a branch
 	// around the gate: the decision is still the policy decision point's, it
 	// is still spanned and still refusable, and moving it here would put an
 	// authorization rule in the enforcement point.
@@ -376,14 +376,14 @@ func (s *Service) enter(ctx context.Context, caller v1.Caller, action policy.Act
 // families, which predate the content surface and were never part of it.
 //
 // **Those handlers' CallerSessionID fields carry an access token, not a session
-// id** (ADR 0102). The field name and its type are unchanged because renaming
+// id** (platform#58). The field name and its type are unchanged because renaming
 // fifteen fields and the hundred call sites that construct them is churn this
 // change does not need — but the mismatch is named here, at the one place the
 // conversion happens, rather than left for a reader to discover.
 //
 // Two forms rather than one because the two families genuinely differ at the
 // signature: a v1.Caller is the opaque reference a module or client holds
-// (ADR 0017), a SessionID is the Platform's own identifier. Converting one to
+// (platform#13), a SessionID is the Platform's own identifier. Converting one to
 // the other here rather than at each call site keeps that distinction where it
 // belongs — in the type the handler accepts — instead of scattering
 // domain.SessionID(caller.Session) across twenty files.
@@ -401,7 +401,7 @@ func (s *Service) newEvent(ctx context.Context, eventType string, payload []byte
 	now := s.clock.Now()
 	// CorrelationID and CausationID carried a "empty until request-scoped
 	// propagation exists" note from the day the envelope was written. This is
-	// that propagation (ADR 0054): the correlation id is the trace id, so an
+	// that propagation (platform#32): the correlation id is the trace id, so an
 	// event row, the log lines around it, and the span that produced it share
 	// one key — and no second identifier had to be invented to get there.
 	//

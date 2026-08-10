@@ -236,7 +236,7 @@ func TestConfigReflectsActiveVersion(t *testing.T) {
 }
 
 // The two binaries have to agree on these three keys, and nothing structurally
-// holds them together (ADR 0129).
+// holds them together (platform#77).
 //
 // **This is the same hazard the Supervisor's telemetry had**: a shape written by
 // one process and read by another, where a key quietly renamed on one side reads

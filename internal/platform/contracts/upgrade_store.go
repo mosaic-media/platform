@@ -11,7 +11,7 @@ import (
 )
 
 // UpgradeStore persists what somebody asked the Supervisor to install
-// (ADR 0129).
+// (platform#77).
 //
 // **This is the one remedy on the resolution register the Platform cannot
 // perform.** It cannot stop and restart itself onto a different Generation, so

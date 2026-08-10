@@ -15,7 +15,7 @@ import (
 // exercises the Platform's own behaviour — the enrichment bridge, playback
 // resolution — without the platform module importing an extension module.
 //
-// That import is the coupling the tier split forbids (ADR 0079, ADR 0081):
+// That import is the coupling the tier split forbids (platform#49, platform#51):
 // extension modules are downloaded and run at runtime, not compiled into the
 // Platform, so they are not platform dependencies and must not appear in its
 // test graph either. What a *real* extension module does out of process is
@@ -38,7 +38,7 @@ func (m *fakeStreamModule) Manifest() v1.Manifest {
 
 func (m *fakeStreamModule) Import(context.Context, v1.ContentService, v1.ImportRequest) (v1.ImportResult, error) {
 	// A stream source fills no read role, so it never materialises content on its
-	// own — it is only ever reached through the enrichment fan-out (ADR 0073).
+	// own — it is only ever reached through the enrichment fan-out (platform#46).
 	return v1.ImportResult{}, nil
 }
 
@@ -58,7 +58,7 @@ var (
 // into the content graph when the Platform invokes it through ImportContent. It
 // stands in for a real import source (Stremio) so a Platform test exercises the
 // composition-and-invocation path — registry -> ImportContent -> capability ->
-// ContentService, each write re-authorising as the caller (ADR 0017) — without
+// ContentService, each write re-authorising as the caller (platform#13) — without
 // the platform module importing an extension module. What a real module does
 // with an addon's JSON is the module's own test; what the Platform does when a
 // capability writes back through the boundary is this one's.

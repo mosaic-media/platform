@@ -35,13 +35,13 @@ type PurgeTelemetryResult struct {
 	// records for one signal, gone from the database rather than marked.
 	Dropped int
 	// Retention is the policy the sweep applied, read from the Active
-	// configuration on this sweep rather than cached (ADR 0058: the retention
+	// configuration on this sweep rather than cached (platform#36: the retention
 	// fields are Hot).
 	Retention TelemetryRetention
 }
 
 // PurgeTelemetry extends the telemetry partition window and drops the
-// partitions retention has run out on (ADR 0058).
+// partitions retention has run out on (platform#36).
 //
 // This is the caller the jobs runner was built to prove. It is deliberately an
 // ordinary application command — validate, authenticate, authorise, act — and

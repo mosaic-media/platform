@@ -15,7 +15,7 @@ import (
 )
 
 // officialPublicKey is Mosaic's own repository signing key, compiled into the
-// binary (ADR 0065: the official repository is "trusted by default"). Trusted by
+// binary (platform#40: the official repository is "trusted by default"). Trusted by
 // default means exactly this — baked in, not configured — so a user who never
 // touches repository settings still verifies every official module against the
 // key Mosaic released it under. Its private half is the registry's CI secret and
@@ -30,7 +30,7 @@ import (
 var officialPublicKey []byte
 
 // OfficialRepositoryName and OfficialRepositoryURL identify Mosaic's own
-// repository. The URL is GitHub Pages for mosaic-media/registry (ADR 0080: the
+// repository. The URL is GitHub Pages for mosaic-media/registry (platform#50: the
 // repository is signed static files over HTTPS, and GitHub is one untrusted
 // host serving them).
 const (
@@ -40,7 +40,7 @@ const (
 
 // DevRepositoryURLEnv and DevRepositoryKeyEnv name the two variables a
 // *development build* reads to point the official repository at a local one
-// (ADR 0099): a registry the dev stack builds and signs from the sibling module
+// (platform#55): a registry the dev stack builds and signs from the sibling module
 // checkouts, so a one-line change to an extension module is exercised through
 // the real install path without a tag, a release and a registry publish.
 //
@@ -74,7 +74,7 @@ type devOverride struct {
 // fails when the embedded key is not a well-formed ed25519 public key, which is
 // a build fault worth catching at boot rather than at first install.
 //
-// In a development build (ADR 0099) the URL and key may be replaced from the
+// In a development build (platform#55) the URL and key may be replaced from the
 // environment. Everything downstream is unchanged: the index signature is
 // verified, the manifests are authenticated by it, and each binary is checked
 // against its signed digest. What changes is *whose* key vouches for the
@@ -119,7 +119,7 @@ func (r Repository) KeyFingerprint() string {
 }
 
 // DefaultRegistry returns a registry trusting only the official repository — the
-// trust a fresh install has before a user adds any third-party one (ADR 0065).
+// trust a fresh install has before a user adds any third-party one (platform#40).
 // The composition root builds this, so a corrupt embedded key fails the boot.
 func DefaultRegistry() (*Registry, error) {
 	repo, err := OfficialRepository()
@@ -139,7 +139,7 @@ func DefaultRegistry() (*Registry, error) {
 // uses to bring a module down and verify it before it runs.
 //
 // The fetcher comes from [officialFetcher] rather than being named here, because
-// a development override (ADR 0099) needs a different one: a local registry is
+// a development override (platform#55) needs a different one: a local registry is
 // on a private address, which is exactly what the dial guard refuses. That
 // relaxation is the sharper half of the override and is compiled out of a
 // shipped binary along with the rest of it.

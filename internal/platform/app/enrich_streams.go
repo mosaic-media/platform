@@ -13,7 +13,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Stream enrichment (ADR 0073).
+// Stream enrichment (platform#46).
 //
 // Materialising used to be one module's whole job: the ref named a capability,
 // that capability built the tree and attached whatever Parts it could. That
@@ -67,7 +67,7 @@ func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1
 	identities := sharedIdentitiesOf(work)
 	if len(identities) == 0 {
 		// Nothing neutral to offer. A source keyed only to itself is unenrichable
-		// by design rather than by oversight (ADR 0073).
+		// by design rather than by oversight (platform#46).
 		return
 	}
 
@@ -134,7 +134,7 @@ func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1
 			if attached {
 				// One provider's set is enough for this item. Merging several
 				// providers' releases needs cross-provider dedup, which does not
-				// exist — ADR 0073 leaves it open rather than guessing.
+				// exist — platform#46 leaves it open rather than guessing.
 				break
 			}
 		}
@@ -171,7 +171,7 @@ func (s *Service) attachResolvedStreams(ctx context.Context, caller v1.Caller, n
 // under the same names and the same types — deliberately, so that moving a
 // candidate onto a Part is a copy rather than a translation — and this pass
 // carried four of them and dropped the rest. A module parsed the container and
-// both codecs at its own boundary (ADR 0051), and every candidate it resolved
+// both codecs at its own boundary (module-stremio-addons#2), and every candidate it resolved
 // arrived at the Platform saying less than its source had said, so the probe
 // was the only thing that ever knew what a release was.
 //
@@ -189,7 +189,7 @@ func partCommandFor(nodeID v1.NodeID, order int, stream v1.StreamLink) v1.Attach
 		SizeBytes:    stream.SizeBytes,
 		// The three the source knew and this pass discarded. They are a parse of
 		// release text rather than a measurement — the probe still settles what a
-		// release actually is (ADR 0050) — but they are what makes a candidate
+		// release actually is (platform#29) — but they are what makes a candidate
 		// list rankable before anything has been fetched, which is what item 6's
 		// selection needs and had nothing to read.
 		Container:  stream.Container,
@@ -226,7 +226,7 @@ func editionLabelOf(stream v1.StreamLink) string {
 // scheme is cheap on the module side — it is a comparison, not a request.
 //
 // The value is the SDK's own v1.ExternalIdentity rather than a private struct,
-// because ADR 0075's artwork request carries the whole set across the module
+// because sdk#6's artwork request carries the whole set across the module
 // boundary and there is no reason for the Platform to hold a second shape for
 // the same pair.
 func sharedIdentitiesOf(work v1.Node) []v1.ExternalIdentity {

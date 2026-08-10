@@ -56,7 +56,7 @@ func TestLoggerNeverWritesSecretOrSensitiveFieldValues(t *testing.T) {
 	}
 }
 
-// TestSensitiveDropsTheValueAtConstruction is the property ADR 0056 adds over
+// TestSensitiveDropsTheValueAtConstruction is the property platform#34 adds over
 // the previous redact-on-emit design: the sensitive string is gone before a
 // Field exists, so it is never buffered, queued or written anywhere — not just
 // masked on the way out.
@@ -261,7 +261,7 @@ func parseLogLine(t *testing.T, data []byte) map[string]interface{} {
 }
 
 // A field's *type* has to survive the round trip through OpenTelemetry
-// (ADR 0128), and losing it is the quiet way this conversion could have gone
+// (sdk#8), and losing it is the quiet way this conversion could have gone
 // wrong.
 //
 // A record is emitted as an OTel record and rebuilt for the sink, so a count
@@ -293,7 +293,7 @@ func TestFieldTypesSurviveTheRoundTripThroughOpenTelemetry(t *testing.T) {
 
 // And redaction still happens on the way out, at the same point it always did.
 // The conversion moved where a record is assembled, not what a sink is allowed
-// to see (ADR 0056).
+// to see (platform#34).
 func TestRedactionStillAppliesThroughOpenTelemetry(t *testing.T) {
 	var buf strings.Builder
 	logger := telemetry.New(telemetry.NewJSONSink(&buf), telemetry.Resource{}, telemetry.LevelDebug)

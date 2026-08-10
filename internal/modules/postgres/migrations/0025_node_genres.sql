@@ -1,7 +1,7 @@
 -- Migration 0025 — Genres stored on the node.
 --
--- The second field to cross from "re-derived live from the provider" (ADR 0034)
--- to "stored on the node", after artwork (ADR 0071), and it crosses for a
+-- The second field to cross from "re-derived live from the provider" (sdk#3)
+-- to "stored on the node", after artwork (platform#45), and it crosses for a
 -- related but distinct reason.
 --
 -- Artwork moved because it is **rendered** in bulk: a rail of in-progress items
@@ -10,8 +10,8 @@
 -- at once, and there is no number of round trips that answers it.
 --
 -- The alternative was the neighbouring `attributes` document, and it is rejected
--- for ADR 0071's reason: attributes are per-media-type variation the schema does
--- not validate and a module owns (ADR 0013), while a genre is universal and the
+-- for platform#45's reason: attributes are per-media-type variation the schema does
+-- not validate and a module owns (platform#9), while a genre is universal and the
 -- Platform is the thing filtering on it. There is also a sharper reason here
 -- than there was for artwork. A facet has to be *complete*: a genre chip that
 -- silently omits half the library because a module spelled its key differently
@@ -19,7 +19,7 @@
 -- see it.
 --
 -- `text[]` rather than jsonb, unlike artwork beside it. Artwork is a document
--- with named slots that will grow a candidate set (ADR 0074); this is a set of
+-- with named slots that will grow a candidate set (platform#47); this is a set of
 -- strings, and the question asked of it is "does this row hold this value",
 -- which `&&` answers off a GIN index over the array directly. Wrapping a string
 -- array in JSON to ask a set question of it would be storing the shape wrong to

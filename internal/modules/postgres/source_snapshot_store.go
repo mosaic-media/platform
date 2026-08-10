@@ -13,7 +13,7 @@ import (
 )
 
 // sourceSnapshotStore is the PostgreSQL contracts.SourceSnapshotStore: the last
-// good answer per source and question (ADR 0052).
+// good answer per source and question (platform#30).
 type sourceSnapshotStore struct {
 	q queryer
 }

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// Module-found subtitle files (ADR 0117). Unlike every other track here they
+// Module-found subtitle files (platform#72). Unlike every other track here they
 // are not in the release, which is what lets a direct-played stream have them.
 
 // TestAnExternalSubtitleIsServedOnBothPaths is the property that makes this
@@ -45,7 +45,7 @@ func TestAnExternalSubtitleIsServedOnBothPaths(t *testing.T) {
 	}
 }
 
-// TestTheModuleURLNeverReachesTheClient is the ADR 0045 property: a module
+// TestTheModuleURLNeverReachesTheClient is the platform#25 property: a module
 // resolves and the Platform serves. The URL may carry a credential, and pointing
 // a browser at it would also hand a third party the viewer's address.
 func TestTheModuleURLNeverReachesTheClient(t *testing.T) {

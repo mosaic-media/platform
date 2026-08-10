@@ -17,7 +17,7 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// The three lifetimes a session has since ADR 0102, and they are three
+// The three lifetimes a session has since platform#58, and they are three
 // different questions.
 const (
 	// AccessLifetime is how long a credential presented on an ordinary call
@@ -65,7 +65,7 @@ func NewManager(clock contracts.Clock, ids contracts.IDGenerator) *Manager {
 	return &Manager{clock: clock, ids: ids}
 }
 
-// Issue creates a session and the first pair of tokens for it (ADR 0102).
+// Issue creates a session and the first pair of tokens for it (platform#58).
 //
 // The session and its tokens are written through the stores the caller passes,
 // which in the sign-in path are both transaction-scoped: a session with no
@@ -73,7 +73,7 @@ func NewManager(clock contracts.Clock, ids contracts.IDGenerator) *Manager {
 // pointing at nothing.
 //
 // capabilities is the caller's flattened authority as it stands at this moment
-// (ADR 0036). It is **resolved by the caller and passed in** rather than read
+// (platform#24). It is **resolved by the caller and passed in** rather than read
 // here, because this package holds no permission store and should not acquire
 // one: a session manager that could read authority would be a second place
 // authority is decided, and there is exactly one — the policy engine, which
@@ -270,7 +270,7 @@ func (m *Manager) Refresh(
 
 // Revoke ends a session and every credential behind it. Remote sign-out goes
 // through this path rather than the client discarding what it holds — which
-// since ADR 0102 means revoking the refresh chain, not merely dropping a value.
+// since platform#58 means revoking the refresh chain, not merely dropping a value.
 func (m *Manager) Revoke(ctx context.Context, sessions contracts.SessionStore, tokens contracts.TokenStore, sessionID domain.SessionID) error {
 	if err := sessions.Revoke(ctx, sessionID); err != nil {
 		return err

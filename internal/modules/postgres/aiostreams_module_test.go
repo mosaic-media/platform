@@ -23,7 +23,7 @@ import (
 // identity by composing a Stremio-style episode id from the shared id and the
 // season and episode the Platform passes on the request. It is what lets a fake
 // stand in for a real stream source while still proving the Platform handed it
-// the coordinates (ADR 0073) rather than the fake inventing them.
+// the coordinates (platform#46) rather than the fake inventing them.
 func episodeStreamFor(provider string) func(v1.StreamRequest) []v1.StreamLink {
 	return func(req v1.StreamRequest) []v1.StreamLink {
 		if req.Ref.ExternalScheme != "imdb" {
@@ -41,11 +41,11 @@ func episodeStreamFor(provider string) func(v1.StreamRequest) []v1.StreamLink {
 
 // TestStreamProviderPrecedenceAgainstPostgres checks the precedence claim in
 // `registerCapabilities` — that of two stream sources able to answer, the one
-// whose module id sorts first is asked first and wins (ADR 0073) — with the real
+// whose module id sorts first is asked first and wins (platform#46) — with the real
 // enrichment pass and a real database.
 //
 // Both sources are fakes: the platform module must not import an extension module
-// (ADR 0079/0081), and what is under test is the Platform's fan-out order, not a
+// (platform#49/0081), and what is under test is the Platform's fan-out order, not a
 // source's addon parsing. Two sources are registered deliberately — the ordering
 // rule is otherwise a comment nothing checks — and both can answer for the shared
 // IMDB identity, so which one's Part lands is decided by id order alone.

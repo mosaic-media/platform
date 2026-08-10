@@ -13,7 +13,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The candidate set, ranked and explained (ADR 0116).
+// The candidate set, ranked and explained (platform#71).
 
 // seedParts puts candidate releases in the fake store directly. The public path
 // to one is a materialisation, which is several commands of setup for a fixture

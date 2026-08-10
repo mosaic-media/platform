@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 
-// Package vocabulary is ADR 0084's negotiation, and the definition library as
+// Package vocabulary is platform#52's negotiation, and the definition library as
 // one particular client should receive it.
 //
 // It lived inside the session transport until the pre-session bootstrap
-// (ADR 0101) needed the same machinery: the doorway carries the same vocabulary
+// (platform#57) needed the same machinery: the doorway carries the same vocabulary
 // declaration Attach carries, so negotiation applies to it unchanged, and a
 // second copy of "what can this client draw" is exactly the drift the
 // declaration exists to remove. Both transports read this one.

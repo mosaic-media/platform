@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// theHindiFirstRelease is the fixture ADR 0050 was written around: a 4K HEVC
+// theHindiFirstRelease is the fixture platform#29 was written around: a 4K HEVC
 // Matroska with four E-AC3 tracks whose first is Hindi. It is the case that
 // proves storing only the Part's scalar columns would have been a regression —
 // nothing in Container/VideoCodec/AudioCodec can say which of these four plays.
@@ -82,7 +82,7 @@ func TestDecodeRejectsWhatItCannotTrust(t *testing.T) {
 }
 
 // TestSummaryAudioCodecNamesThePlayedTrack pins the column that feeds candidate
-// ranking (ADR 0048) to the track the plan would actually choose. The first
+// ranking (platform#27) to the track the plan would actually choose. The first
 // track and the default-flagged track are both the wrong answer here, and both
 // are what a naive summary would pick.
 func TestSummaryAudioCodecNamesThePlayedTrack(t *testing.T) {

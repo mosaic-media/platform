@@ -13,7 +13,7 @@ import (
 )
 
 // TestCapabilityClassIsOrderIndependent is the property the resolution cache
-// rests on (ADR 0049). Two clients with identical abilities must land in one
+// rests on (platform#28). Two clients with identical abilities must land in one
 // class however they happened to list them — a client that enumerates its codecs
 // from a Set, or in whatever order `canPlayType` was probed, does not get a cache
 // of its own. The failure this guards against is silent: a fragmented cache
@@ -170,7 +170,7 @@ func TestEncodeHeightIsCappedForAnHonestlyTallClient(t *testing.T) {
 }
 
 // TestCodecsCarryTheDeclaredHDRAnswer ties the declaration to the per-stream
-// decision (ADR 0050). Selection and planning must read the same profile: a
+// decision (platform#29). Selection and planning must read the same profile: a
 // client picked for its codecs and then planned against a different one gets a
 // re-encode of the very release that was chosen to avoid one.
 func TestCodecsCarryTheDeclaredHDRAnswer(t *testing.T) {

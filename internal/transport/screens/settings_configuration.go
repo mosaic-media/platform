@@ -24,7 +24,7 @@ import (
 )
 
 // Settings › Configuration — the client path to the activation state machine
-// (ADR 0011, roadmap M4.4).
+// (platform#7, roadmap M4.4).
 //
 // The five services behind it — draft, validate, activate, read the active
 // version, read the pending one — were complete, tested and undrivable: the
@@ -65,7 +65,7 @@ type configurableField struct {
 // schema's own comment's "canonical hot-reload example" and nothing reads it;
 // `runtime.environment` is the same. Offering either would be a control that
 // saves a value, reports that it applied, and changes nothing — an affordance
-// with nothing behind it, which is the exact failure ADR 0036 exists to
+// with nothing behind it, which is the exact failure platform#24 exists to
 // prevent and the one hardest to notice, because the write really did succeed.
 //
 // It also excludes two the Platform reads and this panel must not offer.
@@ -86,7 +86,7 @@ var configurableFields = []configurableField{
 	{name: "telemetry.retention.metrics_days", label: "Keep metrics for", unit: "days",
 		help: "How long the recorded measurements are kept."},
 	{name: "telemetry.retention.audit_days", label: "Keep the audit log for", unit: "days",
-		help: "This one has a floor of 30 days that configuration cannot lower (ADR 0057). " +
+		help: "This one has a floor of 30 days that configuration cannot lower (platform#35). " +
 			"A shorter value is accepted and the floor still applies."},
 	{name: "library.maintenance.interval_hours", label: "Library pass, every", unit: "hours",
 		help: "How often the pass that keeps rule-built collections current runs."},

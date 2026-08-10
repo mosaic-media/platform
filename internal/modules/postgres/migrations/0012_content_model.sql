@@ -1,4 +1,4 @@
--- Migration 0012 — The content model (ADR 0013, the object graph; ADR 0014,
+-- Migration 0012 — The content model (platform#9, the object graph; platform#10,
 -- storage authority). Tables: nodes, parts, relations, source_bindings.
 --
 -- This is the first schema in the database that is content rather than
@@ -17,11 +17,11 @@
 -- Deliberately NOT in this migration:
 --   * IPTV programme listings. A 24/7 channel generates thousands of ephemeral
 --     entries a month, and running identity, merge and relation machinery over
---     guide data is waste rather than correctness. ADR 0013 gives listings
+--     guide data is waste rather than correctness. platform#9 gives listings
 --     their own lightweight table keyed to the channel node, refreshed and
 --     pruned on its own schedule; that table is a later slice. An
 --     iptv_channel is a Node. A programme that airs once is not.
---   * Export state. Because PostgreSQL is authoritative (ADR 0014), exports
+--   * Export state. Because PostgreSQL is authoritative (platform#10), exports
 --     are generated on demand from these tables and nothing is maintained
 --     live, so no column records where a node was exported to.
 
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     -- itself, and RESTRICT would fire on the row being deleted.
     work_id        uuid             NOT NULL REFERENCES nodes (id) ON DELETE NO ACTION,
 
-    -- NULL exactly for a Work. RESTRICT, never CASCADE: ADR 0013 rules that
+    -- NULL exactly for a Work. RESTRICT, never CASCADE: platform#9 rules that
     -- deletion is a decision a user confirms, so removing a parent must fail
     -- rather than silently take a subtree with it.
     parent_id      uuid             REFERENCES nodes (id) ON DELETE RESTRICT,
@@ -57,9 +57,9 @@ CREATE TABLE IF NOT EXISTS nodes (
     -- text. The property this whole model exists to deliver is that adding a
     -- media type is new rows and not new tables; a CHECK listing the known
     -- types would make every new media type a schema migration, which is
-    -- precisely the outcome ADR 0002 and ADR 0013 rule out. It would also be
+    -- precisely the outcome platform#2 and platform#9 rule out. It would also be
     -- wrong today: an artist is its own Work (see below) and "artist" is not
-    -- in ADR 0013's illustrative list. Correctness of these values belongs to
+    -- in platform#9's illustrative list. Correctness of these values belongs to
     -- the writing capability, as it does for the JSONB columns.
     media_type     text             NOT NULL,
     container_type text,
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     title          text             NOT NULL,
 
     -- Float sort key so 5.5 inserts between 5 and 6 without renumbering
-    -- siblings. ADR 0013 leaves the exact fractional scheme at large scale
+    -- siblings. platform#9 leaves the exact fractional scheme at large scale
     -- unsettled, so the database stores what it is given and rebalances
     -- nothing.
     natural_order  double precision NOT NULL DEFAULT 0,
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS nodes (
 
     -- Per-media-type variation lives here instead of in per-type columns.
     -- GIN-indexed below, which makes it queryable but not typed: the schema
-    -- does not validate these documents and ADR 0013 assigns their
+    -- does not validate these documents and platform#9 assigns their
     -- correctness to the writing capability.
     external_ids   jsonb            NOT NULL DEFAULT '{}'::jsonb,
     attributes     jsonb            NOT NULL DEFAULT '{}'::jsonb,
@@ -133,7 +133,7 @@ CREATE INDEX IF NOT EXISTS nodes_attributes_gin
 -- with part_role = 'segment', so there is one source-selection path and not
 -- two.
 --
--- A Part points at bytes and never contains them (ADR 0014). Primary media is
+-- A Part points at bytes and never contains them (platform#10). Primary media is
 -- never rewritten, re-containered or moved into a content-addressed store; it
 -- stays as whatever it already is, wherever the source keeps it, so a standard
 -- player can direct-play it without Mosaic in the path.
@@ -202,7 +202,7 @@ CREATE INDEX IF NOT EXISTS parts_attributes_gin
 -- Containment is a tree; association is a graph, and it does not nest.
 -- Conflating the two is what makes flat media models accumulate edge cases.
 --
--- Three of ADR 0013's four deliberate non-uniformities are carried by this
+-- Three of platform#9's four deliberate non-uniformities are carried by this
 -- table rather than by the tree, and the schema must not quietly normalise
 -- them away:
 --
@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS relations (
                                        'same_franchise'
                                    )),
 
-    -- Written once at creation. ADR 0013 records that relation confidence has
+    -- Written once at creation. platform#9 records that relation confidence has
     -- no decay or reverification policy, so nothing ages or rechecks this and
     -- there is deliberately no updated_at.
     confidence    double precision NOT NULL

@@ -4,7 +4,7 @@
 
 // Package probe exercises every part of the published content surface the way
 // a capability would, so that compiling this module is a real test of the
-// surface's completeness and self-containment (ADR 0016). It imports only
+// surface's completeness and self-containment (platform#12). It imports only
 // contracts/platform/v1 and the standard library.
 package probe
 
@@ -15,7 +15,7 @@ import (
 )
 
 // SourceAndAdd is shaped like the reference capability's core: it acts as its
-// invoking caller (ADR 0017), checks whether the work already exists, then
+// invoking caller (platform#13), checks whether the work already exists, then
 // creates a work, a season, an episode, a part, an adaptation edge and a
 // source binding — using only the published service and models.
 func SourceAndAdd(ctx context.Context, svc v1.ContentService, caller v1.Caller) error {

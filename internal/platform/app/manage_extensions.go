@@ -14,13 +14,13 @@ import (
 )
 
 // ActionExtensionManage is the policy action for installing and uninstalling
-// extension modules (ADR 0081). It is administrator-level, beside
+// extension modules (platform#51). It is administrator-level, beside
 // module.configure: deciding which extension modules run is the same kind of
 // authority as configuring the ones that do.
 const ActionExtensionManage policy.Action = "extension.manage"
 
 // ExtensionManager is the runtime lifecycle of extension modules the Service
-// drives on a user's authorized request (ADR 0079, ADR 0081): install and
+// drives on a user's authorized request (platform#49, platform#51): install and
 // uninstall change the durable set and adopt or drop the process live, and the
 // installed list is what a settings surface reads.
 //
@@ -30,7 +30,7 @@ const ActionExtensionManage policy.Action = "extension.manage"
 // which the Service holds every other capability it does not itself contain.
 type ExtensionManager interface {
 	// Install fetches, verifies, spawns and records a module from a trusted
-	// repository; the record is the durable install (ADR 0081).
+	// repository; the record is the durable install (platform#51).
 	Install(ctx context.Context, repository, moduleID string) (domain.InstalledExtension, error)
 	// Uninstall stops a module, makes it unresolvable and drops its record. It is
 	// idempotent.
@@ -42,7 +42,7 @@ type ExtensionManager interface {
 	Available(ctx context.Context) ([]ExtensionCatalogueEntry, error)
 }
 
-// ExtensionCatalogueEntry is one module a trusted repository offers (ADR 0081),
+// ExtensionCatalogueEntry is one module a trusted repository offers (platform#51),
 // projected for a browse-and-install surface: the repository to install it from,
 // its module id, a human name, the catalogued version, and the roles it fills so
 // a user can see what installing it adds.
@@ -71,7 +71,7 @@ type InstallExtensionCommand struct {
 }
 
 // InstalledExtension is the Platform result for an installed module — its
-// identity and provenance (ADR 0081, ADR 0065).
+// identity and provenance (platform#51, platform#40).
 type InstalledExtension struct {
 	ModuleID   string
 	Repository string
@@ -102,7 +102,7 @@ func fromDomainInstalled(d domain.InstalledExtension) InstalledExtension {
 // InstallExtension installs an extension module on a user's request, following
 // the command boundary. The mechanics — download, signature and digest
 // verification, spawn, and recording the durable install — are the injected
-// ExtensionManager's (ADR 0081); this method's job is the boundary: validate,
+// ExtensionManager's (platform#51); this method's job is the boundary: validate,
 // authenticate, authorize, then delegate.
 //
 // It does not open a UnitOfWork. Installing is a side-effectful process

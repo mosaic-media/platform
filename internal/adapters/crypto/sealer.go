@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Sealing credential material that cannot be hashed (ADR 0132).
+// Sealing credential material that cannot be hashed (platform#79).
 //
 // **A password is hashed and a TOTP secret cannot be.** A code is computed from
 // the secret, so the Platform must be able to read it back — which makes the

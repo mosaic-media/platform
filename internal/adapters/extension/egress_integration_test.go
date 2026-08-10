@@ -17,7 +17,7 @@ import (
 )
 
 // The egress slice proven end to end, through a real spawned module making a
-// real HTTP call with an ordinary client (ADR 0064).
+// real HTTP call with an ordinary client (platform#39).
 //
 // extprobe fetches a URL during Import using http.Get — the same default-client
 // shape a real module uses — and signals the outcome in the import's Parts

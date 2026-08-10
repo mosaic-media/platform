@@ -1,4 +1,4 @@
--- Migration 0014 — Telemetry storage (ADR 0058).
+-- Migration 0014 — Telemetry storage (platform#36).
 --
 -- The queryable half of the dual sink. The durable half is a local .log file,
 -- which is what survives a crash and what still records the fault when
@@ -12,7 +12,7 @@
 -- must never fail or delay the request that produced it, so it is written by a
 -- direct pooled batch writer outside any transaction. Audit is the deliberate
 -- exception and goes in Tx precisely for the guarantees telemetry gives up
--- (ADR 0057).
+-- (platform#35).
 --
 -- Partitioned by day so retention is DROP TABLE rather than DELETE. On a
 -- self-hosted box the difference matters more than it looks: deleting a day of
@@ -20,7 +20,7 @@
 -- whereas dropping a partition is a catalogue update. Partitions are created
 -- ahead of time by the Platform (internal/modules/postgres/telemetry_store.go)
 -- rather than by a scheduler, because the jobs runner does not exist yet — that
--- is a stated gap in ADR 0058, not an oversight.
+-- is a stated gap in platform#36, not an oversight.
 
 CREATE TABLE IF NOT EXISTS telemetry_logs (
     time      timestamptz NOT NULL,
@@ -30,14 +30,14 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     boot      text        NOT NULL DEFAULT '',
     -- trace and span are first-class columns, not keys inside fields: joining
     -- a log line to the event row and the span that produced it is the single
-    -- most important query this table serves (ADR 0054), and it should not
+    -- most important query this table serves (platform#32), and it should not
     -- require reaching into jsonb to do it.
     trace     text        NOT NULL DEFAULT '',
     span      text        NOT NULL DEFAULT '',
     component text        NOT NULL DEFAULT '',
     module    text        NOT NULL DEFAULT '',
     message   text        NOT NULL,
-    -- Already redacted at construction (ADR 0056). Nothing in here needs
+    -- Already redacted at construction (platform#34). Nothing in here needs
     -- masking on read, which is what makes rendering these rows into an
     -- administrator's browser defensible at all.
     fields    jsonb       NOT NULL DEFAULT '{}'

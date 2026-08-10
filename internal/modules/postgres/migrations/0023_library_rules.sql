@@ -1,4 +1,4 @@
--- Migration 0023 — Library rules (ADR 0104).
+-- Migration 0023 — Library rules (platform#60).
 --
 -- A durable, administrator-owned statement of what the library should contain.
 -- Before this, nothing anywhere said it: the library was whatever individuals
@@ -7,7 +7,7 @@
 -- Two things about this table are deliberate and would look like omissions.
 --
 -- **`module_id` is plain text with no foreign key.** An extension module is
--- installed and removed at runtime (ADR 0081) and is not a row anywhere the
+-- installed and removed at runtime (platform#51) and is not a row anywhere the
 -- Platform could reference — and even if it were, a rule must survive its
 -- module being uninstalled: degraded and visibly so, never deleted. A cascade
 -- here would silently unmake a household's decision the moment somebody
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS library_rules (
     id           text        PRIMARY KEY,
     name         text        NOT NULL,
     -- CHECK-constrained because Platform code branches on it to decide which
-    -- provider role answers the rule (ADR 0015's test for a closed
+    -- provider role answers the rule (platform#11's test for a closed
     -- vocabulary). A third kind is a decision, not a row.
     kind         text        NOT NULL CHECK (kind IN ('collection', 'query')),
     module_id    text        NOT NULL,

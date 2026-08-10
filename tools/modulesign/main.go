@@ -32,7 +32,7 @@
 // placeholders — so a repository hosted on GitHub points its binaries at release
 // download URLs and its index at Pages, with no bespoke script to get the format
 // wrong. The output is signed with sign-index. The repository model is
-// hosting-agnostic (ADR 0065); GitHub is one HTTPS host, and an untrusted one —
+// hosting-agnostic (platform#40); GitHub is one HTTPS host, and an untrusted one —
 // the signature and digests are what protect a download, not the host.
 //
 // The private key is raw ed25519 seed bytes; the public key is the raw public

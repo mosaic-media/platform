@@ -14,7 +14,7 @@ import (
 )
 
 // installedExtensionStore is the PostgreSQL contracts.InstalledExtensionStore:
-// one row per installed extension module, keyed by module id (ADR 0081).
+// one row per installed extension module, keyed by module id (platform#51).
 type installedExtensionStore struct {
 	q queryer
 }

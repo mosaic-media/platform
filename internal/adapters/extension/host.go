@@ -3,8 +3,8 @@
 // Linking exception: see LICENSE-EXCEPTION.
 
 // Package extension launches an out-of-process module and adapts it into a
-// v1.Capability the rest of the Platform holds like any other (ADR 0064,
-// ADR 0077).
+// v1.Capability the rest of the Platform holds like any other (platform#39,
+// sdk#7).
 //
 // It lives under internal/adapters/ rather than internal/modules/ because of
 // what it is: internal/modules/ holds built-in modules that *implement* a
@@ -15,7 +15,7 @@
 // that is host *of* a tier rather than a member of one.
 //
 // Nothing above the capability registry knows this package exists. That is the
-// property ADR 0064 is arranged around: ImportContent, provider resolution and
+// property platform#39 is arranged around: ImportContent, provider resolution and
 // capability-gated affordances are unchanged, because what they hold is a
 // v1.Capability either way.
 package extension
@@ -40,14 +40,14 @@ import (
 // Config is what the Platform needs to launch one module.
 type Config struct {
 	// BinaryPath is the module executable. The Platform installs it and verifies
-	// its signature and digest before it reaches Launch (ADR 0065's mechanism,
-	// Platform-side per ADR 0079); this function is the spawn step, downstream of
+	// its signature and digest before it reaches Launch (platform#40's mechanism,
+	// Platform-side per platform#49); this function is the spawn step, downstream of
 	// that verification, and does not re-check — the check belongs where the
 	// download lands, not at every launch of an already-verified binary.
 	BinaryPath string
 
 	// DeclaredManifest is what the module's *manifest file* claimed, read
-	// without executing the binary (ADR 0065). The running binary is checked
+	// without executing the binary (platform#40). The running binary is checked
 	// against it at connect time — see [Launch].
 	//
 	// The zero value skips the check, which is correct only where there is no
@@ -57,7 +57,7 @@ type Config struct {
 	DeclaredManifest v1.Manifest
 
 	// Content and Telemetry are what the module calls back into. Every call it
-	// makes re-authorises as the invoking user (ADR 0017) — this package grants
+	// makes re-authorises as the invoking user (platform#13) — this package grants
 	// no authority of its own.
 	Content   v1.ContentService
 	Telemetry v1.Telemetry
@@ -66,7 +66,7 @@ type Config struct {
 	// Platform's own. It exists for the lifecycle tests to drive a controlled
 	// crash; a production launch leaves it empty, and the egress design (ADR
 	// 0064) deliberately does not pass module *configuration* this way — module
-	// settings are the opaque document (ADR 0021), not the environment. The
+	// settings are the opaque document (platform#17), not the environment. The
 	// egress proxy address below is the exception, and it is Platform plumbing
 	// rather than module configuration.
 	Env []string
@@ -95,7 +95,7 @@ type Module struct {
 }
 
 // alive reports whether the module process is still answering, not merely still
-// running (ADR 0064: the Platform is the only component that can tell the
+// running (platform#39: the Platform is the only component that can tell the
 // difference, which is why lifecycle lives here). The gRPC ping is one round
 // trip to the child, so a wedged-but-not-exited process fails it; deadline is
 // the caller's to set.
@@ -129,7 +129,7 @@ func (m *Module) LiveInvocations() int {
 
 // Close terminates the module process. It is safe to call more than once.
 //
-// The Platform owns the process rather than the Supervisor (ADR 0064): a module
+// The Platform owns the process rather than the Supervisor (platform#39): a module
 // crash must be a degraded capability rather than a Generation event, and the
 // Platform is the only component that knows whether a module is *answering* as
 // opposed to merely running.
@@ -145,7 +145,7 @@ func (m *Module) Close() {
 // Launch starts the module process, completes the handshake, and returns a
 // capability.
 //
-// Two checks run before it returns, in the order ADR 0064 requires — declaration
+// Two checks run before it returns, in the order platform#39 requires — declaration
 // first, then enforcement:
 //
 //  1. **go-plugin's handshake**, which refuses a binary that is not a Mosaic
@@ -164,7 +164,7 @@ func Launch(cfg Config) (*Module, error) {
 		return nil, contracts.NewError(contracts.InvalidArgument, "extension: no binary path")
 	}
 
-	// The invocation table, and the two wrappers that use it (ADR 0064). The
+	// The invocation table, and the two wrappers that use it (platform#39). The
 	// module never sees a real session reference: it is handed a handle that
 	// stops resolving the moment the invocation returns, and the ContentService
 	// it calls back into exchanges that handle for the Caller it was minted
@@ -173,7 +173,7 @@ func Launch(cfg Config) (*Module, error) {
 	// resolve.
 	inv := newInvocations()
 
-	// The egress proxy (ADR 0064). Every outbound call the module makes routes
+	// The egress proxy (platform#39). Every outbound call the module makes routes
 	// through it — HTTP_PROXY/HTTPS_PROXY below point the module's HTTP client at
 	// it — so the deny list that guarded the in-process client's dials guards
 	// this one's too, and every host the module contacts is attributed to it.
@@ -200,7 +200,7 @@ func Launch(cfg Config) (*Module, error) {
 		}
 	}()
 
-	cmd := exec.Command(cfg.BinaryPath) //nolint:gosec // the path is the Platform's own, verified at install before we see it (ADR 0079).
+	cmd := exec.Command(cfg.BinaryPath) //nolint:gosec // the path is the Platform's own, verified at install before we see it (platform#49).
 	// Route the module's HTTP client through the proxy. Go's default transport
 	// reads these, so a module using an ordinary client — as every module does —
 	// routes through without any change to its code. NO_PROXY is cleared so
@@ -211,7 +211,7 @@ func Launch(cfg Config) (*Module, error) {
 		// The Mosaic-specific variable sdk/host reads to force *all* egress
 		// through the proxy, loopback included — which the standard variables
 		// below cannot do, because Go's ProxyFromEnvironment excludes loopback
-		// (ADR 0064; sdk/host's egress.go carries the detail).
+		// (platform#39; sdk/host's egress.go carries the detail).
 		host.EgressProxyEnv+"="+proxy.Addr(),
 		// The standard variables too, as defence in depth: a module not built
 		// against sdk/host, or one deliberately using ProxyFromEnvironment, still
@@ -234,15 +234,15 @@ func Launch(cfg Config) (*Module, error) {
 		Cmd: cmd,
 		AllowedProtocols: []goplugin.Protocol{
 			// gRPC only. net/rpc is Go-specific and would close the door on a
-			// module written in another language (ADR 0077).
+			// module written in another language (sdk#7).
 			goplugin.ProtocolGRPC,
 		},
 		// A Unix socket rather than a loopback TCP port: no port allocation, no
 		// accidental network exposure, and filesystem permissions as the access
-		// control (ADR 0064).
+		// control (platform#39).
 		UnixSocketConfig: &goplugin.UnixSocketConfig{},
 		// go-plugin logs the child's stderr through this. Left at its default
-		// for now; wiring it into the telemetry plane is ADR 0077's open
+		// for now; wiring it into the telemetry plane is sdk#7's open
 		// question, and guessing at it here would be inventing a mapping.
 		Managed: true,
 	})
@@ -336,7 +336,7 @@ func checkManifest(declared, running v1.Manifest) error {
 // categoryOf lets sdk/host name the category of a Platform error without
 // importing the Platform's internal vocabulary. It is the injection point
 // described in that package: the harness compiles against the SDK, where these
-// categories are deliberately not published (ADR 0016).
+// categories are deliberately not published (platform#12).
 func categoryOf(err error) string {
 	if err == nil {
 		return ""

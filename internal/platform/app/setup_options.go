@@ -12,7 +12,7 @@ import (
 )
 
 // SetupOptions is what the setup doorway can offer a household to choose from
-// (ADR 0098).
+// (platform#54).
 //
 // Today that is one list: where its streams come from. The concept's other five
 // steps were dropped because the capability behind them does not exist, and the
@@ -34,7 +34,7 @@ type SetupOptions struct {
 // **It is unauthenticated, and it is the only unauthenticated read that leaves
 // this machine.** Two things bound it. It refuses on a claimed server, so it is
 // reachable only in the window a claim is, and the bootstrap that reaches it is
-// already rate-limited as the one pre-authentication surface (ADR 0101). What
+// already rate-limited as the one pre-authentication surface (platform#57). What
 // it discloses is a public signed index published on the internet: the caller
 // learns nothing about this install from it that they could not learn by
 // fetching the same file themselves.

@@ -10,7 +10,7 @@ import "time"
 //
 // It is not authority. A preference decides what a user is *shown*; their
 // permissions decide what they may *reach*. Expert mode is the case that makes
-// the distinction load-bearing (ADR 0058): the toggle reveals the diagnostics
+// the distinction load-bearing (platform#36): the toggle reveals the diagnostics
 // surface and `telemetry.read` is what permits the data behind it, so a user
 // who flips it without the grant sees a denial rather than a leak. Nothing
 // that reads a preference may treat it as permission.
@@ -28,7 +28,7 @@ type UserPreference struct {
 	UpdatedAt time.Time
 }
 
-// PreferenceExpertMode reveals the diagnostics surface (ADR 0058).
+// PreferenceExpertMode reveals the diagnostics surface (platform#36).
 //
 // Named here rather than left as a string literal at each call site so the
 // Platform and the emit-side cannot drift on its spelling — the failure would
@@ -36,7 +36,7 @@ type UserPreference struct {
 // shape a bug can have in a preference.
 const PreferenceExpertMode = "ui.expert_mode"
 
-// PreferenceHomeRows is how one viewer arranged their home screen (ADR 0103):
+// PreferenceHomeRows is how one viewer arranged their home screen (platform#59):
 // which rows they hid, and which they put in an order of their own.
 //
 // **It holds decisions, never a picture of the screen.** A row nobody has
@@ -52,12 +52,12 @@ const PreferenceExpertMode = "ui.expert_mode"
 const PreferenceHomeRows = "ui.home.rows"
 
 // PreferenceLanguages is which languages a viewer wants to hear and read
-// (ADR 0112).
+// (platform#67).
 //
 // **Language belongs to a person, not to an install**, which is the whole
 // reason this key exists: the Platform picked audio tracks from a package
 // variable, so four people sharing one library got one person's answer. It is
-// the same argument ADR 0103 made about the home screen, applied to the setting
+// the same argument platform#59 made about the home screen, applied to the setting
 // where two viewers most obviously disagree.
 //
 // The value is `{audio: [...], subtitles: [...], subtitleMode: "..."}` — two

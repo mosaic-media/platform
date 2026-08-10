@@ -288,7 +288,7 @@ func TestUnservedRoleIsRefusedAcrossTheBoundary(t *testing.T) {
 	}
 }
 
-// ADR 0064's requirement that the running binary agree with what the manifest
+// platform#39's requirement that the running binary agree with what the manifest
 // file claimed. A mismatch refuses the connection rather than registering a
 // module under an identity it does not have.
 func TestManifestMismatchRefusesTheConnection(t *testing.T) {

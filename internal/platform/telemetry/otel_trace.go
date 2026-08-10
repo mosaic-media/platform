@@ -14,18 +14,18 @@ import (
 )
 
 // The bridge between Mosaic's TraceContext and OpenTelemetry's SpanContext
-// (ADR 0128).
+// (sdk#8).
 //
 // **This is the first piece of the Platform's conversion, and it is deliberately
 // the first**, because it is the piece that must not be got wrong. The trace id
-// *is* Mosaic's correlation id (ADR 0054): it is on every log record, every span,
+// *is* Mosaic's correlation id (platform#32): it is on every log record, every span,
 // every event and every outbox row, and it is what joins a support report to the
 // logs. A conversion that produced *a* trace id rather than *the same* trace id
 // would pass any test asserting one exists, and would silently sever the join
 // that the whole telemetry thread is arranged around.
 //
 // **The two representations are the same three values**, which is not luck:
-// ADR 0054 chose W3C Trace Context precisely so "a future OTLP export, and any
+// platform#32 chose W3C Trace Context precisely so "a future OTLP export, and any
 // off-the-shelf instrumentation, work without a translation layer at each
 // boundary". This file is that promise being collected — a field-for-field
 // mapping with nothing invented and nothing dropped.
@@ -68,7 +68,7 @@ func TraceContextOf(sc trace.SpanContext) TraceContext {
 }
 
 // The tracer, and the exporter that carries a finished span back to Mosaic's
-// SpanSink (ADR 0128).
+// SpanSink (sdk#8).
 //
 // **The sink stays, and that is what keeps the conversion contained.** Spans are
 // produced by OpenTelemetry now, so any off-the-shelf instrumentation composes
@@ -76,7 +76,7 @@ func TraceContextOf(sc trace.SpanContext) TraceContext {
 // PostgreSQL store and the expert-mode viewer already read, so neither the
 // schema nor the surface a person looks at moves in this change.
 //
-// **Sampling is AlwaysSample on purpose, and it is not an oversight.** ADR 0054
+// **Sampling is AlwaysSample on purpose, and it is not an oversight.** platform#32
 // says the sampling decision governs whether spans are *recorded* and never
 // whether the ids exist — but the implementation it describes has always written
 // every span to the sink regardless of the flag, so a parent-based sampler here
@@ -88,7 +88,7 @@ func TraceContextOf(sc trace.SpanContext) TraceContext {
 // The reserved attribute keys a span carries so the exporter can rebuild a
 // SpanRecord. They are Mosaic's own dimensions, which OpenTelemetry has no
 // convention for: a component and a module are *who is speaking*, and the error
-// category is one of the Platform's seven (ADR 0056's vocabulary, not OTel's).
+// category is one of the Platform's seven (platform#34's vocabulary, not OTel's).
 const (
 	attrComponent     = "mosaic.component"
 	attrModule        = "mosaic.module"
@@ -107,7 +107,7 @@ const (
 )
 
 // tracerKey carries the tracer beside the sink, so the ambient rule the rest of
-// this package follows (ADR 0053) is unchanged: the composition root configures
+// this package follows (platform#31) is unchanged: the composition root configures
 // it once, and no layer takes it as a parameter.
 type tracerKey struct{}
 
@@ -207,7 +207,7 @@ func spanRecordOf(span sdktrace.ReadOnlySpan) SpanRecord {
 			record.Resource.BootID = kv.Value.AsString()
 		default:
 			// Everything a caller set, carried back verbatim. It has already
-			// been through redaction on the way in (ADR 0056), so this is a
+			// been through redaction on the way in (platform#34), so this is a
 			// re-presentation rather than a second chance to classify.
 			record.Attributes = append(record.Attributes, String(string(kv.Key), kv.Value.Emit()))
 		}

@@ -3,7 +3,7 @@
 // Linking exception: see LICENSE-EXCEPTION.
 
 // Package reference is the reference capability: the thesis test of Mosaic's
-// extension model (ADR 0012). It does what a capability actually does —
+// extension model (platform#8). It does what a capability actually does —
 // source external metadata, search existing content, create nodes and
 // relations, and cause events — using only the published contract surface
 // (contracts/platform/v1) and owning no schema.

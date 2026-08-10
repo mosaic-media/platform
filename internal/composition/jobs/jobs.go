@@ -12,7 +12,7 @@
 // therefore depends on contracts alone, and knowledge of the application
 // services stays here.
 //
-// **Every handler runs as the system principal** (ADR 0017). A handler asks the
+// **Every handler runs as the system principal** (platform#13). A handler asks the
 // Service for that caller and forwards it, exactly as a module forwards the
 // caller it was handed — the boundary is the ordinary one, and there is no path
 // here that reaches a store directly.
@@ -37,7 +37,7 @@ import (
 // silently dropping it.
 const (
 	// KindTelemetryRetention extends the telemetry partition window and drops
-	// the partitions retention has run out on (ADR 0058). It is the first
+	// the partitions retention has run out on (platform#36). It is the first
 	// caller of the six the roadmap queued behind this runner, and it was
 	// picked to prove the runner precisely because it was already configured
 	// and already doing nothing durable: retention ran in a goroutine that only
@@ -45,12 +45,12 @@ const (
 	// with a month of records it had intended to drop.
 	KindTelemetryRetention = "telemetry.retention"
 	// KindSessionTokenSweep deletes expired access and refresh tokens
-	// (ADR 0102). The access-token table is the fastest-growing thing in the
+	// (platform#58). The access-token table is the fastest-growing thing in the
 	// schema — one row per client per ten minutes, forever — and nothing else
 	// would ever remove them.
 	KindSessionTokenSweep = "session.tokens.sweep"
 	// KindLibraryMaintenance evaluates the library rules and reconciles
-	// (ADR 0104). It is the third of the six callers this runner was built for,
+	// (platform#60). It is the third of the six callers this runner was built for,
 	// and the first that does work a person would otherwise have to do by hand
 	// rather than housekeeping nobody would miss.
 	KindLibraryMaintenance = "library.maintenance"
@@ -91,7 +91,7 @@ type Deps struct {
 	// which is exactly the question asked of a job abandoned across a restart.
 	Owner string
 	// LibraryMaintenance is the configured schedule for the library pass
-	// (ADR 0104). The composition root reads it from the Active configuration
+	// (platform#60). The composition root reads it from the Active configuration
 	// and passes it in, rather than this package reading configuration itself:
 	// a schedule is fixed for the life of the process (its field is
 	// Restart-class), so the read belongs at the one point that has a boot
@@ -185,7 +185,7 @@ func sessionTokenSweep(svc *app.Service) jobs.Handler {
 	}
 }
 
-// libraryMaintenance is the handler for KindLibraryMaintenance (ADR 0104).
+// libraryMaintenance is the handler for KindLibraryMaintenance (platform#60).
 //
 // It is idempotent in the way the runner requires and the way that matters
 // here: materialising a title the library already holds is the no-op import the

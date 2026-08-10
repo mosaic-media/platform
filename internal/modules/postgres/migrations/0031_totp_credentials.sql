@@ -1,4 +1,4 @@
--- The time-based second factor (ADR 0132).
+-- The time-based second factor (platform#79).
 --
 -- It sits beside password_credentials rather than inside it because a factor is
 -- not a credential: a user may have a password and no TOTP, and the row's

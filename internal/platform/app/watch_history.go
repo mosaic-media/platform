@@ -12,13 +12,13 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Watch history — the per-user pass over a shared library (ADR 0103).
+// Watch history — the per-user pass over a shared library (platform#59).
 //
 // **It is a Platform query and deliberately not on the SDK's ContentService.**
 // The playback methods that *are* published are there because a consumer module
 // records progress as its invoking user; nothing about a module's job requires
 // reading a person's viewing history back, and putting it on the module surface
-// would hand every installed extension the one list ADR 0103 is most emphatic
+// would hand every installed extension the one list platform#59 is most emphatic
 // is private. A capability that no module needs does not belong in the
 // published contract, and this is the first read where that distinction has
 // been worth drawing.

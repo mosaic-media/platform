@@ -18,7 +18,7 @@ import (
 )
 
 // compile-time assertion that the store is the maintenance contract the
-// retention job drives (ADR 0058). Without it, a signature change here would
+// retention job drives (platform#36). Without it, a signature change here would
 // surface as a nil interface at composition rather than as a build failure.
 var _ contracts.TelemetryMaintenanceStore = (*TelemetryStore)(nil)
 
@@ -37,7 +37,7 @@ var partitionedTables = []string{telemetryLogTable, telemetrySpanTable}
 const partitionLayout = "20060102"
 
 // TelemetryStore writes telemetry records to PostgreSQL and manages the
-// partitions they live in (ADR 0058).
+// partitions they live in (platform#36).
 //
 // It is deliberately not a contracts.* store on Tx. Every other store here
 // exists to make state and its outbox event commit together; this one exists
@@ -164,7 +164,7 @@ func (w spanWriter) WriteBatch(ctx context.Context, spans []telemetry.SpanRecord
 
 // marshalFields renders a record's fields as the jsonb document. Values are
 // already redacted — Sensitive and Secret dropped their content at
-// construction (ADR 0056) — so this serialises what is safe to store by the
+// construction (platform#34) — so this serialises what is safe to store by the
 // time it arrives, and performs no masking of its own.
 func marshalFields(fields []telemetry.Field) ([]byte, error) {
 	if len(fields) == 0 {
@@ -218,7 +218,7 @@ func (s *TelemetryStore) EnsurePartitions(ctx context.Context, day time.Time, ah
 // querying, while dropping a partition is a catalogue update that finishes
 // instantly and returns the disk immediately.
 //
-// The two retentions differ by an order of magnitude (ADR 0058: logs 14 days,
+// The two retentions differ by an order of magnitude (platform#36: logs 14 days,
 // traces 72 hours) because they answer different questions — a log line is
 // evidence weeks later, a span is diagnosis while the problem is fresh, and
 // spans are far more numerous.

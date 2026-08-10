@@ -21,7 +21,7 @@ import (
 // auth transport tests exercise the real command boundary — authenticate,
 // authorize, transaction, outbox — rather than a mocked Service.
 //
-// It is the rig the GraphQL resolver tests used, carried over when ADR 0061
+// It is the rig the GraphQL resolver tests used, carried over when platform#37
 // retired that transport and trimmed to what auth needs: users, sessions,
 // password credentials, roles and the outbox. Config and content stores are nil
 // here rather than fakes nothing exercises, so a method that starts reaching
@@ -31,7 +31,7 @@ type fakeDB struct {
 	users     map[domain.UserID]domain.User
 	usernames map[string]domain.UserID
 	sessions  map[domain.SessionID]domain.Session
-	// The two halves of the session credential (ADR 0102).
+	// The two halves of the session credential (platform#58).
 	accessTokens  map[string]domain.AccessToken
 	refreshTokens map[string]domain.RefreshToken
 	passwords     map[domain.UserID]domain.PasswordCredential
@@ -144,7 +144,7 @@ func (s fakeUserStore) Update(_ context.Context, user domain.User) (domain.User,
 }
 
 // List answers over the seeded users, because the pre-session bootstrap reads
-// it to decide whether this server has been claimed (ADR 0101). It used to be a
+// it to decide whether this server has been claimed (platform#57). It used to be a
 // stub returning nothing, which made a seeded server look unclaimed — a fake
 // that lies about the store it stands in for.
 func (s fakeUserStore) List(context.Context) ([]domain.User, error) {
@@ -214,7 +214,7 @@ func (s fakeSessionStore) ListForUser(_ context.Context, userID domain.UserID, n
 	return out, nil
 }
 
-// fakeTokenStore is the session's bearer pair (ADR 0102) in memory. Spending a
+// fakeTokenStore is the session's bearer pair (platform#58) in memory. Spending a
 // refresh token is exactly-one-winner under the lock, like the conditional
 // UPDATE it stands in for — a fake that let two callers both win would make the
 // reuse-detection path pass without being exercised.
@@ -505,7 +505,7 @@ func (fakeTx) InstalledExtensions() contracts.InstalledExtensionStore { return n
 func (fakeTx) LibraryRules() contracts.LibraryRuleStore               { return nil }
 func (fakeTx) NodeMetadata() contracts.NodeMetadataStore              { return nil }
 
-// Issues is the resolution register (ADR 0119). No fake yet: nothing in
+// Issues is the resolution register (platform#74). No fake yet: nothing in
 // this package's tests raises or reads a finding.
 func (tx fakeTx) Issues() contracts.IssueStore { return nil }
 

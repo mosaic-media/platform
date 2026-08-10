@@ -16,7 +16,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Settings › Preferences › Home (ADR 0103) — the panel a viewer arranges their
+// Settings › Preferences › Home (platform#59) — the panel a viewer arranges their
 // own home screen from.
 
 func homePanel(t *testing.T, fake *fakeQueries, session string) sdui.Node {

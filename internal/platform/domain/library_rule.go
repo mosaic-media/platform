@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// The library rule (ADR 0104).
+// The library rule (platform#60).
 //
 // A rule is a durable, administrator-owned statement of what the library
 // *should* contain. Nothing in Mosaic said that before: the library was
@@ -18,23 +18,23 @@ import (
 //
 // It is **Platform state and not SDK state**, which is the load-bearing choice
 // in this file. A rule references a module the way a screen does — by id — and
-// it outlives that module being uninstalled ([ADR 0081]): the row stays,
+// it outlives that module being uninstalled ([platform#51]): the row stays,
 // degraded and visibly so, because an extension is removable at runtime and a
 // rule that deleted itself with the module would silently unmake a household's
 // decision. Nothing here is on the published surface, and no module reads its
 // own rules.
 //
-// [ADR 0081]: https://github.com/mosaic-media/architecture/blob/main/docs/adr/0081-extension-installation-is-user-initiated-and-persistent.md
+// [platform#51]: https://github.com/mosaic-media/architecture/blob/main/docs/adr/0081-extension-installation-is-user-initiated-and-persistent.md
 
 // LibraryRuleID identifies one rule.
 type LibraryRuleID ID
 
 // LibraryRuleKind is which of the two shapes a rule takes. It is a **closed**
-// set and deliberately has exactly two members (ADR 0104): a rule over the
+// set and deliberately has exactly two members (platform#60): a rule over the
 // library's own contents is a view rather than a source, and a rule that reads
 // what another rule wrote is a loop with no fixed point. Platform code branches
 // on this value to decide which provider role to evaluate it against, which is
-// the test for a closed vocabulary (ADR 0015).
+// the test for a closed vocabulary (platform#11).
 type LibraryRuleKind string
 
 const (
@@ -49,7 +49,7 @@ const (
 // DefaultLibraryRuleBound is how many items a rule evaluates when its author
 // set no bound.
 //
-// A bound rather than "all of it", and the reason is in ADR 0104's
+// A bound rather than "all of it", and the reason is in platform#60's
 // consequences: a rule can produce a large library quickly, so the first run of
 // a new rule is the one most likely to surprise its author. A Stremio-class
 // aggregator exposes thousands of titles per catalog, and materialising each is
@@ -87,7 +87,7 @@ type LibraryRule struct {
 	// rule.
 	Text string
 	// MediaType optionally narrows a query rule, in the Platform's own
-	// canonical vocabulary (ADR 0015) rather than a provider's native word.
+	// canonical vocabulary (platform#11) rather than a provider's native word.
 	//
 	// It is canonicalised by the application service on the way in, with the
 	// same function the node store uses, rather than by this package: the
@@ -106,7 +106,7 @@ type LibraryRule struct {
 	// that maintains itself is one whose contents nobody chose item by item, so
 	// "who asked for this" is a question the install has to be able to answer —
 	// and never read to decide authority: the job runs as the system principal
-	// and re-authorises nothing against this field (ADR 0017).
+	// and re-authorises nothing against this field (platform#13).
 	CreatedBy UserID
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -134,7 +134,7 @@ type LibraryRuleRun struct {
 	// Created is how many titles this evaluation added to the library.
 	Created int
 	// Refreshed is how many were already there and were topped up: artwork
-	// re-merged and Parts filled for items that had none (ADR 0073's pass,
+	// re-merged and Parts filled for items that had none (platform#46's pass,
 	// which is idempotent).
 	Refreshed int
 	// Skipped is how many were passed over without being attempted — an item
@@ -142,7 +142,7 @@ type LibraryRuleRun struct {
 	// running out mid-rule.
 	Skipped int
 	// Failed is how many were attempted and did not succeed. Best-effort per
-	// item is the rule (ADR 0104): one failure logs and continues, because a
+	// item is the rule (platform#60): one failure logs and continues, because a
 	// run that produced ninety-nine correct nodes has succeeded.
 	Failed int
 	// Error is why the whole rule could not be evaluated — its module gone, its

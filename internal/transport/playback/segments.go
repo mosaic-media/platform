@@ -15,7 +15,7 @@ import (
 	"github.com/mosaic-media/platform/internal/adapters/filesystem"
 )
 
-// The transcode session, keyed by segment (ADR 0109, ADR 0111).
+// The transcode session, keyed by segment (platform#64, platform#66).
 //
 // **Segment N is what ffmpeg produces when started at N × the segment length.**
 // It is not the Nth segment of a continuous run, and that distinction is the
@@ -184,7 +184,7 @@ func (s *SegmentSessions) Open(ctx context.Context, rx *Remuxer, key, url string
 // It is served from whichever transcode already has one rather than from a
 // designated session, and that is safe because every run writes the same init:
 // the streams are decided once, at mint time, and travel sealed in the ticket
-// (ADR 0050), so two runs of the same ticket differ only in where they started.
+// (platform#29), so two runs of the same ticket differ only in where they started.
 // A player fetches it once, before anything else, so the common case is that a
 // session is being started for segment zero at the same moment.
 func (s *SegmentSessions) OpenInit(ctx context.Context, rx *Remuxer, key, url string, headers map[string]string, plan Plan, length time.Duration) (io.ReadCloser, int64, error) {

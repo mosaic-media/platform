@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// Adopting the Supervisor's findings (ADR 0119).
+// Adopting the Supervisor's findings (platform#74).
 //
 // The Supervisor writes what went wrong to a file and the Platform takes it
 // over when it comes up — because the findings worth having most are the ones

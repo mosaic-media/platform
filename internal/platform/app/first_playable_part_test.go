@@ -88,7 +88,7 @@ func TestFirstPlayablePartClearsTheBoundaryOnce(t *testing.T) {
 
 // TestFirstPlayablePartReportsNothingToPlay covers the honest negative: a work
 // whose children carry no Parts is not an error, it is a work you cannot play
-// yet, and the detail screen renders without a Play button (ADR 0036).
+// yet, and the detail screen renders without a Play button (platform#24).
 func TestFirstPlayablePartReportsNothingToPlay(t *testing.T) {
 	db := newFakeDB()
 	tr := &trace{}

@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-// The delivery half of ADR 0112, which is where the escalation stops being a
-// computed value and becomes something on a screen (ADR 0113).
+// The delivery half of platform#67, which is where the escalation stops being a
+// computed value and becomes something on a screen (platform#68).
 
 // offered is the common case: plain text tracks, nobody asking for typeset
 // fidelity, so nothing is ever burned.
@@ -36,7 +36,7 @@ func defaultedTo(out []SubtitleDelivery) string {
 	return ""
 }
 
-// TestAdamsTwoReleasesEndUpWithDifferentTracks is the pair of cases ADR 0112 was
+// TestAdamsTwoReleasesEndUpWithDifferentTracks is the pair of cases platform#67 was
 // written from, carried through to the rendition that actually reaches a player.
 // The preference is identical in both; the release is what differs.
 func TestAdamsTwoReleasesEndUpWithDifferentTracks(t *testing.T) {
@@ -83,7 +83,7 @@ func TestOffOffersEverythingAndTurnsNothingOn(t *testing.T) {
 	}
 }
 
-// TestALanguageNobodyAskedForIsNeverTurnedOn is ADR 0112's rule stated as a
+// TestALanguageNobodyAskedForIsNeverTurnedOn is platform#67's rule stated as a
 // property. A subtitle track somebody cannot read occupies the screen and
 // communicates nothing, which is worse than no subtitles at all.
 func TestALanguageNobodyAskedForIsNeverTurnedOn(t *testing.T) {
@@ -411,7 +411,7 @@ func TestAnUnknownSubtitleResourceIsNotFound(t *testing.T) {
 }
 
 // The three forms a subtitle track comes in, and the three different right
-// answers (ADR 0114).
+// answers (platform#69).
 
 // TestAGraphicTrackIsNeverOfferedAsARendition pins a bug that shipped. PGS and
 // VobSub are pictures, and ffmpeg refuses to make text of them — "subtitle
@@ -498,7 +498,7 @@ func TestAskingForTypesetDoesNotBurnAPlainTrack(t *testing.T) {
 	}
 }
 
-// TestSubtitlesOffNeverBurns is the strongest form of ADR 0112's rule. Burning
+// TestSubtitlesOffNeverBurns is the strongest form of platform#67's rule. Burning
 // is irreversible for the playback, so doing it to somebody who asked for no
 // subtitles would put text on their screen that they cannot turn off.
 func TestSubtitlesOffNeverBurns(t *testing.T) {
@@ -616,7 +616,7 @@ func TestUnknownSubtitleCodecsAreTreatedAsText(t *testing.T) {
 	}
 }
 
-// The third answer: send the script and let the client draw it (ADR 0115).
+// The third answer: send the script and let the client draw it (platform#70).
 
 // TestAStyledTrackGoesToTheClientByDefault is the choice that dominates the
 // other two. It preserves the positions and the colours, it costs no encode, and
@@ -676,7 +676,7 @@ func TestOnlyStyledTracksAreSentAsScripts(t *testing.T) {
 }
 
 // TestALegacyTypesetDocumentStillMeansBurn is the compatibility the field swap
-// owes. Somebody who chose "as authored" under ADR 0114 chose the burn, because
+// owes. Somebody who chose "as authored" under platform#69 chose the burn, because
 // that was the only thing it meant, and their playback must not silently change.
 func TestALegacyTypesetDocumentStillMeansBurn(t *testing.T) {
 	got := ParseLanguagePreference([]byte(`{"audio":["eng"],"typeset":true}`))

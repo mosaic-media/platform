@@ -17,7 +17,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Storing what a source said, and growing the tree from it (ADR 0107).
+// Storing what a source said, and growing the tree from it (platform#62).
 //
 // The two failures this closes were both found by opening a library the
 // maintenance job had filled: a detail screen with nothing on it, and a series
@@ -63,7 +63,7 @@ func (m *seriesModule) Import(ctx context.Context, svc v1.ContentService, req v1
 	}
 	for _, node := range found.Nodes {
 		if node.IsRoot() {
-			// What every real module does, and the reason ADR 0107 exists: a
+			// What every real module does, and the reason platform#62 exists: a
 			// re-import stops here, so nothing the module knows can ever reach
 			// the tree a second time.
 			return v1.ImportResult{WorkID: node.ID, AlreadyKnown: true}, nil
@@ -230,7 +230,7 @@ func TestImportStoresWhatTheSourceSaid(t *testing.T) {
 	}
 }
 
-// The failure ADR 0107 was written for: a source gains a season, and the
+// The failure platform#62 was written for: a source gains a season, and the
 // household's copy has to grow.
 func TestASeriesThatGainsASeasonGrows(t *testing.T) {
 	ctx := context.Background()
@@ -580,8 +580,8 @@ func TestATitleThatLeavesEveryServiceStopsMatching(t *testing.T) {
 }
 
 // The refresh recovers the ref from the stored document, which is what makes it
-// able to re-ask about a node at all — ADR 0071 records that a materialised node
-// cannot be turned back into a provider-bearing ref, and ADR 0107 storing the
+// able to re-ask about a node at all — platform#45 records that a materialised node
+// cannot be turned back into a provider-bearing ref, and platform#62 storing the
 // provider's whole answer is what changed that.
 func TestTheRefreshReAsksUsingTheStoredRef(t *testing.T) {
 	ctx := context.Background()
