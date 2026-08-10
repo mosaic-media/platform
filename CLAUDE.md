@@ -2,395 +2,372 @@
 
 ## Source of truth
 
-**The code in this repository is authoritative.** It is ~37,500 lines of Go and it decides what Mosaic is. The [`architecture`](https://github.com/mosaic-media/architecture) repository *describes* it and records the decisions behind it. If the two disagree, the documentation is wrong — fix it there, in the same session, rather than working around it.
+**The code in this repository is authoritative.** It decides what Mosaic is.
+The [`architecture`](https://github.com/mosaic-media/architecture) repository
+holds the roadmap and the cross-cutting records; this repository holds the
+decisions whose mechanism lives here. If code and a document disagree, the
+document is wrong — fix it, in the same session, rather than working around it.
 
-**Thirteen repositories, all siblings on disk** (`../platform`, `../architecture`, `../supervisor`, `../sdk`, `../contracts`, `../web`, `../registry`, `../module-stremio-addons`, `../module-aiostreams`, `../module-fanart-tv`, `../module-remote-playback`, `../module-tmdb`, `../module-cinemeta`):
+**Thirteen repositories, siblings on disk.** `../architecture`, `../supervisor`,
+`../sdk`, `../contracts`, `../web`, `../registry`, and the six `../module-*`
+checkouts. **Each one describes itself** — read its `README.md` and its
+`CLAUDE.md` rather than a summary written here, which is exactly the kind of
+sentence that rots without anything going red.
 
-- **`platform`** (this repo) — the Platform: domain, contracts, application services, the PostgreSQL module, transports, the composition root.
-- **`architecture`** — the docs and ADRs, including the roadmap this repository's work is measured against. Push doc updates here whenever code and docs diverge.
-- **`supervisor`** — the host-level process manager and single front door ([supervisor#1](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0001-supervisor-as-host-manager.md), [supervisor#2](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0002-supervisor-guarantees-an-interface.md)): runs the Platform and the Shell as child processes, terminates TLS, routes, and answers for itself when a child is down. Its own Go module importing the standard library alone — it has to run when the Platform cannot — extracted from this repository once it had somewhere to go. AGPL-3.0-only, no module-linking exception: it links no Module.
-- **`sdk`** — the **published contract surface** (`github.com/mosaic-media/sdk`). This is what a Module compiles against. Hand-written Go, and it names no implementation and depends on nothing ([sdk#10](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0010-the-sdk-carries-no-implementation.md)). See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
-- **`contracts`** — the **published SDUI and session contracts** (`github.com/mosaic-media/contracts`) the Platform, Modules and clients share. **Protobuf** (`proto/**/*.proto`) generated into Go and TypeScript ([contracts#6](https://github.com/mosaic-media/contracts/blob/main/docs/adr/0006-contracts-protobuf-workspace.md)), plus a Go producer binding and the `ui` authoring layer, the standard definition library as data, and DTCG tokens. Apache-2.0, like the SDK ([contracts#3](https://github.com/mosaic-media/contracts/blob/main/docs/adr/0003-sdui-contract-repository.md)). Do not confuse its form with the SDK's: that one is hand-written Go and this one is generated. Renamed from `sdui`; the contract itself did not move, so `mosaic.sdui.v1`, the `contracts/sdui` package and the npm name `@mosaic-media/sdui` are all still "sdui" and are not stale.
-- **`web`** — the **frontend workspace** ([web#3](https://github.com/mosaic-media/web/blob/main/docs/adr/0003-frontend-workspace.md)): the `shell` (the Server-Driven-UI client), `sdui-react` (the published React runtime, `@mosaic-media/sdui-react`) and `storybook`, as three packages in one repository. The three former repositories are archived. AGPL-3.0-only. Not a Module and not in the binary.
-- **`registry`** — the **official extension-module registry** ([platform#40](docs/adr/0040-module-distribution-and-trust.md), [platform#49](docs/adr/0049-the-platform-manages-extension-modules.md)): `registry.yaml` catalogues the module repositories and versions in the official set, and CI builds it into a signed `index.json` on GitHub Pages. It holds no module code and no binaries — a Platform verifies the signature, then downloads each module from that module's own releases.
-- **`module-stremio-addons`** — the first optional module, in its own repo exactly as a third party's would be: a Go client of the Stremio addon protocol importing only the SDK, MIT-licensed. It fills the source-side provider roles ([sdk#2](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0002-modules-as-typed-capability-providers.md), 0037).
-- **`module-aiostreams`** — a **dedicated** stream provider for one named upstream ([module-aiostreams#1](https://github.com/mosaic-media/module-aiostreams/blob/main/docs/adr/0001-a-curated-stream-provider-beside-the-addon-host.md)), beside the addon host above. It fills `stream`, `subtitles` and `settings_ui` and deliberately no read role, so it can never put a title into the library; it is reached only through the enrichment fan-out ([platform#46](docs/adr/0046-stream-resolution-is-decoupled-from-metadata-provenance.md)). MIT-licensed.
-- **`module-fanart-tv`** — the **artwork** provider ([sdk#6](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0006-the-artwork-provider-role.md)), supplying art for titles another source has already identified and never identifying one itself. Artwork is a candidate set, not a single URL ([platform#47](docs/adr/0047-artwork-is-a-candidate-set.md)). MIT-licensed.
-- **`module-remote-playback`** — the first **consumer** module ([platform#25](docs/adr/0025-playback-consumer-and-media-origin.md)): it resolves a Part into a playable location and never serves bytes. MIT-licensed.
-- **`module-tmdb`**, **`module-cinemeta`** — the two **core** metadata modules ([platform#3](docs/adr/0003-platform-as-execution-kernel.md)'s guarantee clause, [module-cinemeta#1](https://github.com/mosaic-media/module-cinemeta/blob/main/docs/adr/0001-the-guaranteed-metadata-provider-needs-no-credential.md)). MIT-licensed.
+What this repository must know about them is in its own files, not in prose:
 
-Each module is its own repository, committed and pushed separately. **Only the
-core modules are `go.mod` dependencies of the Platform** (`module-tmdb`,
-`module-cinemeta`, `module-remote-playback`), required at a tagged version with
-no `replace` and compiled into the binary. **Extension modules are not Platform
-dependencies at all** ([platform#51](docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md)): `module-stremio-addons`, `module-aiostreams`
-and `module-fanart-tv` are installed at runtime and adopted by the extension
-Manager, so they appear in neither `go.mod` nor the composition root, and the
-platform test suite must not import them either (a fake stands in — see
-`internal/modules/postgres/fake_capability_test.go`).
+- **`go.mod` is the list of modules compiled into this binary**, core modules
+  included. Read it for what is required and at what version; do not trust a
+  version written in a document.
+- **Extension modules are not dependencies of this repository at all**
+  ([platform#51](docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md)).
+  They are installed at runtime and adopted by the extension Manager, so they
+  appear in neither `go.mod` nor the composition root — **and the test suite
+  must not import one either.** A fake stands in:
+  `internal/modules/postgres/fake_capability_test.go`.
+- **A `replace` must never land in a commit.** Use one for local cross-repo work,
+  then tag, push, bump the require, and remove it.
 
 Required reading, and it is short:
 
-- **[Architecture](https://github.com/mosaic-media/architecture/blob/main/docs/architecture.md)** — the package map, the invariants, the standing test gates. Read before changing structure.
-- **[Roadmap](https://github.com/mosaic-media/architecture/blob/main/docs/roadmap.md)** — where the build is and what the open threads are. The critical path is complete.
-- **[Unreachable capability](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md)** — the register of what the Platform can do that nobody can ask it to do. **Read it with the roadmap, not instead of it:** a slice marked done there means the capability landed, not that a user can reach it, and no build or test failure will ever tell you the difference.
-- **[Decision records](https://github.com/mosaic-media/architecture/tree/main/docs/adr)** — numbered ADRs. Most load-bearing here: 0007 (static composition), 0012 (capabilities do not own stores), 0013 (the object graph), 0014 (storage authority), 0015 (open vs closed vocabularies), 0016 (the published contract surface), 0017 (how a capability acts).
+- **[Roadmap](https://github.com/mosaic-media/architecture/blob/main/docs/roadmap.md)** —
+  where the build is, across every repository.
+- **[Unreachable capability](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md)** —
+  what the Platform can do that nobody can ask it to do. **Read it with the
+  roadmap, not instead of it:** a slice marked done there means the capability
+  landed, not that a user can reach it, and no build or test failure will ever
+  tell you the difference.
+- **[Architecture](https://github.com/mosaic-media/architecture/blob/main/docs/architecture.md)** —
+  the package map and the standing test gates. Read before changing structure.
+- **[`docs/adr/README.md`](docs/adr/README.md)** — the generated index of the
+  records this repository owns. Read the index first; it is the bounded thing.
 
-Everything else is published at [mosaic-media.github.io/architecture](https://mosaic-media.github.io/architecture/), with a PDF of each page.
-
-> **The MDL/MDS/MEG/MAC/MIP/MOP/MAD/MDP specification library no longer exists.** It grew to 200+ largely unvalidated documents, accumulated contradictions faster than they could be resolved, and produced concrete wrong work — a roadmap built against an abandoned DuckDB storage model, and an invented module transport layer the architecture explicitly forbids. It was retired on 2026-07-19 and is preserved only at git tag `pre-reset-2026-07-19`. **Do not cite MEG-015 or any other retired identifier, and do not attempt to read those paths.** If something you need is missing from the documents above, say so rather than reconstructing it.
+> **The MDL/MDS/MEG/MAC/MIP/MOP/MAD/MDP specification library no longer exists.**
+> It grew past 200 unvalidated documents and produced concrete wrong work — a
+> roadmap built against an abandoned storage model, and an invented module
+> transport layer the architecture forbids. **Do not cite a retired identifier
+> and do not try to read those paths.** If something you need is missing, say so
+> rather than reconstructing it.
 
 ## Package tier model
 
-Three tiers. This is the layout; it is also documented in the architecture page.
+Three tiers, and the third one is real now rather than planned.
 
-1. **Core Platform** — `internal/platform/*`
-   Domain, contracts, application services. Fully trusted, compiled in, defines the rules everything else follows.
+1. **Core Platform** — `internal/platform/*`.
+   Domain, contracts, application services. Fully trusted, compiled in, defines
+   the rules everything else follows.
 
-2. **Built-in module** — `internal/modules/*`
-   Infrastructure that implements Platform contracts using the same registration and manifest shape a future external Module would use, but compiled in, required, and fully trusted — not sandboxed, not independently versioned, not optional.
-   Postgres is the first example: it lives at `internal/modules/postgres/` (**not** `internal/adapters/postgres/`), registered through `internal/composition/builtin/` the same way an external Module would be discovered.
+2. **Built-in module** — `internal/modules/*`.
+   Infrastructure implementing a Platform contract *in this process*, using the
+   same registration shape an external module would — but compiled in, required
+   and fully trusted. Postgres is the example, at `internal/modules/postgres/`
+   (**not** `internal/adapters/postgres/`), registered through
+   `internal/composition/builtin/`.
 
-3. **External module** (future)
-   Product/domain capability packs — anime, manga, etc. Governed, independently versioned, discovered at runtime. **Not** part of this repo's initial scaffold.
+3. **Extension module** — not in this repository at all.
+   Its own repository, its own release, installed by a user at runtime
+   ([platform#51](docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md))
+   and run **out of process** behind a harness
+   ([platform#39](docs/adr/0039-extension-module-boundary.md)).
+   `internal/adapters/extension/` is the *host* of that tier rather than a member
+   of one, and nothing above the capability registry knows it exists: what the
+   Platform holds is a `v1.Capability` either way.
 
-`internal/adapters/` is reserved for things that are **not** module-shaped — helpers that don't implement a full contract surface on their own (filesystem utilities, crypto helpers). Do not put Postgres there.
+`internal/adapters/` is for things that are **not** module-shaped — helpers that
+implement no full contract surface (filesystem, crypto), plus the host above.
+Do not put Postgres there.
 
-Modules compile into the binary, so there is no runtime boundary between Platform and Module code and no in-process sandbox. That is a deliberate trade of isolation for speed ([platform#4](docs/adr/0004-static-go-module-composition.md)). Treat module trust as something established before the build, not enforced at runtime.
+**State the isolation tradeoff accurately; it differs by tier.** A core or
+built-in module is linked into the binary, so there is no runtime boundary and
+no in-process sandbox — trust is established before the build, not enforced at
+runtime ([platform#4](docs/adr/0004-static-go-module-composition.md)). An
+extension module has a process boundary, and its egress containment is a property
+of the **deployment** rather than a guarantee the Platform can make on its own —
+see `internal/adapters/extension/containment.go`, which reports the posture
+instead of claiming enforcement uniformly. Never state the stronger of the two.
 
 ## Non-negotiable rules
 
-- **Dependency direction**: dependencies point inward. Transport → Application services → Contracts/Domain. Adapters/Modules → Contracts → External systems. Domain must never import transport, adapter, or database packages. Application services may depend on Platform contracts, never on concrete Postgres (or other module) types.
-- **Error categories**: every contract error maps to one of `InvalidArgument`, `Unauthenticated`, `PermissionDenied`, `NotFound`, `Conflict`, `Unavailable`, `Internal`. Adapters/modules may keep driver-specific errors internally; application services and transports must only ever see these Platform categories.
-- **Command handler order**: every command handler follows the same sequence — validate command shape → authenticate caller → authorize via policy → open a `UnitOfWork` → load state through contracts → apply domain rules → persist state and outbox events in the same transaction → return a Platform result type. **Steps 2 and 3 are `Service.enter`** ([platform#41](docs/adr/0041-authorization-is-carried-in-the-type.md)), which runs both gates once and returns an `authorized`. An internal helper takes that `authorized` and reads stores directly; only an entry point takes a `v1.Caller`. Calling a public `Service` method from inside a handler re-runs the whole boundary — that is what made one search cost ten authenticate-plus-authorize cycles. The rule is enforced, not merely documented: `boundary_conformance_test.go` asserts every caller-bearing method refuses an unknown session and an ungranted caller, and a reflection pass fails the build if a new one is added without a row.
-- **Transports call services only**: a transport is a projection surface, not a persistence layer. A handler must call application command or query services — never open a database connection or query Postgres (or any module) directly. Boundary tests in `internal/transport/auth` and `internal/transport/health` enforce it by parsing import declarations.
-- **A new screen never needs a client change, and never a component written in a client.** Screens in `internal/transport/screens` are composed from the SDUI vocabulary that already exists, through the generated `ui` builders. **The SDUI has to allow it.** If a screen cannot be expressed, that is a finding about the vocabulary, and there are exactly two honest answers: a new **definition** — authored as data in `contracts`' `definitions/*.json`, which the Platform serves from `definitions.Library()` and which costs no client release — or a deliberate growth of the **native vocabulary** (a primitive, a style field, an action kind), specced in the contract so every client can implement it, with a `@mosaic-media/sdui-react` bump and a roadmap entry. Never a bespoke component or CSS rule added to `web` beside the screen that wanted it; see `web/CLAUDE.md` and `contracts/CLAUDE.md` for the rule in full and what it cost when it was ignored.
-- **Author with the generated builders, not `ui.Component` and `ui.Prop`.** `ui.ExtensionCard(name, ui.Summary(…))` is checked against the contract; `ui.Component("ExtensionCard", ui.Prop("summary", …))` is a string that compiles whatever you spell. Reach for the generic constructor only for a type the spec does not cover yet — and then add it to the spec. A prop nothing renders is the quiet version of the same mistake: `ui.Subtitle` on a `Stack` silently drew nothing for the whole life of the extensions screen, because `Stack` has no subtitle and a props bag accepts anything.
-- **Config reload classes**: every configuration field declares a reload class — `Hot` (applies without restart), `Restart` (requires process restart), `Generation` (requires Supervisor to activate a new Generation), `Recovery` (applies only through recovery flow). Classify new config fields before adding them.
+- **Dependency direction**: dependencies point inward. Transport → application
+  services → contracts/domain. Adapters and modules → contracts → external
+  systems. Domain must never import transport, adapter or database packages.
+  Application services may depend on Platform contracts, never on concrete
+  Postgres (or other module) types.
+- **Error categories**: every contract error maps to one of `InvalidArgument`,
+  `Unauthenticated`, `PermissionDenied`, `NotFound`, `Conflict`, `Unavailable`,
+  `Internal` (`internal/platform/contracts/errors.go`). A module may keep
+  driver-specific errors internally; application services and transports must
+  only ever see these categories.
+- **Command handler order**: validate the command shape → authenticate the
+  caller → authorize via policy → open a `UnitOfWork` → load state through
+  contracts → apply domain rules → persist state and outbox events in the same
+  transaction → return a Platform result type. **Steps 2 and 3 are
+  `Service.enter`** ([platform#41](docs/adr/0041-authorization-is-carried-in-the-type.md)),
+  which runs both gates once and returns an `authorized`. An internal helper
+  takes that `authorized` and reads stores directly; only an entry point takes a
+  `v1.Caller`. Calling a public `Service` method from inside a handler re-runs
+  the whole boundary — that is what made one search cost ten
+  authenticate-plus-authorize cycles. It is enforced, not merely documented:
+  `internal/platform/app/boundary_conformance_test.go` asserts every
+  caller-bearing method refuses an unknown session and an ungranted caller, and a
+  reflection pass fails the build if a new one is added without a row.
+- **Transports call services only.** A transport is a projection surface, not a
+  persistence layer: a handler calls application command or query services and
+  never opens a database connection or queries a module directly. Boundary tests
+  in `internal/transport/auth` and `internal/transport/health` enforce it by
+  parsing import declarations.
+- **A new screen never needs a client change, and never a component written in a
+  client.** Screens in `internal/transport/screens` are composed from the SDUI
+  vocabulary that already exists, through the generated `ui` builders. **The
+  vocabulary has to allow it.** If a screen cannot be expressed, that is a
+  finding about the vocabulary with exactly two honest answers: a new
+  **definition**, authored as data in `contracts` and served from
+  `definitions.Library()` at no client cost, or a deliberate growth of the
+  **native vocabulary** — a primitive, a style field, an action kind — specced in
+  the contract so every client can implement it, with a client release and a
+  roadmap entry. Never a bespoke component or CSS rule added to `web` beside the
+  screen that wanted it; [`contracts`](https://github.com/mosaic-media/contracts/blob/main/CLAUDE.md)
+  and [`web`](https://github.com/mosaic-media/web/blob/main/CLAUDE.md) carry that
+  rule in full and what it cost when it was ignored.
+- **Author with the generated builders, not `ui.Component` and `ui.Prop`.**
+  `ui.ExtensionCard(name, ui.Summary(…))` is checked against the contract;
+  `ui.Component("ExtensionCard", ui.Prop("summary", …))` is a string that
+  compiles whatever you spell. Reach for the generic constructor only for a type
+  the spec does not cover — and then add it to the spec. A prop nothing renders
+  is the quiet version of the same mistake: `ui.Subtitle` on a `Stack` drew
+  nothing for the whole life of the extensions screen, because a props bag
+  accepts anything.
+- **Config reload classes**: every configuration field declares one — `Hot`
+  (applies without restart), `Restart`, `Generation` (needs the Supervisor to
+  activate a new Generation), `Recovery`. Classify a new field before adding it.
 
-## Transaction shape ([platform#8](docs/adr/0008-capabilities-do-not-own-stores.md) supersedes [platform#1](docs/adr/0001-transactional-store-extensibility.md))
+## Transaction shape
 
-`Tx` enumerates the Platform's stores by name — `Users()`, `Sessions()`,
-`Permissions()`, `Config()`, `Outbox()`, `Credentials()`, and the content
-stores `Nodes()`, `Parts()`, `Relations()`, `SourceBindings()`. Every store
-reached through one `Tx` writes to the same database transaction, so state and
-outbox events commit atomically. That is the whole purpose of the type.
+`Tx` is the Platform's store set, and every store reached through one `Tx` writes
+to the same database transaction — so state and its outbox event commit
+atomically. That is the whole purpose of the type.
 
-[platform#1](docs/adr/0001-transactional-store-extensibility.md) replaced these accessors with uniform `Store[T](tx)` resolution so a
-capability could join a transaction without Core Platform being edited for it.
-**[platform#8](docs/adr/0008-capabilities-do-not-own-stores.md) supersedes that**: capabilities do not own stores. An anime
-capability sources metadata, searches and adds content through the Platform's
-generic content model — functions the Platform already performs, applied to a
-different media type. It owns no schema, so it has no store to register.
+**The accessors are enumerated in one place and documented there**:
+`internal/platform/contracts/unit_of_work.go`. Each one carries the record that
+added it and why it had to join the set. Read the type rather than a list here,
+which would be a second copy of a set that grows.
 
-The uniform-resolution machinery has therefore been removed:
-
-- `Store[T]` and its resolver are gone. It was a service locator with a runtime
-  failure mode, solving a case that does not occur.
-- `Tx` keeps its named accessors. Enumerating a closed, Platform-owned set is
-  honest.
-- The `StorageAdapter` port is **kept** — engine replaceability is a separate,
+- **Capabilities do not own stores**
+  ([platform#8](docs/adr/0008-capabilities-do-not-own-stores.md), superseding
+  [platform#1](docs/adr/0001-transactional-store-extensibility.md)). A capability
+  sources, searches and adds content through the generic content model; it owns
+  no schema, so it has no store to register.
+- **`Store[T]` and its resolver are gone** — a service locator with a runtime
+  failure mode, solving a case that does not occur. Do not reintroduce one.
+- **The `StorageAdapter` port stays.** Engine replaceability is a separate,
   still-live concern, and PostgreSQL remains a module rather than a privileged
   implementation.
-
-The four content stores were the first exercise of this rule: growing the
-Platform's store set is deliberate Platform evolution and should look like it.
+- **Growing the set is deliberate Platform evolution and should look like it** —
+  an edit to a Platform interface, not a plugin point.
 
 ## The published SDK is a separate module
 
-This is the single most surprising thing for a new session. **The content
-models and the content application-service API do not live under `internal/`.
-They were extracted into their own module** — `github.com/mosaic-media/sdk`,
-**published** and required in `go.mod` at a tagged version, resolved from the
-module proxy with **no `replace`** ([platform#12](docs/adr/0012-published-contract-surface.md)). It is pre-1.0 and bumps additively
-whenever a module needs something — `v0.1.0` was the content surface, `v0.2.0`
-the `Capability` interface ([platform#15](docs/adr/0015-module-capability-and-invocation.md)), and it has grown steadily since. **Read
-`go.mod` for the version in use rather than trusting a number written here.** The
-SDK's own `README.md` Status section is the per-version changelog. A sibling
-working tree at `../sdk`
-is still handy for local SDK work — add a `replace => ../sdk` temporarily
-if you're changing the SDK, then tag/push a new version and bump the require.
+This is the single most surprising thing for a new session. **The content models
+and the content application-service API do not live under `internal/`.** They are
+`github.com/mosaic-media/sdk`, published and required in `go.mod`, resolved from
+the module proxy with **no `replace`**
+([platform#12](docs/adr/0012-published-contract-surface.md)).
 
 - Content types are imported as
-  `v1 "github.com/mosaic-media/sdk/contracts/platform/v1"`. `v1.Node`,
-  `v1.Part`, `v1.Relation`, `v1.SourceBinding`, their vocabularies (`v1.MediaType`,
-  `v1.NodeKind`, …), the content command/query/result types, the
-  `v1.ContentService` interface, and the opaque `v1.Caller` all live there.
-- **Use the `v1` constants, not `domain`** — `v1.MediaAnimeSeries`,
-  `v1.NodeWork`, etc. `NormaliseTypeName` and `Node.Canonical()` are on the
-  `v1` types now, not on `domain`.
-- What stays internal: the store contracts (`NodeStore`, `Tx`,
-  `StorageAdapter`), and the identity/config/event models in
-  `internal/platform/domain`. A capability calls application services, never
-  stores.
-- **Changing the SDK:** edit `../sdk`, then for the Platform to see it
-  either add a `replace github.com/mosaic-media/sdk => ../sdk`
-  to `go.mod` for local work, or tag and push a new version and bump the
-  require. `../sdk` is its own git repo; commit and push it separately.
-  The reference capability (`capabilities/reference/`) and `test/sdkprobe/`
-  import only the SDK, enforced by boundary tests — the stop point made
-  executable: **if a capability needs a private Platform import, the contracts
-  are not ready to publish.**
-- **The SDK says how a module interacts with the Platform; the Platform holds
-  the implementations** ([sdk#10](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0010-the-sdk-carries-no-implementation.md)). The SDK names no library and its `go.mod` is
-  a module line and a Go version, so anything that constructs, configures or
-  encodes belongs on this side of the boundary. **The OpenTelemetry wiring is
-  here** — `internal/platform/telemetry` holds the providers and the log, span
-  and metric production, and the construction of the `v1.Telemetry` a module is
-  handed belongs beside it (`v1.NewTelemetry` and `TelemetryOptions` are still
-  in the SDK as this is written; moving them is what [sdk#10](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0010-the-sdk-carries-no-implementation.md) decides). The SDK
-  keeps only the module-facing surface — `Telemetry`, `Span`, `Field`,
-  `TelemetryFrom` — and the field classification rule, in pure Go. OpenTelemetry
-  is still Mosaic's telemetry implementation in every process ([sdk#8](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0008-opentelemetry-is-the-telemetry-implementation.md)); what
-  changes is that a host declares the dependency. A telemetry change wanting a
-  new OTel type is a change here; an SDK bump is warranted only when the
-  *module-facing* surface cannot express something, and it names no library
-  either.
+  `v1 "github.com/mosaic-media/sdk/contracts/platform/v1"` — `v1.Node`,
+  `v1.Part`, `v1.Relation`, `v1.SourceBinding`, their vocabularies, the content
+  command/query/result types, `v1.ContentService` and the opaque `v1.Caller`.
+- **Use the `v1` constants, not `domain`.** `NormaliseTypeName` and
+  `Node.Canonical()` are on the `v1` types.
+- What stays internal: the store contracts (`NodeStore`, `Tx`, `StorageAdapter`)
+  and the identity/config/event models in `internal/platform/domain`.
+- **Read `go.mod` for the version in use**, and the SDK's own `README.md` Status
+  section for what a version contains. Changing the SDK means editing `../sdk`,
+  tagging, pushing and bumping the require here — with a temporary `replace` for
+  the local loop only.
+- **The stop point governs every SDK change: if a capability needs a private
+  Platform import, the contracts are not ready to publish.** It is executable —
+  `capabilities/reference/` and `test/sdkprobe/` import only the SDK, and
+  `test/sdkboundary` compiles the probe as an external module.
+- **The Platform holds the implementations; the SDK says how a module interacts
+  with it** ([sdk#10](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0010-the-sdk-carries-no-implementation.md)).
+  Anything that constructs, configures or encodes belongs on this side: the
+  OpenTelemetry wiring is `internal/platform/telemetry`, and this repository
+  requires the SDK's host module for the host-facing half. A finding that is a
+  *shape* — a type, a verb, naming no library — is an SDK bump; one that can only
+  be closed by naming a library is a Platform change reached through a
+  declarative surface. **Do not describe the SDK's dependency graph here; read
+  its `go.mod`.**
 
-## Everything runs in the container, nothing runs on the host
+## Background work has a principal
 
-**Do not run `go build`, `go test`, `go vet`, `go run`, or any Mosaic binary
-directly on this machine.** Every gate in this repository runs inside the test
-container:
+**Work with no user acts as the system principal** — `Service.SystemCaller()` in
+`internal/platform/app/system_principal.go` — and it goes through the same
+authenticate-and-authorize boundary as everything else. Do not invent a caller,
+do not skip the gate, and do not borrow the session of whoever happened to
+trigger it.
 
-```bash
-docker compose -f docker-compose.test.yml run --rm test
-```
+The runner, the scheduler and the schedules are built:
+`internal/platform/jobs/` holds `Runner` and `Scheduler`, and
+`internal/composition/jobs/` wires the Platform's own jobs to them. **A module
+still cannot declare a job** — there is no surface for it in the SDK — so that
+remains an open finding rather than something to simulate locally.
 
-That is the whole gate — license headers, gofmt, `go vet`, `go build`, `go
-test` — and `.github/workflows/verify.yml` runs this exact command on every push
-and pull request, so what refuses a push is the thing you just ran rather than a
-CI transcription of it. Append `bash` to the same command for a shell in that
-environment when iterating on one package.
+## Standing facts a new session needs
 
-**The reason is that this repository's two most important test dependencies
-fail soft.** Neither turns a run red when it is missing. Both let it pass while
-testing far less than it appears to:
-
-- **PostgreSQL.** `internal/modules/postgres/harness_test.go` skips every
-  contract test, with a reason, when no database is reachable. On a host with
-  none, `go test ./...` prints `ok` having exercised no storage code at all.
-  The fallback it tries first is an *embedded* PostgreSQL, which refuses to run
-  as root — so the naive containerised version skips too. The compose file
-  points `MOSAIC_TEST_POSTGRES_DSN` at a real service precisely to convert
-  those skips back into tests.
-- **ffprobe.** Playback probing shells out to it ([platform#29](docs/adr/0029-probing-and-the-per-stream-playback-decision.md)). Absent, the
-  Platform relays unprobed — a behaviour change rather than an error, and a
-  release with undecodable audio then plays silently.
-
-This is the same distinction the push rule below turns on: **demonstrated, not
-asserted.** A skipped test is not a passed test, and the container is what makes
-that difference structural rather than something each session must remember.
-
-**To run the Platform itself, use the dev stack, not `go run`** — see "Running
-the Platform" below.
-
-## Workflow
-
-- Develop and commit directly on `main`. This repository does not use feature branches for Platform implementation work.
-- **Commit author identity:** every commit in this repository must be authored (and committed) by `AdamNi-7080 <anicholls41@gmail.com>`. This is the repo owner's identity — do not commit as `Claude`/`noreply@anthropic.com` or any other identity. If git has no identity configured on the machine, set it repo-locally (`git config user.name "AdamNi-7080"` / `git config user.email "anicholls41@gmail.com"`), not globally. Keep the `Co-Authored-By: Claude ...` trailer in the message body; it does not change the commit author.
-- **Push when the work has been shown to pass, in this conversation.** The rule
-  used to be "never push without asking each time", which produced long queues of
-  unpushed commits and made the remote a lagging, unreliable picture of the
-  build. The bar is now evidence rather than permission: push once the change has
-  been *demonstrated* working — the test container green
-  (`docker compose -f docker-compose.test.yml run --rm test`, which covers the
-  license-header check, gofmt, vet, build and the tests), and where the change is
-  user-visible, exercised against the running dev stack.
-  - **Demonstrated, not asserted.** Tests that were skipped are not tests that
-    passed, and "it should work" is not evidence. If the verification could not
-    be run, commit locally and say so rather than pushing on optimism.
-  - **Force-push still requires asking**, every time. It rewrites history other
-    checkouts may hold, and no amount of local green makes that safe to decide
-    alone.
-- Build one slice at a time, in the order defined by the roadmap. Do not start a slice whose prerequisites have not landed.
-- Each slice must pass the standing test gates in the architecture page before the next dependent slice begins.
-- Run the test container before declaring any slice done. Nothing is declared
-  done on the strength of a host-side build, which on this machine is not
-  available to be right or wrong about — there is no Go toolchain installed.
-- **Every Go file carries an SPDX header** (`AGPL-3.0-only`, the Platform's license). New files get it from the tool, not by hand, and the tool runs in the container like everything else: `docker compose -f docker-compose.test.yml run --rm test go run ./tools/licenseheader` adds it to any file missing it (pass file paths to limit it to those). **CI enforces it** — `.github/workflows/verify.yml` runs `go run ./tools/licenseheader -check` in its fast `checks` job (with gofmt/vet/build) on every push and PR, so a headerless file fails the check in seconds, before the `gate` job runs the container suite behind it. A local pre-commit hook adds it for you before the commit — enable once per clone with `git config core.hooksPath .githooks`. Change the header text in one place — the `header` const in that tool.
-- Commit per passing slice — one commit (or focused set of commits) per slice, not one commit for the whole build sequence.
-- When ambiguity comes up, read the code first, then the three architecture documents. Do not substitute assumption for a decision. If neither answers it, say so — an honest gap is worth more than an invention that reads as settled.
+- **Content vocabularies are open text, canonicalised on write**
+  ([platform#11](docs/adr/0011-open-and-closed-vocabularies.md)). The test for
+  open-versus-closed is "does Platform code branch on it?" — `node_kind`,
+  `part_role`, relation types, match methods and statuses are `CHECK`-constrained;
+  `media_type`, `container_type`, `item_type` are not. Stores call
+  `v1.Node.Canonical()`, a contract obligation, so `Anime Series` and
+  `anime-series` are one type.
+- **How a module is composed and invoked**
+  ([platform#15](docs/adr/0015-module-capability-and-invocation.md),
+  [platform#13](docs/adr/0013-how-a-capability-acts.md)). `main.go`'s
+  `registerCapabilities` wires the **core** module capabilities compiled into
+  this binary and nothing else; an extension module reaches the same registry
+  through the Manager after a user installs it. A caller invokes a module through
+  a command — `ImportContent` for the import path — which authorises, resolves
+  the capability by id, and hands it the `app.Service` as its `ContentService`
+  plus the caller, **so the module's own writes each re-authorise as the invoking
+  user.**
+- **Metadata and streams are independent.** A meta-only import yields Works and
+  their tree with **no Parts**, and that is the correct outcome rather than a
+  degraded one. A module that snapshots a remote stream writes a Part with
+  `Scheme: v1.RemoteLocation`
+  ([platform#10](docs/adr/0010-storage-authority-and-transaction-scope.md)'s
+  remote path).
+- **Module settings are user-managed, opaque JSON**
+  ([platform#17](docs/adr/0017-module-settings.md)) — *not* the Platform config
+  system, which is operator config with reload classes. `ModuleSettingsStore`
+  holds one jsonb document per module id; the Platform stores it uninterpreted
+  and hands it back on invocation. The module owns its meaning.
+- **UUIDv7 for content ids.** `NewIDGenerator()` (UUIDv4) serves the
+  infrastructure tables; `NewUUIDv7Generator()` serves the content tables.
+  Content ids are native `uuid`; infrastructure ids stay `text`/UUIDv4 and are
+  not migrated.
+- **SQLSTATE `23001` → `Conflict`** (an explicit `ON DELETE RESTRICT`).
+- **Password hashing is Argon2id** in `internal/adapters/crypto`, PHC-encoded.
+- **Left unbuilt, not invented**
+  ([platform#9](docs/adr/0009-object-graph.md)): the fractional ordering scheme
+  at scale, relation confidence decay (edges are written once — `RelationStore`
+  has no `Update`), and attribute validation (JSONB is unvalidated by design).
 
 ## Running the Platform
 
 **In the dev stack, not with `go run`.** It brings its own PostgreSQL, its own
-ffmpeg, and the Shell, already wired to each other:
+ffmpeg and the Shell, already wired together:
 
 ```bash
 docker compose -f docker-compose.dev.yml up
 ```
 
-Add `-f docker-compose.local.yml` after the first `-f` file to build against the
-sibling working copies of `sdk`, `contracts` and the modules instead of their
-published versions — that overlay writes a `go.work` inside the container only,
-which is why switching between published and local changes no committed file.
+`docker-compose.dev.yml` documents its own environment — read it rather than a
+copy. Two things worth knowing before you look:
+
+- **A fresh stack is unclaimed and starts at the setup wizard**
+  ([platform#54](docs/adr/0054-claiming-an-unclaimed-server.md)). It seeds no
+  administrator. The `MOSAIC_BOOTSTRAP_ADMIN_*` pair still exists for an
+  automated deployment and as the way back into a dev box whose login was lost,
+  but it is unset by default and setting it is a deliberate act.
+- Add `-f docker-compose.local.yml` after the first `-f` to build against the
+  sibling working copies instead of published versions. The overlay writes a
+  `go.work` inside the container only, which is why switching changes no
+  committed file.
 
 ### The local module registry ([platform#55](docs/adr/0055-the-development-module-repository.md))
 
-The overlay above covers the **core** modules, which are compiled in. The three
-**extension** modules are not Platform dependencies at all ([platform#51](docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md)), so a
-local change to one reaches a running Platform through the *install path* or not
-at all — and the install path leads to the official registry, whose URL and
-trusted key are compiled into the binary.
+Extension modules are not dependencies, so a local change to one reaches a
+running Platform through the *install path* or not at all — and that path leads
+to the official registry, whose URL and key are compiled in. The overlay
+therefore stands up a local registry, signed with a throwaway key
+(`tools/localregistry/assemble.sh`), and the Platform warns on every boot that it
+is using one.
 
-The overlay therefore also stands up a **local registry**: `registry-build`
-compiles each sibling extension checkout, assembles a manifest per module and
-signs an index over them with a throwaway key
-(`tools/localregistry/assemble.sh`, the local counterpart of the registry
-repository's `scripts/assemble.sh`); `registry` serves it over HTTP. The
-Platform is pointed at it by `MOSAIC_DEV_REPOSITORY_URL` and
-`MOSAIC_DEV_REPOSITORY_KEY`, and warns at `Warn` on every boot that it is doing
-so, with the key's fingerprint.
-
-**Nothing is bypassed** — a development key signs a development index, and every
-check the real path runs still runs: the index signature, the manifests it
-authenticates, the SDK major, the binary's signed digest, the handshake. That is
-the point of it; a loop that skipped verification would exercise a path
+**Nothing is bypassed.** A development key signs a development index and every
+check the real path runs still runs — index signature, manifests, SDK major,
+binary digest, handshake. A loop that skipped verification would exercise a path
 production does not have.
 
-**Those two variables only exist in a `-tags mosaicdev` build**, which is what
-the overlay's `go run` builds and what a release is not. In a shipped binary the
-mechanism is not switched off, it is absent — see
-`internal/adapters/extension/devregistry_off.go`, and [platform#55](docs/adr/0055-the-development-module-repository.md) for why the guard
-is a build tag rather than a runtime check. Both configurations are gated:
-`docker-compose.test.yml` runs `go vet -tags mosaicdev ./...` and the tagged
-tests for the extension package after the ordinary suite.
+**Those variables exist only in a `-tags mosaicdev` build.** In a shipped binary
+the mechanism is *absent*, not switched off — see
+`internal/adapters/extension/devregistry_off.go`. Both configurations are gated.
 
-The loop, after editing a module:
+After editing a module:
 
 ```bash
 docker compose -f docker-compose.dev.yml -f docker-compose.local.yml run --rm registry-build
 ```
 
-then **uninstall and reinstall** the module from the extensions surface. A
-rebuilt index does not reach an already-installed module on its own: boot
-re-adopts the pinned bytes from disk rather than following a catalogue that has
-moved ([platform#51](docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md)), which is the pin working rather than a gap. Local builds are
-versioned `local-<git describe>`, so a working copy reads
-`local-v0.28.0-1-gb34c5be-dirty` in the catalogue and in the install record and
-cannot be mistaken for a release. `curl -s localhost:8082/index.json` reads the
-served index from the host.
+then **uninstall and reinstall it from the extensions surface.** A rebuilt index
+does not reach an already-installed module: boot re-adopts the pinned bytes from
+disk rather than following a catalogue that moved
+([platform#51](docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md)),
+which is the pin working rather than a gap. Local builds are versioned
+`local-<git describe>` so they cannot be mistaken for a release.
 
-The stack sets `MOSAIC_POSTGRES_DSN` and the
-`MOSAIC_BOOTSTRAP_ADMIN_USERNAME` + `MOSAIC_BOOTSTRAP_ADMIN_PASSWORD` pair for
-you. The Platform then migrates, seeds the admin, registers the
-built-in modules, and serves the whole client API on `:8081` over h2c — the
-Connect `AuthService` that mints a session ([platform#37](docs/adr/0037-one-client-transport.md)) and the two-lane Connect
-`SessionService` that spends it ([contracts#5](https://github.com/mosaic-media/contracts/blob/main/docs/adr/0005-cross-client-transport-two-lane-rpc.md)) — plus artwork at `:8081/artwork`,
-playback at `:8081/playback/`, and the Supervisor handoff on `:8080`. There is
-no GraphQL endpoint: [platform#37](docs/adr/0037-one-client-transport.md) deleted it. A fresh stack registers only the
-**core** modules; Stremio and the other extension modules are **not** composed
-in ([platform#51](docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md)) — a user installs one at runtime through the `installExtension`
-action, and the Platform adopts it across restarts. Once installed, its addons
-are configured through the `configureModule` action ([platform#17](docs/adr/0017-module-settings.md)), the same as
-before; the `MOSAIC_STREMIO_ADDONS` env var is retired.
+## The records this repository owns
 
-## The roadmap and the decision records
+`docs/adr/` holds the decisions whose *mechanism* is here — the composition root,
+the store set, the transports, the extension host, the release workflow.
+[`docs/adr/README.md`](docs/adr/README.md) is the generated index; it is the
+bounded thing to read, and it is not edited by hand.
 
-These rules are identical in every Mosaic repository. They exist because the
-state of the build and the reasons behind it are the two things that rot fastest
-and report nothing when they do — no build fails, no test goes red.
+**The index generator and the citation lint are not vendored into this
+repository yet, and nothing in this repository's gate runs them.** They live in
+`architecture/scripts/`, and the index here was generated by them. Do not claim a
+gate step that does not exist; if you regenerate or lint, say which script you
+ran and from where.
 
-### The roadmap is maintained, not consulted
+<!-- shared-rules:begin -->
+<!-- shared-rules:end -->
 
-**`docs/roadmap.md` in [`architecture`](https://github.com/mosaic-media/architecture)
-is the single record of where the build is.** Read it before starting work, and
-**update it in the same session as the change that dates it** — not in a
-follow-up, which does not happen.
+## The gate
 
-- **A slice that lands is marked landed, with what was left out.** "Built" with
-  no qualifier is a claim that the whole slice shipped; if part of it did not,
-  say which part and why in the same sentence.
-- **Implementation that departs from the plan is recorded where it departed.**
-  The roadmap is derived from the code, not from the intention that preceded it,
-  and the surprises are the most valuable thing in it.
-- **Do not restate the roadmap here.** A second copy of "what is built" in a
-  `CLAUDE.md` is how the first copy goes stale unnoticed. This file carries how
-  to work in *this* repository; the roadmap carries what has been done across all
-  of them.
-- **A capability with no client path is not done — it is
-  [owed](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md).**
-  If you delete or fail to build a client path to a working service, add its row
-  to that register in the same change.
+**Do not run `go build`, `go test`, `go vet`, `go run` or any Mosaic binary
+directly on this machine.** Every gate runs inside the test container:
 
-### Decision records are append-only
+```bash
+docker compose -f docker-compose.test.yml run --rm test
+```
 
-An ADR is an account of what was decided and why, at a time. It is evidence, not
-documentation, and its value is that it was not edited afterwards.
+That is the whole gate — license headers, gofmt, `go vet`, `go build`,
+`go test`, then a second `-tags mosaicdev` pass — and
+`.github/workflows/verify.yml` runs this exact file rather than a transcription,
+so what refuses a push is the thing you just ran. Append `bash` for a shell in
+the same environment.
 
-- **Never rewrite a record's body to match what was built.** Not to correct it,
-  not to annotate it, not to add "as built, this differs". That pattern turns a
-  record into a running commentary and destroys the thing it is for.
-- **State changes in the `**Status:**` line, and nowhere else.** That is where a
-  record says it is built, built in part (naming the part), or superseded —
-  wholly ("Superseded by ADR N") or partly ("Partly superseded: X was reversed by
-  ADR N; the rest stands").
-- **A changed decision needs a new record that supersedes it.** If the code
-  deliberately does something a record decided against, that is a decision and it
-  is written down as one, with its own Context / Decision / Alternatives /
-  Consequences. Both records then stand: the old one keeps its reasoning, the new
-  one carries the change.
-- **An unbuilt decision is not a superseded one.** "We have not done this yet"
-  belongs in the Status line and the roadmap. Only a genuine reversal earns a new
-  record.
-- **Records live only in `architecture/docs/adr/`**, numbered sequentially in
-  kebab-case. Adding one means adding it to `nav:` in `mkdocs.yml`, and
-  `mkdocs build --strict` must pass.
+**The reason is that this repository's two most important test dependencies fail
+soft**, letting a run pass while testing far less than it appears to:
 
-**If the code and a record disagree, say so rather than quietly picking one.** An
-honest "this is unresolved" is worth more than a plausible reconciliation that
-reads as settled.
+- **PostgreSQL.** The contract tests in `internal/modules/postgres` skip, with a
+  reason, when no database is reachable — so `go test ./...` on a host with none
+  prints `ok` having exercised no storage code. The embedded fallback refuses to
+  run as root, so the naive containerised version skips too; the compose file
+  points `MOSAIC_TEST_POSTGRES_DSN` at a real service to convert those skips back
+  into tests.
+- **ffprobe.** Playback probing shells out to it
+  ([platform#29](docs/adr/0029-probing-and-the-per-stream-playback-decision.md)).
+  Absent, the Platform relays unprobed — a behaviour change rather than an error,
+  and a release with undecodable audio then plays silently.
 
-## Standing facts a new session needs
+**Every Go file carries an SPDX header** (`AGPL-3.0-only`). Add it with the tool,
+never by hand — `docker compose -f docker-compose.test.yml run --rm test go run
+./tools/licenseheader` — and change the header text in one place, the `header`
+const in that tool. CI checks it in seconds, ahead of the container job. A local
+hook adds it before the commit: `git config core.hooksPath .githooks`, once per
+clone.
 
-- **Content vocabularies are open text, canonicalised on write** ([platform#11](docs/adr/0011-open-and-closed-vocabularies.md)).
-  The test for open-vs-closed is "does Platform code branch on it?" —
-  `node_kind`, `part_role`, relation types, match methods, statuses are
-  `CHECK`-constrained; `media_type`, `container_type`, `item_type` are not.
-  Stores call `v1.Node.Canonical()`, a contract obligation, so `Anime Series`
-  and `anime-series` are one type. Use `v1` constants, not string literals.
-- **How an optional module is composed and invoked** ([platform#15](docs/adr/0015-module-capability-and-invocation.md), 0020). A
-  module is its **own Go module and its own repository** — the Stremio module
-  now lives in the sibling repo
-  [`module-stremio-addons`](https://github.com/mosaic-media/module-stremio-addons)
-  (`../module-stremio-addons` on disk, module path
-  `github.com/mosaic-media/module-stremio-addons`), importing **only** the SDK —
-  enforced by a boundary test and by Go itself. It implements the SDK
-  `Capability` interface. `main.go`'s `registerCapabilities` constructs it and
-  registers it into an `app.CapabilityRegistry`; the platform `go.mod` requires
-  it at a tagged version from the module proxy, no `replace`. A caller
-  invokes it through the `ImportContent` command (the `importContent` action),
-  which authorises `content.import`, resolves the capability by id, and hands
-  it the `app.Service` as its `ContentService` plus the caller — so the
-  module's own writes each re-authorise as the invoking user ([platform#13](docs/adr/0013-how-a-capability-acts.md)).
-  Explicit registration stands in for [platform#4](docs/adr/0004-static-go-module-composition.md)'s eventual Build-Pipeline
-  `imports.go`. Distinct from `internal/modules/` (built-in, trusted, required,
-  e.g. Postgres) and `capabilities/reference/` (a package *inside* the platform
-  module, not its own).
-- **`RemoteLocation` Parts are now exercised.** The Stremio module snapshots a
-  stream URL/magnet into a Part with `Scheme: v1.RemoteLocation, Provider:
-  "stremio"` ([platform#10](docs/adr/0010-storage-authority-and-transaction-scope.md)'s remote path, previously unused). Metadata and streams
-  are independent: a meta-only addon yields Works + tree with **no** Parts, so
-  Stremio metadata can enrich local media without adopting remote streaming.
-- **Module settings are user-managed, opaque JSON** ([platform#17](docs/adr/0017-module-settings.md)), *not* the
-  platform Config system (which is operator config with reload classes).
-  `ModuleSettingsStore` holds one jsonb doc per module id (on `Tx`); the
-  Platform stores it uninterpreted and hands it to the module on invocation
-  (`v1.ImportRequest.Settings`); the module owns its meaning. Set via
-  `configureModule`, read via `moduleSettings`. **Modules are built to find SDK
-  gaps** — this was the first (user-entered addon URLs). The next identified gap
-  is module-declared cron/jobs, which needs the jobs runner, a scheduler, and
-  the **system principal** ([platform#13](docs/adr/0013-how-a-capability-acts.md)'s named gap, for no-user work).
-- **UUIDv7 for content ids.** `NewIDGenerator()` (UUIDv4) serves the
-  infrastructure tables; `NewUUIDv7Generator()` (`ContractSet.ContentIDs`)
-  serves the content tables. Content ids are native `uuid`; infrastructure
-  ids stay `text`/UUIDv4 and are not migrated.
-- **SQLSTATE `23001` → `Conflict`** (explicit `ON DELETE RESTRICT`).
-- **Password hashing is Argon2id** in `internal/adapters/crypto`, PHC-encoded;
-  satisfies `domain.PasswordVerifier` structurally.
-- **Left unbuilt, not invented** ([platform#9](docs/adr/0009-object-graph.md)): the fractional ordering scheme at
-  scale, relation confidence decay (edges written once; `RelationStore` has no
-  `Update`), and attribute validation (JSONB is unvalidated by design).
-- **The stop point still governs any SDK change:** if a capability needs a
-  private Platform import, the contracts are not ready to publish.
+## Working in this repository
+
+- **Develop and commit directly on `main`.** This repository does not use feature
+  branches for Platform implementation work.
+- **Build one slice at a time, in roadmap order.** Do not start a slice whose
+  prerequisites have not landed, and commit per passing slice rather than once
+  for a whole sequence.
+- Each slice passes the standing test gates before the next dependent slice
+  begins. Nothing is declared done on a host-side build.
+- **When ambiguity comes up, read the code first.** If neither the code nor a
+  record answers it, say so — an honest gap is worth more than an invention that
+  reads as settled.
