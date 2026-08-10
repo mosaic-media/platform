@@ -9,7 +9,7 @@
 - **`platform`** (this repo) — the Platform: domain, contracts, application services, the PostgreSQL module, transports, the composition root.
 - **`architecture`** — the docs and ADRs, including the roadmap this repository's work is measured against. Push doc updates here whenever code and docs diverge.
 - **`supervisor`** — the host-level process manager and single front door (ADR 0004, ADR 0005): runs the Platform and the Shell as child processes, terminates TLS, routes, and answers for itself when a child is down. Its own Go module importing the standard library alone — it has to run when the Platform cannot — extracted from this repository once it had somewhere to go. AGPL-3.0-only, no module-linking exception: it links no Module.
-- **`sdk`** — the **published contract surface** (`github.com/mosaic-media/sdk`). This is what a Module compiles against. Hand-written Go, no dependencies. See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
+- **`sdk`** — the **published contract surface** (`github.com/mosaic-media/sdk`). This is what a Module compiles against. Hand-written Go, and it names no implementation and depends on nothing (ADR 0135). See "The published SDK is a separate module" below — this catches out anyone who assumes the content types are still under `internal/`.
 - **`contracts`** — the **published SDUI and session contracts** (`github.com/mosaic-media/contracts`) the Platform, Modules and clients share. **Protobuf** (`proto/**/*.proto`) generated into Go and TypeScript (ADR 0044), plus a Go producer binding and the `ui` authoring layer, the standard definition library as data, and DTCG tokens. Apache-2.0, like the SDK (ADR 0025). Do not confuse its form with the SDK's: that one is hand-written Go and this one is generated. Renamed from `sdui`; the contract itself did not move, so `mosaic.sdui.v1`, the `contracts/sdui` package and the npm name `@mosaic-media/sdui` are all still "sdui" and are not stale.
 - **`web`** — the **frontend workspace** (ADR 0042): the `shell` (the Server-Driven-UI client), `sdui-react` (the published React runtime, `@mosaic-media/sdui-react`) and `storybook`, as three packages in one repository. The three former repositories are archived. AGPL-3.0-only. Not a Module and not in the binary.
 - **`registry`** — the **official extension-module registry** (ADR 0065, ADR 0079): `registry.yaml` catalogues the module repositories and versions in the official set, and CI builds it into a signed `index.json` on GitHub Pages. It holds no module code and no binaries — a Platform verifies the signature, then downloads each module from that module's own releases.
@@ -131,6 +131,21 @@ if you're changing the SDK, then tag/push a new version and bump the require.
   import only the SDK, enforced by boundary tests — the stop point made
   executable: **if a capability needs a private Platform import, the contracts
   are not ready to publish.**
+- **The SDK says how a module interacts with the Platform; the Platform holds
+  the implementations** (ADR 0135). The SDK names no library and its `go.mod` is
+  a module line and a Go version, so anything that constructs, configures or
+  encodes belongs on this side of the boundary. **The OpenTelemetry wiring is
+  here** — `internal/platform/telemetry` holds the providers and the log, span
+  and metric production, and the construction of the `v1.Telemetry` a module is
+  handed belongs beside it (`v1.NewTelemetry` and `TelemetryOptions` are still
+  in the SDK as this is written; moving them is what ADR 0135 decides). The SDK
+  keeps only the module-facing surface — `Telemetry`, `Span`, `Field`,
+  `TelemetryFrom` — and the field classification rule, in pure Go. OpenTelemetry
+  is still Mosaic's telemetry implementation in every process (ADR 0128); what
+  changes is that a host declares the dependency. A telemetry change wanting a
+  new OTel type is a change here; an SDK bump is warranted only when the
+  *module-facing* surface cannot express something, and it names no library
+  either.
 
 ## Everything runs in the container, nothing runs on the host
 
