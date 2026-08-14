@@ -16,16 +16,19 @@ filtergraph and not against a real PGS stream**; whether the client draws a
 script correctly is unverified, no browser having run; and `v1.Subtitle` still
 cannot say a track is forced, so forced-subtitle behaviour is complete for
 embedded tracks and unavailable for module-provided ones.
-Consolidates platform#83, platform#83, platform#83, platform#83 and platform#83,
-whose bodies this replaces. **Two of those were partly superseded within the
-run** and the corrections are kept below rather than in this line: platform#83's
-offer of *every* embedded track as a rendition was wrong for picture tracks and
-lossy for typeset ones, corrected by platform#83; and platform#83's two fates for
-a typeset track became three under platform#83, which built the client-side
-renderer platform#83 had rejected as blocked and demoted burning to the answer
-for when it cannot be used. platform#83's own decision, platform#83's
-classification and graphic path, and platform#83 were not superseded by anything.
-The retired numbers stay retired.
+Consolidates the five records of the subtitle run, whose bodies this replaces.
+Their numbers are retired and stay retired, so they are named here by what they
+decided rather than cited — a citation would either dangle or, worse, resolve to
+some later record that happens to hold the number. **Two of the five were partly
+superseded within the run** and the corrections are kept below, under their own
+Context headings, rather than in this line: the *delivery* record's offer of
+**every** embedded track as a rendition was wrong for picture tracks and lossy
+for typeset ones, corrected by the *classification* record that followed it; and
+that record's two fates for a typeset track became three under the *styled
+script* record after it, which built the client-side renderer the classification
+had rejected as blocked and demoted burning to the answer for when it cannot be
+used. The **preference** decision itself, the classification's **graphic** path,
+and the **module-provided** record were not superseded by anything.
 **Date:** 2026-08-10
 
 ## Context
