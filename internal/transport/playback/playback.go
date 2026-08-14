@@ -294,10 +294,10 @@ func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, 
 		}
 		if resource != "" {
 			// A relayed stream has one sub-resource and only one: a subtitle file
-			// a module found elsewhere (platform#72). It is not in the release, so
+			// a module found elsewhere (platform#83). It is not in the release, so
 			// whether the video needed a transcode has no bearing on it — which
 			// is exactly why a direct-played release can have subtitles at all,
-			// where an embedded track cannot (platform#68).
+			// where an embedded track cannot (platform#83).
 			if i, ok := externalSubtitleOf(resource); ok && i < len(t.Plan.External) {
 				serveExternalSubtitle(w, r, remuxer, t.Plan.External[i].URL)
 				return

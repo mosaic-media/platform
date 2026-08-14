@@ -14,7 +14,7 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The consumer for the `subtitles` capability role (platform#72).
+// The consumer for the `subtitles` capability role (platform#83).
 //
 // **The role has been fillable since module-stremio-addons#1 and nothing ever asked it.** Two
 // modules implement it, the registry could resolve one *by name*, and no code
@@ -59,7 +59,7 @@ type PlaybackSubtitlesResult struct {
 }
 
 // PlaybackSubtitles asks every installed subtitles provider for this item
-// (platform#72).
+// (platform#83).
 //
 // **Best-effort by construction, exactly like stream enrichment.** Every failure
 // here logs and continues: a subtitle source that is down, unconfigured or

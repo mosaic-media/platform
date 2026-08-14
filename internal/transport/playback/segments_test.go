@@ -156,7 +156,7 @@ func TestARelayedStreamHasNoSubResources(t *testing.T) {
 	}
 }
 
-// TestSegmentArgsCarryThePositionAndTheNumbering is the mechanism platform#66 turns
+// TestSegmentArgsCarryThePositionAndTheNumbering is the mechanism platform#82 turns
 // on, asserted where it is observable: nothing in the response says which
 // timestamp a transcode was started at, so the argument list is the only place.
 //
@@ -187,7 +187,7 @@ func TestSegmentArgsCarryThePositionAndTheNumbering(t *testing.T) {
 	}
 }
 
-// TestOnlyAnEncodeForcesKeyframes is the asymmetry platform#66 rests on. Where the
+// TestOnlyAnEncodeForcesKeyframes is the asymmetry platform#82 rests on. Where the
 // origin re-encodes it places the boundaries and the grid is exact; where it
 // copies, the source's keyframes decide and forcing would be a lie the flag
 // cannot make true.

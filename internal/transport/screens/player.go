@@ -38,7 +38,7 @@ type PlayerParams struct {
 	NodeID string
 	PartID string
 	// Subtitles are authored subtitle scripts the client may draw itself
-	// (platform#70), each a URL under the same playback ticket.
+	// (platform#83), each a URL under the same playback ticket.
 	//
 	// They do not replace what the playlist already declares. A client that
 	// cannot render a script ignores these entirely and uses the HLS subtitle
@@ -110,7 +110,7 @@ func NextEpisodeNode(label, partID, nodeID, title string) sdui.Node {
 }
 
 // subtitleTrackProps renders the authored subtitle scripts as the props bag the
-// `subtitleTracks` prop carries (platform#70).
+// `subtitleTracks` prop carries (platform#83).
 //
 // **Set with ui.Prop rather than a generated builder, and that is deliberate
 // rather than the shortcut the rule warns about.** The prop is specced in

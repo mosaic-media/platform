@@ -1,9 +1,9 @@
 # The upgrade channel is the handoff and the register
 
-**Status:** Built. The Supervisor checks the catalogue on a schedule and spools an offer, polls `GET /upgrade` and carries out what it finds; the Platform raises `upgrade_available`, offers `apply_upgrade`, records the request and settles it by comparing `MOSAIC_GENERATION_ID` against the version asked for. Not built: [supervisor#9](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0009-major-upgrades-are-never-automatic.md)'s automation *policy* on top of it — every upgrade is a person pressing something today, which is that record's Manual level and its safest.
+**Status:** Built. The Supervisor checks the catalogue on a schedule and spools an offer, polls `GET /upgrade` and carries out what it finds; the Platform raises `upgrade_available`, offers `apply_upgrade`, records the request and settles it by comparing `MOSAIC_GENERATION_ID` against the version asked for. Not built: [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md)'s automation *policy* on top of it — every upgrade is a person pressing something today, which is that record's Manual level and its safest.
 **Date:** 2026-08-09
 
-Closes the question [supervisor#9](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0009-major-upgrades-are-never-automatic.md)
+Closes the question [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md)
 deliberately left open — *how does a person's choice reach the Supervisor* — and
 with it the one clause of M4's exit criterion that did not land.
 
@@ -17,7 +17,7 @@ itself safely has no way to be told to. It has been a row on the
 [unreachable-capability register](../unreachable-capability.md) since the
 mechanism landed.
 
-[supervisor#9](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0009-major-upgrades-are-never-automatic.md) decided the *policy* — three levels, and a contract change is never
+[supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md) decided the *policy* — three levels, and a contract change is never
 activated unattended — and named the obstacle in its Consequences: "The setting
 is Platform configuration and the actor is the Supervisor, which is the one place
 they must agree and the Supervisor cannot read the Platform's database. How the
@@ -36,7 +36,7 @@ already exist and are already used for exactly this shape of problem:
 - **The findings spool** is how the Supervisor tells the Platform things
   ([platform#74](0074-operational-findings-are-durable-state.md)). It already
   carries what the Supervisor learned while the Platform was not there, and
-  [supervisor#9](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0009-major-upgrades-are-never-automatic.md) already anticipated its use here: "A staged Generation is a finding:
+  [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md) already anticipated its use here: "A staged Generation is a finding:
   the register is how an install says 'there is a version here you have not
   taken', with the suggestion being to apply it. That is what makes the offer
   reachable without inventing a notification channel."
@@ -79,10 +79,10 @@ Generation id is what settles it. No new channel is invented.**
   comes back is the old one and its Generation does not match. The offer returns
   on the next check, which is correct: the version is still available and still
   did not install.
-- **The policy of [supervisor#9](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0009-major-upgrades-are-never-automatic.md) sits on top of this and is not built here.** This
+- **The policy of [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md) sits on top of this and is not built here.** This
   record decides the *channel*; whether an install takes a small upgrade
   unattended is a setting, and it reads the contract version rather than the
-  artefact's ([supervisor#11](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0011-the-monitored-version-is-the-contract-not-the-artefact.md)).
+  artefact's ([supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md)).
   An automatic level would skip the finding and go straight to the request, using
   the same two channels.
 

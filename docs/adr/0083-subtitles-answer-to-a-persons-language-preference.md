@@ -16,15 +16,15 @@ filtergraph and not against a real PGS stream**; whether the client draws a
 script correctly is unverified, no browser having run; and `v1.Subtitle` still
 cannot say a track is forced, so forced-subtitle behaviour is complete for
 embedded tracks and unavailable for module-provided ones.
-Consolidates platform#67, platform#68, platform#69, platform#70 and platform#72,
+Consolidates platform#83, platform#83, platform#83, platform#83 and platform#83,
 whose bodies this replaces. **Two of those were partly superseded within the
-run** and the corrections are kept below rather than in this line: platform#68's
+run** and the corrections are kept below rather than in this line: platform#83's
 offer of *every* embedded track as a rendition was wrong for picture tracks and
-lossy for typeset ones, corrected by platform#69; and platform#69's two fates for
-a typeset track became three under platform#70, which built the client-side
-renderer platform#69 had rejected as blocked and demoted burning to the answer
-for when it cannot be used. platform#67's own decision, platform#69's
-classification and graphic path, and platform#72 were not superseded by anything.
+lossy for typeset ones, corrected by platform#83; and platform#83's two fates for
+a typeset track became three under platform#83, which built the client-side
+renderer platform#83 had rejected as blocked and demoted burning to the answer
+for when it cannot be used. platform#83's own decision, platform#83's
+classification and graphic path, and platform#83 were not superseded by anything.
 The retired numbers stay retired.
 **Date:** 2026-08-10
 

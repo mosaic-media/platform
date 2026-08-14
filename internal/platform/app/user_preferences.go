@@ -164,7 +164,7 @@ func (s *Service) ExpertModeEnabled(ctx context.Context, caller v1.Caller) bool 
 }
 
 // LanguagePreferenceFor returns the caller's stored language document
-// (platform#67), or nil when there is not one to return.
+// (platform#83), or nil when there is not one to return.
 //
 // **It returns the raw document rather than a parsed preference**, and the
 // reason is the dependency direction rather than laziness: the type that

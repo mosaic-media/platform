@@ -17,7 +17,7 @@ import (
 )
 
 // Settings › Preferences › Language — what a viewer wants to hear and read
-// (platform#67).
+// (platform#83).
 //
 // Under Preferences with Home, and for the same reason: it is taste. Four people
 // share one library and disagree about this more than about anything else on the
@@ -154,7 +154,7 @@ func stylingButton(current playback.LanguagePreference, styling playback.Subtitl
 	next.Styling = styling
 	// The field this replaced is cleared on any write, so a document written
 	// before it existed stops carrying an answer that contradicts the new one
-	// (platform#70). It is read on the way in and never written on the way out.
+	// (platform#83). It is read on the way in and never written on the way out.
 	next.Typeset = false
 	return ui.Button(label, tone, ui.OnTap(setLanguages(next)))
 }

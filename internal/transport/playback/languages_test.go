@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// The two viewers platform#67 was written from, run as tests. They are the whole
+// The two viewers platform#83 was written from, run as tests. They are the whole
 // argument for coupling the subtitle mode to the audio outcome: the same person,
 // the same preference, two releases, two different right answers.
 

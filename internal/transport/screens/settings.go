@@ -28,7 +28,7 @@ const (
 	sectionAccount = "account"
 	// sectionHomeRows is where a viewer arranges their own home (platform#59).
 	sectionHomeRows = "home"
-	// sectionLanguages is what a viewer wants to hear and read (platform#67).
+	// sectionLanguages is what a viewer wants to hear and read (platform#83).
 	sectionLanguages  = "language"
 	sectionPeople     = "people"
 	sectionExtensions = "extensions"

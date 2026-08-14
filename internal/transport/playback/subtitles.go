@@ -11,7 +11,7 @@ import (
 )
 
 // Which embedded subtitle tracks a playback offers, and which one is on
-// (platform#67's second half, platform#68).
+// (platform#83's second half, platform#83).
 //
 // **Offering is not selecting**, and the whole file turns on that distinction.
 // A viewer's preference decides what comes on by itself; it does not decide what
@@ -47,7 +47,7 @@ type SubtitleDelivery struct {
 }
 
 // SubtitleForm is how a subtitle track can be delivered, which is decided by its
-// codec and not by anything a viewer chose (platform#69).
+// codec and not by anything a viewer chose (platform#83).
 type SubtitleForm int
 
 const (
@@ -89,7 +89,7 @@ func formOf(codec string) SubtitleForm {
 	}
 }
 
-// BurnedSubtitle names a track to render into the picture itself (platform#69).
+// BurnedSubtitle names a track to render into the picture itself (platform#83).
 //
 // It is the last resort and it is priced like one: burning forces a video
 // encode, because there is no way to draw on frames that are being copied
@@ -113,9 +113,9 @@ type BurnedSubtitle struct {
 }
 
 // DecideSubtitles turns a release's subtitle tracks and one viewer's intent into
-// what a playback offers, and what if anything it burns (platform#68, platform#69).
+// what a playback offers, and what if anything it burns (platform#83, platform#83).
 //
-// The rule is platform#67's, applied to a list that already exists:
+// The rule is platform#83's, applied to a list that already exists:
 //
 //   - **Every deliverable track is offered**, in the order the container carries
 //     them. A menu that hid tracks would make the preference an access control
@@ -133,7 +133,7 @@ type BurnedSubtitle struct {
 // gets the forced one, which is more than nothing and is what the release has.
 //
 // **Burning is decided last and only when there is no other way**, which is the
-// whole shape of platform#69. The chosen track is burned when it is graphic — there
+// whole shape of platform#83. The chosen track is burned when it is graphic — there
 // being no text in it to send — or when it is typeset and this viewer asked to
 // see it as authored. Everything else is a rendition, because a rendition costs
 // nothing and a burn costs a video encode.
@@ -174,7 +174,7 @@ func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, styling Subt
 	chosen := all[n]
 	// A picture track has no other delivery. A styled one is burned only when
 	// this viewer asked for it to be, because burning is the expensive answer
-	// and sending the script to the client is the cheap one (platform#70).
+	// and sending the script to the client is the cheap one (platform#83).
 	if chosen.form == SubtitleGraphic || (chosen.form == SubtitleTypeset && styling == StylingBurn) {
 		return nil, &BurnedSubtitle{
 			Index:   chosen.Index,
@@ -194,7 +194,7 @@ func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, styling Subt
 }
 
 // StyledSubtitle is a track offered to the client as it was authored, for a
-// client that can draw it (platform#70).
+// client that can draw it (platform#83).
 //
 // It rides beside the flattened rendition rather than replacing it. That is the
 // whole reason this costs nothing to get wrong: a client that cannot render the
@@ -494,7 +494,7 @@ func WithSubtitleOverride(offered []SubtitleDelivery, styled []StyledSubtitle, i
 	}
 }
 
-// ExternalSubtitle is a subtitle file a module found somewhere else (platform#72).
+// ExternalSubtitle is a subtitle file a module found somewhere else (platform#83).
 //
 // It differs from every other track here in one way that decides the design:
 // **it is already a complete file, and it is not in the release.** So there is

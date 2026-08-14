@@ -281,7 +281,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	// the English audio" rather than either a whole-file transcode or a silent
 	// film. The plan travels sealed inside the ticket, so the origin does not
 	// re-probe on every range request a seeking player makes.
-	// What this viewer wants to hear (platform#67). Read here rather than baked
+	// What this viewer wants to hear (platform#83). Read here rather than baked
 	// into the Platform, because language belongs to a person: four people
 	// sharing one library previously got one person's answer from a package
 	// variable, and the parameter that would have carried theirs was passed nil.
@@ -302,7 +302,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	// names what someone wants when they got the language they asked for; when
 	// they did not, this is where the Platform notices and escalates.
 	subtitles := langs.SubtitlesFor(plan.AudioLanguage)
-	// What the installed subtitle sources have for this item (platform#72). Asked
+	// What the installed subtitle sources have for this item (platform#83). Asked
 	// on every play rather than stored, because a subtitle URL is perishable in
 	// the same way a stream address is — and best-effort, so a source that is
 	// down costs the extra tracks and never the playback.
@@ -310,11 +310,11 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	plan.External = external
 
 	// Offered as HLS renditions, which is why subtitles cost no client change
-	// (platform#68). Only on the transcoded path: a direct-played release is
+	// (platform#83). Only on the transcoded path: a direct-played release is
 	// relayed byte for byte, so there is no playlist to declare a rendition in.
 	//
 	// A track that cannot be a rendition is burned into the picture instead
-	// (platform#69), which forces a video encode — so it can turn a release that
+	// (platform#83), which forces a video encode — so it can turn a release that
 	// would have direct-played into one that does not. That is the whole cost of
 	// typeset fidelity and of a Blu-ray's picture subtitles, and it is why the
 	// preference behind it is opt-in.
@@ -361,7 +361,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		telemetry.String("audio_language", plan.AudioLanguage),
 		telemetry.String("subtitle_mode", string(subtitles.Mode)),
 		telemetry.Bool("subtitle_escalated", subtitles.Escalated),
-		// Whether subtitles forced a video encode (platform#69). This is the single
+		// Whether subtitles forced a video encode (platform#83). This is the single
 		// most expensive thing a playback can decide to do, and from the outside
 		// it presents only as a release that suddenly plays badly — so the log
 		// has to be able to answer "was it the subtitles".
@@ -394,7 +394,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 
 		ResumeAt: resumeAt,
 		// The authored subtitle scripts, for a client that can draw them
-		// (platform#70). A client that cannot ignores this and uses the HLS
+		// (platform#83). A client that cannot ignores this and uses the HLS
 		// renditions, which are in the playlist either way.
 		Subtitles: subtitleTracksFor(ticket, plan),
 		// Which pipeline the client should use, decided before it fetches a
@@ -501,7 +501,7 @@ func playbackMimeType(plan playback.Plan) string {
 	if plan.Duration <= 0 {
 		// No duration means no playlist, so the origin serves the unseekable
 		// fragmented-MP4 pipe and the client plays it as a plain progressive
-		// stream (platform#66).
+		// stream (platform#82).
 		return "video/mp4"
 	}
 	return playback.HLSMimeType
@@ -510,7 +510,7 @@ func playbackMimeType(plan playback.Plan) string {
 // playbackSrc is what the client fetches.
 //
 // A relayed stream is the ticket itself; a segmented one is the playlist beneath
-// it (platform#64). The two are different resources rather than the same one
+// it (platform#82). The two are different resources rather than the same one
 // behaving differently, so the difference is in the URL rather than in a header
 // the client would have to fetch before it knew what it had.
 func playbackSrc(ticket string, plan playback.Plan) string {
@@ -521,7 +521,7 @@ func playbackSrc(ticket string, plan playback.Plan) string {
 }
 
 // styledTracks renders the authored subtitle scripts as the player node carries
-// them (platform#70): a URL under the same ticket, what it is, and which one the
+// them (platform#83): a URL under the same ticket, what it is, and which one the
 // preference chose.
 //
 // The URL is the origin's own, never the upstream's, for the same reason the
@@ -538,7 +538,7 @@ func subtitleTracksFor(ticket string, plan playback.Plan) []screens.SubtitleTrac
 			Default:  s.Default,
 		})
 	}
-	// The module-found files, served as WebVTT by the origin (platform#72). They
+	// The module-found files, served as WebVTT by the origin (platform#83). They
 	// are never default: the release's own tracks are the ones a preference was
 	// resolved against, and a file from elsewhere turning itself on would
 	// override a decision nobody asked it to make.
@@ -554,7 +554,7 @@ func subtitleTracksFor(ticket string, plan playback.Plan) []screens.SubtitleTrac
 }
 
 // externalSubtitles asks the installed subtitle sources what they have, and
-// costs the play nothing when they have nothing to say (platform#72).
+// costs the play nothing when they have nothing to say (platform#83).
 func (h *Handler) externalSubtitles(ctx context.Context, caller v1.Caller, nodeID string) []playback.ExternalSubtitle {
 	if nodeID == "" {
 		return nil

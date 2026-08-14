@@ -11,7 +11,7 @@ import (
 	"syscall"
 )
 
-// Holding a transcode back (platform#66).
+// Holding a transcode back (platform#82).
 //
 // **Stopping the process is the only throttle available**, because the pressure
 // has to reach ffmpeg rather than the origin. ffmpeg writes its segments to a

@@ -23,7 +23,7 @@ func testURI(n int) string {
 
 // segLen is the segment length these tests divide by. The origin chooses it —
 // the grid is nominal, and a seek restarts at the position the playlist names
-// rather than inheriting where the previous segment ended (platform#66) — so the
+// rather than inheriting where the previous segment ended (platform#82) — so the
 // arithmetic here is the arithmetic in production.
 const segLen = encodedSegmentLength
 
@@ -84,7 +84,7 @@ func TestSegmentDurationsSumToTheRelease(t *testing.T) {
 }
 
 // TestSegmentStartIsWhereFFmpegIsToldToSeek ties the index to the position. The
-// index is not a name: it is the -ss value, and it is what makes platform#63's
+// index is not a name: it is the -ss value, and it is what makes platform#82's
 // restart arithmetic survive into a segmented design.
 func TestSegmentStartIsWhereFFmpegIsToldToSeek(t *testing.T) {
 	if got := segmentStart(0, segLen); got != 0 {
@@ -101,7 +101,7 @@ func TestSegmentStartIsWhereFFmpegIsToldToSeek(t *testing.T) {
 }
 
 // TestThePlaylistIsCompleteBeforeAnythingIsProduced is decision point 1 of
-// platform#64, stated as a test.
+// platform#82, stated as a test.
 //
 // Every segment of the film is listed, and the playlist is closed. That is what
 // lets a player seek to the last minute of a two-hour release before the

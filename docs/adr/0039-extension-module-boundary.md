@@ -57,8 +57,7 @@ Three properties of the current design constrain the answer sharply:
   version. [sdk#5](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0005-modules-observe-through-the-sdk.md) rejected exporting
   the OpenTelemetry API specifically to keep it that way, on the grounds that a
   contract must not distribute the Platform's taste in libraries. A gRPC serving
-  harness inside `sdk` would break that property by exactly the mechanism ADR
-  0059 refused.
+  harness inside `sdk` would break that property by exactly the mechanism [sdk#5](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0005-modules-observe-through-the-sdk.md) refused.
 - **The call graph is bidirectional.** The Platform calls `Import` and the
   provider roles; the module calls back into `ContentService` (many times per
   import) and `Telemetry`. This is not a one-way service.

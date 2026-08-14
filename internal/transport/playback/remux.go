@@ -86,7 +86,7 @@ func (r *Remuxer) Stream(ctx context.Context, upstreamURL string, headers map[st
 }
 
 // StreamFrom is Stream starting at an offset into the release, which is what
-// makes a transcoded stream seekable (platform#63).
+// makes a transcoded stream seekable (platform#82).
 //
 // Two flags carry the whole idea and both are load-bearing:
 //
@@ -182,7 +182,7 @@ func reconnectArgs(upstreamURL string) []string {
 }
 
 // Segment starts a transcode that writes HLS segments into dir, beginning at
-// segment index n (platform#64, platform#66).
+// segment index n (platform#82, platform#82).
 //
 // It returns handles to stop the process and to pause and resume it. The last
 // two are what the throttle needs: an audio-only remux runs at near-copy speed,
@@ -191,7 +191,7 @@ func reconnectArgs(upstreamURL string) []string {
 //
 // Three flags carry the design and each is load-bearing:
 //
-//   - **`-ss` before `-i`, with `-copyts`** — platform#63's arithmetic, re-keyed
+//   - **`-ss` before `-i`, with `-copyts`** — platform#82's arithmetic, re-keyed
 //     from a byte offset to a segment index. Together they make segment n begin
 //     at the timestamp its nominal position implies rather than at zero, which
 //     is what lets a client seek into a stream nothing has produced yet.
@@ -262,7 +262,7 @@ func (r *Remuxer) Segment(ctx context.Context, upstreamURL string, headers map[s
 }
 
 // Subtitles extracts one window of one embedded subtitle track as WebVTT
-// (platform#68).
+// (platform#83).
 //
 // It is the same arithmetic the video segments use — a start derived from an
 // index, a length, `-copyts` so the cues carry the times the source gave them —
@@ -325,7 +325,7 @@ func (r *Remuxer) Subtitles(ctx context.Context, upstreamURL string, headers map
 }
 
 // StyledSubtitles extracts one subtitle track as the script it was authored as
-// (platform#70).
+// (platform#83).
 //
 // **It is not windowed, and it cannot be.** An ASS script is one document: a
 // header, a style table and then the events, and libass needs all of it before
@@ -562,7 +562,7 @@ func (p Plan) videoFilter() string {
 }
 
 // serveSegmented answers the HLS surface for a release that must go through
-// ffmpeg (platform#64, platform#66).
+// ffmpeg (platform#82, platform#82).
 //
 // Three resources and a closed set: the playlist, the initialisation segment,
 // and a numbered segment. The resource is matched rather than used as a
@@ -584,7 +584,7 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 	// The entry point is a master when there are subtitles to declare and the
 	// media playlist itself when there are not, so a release with none is served
 	// exactly what it was before subtitles existed — no extra round trip bought
-	// for a rendition list that would be empty (platform#68).
+	// for a rendition list that would be empty (platform#83).
 	case (resource == "" || resource == PlaylistName) && len(t.Plan.Subtitles) > 0:
 		writePlaylist(w, r, masterPlaylist(
 			masterBandwidth(t.Plan.SourceBytes, t.Plan.Duration), t.Plan.Subtitles))
@@ -673,7 +673,7 @@ func serveSegmented(w http.ResponseWriter, r *http.Request, rx *Remuxer, session
 // PlaylistName is the playlist a client is pointed at. What it holds depends on
 // the release: the video's own segment list when there are no subtitles, and a
 // master declaring the video and each subtitle rendition when there are
-// (platform#68). The client asks for the same URL either way.
+// (platform#83). The client asks for the same URL either way.
 //
 // Exported because the transport that mints a ticket has to point the client at
 // it, and a second spelling of the same path is exactly the drift this avoids.
@@ -769,7 +769,7 @@ func serveSubtitleSegment(w http.ResponseWriter, r *http.Request, rx *Remuxer, t
 // boundaries are exactly this. Where it is copied the source's keyframes decide
 // and this is only what ffmpeg is asked for — which the nominal grid tolerates,
 // because a seek restarts at the position the playlist names rather than
-// inheriting where the previous segment happened to end (platform#66).
+// inheriting where the previous segment happened to end (platform#82).
 func segmentLengthFor(plan Plan) time.Duration { return encodedSegmentLength }
 
 // segmentIndexOf reads a segment index out of a resource name, accepting only
@@ -805,7 +805,7 @@ func writeSegment(w http.ResponseWriter, r *http.Request, contentType string, si
 }
 
 // ExternalSubtitles fetches a module-resolved subtitle file and converts it to
-// WebVTT (platform#72).
+// WebVTT (platform#83).
 //
 // **ffmpeg does the fetch as well as the conversion**, which is not laziness: it
 // already speaks every scheme a module might return, it already carries the

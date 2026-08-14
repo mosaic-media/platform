@@ -6,16 +6,16 @@ segments, the nominal grid is computed in `playlist.go` and the restart-at-`-ss`
 in `segments.go`, and `@mosaic-media/sdui-react` `0.22.0` reads them. No release
 has been watched through it — the row stays on the
 [register](../unreachable-capability.md#the-segmented-playback-origin).
-Consolidates platform#63, platform#64, platform#65 and platform#66, whose bodies
+Consolidates platform#82, platform#82, platform#82 and platform#82, whose bodies
 this replaces. **Three of those four were partly or wholly wrong as written**,
-and the corrections are kept below rather than in this line: platform#63 was
+and the corrections are kept below rather than in this line: platform#82 was
 *accepted, and partly wrong as written* — its measurement stood and its
-byte-addressing inference was disproved live; platform#64's decision points 1
+byte-addressing inference was disproved live; platform#82's decision points 1
 and 3 were superseded, its constant segment length being wrong and the drift it
-called tolerable being measured and not; and platform#65 was **superseded wholly
+called tolerable being measured and not; and platform#82 was **superseded wholly
 and never built**, both of its decisions wrong. The four measurements all stand
 and are reproduced here. This record replaces the numbers, not the history:
-platform#63 through platform#66 are retired and their numbers stay retired.
+platform#82 through platform#82 are retired and their numbers stay retired.
 **Date:** 2026-08-10
 
 ## Context
@@ -28,13 +28,13 @@ not repeat them.
 
 The four records superseded each other in parts rather than wholesale, and the
 chain is worth stating exactly, because most of each record survived the record
-that corrected it. platform#64 superseded **decision point 2 of platform#63**,
+that corrected it. platform#82 superseded **decision point 2 of platform#82**,
 leaving that record's measurement and its decision points 1 and 3 standing
-unchanged. platform#65 then superseded **decision points 1 and 3 of
-platform#64**, leaving platform#64's decision to segment and its points 2, 4 and
-5 standing. platform#66 superseded **platform#65 wholly** — both its decision to
+unchanged. platform#82 then superseded **decision points 1 and 3 of
+platform#82**, leaving platform#82's decision to segment and its points 2, 4 and
+5 standing. platform#82 superseded **platform#82 wholly** — both its decision to
 measure the source's keyframe interval and its degradation for irregular sources
-— and platform#64's decision to segment and its points 2, 4 and 5 stood through
+— and platform#82's decision to segment and its points 2, 4 and 5 stood through
 all of it. What follows is the surviving material from all four, arranged as one
 decision, with each failed design kept as history rather than deleted.
 
@@ -82,7 +82,7 @@ developer's credential, so it is a tool and never a CI test.
 
 ### Design 1 — byte addressing, and the overlapping-range failure
 
-The measurement said the upstream ranges, and platform#63 inferred from it that a
+The measurement said the upstream ranges, and platform#82 inferred from it that a
 transcoded stream could be made seekable **by byte**: advertise a length, map a
 requested offset onto a timestamp, restart ffmpeg there. Because a keyframe-aligned
 segment can be produced with `ffmpeg -ss` for the cost of one ranged fetch,
@@ -95,7 +95,7 @@ A ranging upstream makes an offset restart *cheap*; it does not make per-range
 restart *correct*. Serving each client range from its own ffmpeg was built and
 tested: a media element issues overlapping, opportunistic ranges, so one playback
 drew bytes from two transcodes at different timestamps and would not decode. The
-file-backed design platform#63 dismissed as unnecessary is required by **the
+file-backed design platform#82 dismissed as unnecessary is required by **the
 client's** range behaviour, not by the upstream's — the two are not variations,
 they are different systems, and building the wrong one is expensive. That is what
 the measurement was for, and it is why the delay to take it was worth paying.
@@ -146,7 +146,7 @@ transcoder is local-file only, so it never had to face it.
 
 ### Design 2 — segmented HLS at a constant length, and the drift that was not tolerable
 
-platform#64 took the alternative platform#63 had left open, and served the
+platform#82 took the alternative platform#82 had left open, and served the
 transcoded stream as HLS with a uniform VOD playlist computed from the probed
 duration at a **constant six-second** segment. It conceded, in its own decision
 point 3, that where the video is copied "ffmpeg cuts at the next keyframe in the
@@ -162,7 +162,7 @@ uniform playlist only for MPEG-TS. The moment it uses fragmented MP4 —
 playlist and serves ffmpeg's own rolling `EVENT` playlist instead, upgrading it
 to `VOD` only once ffmpeg has written `EXT-X-ENDLIST`. Its comment gives the
 reason: fMP4 segments snap to keyframe boundaries, so the playlist must reflect
-real timing. platform#64 specified a computed playlist *and* fMP4, which is the
+real timing. platform#82 specified a computed playlist *and* fMP4, which is the
 one pairing that record avoids.
 
 **A rolling playlist is not available to Mosaic**, whatever remux does with it. A
@@ -196,7 +196,7 @@ other half of the answer: when the two agree, a copied stream segments exactly.
 
 ### Design 3 — measure the source's keyframe interval. Never built, wrong twice.
 
-platform#65 read those rows and concluded that the origin must **measure** the
+platform#82 read those rows and concluded that the origin must **measure** the
 interval rather than choose it: where video is re-encoded the origin chooses,
 because `-force_key_frames` makes the playlist exact by construction; where video
 is copied, a head-only probe — `ffprobe -read_intervals`, reported as returning in
@@ -230,10 +230,10 @@ served:
 The window makes no difference. The "93 ms" was wall-clock against a small local
 file and was never a measure of what crosses a network. Learning the interval
 costs the same whole download as seanime's full keyframe index — the very cost
-platform#64 had rejected that index for.
+platform#82 had rejected that index for.
 
 **And the playlist does not describe a continuous run.** This is the deeper error.
-platform#65 assumed a playlist must describe what one uninterrupted ffmpeg will
+platform#82 assumed a playlist must describe what one uninterrupted ffmpeg will
 emit, which is why a mismatch between requested and actual segment length looked
 fatal. It does not, because **the origin restarts ffmpeg at the position the
 client asked for.** That machinery already existed — it is design 1's `-ss` before
@@ -254,7 +254,7 @@ the second row is the keyframe at 40 s, which is where a copy can begin and
 nowhere else.
 
 Three records governed one slice and two were superseded. That is the cost of
-reasoning where measuring was available: platform#65 was written from an inference
+reasoning where measuring was available: platform#82 was written from an inference
 about ffprobe's flags and a wall-clock number that measured the wrong thing.
 
 ## Decision

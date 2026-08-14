@@ -159,7 +159,7 @@ func Decode(raw []byte) (MediaInfo, bool) {
 // answer a question nobody asked.
 func SummaryAudioCodec(info MediaInfo) string {
 	// PreferredLanguages explicitly, and it stays install-wide on purpose now
-	// that language is a person's preference (platform#67). This column feeds
+	// that language is a person's preference (platform#83). This column feeds
 	// *candidate ranking*, which asks "will this release need an audio encode at
 	// all" — a coarse question one answer serves. Keying it per viewer is not
 	// possible anyway: it is one column on a Part that four people share, so it

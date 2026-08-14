@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// The segmented transcode's playlist (platform#64).
+// The segmented transcode's playlist (platform#82).
 //
 // **It is computed, not observed**, and that is the whole reason segmenting
 // replaces byte addressing. The origin cannot know how many bytes a transcode
@@ -22,7 +22,7 @@ import (
 // single byte exists, and a player can seek anywhere in it immediately.
 //
 // Nothing here starts a transcode or touches ffmpeg. That separation is
-// deliberate: this is the part of platform#64 that is pure arithmetic over a
+// deliberate: this is the part of platform#82 that is pure arithmetic over a
 // duration, and it is the part that can be checked without a decoder — which
 // matters in a slice whose every previous design passed its unit tests and
 // failed in a browser.
@@ -41,7 +41,7 @@ import (
 // keyframes yields ten-second segments however this is set. The nominal grid
 // tolerates that, because a seek restarts at the position the playlist names
 // rather than inheriting where the previous segment happened to end
-// (platform#66).
+// (platform#82).
 const encodedSegmentLength = 6 * time.Second
 
 // segmentCount is how many segments a release of this length divides into.
@@ -98,7 +98,7 @@ const HLSMimeType = mediaPlaylistType
 //
 // **There is no master playlist, because there is one rendition.** A master
 // exists to let a client choose between variants, and Mosaic serves exactly one:
-// platform#64 puts a real bitrate ladder out of scope, because a menu of unrelated
+// platform#82 puts a real bitrate ladder out of scope, because a menu of unrelated
 // releases cannot supply aligned renditions at any level of effort. Emitting a
 // master anyway would cost a round trip and would require declaring a CODECS
 // string the origin can only guess at before the transcode runs — and a wrong
@@ -154,11 +154,11 @@ const initSegment = -1
 // videoPlaylistName is where the video's own media playlist moves to once a
 // master exists above it. Without subtitles there is no master and the media
 // playlist keeps the entry-point name, so a release with none is served exactly
-// the bytes it was before (platform#68).
+// the bytes it was before (platform#83).
 const videoPlaylistName = "v.m3u8"
 
 // masterPlaylist declares the video rendition and one subtitle rendition per
-// offered track (platform#68).
+// offered track (platform#83).
 //
 // A master is emitted only when there are subtitles to declare. The comment on
 // mediaPlaylist gives the reasons not to have one — a round trip, and a CODECS
@@ -185,7 +185,7 @@ func masterPlaylist(bandwidth int, subtitles []SubtitleDelivery) string {
 		if s.Language != "" {
 			b.WriteString(fmt.Sprintf(",LANGUAGE=%q", s.Language))
 		}
-		// DEFAULT is the whole delivery of platform#67: the escalation decided
+		// DEFAULT is the whole delivery of platform#83: the escalation decided
 		// which track comes on, and this attribute is where that decision
 		// reaches the player. AUTOSELECT tracks it, so a client choosing by the
 		// system language does not overrule a choice the viewer already made.

@@ -52,7 +52,7 @@ const PreferenceExpertMode = "ui.expert_mode"
 const PreferenceHomeRows = "ui.home.rows"
 
 // PreferenceLanguages is which languages a viewer wants to hear and read
-// (platform#67).
+// (platform#83).
 //
 // **Language belongs to a person, not to an install**, which is the whole
 // reason this key exists: the Platform picked audio tracks from a package

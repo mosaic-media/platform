@@ -323,7 +323,7 @@ type SubtitlesProviderEntry struct {
 // RoleSubtitles, in stable module-id order.
 //
 // The plural was missing while the singular was not, and that is the shape of
-// the gap platform#72 closes: `SubtitlesProvider(id)` could resolve one *by name*
+// the gap platform#83 closes: `SubtitlesProvider(id)` could resolve one *by name*
 // and nothing ever knew a name to ask for. Subtitles fan out for the same reason
 // streams do (platform#46) — a provider is asked about content it did not source,
 // so every installed one is asked rather than only the module that supplied the

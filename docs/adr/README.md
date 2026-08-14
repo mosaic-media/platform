@@ -68,16 +68,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 60 | [The library is built from rules, and a job maintains it](0060-the-library-is-built-from-rules.md) | Accepted and built in part in roadmap M2a, on M0.1's runner, scheduler and system principal. |
 | 61 | [The pre-session action lane](0061-the-pre-session-action-lane.md) | Accepted and built (M1.1, M1.2). |
 | 62 | [The Platform keeps what a source told it, and tops up the tree](0062-the-platform-keeps-what-a-source-told-it.md) | Accepted and built in roadmap M2a, discharging M2.7's durable metadata cache. |
-| 63 | [The origin is a pipe only where it must be](0063-the-origin-is-a-pipe-only-where-it-must-be.md) | Accepted, and partly wrong as written. The measurement stands. |
-| 64 | [The transcoded stream is segmented, not byte-addressed](0064-the-transcoded-stream-is-segmented.md) | Accepted. Built on both sides, and never played. internal/transport/playback serves index.m3u8, init.mp4 and numbered segments; |
-| 65 | [The segment length is measured from the source, not chosen](0065-the-segment-length-is-measured.md) | Superseded wholly by [platform#66](0066-the-playlist-is-a-nominal-grid.md), and never built. Both decisions here are wrong. |
-| 66 | [The playlist is a nominal grid, and a segment index is a seek instruction](0066-the-playlist-is-a-nominal-grid.md) | Accepted. Built, and never played. |
-| 67 | [Language is a person's preference, and subtitles answer to whether it was met](0067-language-is-a-persons-preference.md) | Accepted. Built for embedded subtitle tracks on the transcoded path. |
-| 68 | [Subtitles are a rendition, extracted a window at a time](0068-subtitles-are-a-rendition.md) | Accepted. Built for embedded tracks on the transcoded path. Not built for direct-played releases or for module-provided subtitles; |
-| 69 | [A subtitle track has a form, and only one form can be burned into the picture](0069-a-subtitle-track-has-a-form.md) | Accepted. Built. The classification, the three delivery paths and the opt-in setting are in. |
-| 70 | [A styled subtitle track goes to the client whole, and burning is what is left when it cannot](0070-a-styled-subtitle-goes-to-the-client.md) | Accepted. |
 | 71 | [A preference is a default, an override is one sitting](0071-a-preference-is-a-default-an-override-is-a-sitting.md) | Accepted. Built. The candidate list, the picker screen, the no-candidate state and the per-play audio and subtitle overrides are in. |
-| 72 | [The subtitles role gets a consumer, and the Platform fetches what it finds](0072-the-subtitles-role-gets-a-consumer.md) | Accepted. Built. |
 | 73 | [Playing something unowned adds it](0073-playing-something-unowned-adds-it.md) | Accepted. Built. |
 | 74 | [Operational findings are durable state](0074-operational-findings-are-durable-state.md) | Built. The register, its screen and the Supervisor's spool all landed; unhealthy and unsupported did not — see the roadmap. |
 | 75 | [The children listen on Unix sockets](0075-the-children-listen-on-unix-sockets.md) | Built. |
@@ -87,6 +78,8 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 79 | [TOTP is the second factor that works everywhere](0079-totp-is-the-second-factor-that-works-everywhere.md) | Proposed. Nothing is built. domain.RecoveryFactor already exists — single-use, hashed, with ConsumedAt — and has never had a caller; |
 | 80 | [An optional capability is announced once, when it becomes possible](0080-an-optional-capability-is-announced-once-when-it-becomes-possible.md) | Proposed. Nothing is built. |
 | 81 | [The install key](0081-the-install-key.md) | Proposed. The sealing envelope is built (internal/adapters/crypto/sealer.go); the key it needs is not, which is what this record is for. |
+| 82 | [The origin relays where it can, and serves a nominal segment grid where it cannot](0082-the-origin-relays-or-serves-a-nominal-segment-grid.md) | Accepted. Built on both sides, and never played. |
+| 83 | [Subtitles answer to a person's language preference, in whatever form the track has](0083-subtitles-answer-to-a-persons-language-preference.md) | Accepted. Built, with four things named rather than claimed. |
 
 ## Records this repository depends on
 
@@ -138,8 +131,7 @@ Decisions held elsewhere that these records cite. They bind work here and are no
 - [supervisor#4](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0004-supervisor-driven-live-handover.md)
 - [supervisor#5](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0005-the-supervisor-observes-independently.md)
 - [supervisor#7](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0007-the-supervisor-answers-the-platforms-client-surface.md)
-- [supervisor#9](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0009-major-upgrades-are-never-automatic.md)
-- [supervisor#11](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0011-the-monitored-version-is-the-contract-not-the-artefact.md)
+- [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md)
 
 **`web`**
 

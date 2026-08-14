@@ -5,13 +5,13 @@ audio-encode-video-copy path are built, and implementation added one thing this
 record does not anticipate: HDR is tone-mapped rather than copied, because
 passing HDR10 metadata to an SDR browser decoder produces a purple-and-green
 picture. **The HLS emission below has landed since**, by a route this record
-does not describe: [platform#64](0064-the-transcoded-stream-is-segmented.md) and
-[platform#66](0066-the-playlist-is-a-nominal-grid.md) make the transcoded stream a
+does not describe: [platform#82](0082-the-origin-relays-or-serves-a-nominal-segment-grid.md) and
+[platform#82](0082-the-origin-relays-or-serves-a-nominal-segment-grid.md) make the transcoded stream a
 computed playlist over restart-addressed segments, so anything encoded is served
 as `index.m3u8`, `init.mp4` and numbered segments and is seekable. The
 unseekable fragmented-MP4 pipe survives only where a source reports no duration
 — there is no grid to compute — and answers `Accept-Ranges: none` there. **Nothing
-has been watched through the segmented path**, which is [platform#64](0064-the-transcoded-stream-is-segmented.md)'s own status
+has been watched through the segmented path**, which is [platform#82](0082-the-origin-relays-or-serves-a-nominal-segment-grid.md)'s own status
 line and a row on the [register](../unreachable-capability.md).
 **Probe results are now durable on the Part, with one departure:** the technical
 columns this record points at cannot hold a track list, and the four-audio-track

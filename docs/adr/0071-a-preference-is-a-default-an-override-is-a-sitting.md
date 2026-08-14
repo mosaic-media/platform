@@ -22,7 +22,7 @@ import, a source that has stopped offering something — rendered as though
 playback were broken, which sent people looking for a bug that was not there.
 
 **Item 6: the preference had no escape hatch.**
-[platform#67](0067-language-is-a-persons-preference.md) made language a per-user
+[platform#83](0083-subtitles-answer-to-a-persons-language-preference.md) made language a per-user
 preference and its own Alternatives section deferred the other half:
 
 > **Per-title overrides.** *Out of scope, not rejected.* Choosing a specific
@@ -108,7 +108,7 @@ different answers. The client echoes; the server decides
   subtitle overrides are honoured on the play path and reachable by any client
   that sends them; the screen that would offer them as controls is not built.
   Embedded subtitle tracks are separately switchable in the player's own menu
-  ([platform#68](0068-subtitles-are-a-rendition.md)), so the visible gap is audio. That is an
+  ([platform#83](0083-subtitles-answer-to-a-persons-language-preference.md)), so the visible gap is audio. That is an
   [unreachable capability](../unreachable-capability.md) row until the surface
   lands.
 - **A stable tiebreak was needed and is not cosmetic.** Two candidates that rank

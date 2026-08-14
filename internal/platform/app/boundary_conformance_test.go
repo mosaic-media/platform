@@ -97,7 +97,7 @@ var boundaryExempt = map[string]string{
 	// forbids, because a hidden row is not evidence of a permission.
 	"HomeCompositionFor": "display preference; authenticates but does not authorize, returns no content, and hides nothing that is not reachable by other means",
 	// LanguagePreferenceFor reads what the caller wants to hear and read
-	// (platform#67). Exempt on the same terms as the two rows above: it
+	// (platform#83). Exempt on the same terms as the two rows above: it
 	// authenticates, deliberately does not authorize, and returns the caller's
 	// own stored document and nothing else — no content, no other viewer's
 	// setting, nothing a permission was protecting.

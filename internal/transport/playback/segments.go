@@ -15,7 +15,7 @@ import (
 	"github.com/mosaic-media/platform/internal/adapters/filesystem"
 )
 
-// The transcode session, keyed by segment (platform#64, platform#66).
+// The transcode session, keyed by segment (platform#82, platform#82).
 //
 // **Segment N is what ffmpeg produces when started at N × the segment length.**
 // It is not the Nth segment of a continuous run, and that distinction is the

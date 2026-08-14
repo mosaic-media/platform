@@ -147,7 +147,7 @@ func TestBoolPreferenceFallsBackRatherThanFailing(t *testing.T) {
 }
 
 // TestLanguagePreferenceIsTheCallersOwnAndCannotFailAPlay covers the two claims
-// the boundary exemption for LanguagePreferenceFor rests on (platform#67), because
+// the boundary exemption for LanguagePreferenceFor rests on (platform#83), because
 // an exemption written in a comment and never exercised is an assertion rather
 // than a property.
 //

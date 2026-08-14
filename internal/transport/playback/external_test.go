@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// Module-found subtitle files (platform#72). Unlike every other track here they
+// Module-found subtitle files (platform#83). Unlike every other track here they
 // are not in the release, which is what lets a direct-played stream have them.
 
 // TestAnExternalSubtitleIsServedOnBothPaths is the property that makes this
