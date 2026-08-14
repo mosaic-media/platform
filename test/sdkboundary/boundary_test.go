@@ -8,6 +8,7 @@
 package sdkboundary_test
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,8 +51,22 @@ func TestPublishedSurfaceCompilesFromAnExternalModule(t *testing.T) {
 	cmd.Env = append(os.Environ(), "GOWORK=off")
 
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("an external module failed to compile against contracts/platform/v1 "+
-			"— an internal type has leaked into the published surface (platform#12):\n%s", out)
+	if err == nil {
+		return
 	}
+
+	// **Say which failure this is.** The message used to report every build
+	// failure as an internal-type leak, which is the one diagnosis most of them
+	// are not: a missing go.sum entry reported as "an internal type has leaked
+	// into the published surface" sends the reader to look for a leak that was
+	// never there. The comment above already names the same trap for an ambient
+	// go.work; this makes the distinction the test's own rather than a comment's.
+	if bytes.Contains(out, []byte("use of internal package")) {
+		t.Fatalf("an internal type has leaked into the published surface (platform#12) "+
+			"— an external module cannot import it:\n%s", out)
+	}
+	t.Fatalf("the probe failed to build, and NOT because of an internal-type leak — "+
+		"no 'use of internal package' in the output. A missing go.sum entry means the "+
+		"SDK's requirements moved and test/sdkprobe's go.mod/go.sum need `go mod tidy` "+
+		"in the container:\n%s", out)
 }
