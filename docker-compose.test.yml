@@ -99,6 +99,14 @@ services:
       - pipefail
       - -c
       - |
+        # The decision-record checks. This image carries no interpreter of its
+        # own, so install one if it is absent rather than assume either way —
+        # a check that silently does not run is what this repository's gate
+        # exists to prevent.
+        command -v python3 >/dev/null || { apt-get update -qq && \
+          apt-get install -y -qq --no-install-recommends python3 >/dev/null; }
+        python3 scripts/adr_index.py --repo platform --check
+        python3 scripts/adr_lint.py --repo platform --exclude 'scripts/adr_*.py'
         go run ./tools/licenseheader -check
         gofmt -l . > /tmp/unformatted
         if [ -s /tmp/unformatted ]; then

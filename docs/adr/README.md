@@ -92,6 +92,13 @@ A record is cited from another repository as `platform#N`, written as a link to 
 
 Decisions held elsewhere that these records cite. They bind work here and are not repeated — follow the link.
 
+**`architecture`**
+
+- [architecture#1](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0001-licensing.md)
+- [architecture#2](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0002-repository-naming-convention.md)
+- [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md)
+- [architecture#4](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0004-project-credentials-in-official-builds.md)
+
 **`contracts`**
 
 - [contracts#1](https://github.com/mosaic-media/contracts/blob/main/docs/adr/0001-server-driven-ui-and-the-shell.md)
