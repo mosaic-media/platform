@@ -118,7 +118,7 @@ fact is self-promotion.
   substitution this record makes for a tier that structurally could not.
 - **None of it is reachable yet.** There is no client surface for creating a
   user or granting a role, which remains the
-  [unreachable capability](../unreachable-capability.md) register's largest
+  [unreachable capability](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md) register's largest
   entry. `GrantablePermissions` exists, is tested, and has no screen — stated
   rather than implied.
 - **Presets will drift from the UI's vocabulary unless the UI reads them.**

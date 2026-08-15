@@ -14,7 +14,7 @@ surface a client actually reaches, and revert keeping the evidence. All of it
 works and all of it is reachable **only from Go**. Nothing polls the catalogue
 and no surface offers the check or the upgrade, so an install that could upgrade
 itself safely has no way to be told to. It has been a row on the
-[unreachable-capability register](../unreachable-capability.md) since the
+[unreachable-capability register](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md) since the
 mechanism landed.
 
 [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md) decided the *policy* — three levels, and a contract change is never

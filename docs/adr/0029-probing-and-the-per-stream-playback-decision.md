@@ -12,7 +12,7 @@ as `index.m3u8`, `init.mp4` and numbered segments and is seekable. The
 unseekable fragmented-MP4 pipe survives only where a source reports no duration
 — there is no grid to compute — and answers `Accept-Ranges: none` there. **Nothing
 has been watched through the segmented path**, which is [platform#82](0082-the-origin-relays-or-serves-a-nominal-segment-grid.md)'s own status
-line and a row on the [register](../unreachable-capability.md).
+line and a row on the [register](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md).
 **Probe results are now durable on the Part, with one departure:** the technical
 columns this record points at cannot hold a track list, and the four-audio-track
 release below is exactly why that matters — so the full result is stored as a

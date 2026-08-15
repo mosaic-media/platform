@@ -9,7 +9,7 @@ The Stremio module ([platform#15](0015-module-capability-and-invocation.md), [pl
 
 Building the module surfaced the gap, which is the point of building modules — they are the forcing function that finds what the SDK is missing. The gap is **user-managed, module-scoped configuration**: a place a module's runtime settings live, a way a user sets them, and a way the module reads them on invocation.
 
-This is deliberately *not* the platform Config system ([config versioning](../architecture.md)). That system is operator configuration — versioned, activated as a whole, and reload-classed (Hot/Restart/Generation/Recovery). You do not cut a new config Generation to add an addon. Module settings are user-owned data that changes freely at runtime, with no version to activate and no reload class to declare.
+This is deliberately *not* the platform Config system ([config versioning](https://github.com/mosaic-media/architecture/blob/main/docs/architecture.md)). That system is operator configuration — versioned, activated as a whole, and reload-classed (Hot/Restart/Generation/Recovery). You do not cut a new config Generation to add an addon. Module settings are user-owned data that changes freely at runtime, with no version to activate and no reload class to declare.
 
 ## Decision
 

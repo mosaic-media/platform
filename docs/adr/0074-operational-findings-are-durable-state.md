@@ -20,7 +20,7 @@ Generation and roll it back when the new one fails its health check
 its own upgrade and says so only in a log is one where the user's report is "it
 didn't update" and the truth is three days old and rotated away.
 
-The [unreachable-capability register](../unreachable-capability.md) is a
+The [unreachable-capability register](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md) is a
 document about the inverse problem — capabilities with no client path — and it
 is maintained by hand, by people, about the build. It is not a runtime
 mechanism and must not be confused with one.

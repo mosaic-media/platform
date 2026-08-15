@@ -5,7 +5,7 @@
 segments, the nominal grid is computed in `playlist.go` and the restart-at-`-ss`
 in `segments.go`, and `@mosaic-media/sdui-react` `0.22.0` reads them. No release
 has been watched through it — the row stays on the
-[register](../unreachable-capability.md#the-segmented-playback-origin).
+[register](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md#the-segmented-playback-origin).
 Consolidates the four records of the segmented-origin run, whose bodies this
 replaces. Their numbers are retired and stay retired, so they are named
 throughout as the first through fourth attempt rather than cited — a citation

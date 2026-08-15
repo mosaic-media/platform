@@ -109,7 +109,7 @@ different answers. The client echoes; the server decides
   that sends them; the screen that would offer them as controls is not built.
   Embedded subtitle tracks are separately switchable in the player's own menu
   ([platform#83](0083-subtitles-answer-to-a-persons-language-preference.md)), so the visible gap is audio. That is an
-  [unreachable capability](../unreachable-capability.md) row until the surface
+  [unreachable capability](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md) row until the surface
   lands.
 - **A stable tiebreak was needed and is not cosmetic.** Two candidates that rank
   equally must come back in the same order every render, or the list moves under

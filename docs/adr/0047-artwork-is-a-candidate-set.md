@@ -198,7 +198,7 @@ each source's own rank and preferring within a source is honest and sufficient.
   is a per-slot resolution rather than a per-provider ranking. That is not a
   general answer — streams still need one — but it is the correct answer here.
 - **The picker is not built by this record**, and a capability with no client
-  path is [owed](../unreachable-capability.md) rather than done. Selection
+  path is [owed](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md) rather than done. Selection
   resolving by rule is reachable; a user overriding it is not, until a screen
   exists to do it on.
 

@@ -512,7 +512,7 @@ set of reconnect behaviour, to avoid a process for a file measured in kilobytes.
   was the second one.
 - **A preference nobody can set is not a preference.** It ships with a surface to
   set it in the same change, or it is an
-  [unreachable capability](../unreachable-capability.md) row rather than a
+  [unreachable capability](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md) row rather than a
   feature.
 - **Direct-played releases get no *embedded* subtitles.** A relayed stream is the
   upstream's own bytes and the origin adds no playlist to hang a rendition off.

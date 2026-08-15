@@ -158,7 +158,7 @@ reporting GraphQL handles worst.
 - **The gap gets a register rather than a sentence.** Deleting a surface makes
   its absence invisible: the application services keep their tests, so the build
   stays green and the roadmap keeps saying "done". [Unreachable
-  capability](../unreachable-capability.md) enumerates every affected operation,
+  capability](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md) enumerates every affected operation,
   classifies it (owed / migrated / never worked), and states what discharging it
   requires. Enumerating the deleted schema to write it surfaced a case this ADR
   did not cause and would otherwise have missed: `app.CreateLocalUser` is a

@@ -109,7 +109,7 @@ Three honest limits:
    but it means a module that wants a bespoke configuration screen has none; the
    Platform renders module settings generically. Named, not solved.
 3. **The skin is still neutral.** These screens render on the Shell's neutral
-   token skin; the Mosaic Design Language ([roadmap](../roadmap.md)) that replaces
+   token skin; the Mosaic Design Language ([roadmap](https://github.com/mosaic-media/architecture/blob/main/docs/roadmap.md)) that replaces
    it is separate work.
 
 ## Implementation implications
