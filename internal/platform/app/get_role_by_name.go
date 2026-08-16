@@ -42,7 +42,6 @@ type GetRoleByNameResult struct {
 // role carries is not the authority to hand it out, and the grant itself is
 // bounded by what the grantor holds whatever this returns (platform#44).
 func (s *Service) GetRoleByName(ctx context.Context, q GetRoleByNameQuery) (GetRoleByNameResult, error) {
-	// 1. validate query shape.
 	if q.Caller.Session == "" {
 		return GetRoleByNameResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
@@ -50,7 +49,6 @@ func (s *Service) GetRoleByName(ctx context.Context, q GetRoleByNameQuery) (GetR
 		return GetRoleByNameResult{}, contracts.NewError(contracts.InvalidArgument, "a role name is required")
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	if _, err := s.enter(ctx, q.Caller, ActionPermissionRead, policy.Resource{Type: "role"}); err != nil {
 		return GetRoleByNameResult{}, err
 	}

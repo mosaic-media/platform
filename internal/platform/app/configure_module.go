@@ -51,18 +51,16 @@ func validateConfigureModuleCommand(cmd ConfigureModuleCommand) error {
 // boundary. It refuses an id that names no registered module, so a user cannot
 // configure something that will never run.
 func (s *Service) ConfigureModule(ctx context.Context, cmd ConfigureModuleCommand) (ConfigureModuleResult, error) {
-	// 1. validate command shape.
 	if err := validateConfigureModuleCommand(cmd); err != nil {
 		return ConfigureModuleResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionModuleConfigure, policy.Resource{Type: "module"})
 	if err != nil {
 		return ConfigureModuleResult{}, err
 	}
 
-	// 4. the module must be registered.
+	// The module must be registered.
 	if _, ok := s.lookupCapability(cmd.ModuleID); !ok {
 		return ConfigureModuleResult{}, contracts.NewError(contracts.NotFound, "no module registered under id "+cmd.ModuleID)
 	}
@@ -72,7 +70,6 @@ func (s *Service) ConfigureModule(ctx context.Context, cmd ConfigureModuleComman
 		settings = []byte("{}")
 	}
 
-	// 5. persist the settings and the outbox event in one transaction.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
 		if _, err := tx.ModuleSettings().Set(ctx, domain.ModuleSettings{
 			ModuleID: cmd.ModuleID, Settings: settings, UpdatedAt: s.clock.Now(),
@@ -87,6 +84,5 @@ func (s *Service) ConfigureModule(ctx context.Context, cmd ConfigureModuleComman
 		return ConfigureModuleResult{}, err
 	}
 
-	// 6. return a Platform result type.
 	return ConfigureModuleResult{ModuleID: cmd.ModuleID, Settings: settings}, nil
 }

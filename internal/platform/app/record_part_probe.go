@@ -74,7 +74,6 @@ type RecordPartProbeResult struct {
 // the gate is unchanged and a read-only viewer can still warm the cache, and
 // the event's actor is the system, since nobody asked for this write.
 func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeCommand) (RecordPartProbeResult, error) {
-	// 1. validate command shape.
 	if cmd.Caller.Session == "" {
 		return RecordPartProbeResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
@@ -85,7 +84,6 @@ func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeComman
 		return RecordPartProbeResult{}, contracts.NewError(contracts.InvalidArgument, "probe document is not valid JSON")
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionContentBind, policy.Resource{Type: "content"})
 	if err != nil {
 		return RecordPartProbeResult{}, err
@@ -93,16 +91,12 @@ func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeComman
 
 	var result RecordPartProbeResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5. load state through contracts.
 		part, err := tx.Parts().FindByID(ctx, cmd.PartID)
 		if err != nil {
 			return err
 		}
 
-		// 6. apply domain rules.
-		//
 		// The probe is authoritative and overwrites whatever the module parsed
 		// from the release name (platform#29, which demoted parsing to a ranking
 		// hint). An empty field is still left alone: a probe that could not
@@ -138,7 +132,6 @@ func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeComman
 		part.Attributes = attributes
 		part.UpdatedAt = s.clock.Now()
 
-		// 7. persist state and the outbox event in the same transaction.
 		updated, err := tx.Parts().Update(ctx, part)
 		if err != nil {
 			return err
@@ -156,7 +149,6 @@ func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeComman
 		return RecordPartProbeResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }
 

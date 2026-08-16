@@ -52,8 +52,8 @@ func HTTPMuxMiddleware(component string, mux *http.ServeMux) http.Handler {
 	})
 }
 
-// instrument is the shared body. resolveRoute may be nil, in which case the
-// route comes from r.Pattern (set by an enclosing mux) or the component name.
+// instrument is the shared body of both middlewares. resolveRoute may be nil;
+// routeName is what decides the label a request is recorded under either way.
 func instrument(component string, next http.Handler, resolveRoute func(*http.Request) string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := StartRequest(r.Context(), r.Header.Get(TraceparentHeader))
@@ -64,21 +64,9 @@ func instrument(component string, next http.Handler, resolveRoute func(*http.Req
 			w.Header().Set(TraceIDHeader, tc.TraceIDString())
 		}
 
-		// The route pattern, never r.URL.Path. A playback path carries a sealed
-		// ticket and an artwork path a signed URL — both credential-bearing, and
-		// both would be written verbatim by the obvious version of this line.
-		// The pattern is what was matched, which is what anyone reading this
-		// actually wants, and it carries nothing.
-		//
 		// Resolved before the handler runs so it can name the span, which has
 		// to be named at Start rather than at End.
-		route := r.Pattern
-		if route == "" && resolveRoute != nil {
-			route = resolveRoute(r)
-		}
-		if route == "" {
-			route = component
-		}
+		route := routeName(r, resolveRoute, component)
 
 		ctx, span := Start(ctx, r.Method+" "+route,
 			String("http.method", r.Method),
@@ -103,6 +91,25 @@ func instrument(component string, next http.Handler, resolveRoute func(*http.Req
 			Int("status", rec.status),
 			Duration("elapsed", time.Since(started).Round(time.Millisecond)))
 	})
+}
+
+// routeName is what a span and a log record call the request: the route pattern,
+// never r.URL.Path. A playback path carries a sealed ticket and an artwork path a
+// signed URL — both credential-bearing, and both would be written verbatim by the
+// obvious version of this. The pattern is what was matched, which is what anyone
+// reading this actually wants, and it carries nothing.
+//
+// resolveRoute may be nil, and an unmatched request has no pattern, so the
+// component name is the last resort rather than an empty label.
+func routeName(r *http.Request, resolveRoute func(*http.Request) string, component string) string {
+	route := r.Pattern
+	if route == "" && resolveRoute != nil {
+		route = resolveRoute(r)
+	}
+	if route == "" {
+		route = component
+	}
+	return route
 }
 
 // statusRecorder captures the status code for the record above. It forwards

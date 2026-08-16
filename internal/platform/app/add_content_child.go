@@ -50,12 +50,10 @@ func validateAddContentChildCommand(cmd v1.AddContentChildCommand) error {
 // its work id and media type from its parent (platform#9), so a season cannot
 // declare a different media type than its series.
 func (s *Service) AddContentChild(ctx context.Context, cmd v1.AddContentChildCommand) (v1.AddContentChildResult, error) {
-	// 1. validate command shape.
 	if err := validateAddContentChildCommand(cmd); err != nil {
 		return v1.AddContentChildResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionContentCreate, policy.Resource{Type: "content"})
 	if err != nil {
 		return v1.AddContentChildResult{}, err
@@ -63,10 +61,9 @@ func (s *Service) AddContentChild(ctx context.Context, cmd v1.AddContentChildCom
 
 	var result v1.AddContentChildResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5. load the parent — it fixes the tree and the media type, and its
-		// absence is the caller's error (NotFound propagates).
+		// The parent fixes the tree and the media type, and its absence is the
+		// caller's error (NotFound propagates).
 		parent, err := tx.Nodes().FindByID(ctx, cmd.ParentID)
 		if err != nil {
 			return err
@@ -92,7 +89,6 @@ func (s *Service) AddContentChild(ctx context.Context, cmd v1.AddContentChildCom
 			UpdatedAt:     now,
 		}
 
-		// 7. persist state and the outbox event in the same transaction.
 		created, err := tx.Nodes().Create(ctx, child)
 		if err != nil {
 			return err
@@ -110,6 +106,5 @@ func (s *Service) AddContentChild(ctx context.Context, cmd v1.AddContentChildCom
 		return v1.AddContentChildResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }

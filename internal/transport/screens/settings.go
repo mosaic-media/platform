@@ -144,16 +144,51 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 	nav := settingsNavModel{}
 	var groups []settingsNavGroup
 
-	// Preferences — what is true of the person reading, not of the install.
-	// Account is always here: everyone signed in has a name, and a settings
-	// screen whose first section a viewer cannot open is a settings screen that
-	// opens on an error.
-	//
-	// Home is here beside it, and deliberately not under Server: the library is
-	// one shared graph and this decides nothing about it, only about how one
-	// person sees it (platform#59). It needs no permission gate for the same
-	// reason — a viewer arranging their own screen has authority over nobody.
-	groups = append(groups, settingsNavGroup{label: "Preferences", entries: []settingsNavEntry{{
+	groups = append(groups, preferencesGroup())
+
+	server := s.serverEntries(ctx, caller)
+	if len(server) > 0 {
+		groups = append(groups, settingsNavGroup{label: "Server", entries: server})
+	}
+
+	entries, err := s.extensionsEntries(ctx, caller)
+	if err != nil {
+		return settingsNavModel{}, err
+	}
+	if len(entries) > 0 {
+		groups = append(groups, settingsNavGroup{label: "Extensions", entries: entries})
+	}
+
+	// The control is drawn only for a caller who could use what it reveals — a
+	// normal user does not see the switch at all, rather than seeing it and being
+	// denied the data behind it. It remains a hint and never a gate: each screen
+	// authorises telemetry.read for itself, so navigating straight to one without
+	// the grant is refused regardless of what was drawn.
+	canReadTelemetry := s.content.CallerCan(ctx, caller, app.ActionTelemetryRead, "telemetry")
+	canReadJobs := s.content.CallerCan(ctx, caller, app.ActionJobRead, "job")
+	nav.showExpertMode = canReadTelemetry || canReadJobs
+	if nav.showExpertMode {
+		nav.expertModeOn = s.content.ExpertModeEnabled(ctx, caller)
+	}
+	if nav.showExpertMode && nav.expertModeOn {
+		diagnostics := diagnosticsEntries(canReadTelemetry, canReadJobs)
+		groups = append(groups, settingsNavGroup{label: "Diagnostics", entries: diagnostics})
+	}
+
+	nav.groups = groups
+	return nav, nil
+}
+
+// preferencesGroup is what is true of the person reading, not of the install.
+//
+// Account is always here: everyone signed in has a name, and a settings screen
+// whose first section a viewer cannot open is a settings screen that opens on an
+// error. Home is here beside it, and deliberately not under Server: the library
+// is one shared graph and this decides nothing about it, only about how one
+// person sees it (platform#59). The group needs no permission gate for the same
+// reason — a viewer arranging their own screen has authority over nobody.
+func preferencesGroup() settingsNavGroup {
+	return settingsNavGroup{label: "Preferences", entries: []settingsNavEntry{{
 		key:    sectionAccount,
 		label:  "Account",
 		icon:   "info",
@@ -171,12 +206,13 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 		icon:   "info",
 		action: ui.Navigate(screenSettings, map[string]any{paramSection: sectionLanguages}),
 		panel:  true,
-	}}})
+	}}}
+}
 
-	// Server — the install and who reaches it. Each row is gated on its own
-	// permission, so a caller granted one and not the other sees exactly the
-	// rows they can open, and the group appears only if there is something in
-	// it.
+// serverEntries are the rows about the install and who reaches it. Each is gated
+// on its own permission, so a caller granted one and not the other sees exactly
+// the rows they can open, and the caller drops the group when nothing is in it.
+func (s *Service) serverEntries(ctx context.Context, caller v1.Caller) []settingsNavEntry {
 	var server []settingsNavEntry
 	if s.content.CallerCan(ctx, caller, app.ActionUserRead, "user") {
 		server = append(server, settingsNavEntry{
@@ -225,19 +261,19 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 			panel:  true,
 		})
 	}
-	if len(server) > 0 {
-		groups = append(groups, settingsNavGroup{label: "Server", entries: server})
-	}
+	return server
+}
 
-	// Extensions — the store, then the installed ones nested beneath it, as the
-	// design draws them: one list that reads as a hierarchy rather than a store
-	// in one group and its results in another.
-	//
-	// The store row and the installed rows are gated separately, and must be:
-	// browsing what the repository offers is an install-level permission, while
-	// opening the settings of something already installed is not. Nesting the
-	// second under the first would take a module's settings away from every
-	// caller who may use that module and may not install another.
+// extensionsEntries are the store row, then the installed modules nested beneath
+// it, as the design draws them: one list that reads as a hierarchy rather than a
+// store in one group and its results in another.
+//
+// The store row and the installed rows are gated separately, and must be:
+// browsing what the repository offers is an install-level permission, while
+// opening the settings of something already installed is not. Nesting the second
+// under the first would take a module's settings away from every caller who may
+// use that module and may not install another.
+func (s *Service) extensionsEntries(ctx context.Context, caller v1.Caller) ([]settingsNavEntry, error) {
 	var entries []settingsNavEntry
 	if s.content.CallerCan(ctx, caller, app.ActionModuleRead, "extension") {
 		entries = append(entries, settingsNavEntry{
@@ -259,7 +295,7 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 		var err error
 		res, err = s.content.ListSettingsModules(ctx, app.ListSettingsModulesQuery{Caller: caller})
 		if err != nil {
-			return settingsNavModel{}, err
+			return nil, err
 		}
 	}
 	for _, m := range res.Modules {
@@ -273,47 +309,30 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 			indent: len(entries) > 0,
 		})
 	}
-	if len(entries) > 0 {
-		groups = append(groups, settingsNavGroup{label: "Extensions", entries: entries})
-	}
+	return entries, nil
+}
 
-	// The expert-mode level, and what it reveals: the diagnostics sections
-	// appear as their own group only while it is on (platform#36).
-	//
-	// The control is drawn only for a caller who could use what it reveals — a
-	// normal user does not see the switch at all, rather than seeing it and being
-	// denied the data behind it. It remains a hint and never a gate: each screen
-	// authorises telemetry.read for itself, so navigating straight to one without
-	// the grant is refused regardless of what was drawn.
-	canReadTelemetry := s.content.CallerCan(ctx, caller, app.ActionTelemetryRead, "telemetry")
-	canReadJobs := s.content.CallerCan(ctx, caller, app.ActionJobRead, "job")
-	nav.showExpertMode = canReadTelemetry || canReadJobs
-	if nav.showExpertMode {
-		nav.expertModeOn = s.content.ExpertModeEnabled(ctx, caller)
+// diagnosticsEntries are the sections expert mode reveals, which appear as their
+// own group only while it is on (platform#36).
+//
+// Each row is gated on its own permission, because they are different
+// disclosures: the queue is what the install did to itself, telemetry is what
+// its users did (platform#13). A caller granted one and not the other sees
+// exactly the rows they can open. Expert mode stays the level control over the
+// group and never the gate — each screen authorises for itself.
+func diagnosticsEntries(canReadTelemetry, canReadJobs bool) []settingsNavEntry {
+	var diagnostics []settingsNavEntry
+	if canReadTelemetry {
+		diagnostics = append(diagnostics,
+			settingsNavEntry{key: sectionTraces, label: "Traces", icon: "info", action: ui.Navigate(screenTraces, nil)},
+			settingsNavEntry{key: sectionLogs, label: "Logs", icon: "list", action: ui.Navigate(screenLogs, nil)},
+			settingsNavEntry{key: sectionMetrics, label: "Metrics", icon: "info", action: ui.Navigate(screenMetrics, nil)})
 	}
-	// Each row inside the group is gated on its own permission, because they
-	// are different disclosures: the queue is what the install did to itself,
-	// telemetry is what its users did (platform#13). A caller granted one and not
-	// the other sees exactly the rows they can open. Expert mode stays the level
-	// control over the group and never the gate — each screen authorises for
-	// itself.
-	if nav.showExpertMode && nav.expertModeOn {
-		var diagnostics []settingsNavEntry
-		if canReadTelemetry {
-			diagnostics = append(diagnostics,
-				settingsNavEntry{key: sectionTraces, label: "Traces", icon: "info", action: ui.Navigate(screenTraces, nil)},
-				settingsNavEntry{key: sectionLogs, label: "Logs", icon: "list", action: ui.Navigate(screenLogs, nil)},
-				settingsNavEntry{key: sectionMetrics, label: "Metrics", icon: "info", action: ui.Navigate(screenMetrics, nil)})
-		}
-		if canReadJobs {
-			diagnostics = append(diagnostics,
-				settingsNavEntry{key: sectionJobs, label: "Jobs", icon: "list", action: ui.Navigate(screenJobs, nil)})
-		}
-		groups = append(groups, settingsNavGroup{label: "Diagnostics", entries: diagnostics})
+	if canReadJobs {
+		diagnostics = append(diagnostics,
+			settingsNavEntry{key: sectionJobs, label: "Jobs", icon: "list", action: ui.Navigate(screenJobs, nil)})
 	}
-
-	nav.groups = groups
-	return nav, nil
+	return diagnostics
 }
 
 // openSection resolves which section the panel shows: the requested module, the

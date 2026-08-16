@@ -57,13 +57,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 	}
 	genre := stringParam(params, paramGenre)
 
-	// One read of everything loaded so far, rather than a read per page: the
-	// library is the install's own rows and can be windowed directly, where a
-	// provider's catalog has to be walked a page at a time.
-	window := (page + 1) * libraryPageSize
-	if window > libraryWindowCap {
-		window = libraryWindowCap
-	}
+	window := libraryWindow(page)
 	res, err := s.content.ListLibrary(ctx, app.ListLibraryQuery{
 		Caller: caller,
 		Genres: genreFilter(genre),
@@ -75,68 +69,15 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 	}
 
 	if res.Total == 0 && genre == "" {
-		// The genuinely empty library. It is worth a different sentence from
-		// "this page is past the end" below, because one is a new install and
-		// the other is a stale link, and telling somebody with an empty library
-		// to go back a page would be nonsense.
-		//
-		// A narrowed browse that matches nothing is a third thing again and
-		// must not land here: telling somebody whose library holds eight hundred
-		// titles that it is empty because they pressed a chip would be the screen
-		// lying about the library. The facets are built from what is on the shelf
-		// so this should be unreachable by pressing — but a stale link carries a
-		// genre that may since have left, and that is exactly when a screen has
-		// to be right.
-		return ui.Screen(
-			ui.Title("Library"),
-			ui.Subtitle("Everything this server owns."),
-			ui.EmptyState(emptyIconCollections,
-				"Nothing in the library yet",
-				ui.Message("Add something from search, or set up a library rule in Settings and let the "+
-					"server keep it filled."),
-				ui.ActionSlot(
-					ui.Button("Search for something", "primary", ui.IconName("search"),
-						ui.OnTap(ui.Navigate(screenSearch, nil))),
-					ui.Button("Library rules", "secondary", ui.IconName("settings"),
-						ui.OnTap(ui.Navigate(screenSettings, map[string]any{paramSection: sectionLibraryRules}))),
-				),
-			),
-		).Build(), nil
+		return emptyLibraryScreen(), nil
 	}
 
 	if len(res.Works) == 0 && genre == "" {
-		// A window that landed past the end — a stale link, or a library that
-		// shrank. The count is still true, so the screen says it and offers the
-		// way back rather than looking like an empty library.
-		return ui.Screen(
-			ui.Title("Library"),
-			ui.Subtitle(libraryCountLabel(res.Total)),
-			ui.EmptyState(emptyIconNotFound,
-				"There is nothing here",
-				ui.Message("The library has "+libraryCountLabel(res.Total)+"."),
-				ui.ActionSlot(ui.Button("Back to the start", "primary",
-					ui.OnTap(ui.Navigate(screenLibrary, nil)))),
-			),
-		).Build(), nil
+		return pastTheEndScreen(res.Total), nil
 	}
 
 	if len(res.Works) == 0 {
-		// Narrowed to nothing — a stale link, or a combination that holds
-		// nothing. It has to come after the past-the-end case and be guarded
-		// against it, because both are "no rows on this page" and only this one
-		// can offer the way out that actually helps: the facet rows themselves,
-		// which are still drawn.
-		return ui.Screen(
-			ui.Title("Library"),
-			ui.Subtitle("Nothing matches "+genre),
-			libraryFacets(res.Facets, genre),
-			ui.EmptyState(emptyIconNotFound,
-				"No "+genre+" titles",
-				ui.Message("Nothing in the library carries that genre. It may have been the only title, and it may have left."),
-				ui.ActionSlot(ui.Button("Show everything", "primary",
-					ui.OnTap(ui.Navigate(screenLibrary, nil)))),
-			),
-		).Build(), nil
+		return narrowedToNothingScreen(res.Facets, genre), nil
 	}
 
 	cards := make([]ui.El, 0, len(res.Works))
@@ -152,15 +93,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 	grid := []ui.El{ui.MinColumnWidth(196), ui.Group(cards...)}
 	more := len(res.Works) < res.Total
 	if more && window < libraryWindowCap {
-		// The narrowing travels with the page. A query action replaces the
-		// content region and re-renders the whole window, so a next-page action
-		// that dropped the genre would quietly widen the browse mid-scroll —
-		// the same class of mistake as a provider that ignores a filter it does
-		// not recognise, and just as invisible.
-		next := map[string]any{paramPage: page + 1}
-		if genre != "" {
-			next[paramGenre] = genre
-		}
+		next := nextPageQuery(page, genre)
 		grid = append(grid, ui.HasMore(true), ui.LoadMore(ui.Query(screenLibrary, next)))
 	}
 
@@ -170,6 +103,95 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		libraryFacets(res.Facets, genre),
 		ui.Grid(grid...),
 	).Build(), nil
+}
+
+// libraryWindow is how many rows one page of the screen reads: one read of
+// everything loaded so far, rather than a read per page. The library is the
+// install's own rows and can be windowed directly, where a provider's catalog
+// has to be walked a page at a time. It stops at libraryWindowCap.
+func libraryWindow(page int) int {
+	window := (page + 1) * libraryPageSize
+	if window > libraryWindowCap {
+		return libraryWindowCap
+	}
+	return window
+}
+
+// nextPageQuery is what the next page is fetched with, and the narrowing travels
+// with it. A query action replaces the content region and re-renders the whole
+// window, so a next-page action that dropped the genre would quietly widen the
+// browse mid-scroll — the same class of mistake as a provider that ignores a
+// filter it does not recognise, and just as invisible.
+func nextPageQuery(page int, genre string) map[string]any {
+	next := map[string]any{paramPage: page + 1}
+	if genre != "" {
+		next[paramGenre] = genre
+	}
+	return next
+}
+
+// emptyLibraryScreen is the genuinely empty library. It is worth a different
+// sentence from pastTheEndScreen, because one is a new install and the other is
+// a stale link, and telling somebody with an empty library to go back a page
+// would be nonsense.
+//
+// A narrowed browse that matches nothing is a third thing again and must not
+// land here: telling somebody whose library holds eight hundred titles that it
+// is empty because they pressed a chip would be the screen lying about the
+// library. The facets are built from what is on the shelf so this should be
+// unreachable by pressing — but a stale link carries a genre that may since have
+// left, and that is exactly when a screen has to be right.
+func emptyLibraryScreen() sdui.Node {
+	return ui.Screen(
+		ui.Title("Library"),
+		ui.Subtitle("Everything this server owns."),
+		ui.EmptyState(emptyIconCollections,
+			"Nothing in the library yet",
+			ui.Message("Add something from search, or set up a library rule in Settings and let the "+
+				"server keep it filled."),
+			ui.ActionSlot(
+				ui.Button("Search for something", "primary", ui.IconName("search"),
+					ui.OnTap(ui.Navigate(screenSearch, nil))),
+				ui.Button("Library rules", "secondary", ui.IconName("settings"),
+					ui.OnTap(ui.Navigate(screenSettings, map[string]any{paramSection: sectionLibraryRules}))),
+			),
+		),
+	).Build()
+}
+
+// pastTheEndScreen is a window that landed past the end — a stale link, or a
+// library that shrank. The count is still true, so the screen says it and offers
+// the way back rather than looking like an empty library.
+func pastTheEndScreen(total int) sdui.Node {
+	return ui.Screen(
+		ui.Title("Library"),
+		ui.Subtitle(libraryCountLabel(total)),
+		ui.EmptyState(emptyIconNotFound,
+			"There is nothing here",
+			ui.Message("The library has "+libraryCountLabel(total)+"."),
+			ui.ActionSlot(ui.Button("Back to the start", "primary",
+				ui.OnTap(ui.Navigate(screenLibrary, nil)))),
+		),
+	).Build()
+}
+
+// narrowedToNothingScreen is a browse narrowed to nothing — a stale link, or a
+// combination that holds nothing. It has to be reached after the past-the-end
+// case and be guarded against it, because both are "no rows on this page" and
+// only this one can offer the way out that actually helps: the facet rows
+// themselves, which are still drawn.
+func narrowedToNothingScreen(facets contracts.Facets, genre string) sdui.Node {
+	return ui.Screen(
+		ui.Title("Library"),
+		ui.Subtitle("Nothing matches "+genre),
+		libraryFacets(facets, genre),
+		ui.EmptyState(emptyIconNotFound,
+			"No "+genre+" titles",
+			ui.Message("Nothing in the library carries that genre. It may have been the only title, and it may have left."),
+			ui.ActionSlot(ui.Button("Show everything", "primary",
+				ui.OnTap(ui.Navigate(screenLibrary, nil)))),
+		),
+	).Build()
 }
 
 // genreFilter renders the screen's one selected genre as the store query's

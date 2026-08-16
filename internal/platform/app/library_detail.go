@@ -74,7 +74,6 @@ type GetLibraryDetailResult struct {
 // there is one shared library and everybody who may see it may see all of it
 // (platform#59).
 func (s *Service) GetLibraryDetail(ctx context.Context, q GetLibraryDetailQuery) (GetLibraryDetailResult, error) {
-	// 1. validate query shape.
 	if q.Caller.Session == "" {
 		return GetLibraryDetailResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
@@ -82,14 +81,12 @@ func (s *Service) GetLibraryDetail(ctx context.Context, q GetLibraryDetailQuery)
 		return GetLibraryDetailResult{}, contracts.NewError(contracts.InvalidArgument, "a node id is required")
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	if _, err := s.enter(ctx, q.Caller, ActionContentRead, policy.Resource{
 		Type: "content", ID: string(q.NodeID),
 	}); err != nil {
 		return GetLibraryDetailResult{}, err
 	}
 
-	// 4. load state through read contracts.
 	node, err := s.nodes.FindByID(ctx, q.NodeID)
 	if err != nil {
 		return GetLibraryDetailResult{}, err

@@ -40,18 +40,15 @@ func validateGetUserByIDQuery(query GetUserByIDQuery) error {
 // use a direct read contract rather than a UnitOfWork, but must still
 // authenticate and pass through policy before reading state.
 func (s *Service) GetUserByID(ctx context.Context, query GetUserByIDQuery) (GetUserByIDResult, error) {
-	// 1. validate query shape.
 	if err := validateGetUserByIDQuery(query); err != nil {
 		return GetUserByIDResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	if _, err := s.enterSession(ctx, query.CallerSessionID, ActionUserRead,
 		policy.Resource{Type: "user", ID: string(query.UserID)}); err != nil {
 		return GetUserByIDResult{}, err
 	}
 
-	// 4. load state through a read contract.
 	user, err := s.users.FindByID(ctx, query.UserID)
 	if err != nil {
 		return GetUserByIDResult{}, err

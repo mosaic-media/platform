@@ -58,7 +58,6 @@ const minFinishedDuration = 30 * time.Second
 // assume it is called often and do nothing per call it would not want done a
 // hundred times.
 func (s *Service) RecordPlaybackProgress(ctx context.Context, cmd v1.RecordPlaybackProgressCommand) (v1.RecordPlaybackProgressResult, error) {
-	// 1. validate command shape.
 	if cmd.Caller.Session == "" {
 		return v1.RecordPlaybackProgressResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
@@ -69,7 +68,6 @@ func (s *Service) RecordPlaybackProgress(ctx context.Context, cmd v1.RecordPlayb
 		return v1.RecordPlaybackProgressResult{}, contracts.NewError(contracts.InvalidArgument, "position and duration cannot be negative")
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionPlaybackWrite, policy.Resource{Type: "playback"})
 	if err != nil {
 		return v1.RecordPlaybackProgressResult{}, err
@@ -77,16 +75,14 @@ func (s *Service) RecordPlaybackProgress(ctx context.Context, cmd v1.RecordPlayb
 
 	var result v1.RecordPlaybackProgressResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5. load state through contracts. A first report has none, which is
-		// the normal case rather than an error.
+		// A first report has no previous state, which is the normal case rather
+		// than an error.
 		previous, err := tx.PlaybackStates().Get(ctx, az.userID, cmd.NodeID)
 		if err != nil && contracts.CategoryOf(err) != contracts.NotFound {
 			return err
 		}
 
-		// 6. apply domain rules.
 		state := v1.PlaybackState{
 			NodeID:           cmd.NodeID,
 			PartID:           cmd.PartID,
@@ -110,7 +106,6 @@ func (s *Service) RecordPlaybackProgress(ctx context.Context, cmd v1.RecordPlayb
 			state.Finished = crossedFinishThreshold(state.Position, state.Duration)
 		}
 
-		// 7. persist state and the outbox event in the same transaction.
 		saved, err := tx.PlaybackStates().Upsert(ctx, az.userID, state)
 		if err != nil {
 			return err
@@ -131,7 +126,6 @@ func (s *Service) RecordPlaybackProgress(ctx context.Context, cmd v1.RecordPlayb
 		return v1.RecordPlaybackProgressResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }
 

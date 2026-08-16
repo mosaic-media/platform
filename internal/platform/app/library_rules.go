@@ -134,13 +134,11 @@ type CreateLibraryRuleResult struct {
 // Saving states an intention, a run acts on it, and PreviewLibraryRule is what
 // goes in between.
 func (s *Service) CreateLibraryRule(ctx context.Context, cmd CreateLibraryRuleCommand) (CreateLibraryRuleResult, error) {
-	// 1. validate command shape.
 	rule, err := s.validateNewLibraryRule(cmd)
 	if err != nil {
 		return CreateLibraryRuleResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionLibraryRuleManage, policy.Resource{Type: "library_rule"})
 	if err != nil {
 		return CreateLibraryRuleResult{}, err
@@ -154,7 +152,6 @@ func (s *Service) CreateLibraryRule(ctx context.Context, cmd CreateLibraryRuleCo
 	rule.UpdatedAt = now
 
 	var stored domain.LibraryRule
-	// 4-7. one transaction for the rule and the event announcing it.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
 		created, err := tx.LibraryRules().Create(ctx, rule)
 		if err != nil {

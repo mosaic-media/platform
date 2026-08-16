@@ -32,8 +32,9 @@ import (
 // An action pushes a sequence of updates, not one: the two-lane transport
 // (contracts#5) exists so the server drives the client's regions unprompted, and a
 // single action can legitimately push more than one region update — a player and
-// the "Next episode" control beside it. Most actions push nothing (a nil slice)
-// and re-render the content region instead; playPart is the one that pushes.
+// the "Next episode" control beside it. An action with nothing of its own to show
+// returns a nil slice and lets the caller re-render the content region; one that
+// builds its own surface returns it here instead.
 func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, input []byte) ([]*sessionv1.ServerMessage, error) {
 	caller := s.currentCaller()
 	switch action {
@@ -69,48 +70,9 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 			Caller: caller, ModuleID: moduleID,
 		})
 	case "revokeSession":
-		// Ending one device's session (platform#58). The target is a session id
-		// from the device list; the caller is this connection's own credential,
-		// and the command's own boundary decides whether they may — a viewer
-		// ending their own phone and an administrator ending somebody else's
-		// TV are the same call and a different authorisation.
-		target, err := sessionIDFromInput(input)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
-			CallerSessionID: domain.SessionID(caller.Session),
-			TargetSessionID: target,
-		}); err != nil {
-			return nil, err
-		}
-		// And end that device's live session, so the revocation reaches it now
-		// rather than when its access token happens to expire. The target is
-		// somebody else's connection, which is exactly why the Manager is keyed
-		// by session id: this call has no other handle on it.
-		h.mgr.End(string(target))
-		return nil, nil
+		return nil, h.revokeSession(ctx, caller, input)
 	case "signOut":
-		// Ending this session (platform#58). It names no target and cannot: the
-		// session it arrives on is the one it revokes, which is what makes it
-		// safe to put on the account cluster of every screen — an affordance
-		// that could be pointed at another device would need to say which.
-		//
-		// The client discovers the outcome the way it discovers any revocation:
-		// its next call fails Unauthenticated, it drops the stored pair, and the
-		// doorway comes back. Signing out and being signed out are therefore one
-		// code path in the client rather than two.
-		if _, err := h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
-			CallerSessionID: domain.SessionID(caller.Session),
-			TargetSessionID: domain.SessionID(s.ref),
-		}); err != nil {
-			return nil, err
-		}
-		// End the live session too, after the revocation and never before: the
-		// credential is what actually ended, and closing the stream first would
-		// drop a client that was still signed in if the command then failed.
-		h.mgr.End(s.ref)
-		return nil, nil
+		return nil, h.signOut(ctx, s, caller)
 	case "createAccount":
 		// Provisioning a household member (platform#44). Three commands behind one
 		// action — see accounts.go for why they are three and what a failure
@@ -179,6 +141,56 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 	default:
 		return nil, contracts.NewError(contracts.InvalidArgument, "unknown action: "+action)
 	}
+}
+
+// revokeSession ends one device's session (platform#58), and ends that device's
+// live session with it so the revocation reaches it now rather than when its
+// access token happens to expire.
+//
+// The target is a session id from the device list; the caller is this
+// connection's own credential, and the command's own boundary decides whether
+// they may — a viewer ending their own phone and an administrator ending
+// somebody else's TV are the same call and a different authorisation.
+//
+// Ending somebody else's connection is exactly why the Manager is keyed by
+// session id: this call has no other handle on it.
+func (h *Handler) revokeSession(ctx context.Context, caller v1.Caller, input []byte) error {
+	target, err := sessionIDFromInput(input)
+	if err != nil {
+		return err
+	}
+	if _, err := h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
+		CallerSessionID: domain.SessionID(caller.Session),
+		TargetSessionID: target,
+	}); err != nil {
+		return err
+	}
+	h.mgr.End(string(target))
+	return nil
+}
+
+// signOut ends this session (platform#58). It names no target and cannot: the
+// session it arrives on is the one it revokes, which is what makes it safe to
+// put on the account cluster of every screen — an affordance that could be
+// pointed at another device would need to say which.
+//
+// The live session ends after the revocation and never before: the credential is
+// what actually ended, and closing the stream first would drop a client that was
+// still signed in if the command then failed.
+//
+// The client discovers the outcome the way it discovers any revocation: its next
+// call fails Unauthenticated, it drops the stored pair, and the doorway comes
+// back. Signing out and being signed out are therefore one code path in the
+// client rather than two.
+func (h *Handler) signOut(ctx context.Context, s *liveSession, caller v1.Caller) error {
+	if _, err := h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
+		CallerSessionID: domain.SessionID(caller.Session),
+		TargetSessionID: domain.SessionID(s.ref),
+	}); err != nil {
+		return err
+	}
+	h.mgr.End(s.ref)
+	return nil
 }
 
 // playEnvelope is the playPart action input: the Part to play. The SDUI Play

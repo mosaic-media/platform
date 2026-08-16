@@ -44,12 +44,10 @@ func validateRelateContentCommand(cmd v1.RelateContentCommand) error {
 // deliberate non-uniformities are expressed — an artist joined to its albums,
 // a collected edition to what it collects, an anime to its source manga.
 func (s *Service) RelateContent(ctx context.Context, cmd v1.RelateContentCommand) (v1.RelateContentResult, error) {
-	// 1. validate command shape.
 	if err := validateRelateContentCommand(cmd); err != nil {
 		return v1.RelateContentResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionContentRelate, policy.Resource{Type: "content"})
 	if err != nil {
 		return v1.RelateContentResult{}, err
@@ -57,11 +55,10 @@ func (s *Service) RelateContent(ctx context.Context, cmd v1.RelateContentCommand
 
 	var result v1.RelateContentResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5-6. both endpoints must exist. Loading them turns a dangling edge
-		// into a NotFound the caller can act on, rather than a foreign-key
-		// violation surfacing as a Conflict.
+		// Both endpoints must exist. Loading them turns a dangling edge into a
+		// NotFound the caller can act on, rather than a foreign-key violation
+		// surfacing as a Conflict.
 		if _, err := tx.Nodes().FindByID(ctx, cmd.FromNodeID); err != nil {
 			return err
 		}
@@ -79,7 +76,6 @@ func (s *Service) RelateContent(ctx context.Context, cmd v1.RelateContentCommand
 			CreatedAt:  s.clock.Now(),
 		}
 
-		// 7. persist state and the outbox event in the same transaction.
 		created, err := tx.Relations().Create(ctx, relation)
 		if err != nil {
 			return err
@@ -97,7 +93,6 @@ func (s *Service) RelateContent(ctx context.Context, cmd v1.RelateContentCommand
 		return v1.RelateContentResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }
 

@@ -99,9 +99,9 @@ func (s *Service) shellScreen(ctx context.Context, caller v1.Caller, screen stri
 			navItem("Collections", "list", screenCollections),
 			navItem("Settings", "settings", screenSettings),
 		),
-		// The search bar owns the centre of the top bar and is always present, so
-		// there is no Search nav item. Typing takes over the content region (a live
-		// input); clearing it returns to the current screen.
+		// The search bar owns the centre of the top bar and is always present.
+		// Typing takes over the content region (a live input); clearing it
+		// returns to the current screen.
 		ui.Slot("topbar",
 			ui.Component("SearchBar", ui.Prop("placeholder", "Search for anime, movies, shows…")),
 		),

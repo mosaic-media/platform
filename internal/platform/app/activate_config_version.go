@@ -51,12 +51,10 @@ func validateActivateConfigVersionCommand(cmd ActivateConfigVersionCommand) erro
 // ActivateConfigVersion implements the command order for the Activate
 // step of the activation state machine.
 func (s *Service) ActivateConfigVersion(ctx context.Context, cmd ActivateConfigVersionCommand) (ActivateConfigVersionResult, error) {
-	// 1. validate command shape.
 	if err := validateActivateConfigVersionCommand(cmd); err != nil {
 		return ActivateConfigVersionResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enterSession(ctx, cmd.CallerSessionID, ActionConfigActivate,
 		policy.Resource{Type: "config", ID: string(cmd.ConfigVersionID)})
 	if err != nil {
@@ -65,16 +63,14 @@ func (s *Service) ActivateConfigVersion(ctx context.Context, cmd ActivateConfigV
 
 	var outcome config.ActivationOutcome
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5-6. load state and apply the activate/defer domain rule.
 		var err error
 		outcome, err = s.configManager.Activate(ctx, tx.Config(), cmd.ConfigVersionID)
 		if err != nil {
 			return err
 		}
 
-		// 7. persist the outbox event alongside whatever the outcome was.
+		// The outbox event is appended whatever the outcome was.
 		eventType := "config.activation_deferred"
 		if outcome.Activated {
 			eventType = "config.activated"
@@ -86,7 +82,6 @@ func (s *Service) ActivateConfigVersion(ctx context.Context, cmd ActivateConfigV
 		return ActivateConfigVersionResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return ActivateConfigVersionResult{
 		Version:     outcome.Version,
 		Activated:   outcome.Activated,

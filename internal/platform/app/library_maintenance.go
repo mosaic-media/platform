@@ -168,12 +168,10 @@ type RunLibraryMaintenanceResult struct {
 // system principal, so a person may press the button and the nodes still belong
 // to the install.
 func (s *Service) RunLibraryMaintenance(ctx context.Context, cmd RunLibraryMaintenanceCommand) (RunLibraryMaintenanceResult, error) {
-	// 1. validate command shape.
 	if cmd.Caller.Session == "" {
 		return RunLibraryMaintenanceResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
 
-	// 2-3. authenticate the caller and authorize triggering a materialisation.
 	if _, err := s.enter(ctx, cmd.Caller, ActionContentImport, policy.Resource{Type: "content"}); err != nil {
 		return RunLibraryMaintenanceResult{}, err
 	}

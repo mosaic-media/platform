@@ -47,7 +47,6 @@ type SetUserPreferenceResult struct {
 
 // SetUserPreference stores one preference for the calling user.
 func (s *Service) SetUserPreference(ctx context.Context, cmd SetUserPreferenceCommand) (SetUserPreferenceResult, error) {
-	// 1. validate command shape.
 	if cmd.Key == "" {
 		return SetUserPreferenceResult{}, contracts.NewError(contracts.InvalidArgument, "preference key is required")
 	}
@@ -58,7 +57,6 @@ func (s *Service) SetUserPreference(ctx context.Context, cmd SetUserPreferenceCo
 		return SetUserPreferenceResult{}, contracts.NewError(contracts.InvalidArgument, "preference value must be valid JSON")
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionPreferenceWrite, policy.Resource{Type: "preference"})
 	if err != nil {
 		return SetUserPreferenceResult{}, err
@@ -71,7 +69,6 @@ func (s *Service) SetUserPreference(ctx context.Context, cmd SetUserPreferenceCo
 		UpdatedAt: s.clock.Now(),
 	}
 
-	// 4. persist the preference and its outbox event in one transaction.
 	var stored domain.UserPreference
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
 		var err error
@@ -90,7 +87,6 @@ func (s *Service) SetUserPreference(ctx context.Context, cmd SetUserPreferenceCo
 		return SetUserPreferenceResult{}, err
 	}
 
-	// 5. return a Platform result type.
 	return SetUserPreferenceResult{Preference: stored}, nil
 }
 
@@ -106,7 +102,6 @@ type GetUserPreferencesResult struct {
 
 // GetUserPreferences returns the calling user's preferences.
 func (s *Service) GetUserPreferences(ctx context.Context, q GetUserPreferencesQuery) (GetUserPreferencesResult, error) {
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, q.Caller, ActionPreferenceRead, policy.Resource{Type: "preference"})
 	if err != nil {
 		return GetUserPreferencesResult{}, err

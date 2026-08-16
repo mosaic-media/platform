@@ -119,14 +119,12 @@ type RefreshAvailabilityResult struct {
 // refresh must not fail because the person who last signed in has since been
 // suspended, and nothing here is anybody's decision.
 func (s *Service) RefreshAvailability(ctx context.Context, cmd RefreshAvailabilityCommand) (RefreshAvailabilityResult, error) {
-	// 1. validate command shape.
 	if cmd.Caller.Session == "" {
 		return RefreshAvailabilityResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
 
-	// 2-3. authenticate the caller and authorize the action. The outer boundary
-	// authorises whoever asked; every read and write beneath it is the
-	// install's.
+	// The outer boundary authorises whoever asked; every read and write
+	// beneath it is the install's.
 	if _, err := s.enter(ctx, cmd.Caller, ActionContentImport, policy.Resource{Type: "content"}); err != nil {
 		return RefreshAvailabilityResult{}, err
 	}

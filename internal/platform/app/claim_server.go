@@ -163,15 +163,14 @@ func summarise(fields []contracts.FieldRejection) string {
 // once before any work, and again inside the transaction, because the check and
 // the write must not be separable by a second claimant.
 func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (ClaimServerResult, error) {
-	// 1. validate command shape.
 	if err := validateClaimServerCommand(cmd); err != nil {
 		return ClaimServerResult{}, err
 	}
 
-	// 2-3. emptiness stands in for authentication and authorisation. This first
-	// check is a courtesy — it turns the common case (somebody opening a claimed
-	// server's setup page from a stale tab) into a clean refusal without opening
-	// a transaction. The one that actually holds is inside it.
+	// Emptiness stands in for authentication and authorisation. This first
+	// check is a courtesy — it turns the common case (somebody opening a
+	// claimed server's setup page from a stale tab) into a clean refusal
+	// without opening a transaction. The one that actually holds is inside it.
 	if !s.ServerState(ctx).Claimable() {
 		return ClaimServerResult{}, contracts.NewError(contracts.Conflict, "this server has already been claimed")
 	}
@@ -194,13 +193,12 @@ func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (Clai
 		displayName = username
 	}
 
-	// 4. open a UnitOfWork. The account, its credential, its role, the grant and
-	// its first session all commit together: a claim that left a user with no
-	// authority would be a server nobody could administer and nobody could claim
-	// again.
+	// The account, its credential, its role, the grant and its first session
+	// all commit together: a claim that left a user with no authority would be
+	// a server nobody could administer and nobody could claim again.
 	err := s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5-6. the domain rule, re-read inside the transaction. Two people
-		// claiming at once both pass the check above; only one passes this one.
+		// The domain rule, re-read inside the transaction. Two people claiming at
+		// once both pass the check above; only one passes this one.
 		existing, err := tx.Users().List(ctx)
 		if err != nil {
 			return err
@@ -258,9 +256,8 @@ func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (Clai
 			return err
 		}
 
-		// 7. state and the outbox event in the same transaction. The actor is the
-		// account that was just made — there was nobody else it could be, and an
-		// empty actor would read as a system action.
+		// The actor is the account that was just made — there was nobody else it
+		// could be, and an empty actor would read as a system action.
 		if err := tx.Outbox().Append(ctx, domain.OutboxEvent{
 			Event: s.newEvent(ctx, "server.claimed", []byte(created.Username), string(created.ID)),
 		}); err != nil {

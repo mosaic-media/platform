@@ -57,53 +57,15 @@ func validateAuthenticateLocalUserCommand(cmd AuthenticateLocalUserCommand) erro
 // (Unauthenticated, "invalid credentials") so a caller cannot use this
 // command to discover which usernames exist.
 func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLocalUserCommand) (AuthenticateLocalUserResult, error) {
-	// 1. validate command shape.
 	if err := validateAuthenticateLocalUserCommand(cmd); err != nil {
 		return AuthenticateLocalUserResult{}, err
 	}
 
-	// 2. authenticate caller: verify the password credential.
-	user, err := s.users.FindByUsername(ctx, cmd.Username)
+	user, err := s.authenticatePassword(ctx, cmd.Username, cmd.Password)
 	if err != nil {
-		if contracts.CategoryOf(err) == contracts.NotFound {
-			return AuthenticateLocalUserResult{}, contracts.NewError(contracts.Unauthenticated, "invalid credentials")
-		}
 		return AuthenticateLocalUserResult{}, err
 	}
 
-	credential, err := s.credentials.FindPassword(ctx, user.ID)
-	if err != nil {
-		if contracts.CategoryOf(err) == contracts.NotFound {
-			return AuthenticateLocalUserResult{}, contracts.NewError(contracts.Unauthenticated, "invalid credentials")
-		}
-		return AuthenticateLocalUserResult{}, err
-	}
-
-	verified, err := s.passwordVerifier.Verify(cmd.Password, credential.Hash)
-	if err != nil {
-		return AuthenticateLocalUserResult{}, contracts.WrapError(contracts.Internal, "verify password", err)
-	}
-	if !verified {
-		// A failed authentication has no authenticated subject, so the actor
-		// is empty; the attempted username travels in the payload.
-		s.publishAuditEvent(ctx, "authentication.failed", []byte(cmd.Username), "")
-		return AuthenticateLocalUserResult{}, contracts.NewError(contracts.Unauthenticated, "invalid credentials")
-	}
-
-	// A suspended account is refused after the credential is verified, and with
-	// a different category.
-	//
-	// After, because refusing before would answer differently for a suspended
-	// account and an unknown one against a wrong password — the enumeration the
-	// collapsing above exists to prevent. Different, because "your password is
-	// wrong" sends somebody off to retype something that was right.
-	if user.Status != domain.UserActive {
-		s.publishAuditEvent(ctx, "authentication.refused", []byte(string(user.Status)), string(user.ID))
-		return AuthenticateLocalUserResult{}, contracts.NewError(contracts.PermissionDenied,
-			"this account cannot sign in")
-	}
-
-	// 3. authorize action through policy.
 	subject := policy.Subject{UserID: user.ID, AuthStrength: domain.AuthStrengthPassword}
 	resource := policy.Resource{Type: "user", ID: string(user.ID)}
 	if err := s.authorize(ctx, subject, ActionSessionCreate, resource, policy.PolicyContext{}); err != nil {
@@ -112,9 +74,8 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 
 	var result AuthenticateLocalUserResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5/6. no further state to load: the new session is the direct
+		// There is no further state to load: the new session is the direct
 		// outcome of the verified credential, so issuing it is this
 		// command's only domain rule. The session and its first pair of tokens
 		// are written through the same Tx, because a session with no tokens is
@@ -131,7 +92,6 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 			return err
 		}
 
-		// 7. persist state and outbox events in the same transaction.
 		event := domain.OutboxEvent{Event: s.newEvent(ctx, "authentication.succeeded", []byte(cmd.Username), string(user.ID))}
 		if err := tx.Outbox().Append(ctx, event); err != nil {
 			return err
@@ -144,6 +104,51 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 		return AuthenticateLocalUserResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
+}
+
+// authenticatePassword verifies the password credential and returns the user it
+// identifies. It stands in for the caller-session lookup this boundary cannot
+// do — see AuthenticateLocalUser.
+//
+// A suspended account is refused after the credential is verified, and with a
+// different category. After, because refusing before would answer differently
+// for a suspended account and an unknown one against a wrong password — the
+// username enumeration the shared "invalid credentials" refusal exists to
+// prevent. Different, because "your password is wrong" sends somebody off to
+// retype something that was right.
+func (s *Service) authenticatePassword(ctx context.Context, username, password string) (domain.User, error) {
+	user, err := s.users.FindByUsername(ctx, username)
+	if err != nil {
+		if contracts.CategoryOf(err) == contracts.NotFound {
+			return domain.User{}, contracts.NewError(contracts.Unauthenticated, "invalid credentials")
+		}
+		return domain.User{}, err
+	}
+
+	credential, err := s.credentials.FindPassword(ctx, user.ID)
+	if err != nil {
+		if contracts.CategoryOf(err) == contracts.NotFound {
+			return domain.User{}, contracts.NewError(contracts.Unauthenticated, "invalid credentials")
+		}
+		return domain.User{}, err
+	}
+
+	verified, err := s.passwordVerifier.Verify(password, credential.Hash)
+	if err != nil {
+		return domain.User{}, contracts.WrapError(contracts.Internal, "verify password", err)
+	}
+	if !verified {
+		// A failed authentication has no authenticated subject, so the actor
+		// is empty; the attempted username travels in the payload.
+		s.publishAuditEvent(ctx, "authentication.failed", []byte(username), "")
+		return domain.User{}, contracts.NewError(contracts.Unauthenticated, "invalid credentials")
+	}
+
+	if user.Status != domain.UserActive {
+		s.publishAuditEvent(ctx, "authentication.refused", []byte(string(user.Status)), string(user.ID))
+		return domain.User{}, contracts.NewError(contracts.PermissionDenied,
+			"this account cannot sign in")
+	}
+	return user, nil
 }

@@ -43,12 +43,10 @@ func validateDraftConfigVersionCommand(cmd DraftConfigVersionCommand) error {
 // DraftConfigVersion implements the command order for
 // the Draft step of the activation state machine.
 func (s *Service) DraftConfigVersion(ctx context.Context, cmd DraftConfigVersionCommand) (DraftConfigVersionResult, error) {
-	// 1. validate command shape.
 	if err := validateDraftConfigVersionCommand(cmd); err != nil {
 		return DraftConfigVersionResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enterSession(ctx, cmd.CallerSessionID, ActionConfigDraft,
 		policy.Resource{Type: "config"})
 	if err != nil {
@@ -57,16 +55,12 @@ func (s *Service) DraftConfigVersion(ctx context.Context, cmd DraftConfigVersion
 
 	var result DraftConfigVersionResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5-6. load state and apply the domain rule (draft creation) via the
-		// config state machine.
 		version, err := s.configManager.Draft(ctx, tx.Config(), cmd.Payload)
 		if err != nil {
 			return err
 		}
 
-		// 7. persist state and outbox events in the same transaction.
 		event := domain.OutboxEvent{Event: s.newEvent(ctx, "config.drafted", []byte(string(version.ID)), string(az.userID))}
 		if err := tx.Outbox().Append(ctx, event); err != nil {
 			return err
@@ -79,6 +73,5 @@ func (s *Service) DraftConfigVersion(ctx context.Context, cmd DraftConfigVersion
 		return DraftConfigVersionResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }

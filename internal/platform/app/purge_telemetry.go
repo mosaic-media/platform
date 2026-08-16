@@ -54,12 +54,10 @@ type PurgeTelemetryResult struct {
 // is for. A day of records leaves as a catalogue update rather than a rewrite of
 // a table somebody may be querying.
 func (s *Service) PurgeTelemetry(ctx context.Context, cmd PurgeTelemetryCommand) (PurgeTelemetryResult, error) {
-	// 1. validate command shape.
 	if cmd.Caller.Session == "" {
 		return PurgeTelemetryResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	if _, err := s.enter(ctx, cmd.Caller, ActionTelemetryConfigure, policy.Resource{Type: "telemetry"}); err != nil {
 		return PurgeTelemetryResult{}, err
 	}
@@ -94,6 +92,5 @@ func (s *Service) PurgeTelemetry(ctx context.Context, cmd PurgeTelemetryCommand)
 			telemetry.Duration("span_retention", retention.Spans))
 	}
 
-	// 8. return a Platform result type.
 	return PurgeTelemetryResult{Dropped: dropped, Retention: retention}, nil
 }

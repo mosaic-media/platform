@@ -220,38 +220,50 @@ func (h *Handler) Invoke(ctx context.Context, req *connect.Request[sessionv1.Inv
 	}
 	outcomes, err := h.dispatch(ctx, s, r.GetAction(), r.GetInput())
 	if err != nil {
-		// A rejection that names fields goes to the fields (contracts#13). A toast
-		// saying "that username is taken" is a sentence floating next to the
-		// form rather than a mark on the box that is wrong, and on a form with
-		// four inputs it does not say which.
-		if msg, ok := fieldErrorsMsg(err); ok {
-			s.enqueue(msg)
-			return connect.NewResponse(&sessionv1.Ack{}), nil
-		}
-		s.enqueue(toastMsg(errorMessage(err), "danger"))
+		pushFailure(s, err)
 		return connect.NewResponse(&sessionv1.Ack{}), nil
 	}
-	// An action that produced its own surface pushes it — possibly a sequence
-	// (a player, and the "Next episode" control beside it) — instead of a
-	// confirmation toast, and must not re-render the content region: the screen
-	// underneath the player has not changed and re-rendering it would tear the
-	// player down.
+	h.pushOutcome(ctx, s, r.GetAction(), outcomes)
+	return connect.NewResponse(&sessionv1.Ack{}), nil
+}
+
+// pushFailure puts a rejected action on the push lane: a rejection that names
+// fields goes to the fields (contracts#13), anything else becomes a danger toast.
+//
+// A toast saying "that username is taken" is a sentence floating next to the
+// form rather than a mark on the box that is wrong, and on a form with four
+// inputs it does not say which.
+func pushFailure(s *liveSession, err error) {
+	if msg, ok := fieldErrorsMsg(err); ok {
+		s.enqueue(msg)
+		return
+	}
+	s.enqueue(toastMsg(errorMessage(err), "danger"))
+}
+
+// pushOutcome puts what a successful action produced on the push lane.
+//
+// An action that produced its own surface pushes it — possibly a sequence (a
+// player, and the "Next episode" control beside it) — instead of a confirmation
+// toast, and must not re-render the content region: the screen underneath the
+// player has not changed and re-rendering it would tear the player down.
+//
+// A silent action gets neither. Confirming something the user did not do is
+// noise, and re-rendering underneath a player would tear it down mid-scene —
+// which is what a position report, arriving every few seconds while a film
+// plays, would otherwise do to itself.
+func (h *Handler) pushOutcome(ctx context.Context, s *liveSession, action string, outcomes []*sessionv1.ServerMessage) {
 	if len(outcomes) > 0 {
 		for _, m := range outcomes {
 			s.enqueue(m)
 		}
-		return connect.NewResponse(&sessionv1.Ack{}), nil
+		return
 	}
-	// A silent action gets neither. Confirming something the user did not do is
-	// noise, and re-rendering underneath a player would tear it down mid-scene
-	// — which is what a position report, arriving every few seconds while a film
-	// plays, would otherwise do to itself.
-	if silentAction(r.GetAction()) {
-		return connect.NewResponse(&sessionv1.Ack{}), nil
+	if silentAction(action) {
+		return
 	}
-	s.enqueue(toastMsg(invokeToast(r.GetAction()), "success"))
+	s.enqueue(toastMsg(invokeToast(action), "success"))
 	h.pushContent(ctx, s)
-	return connect.NewResponse(&sessionv1.Ack{}), nil
 }
 
 // SubmitInput carries one search-as-you-type keystroke; the Platform coalesces a

@@ -43,12 +43,10 @@ func validateValidateConfigVersionCommand(cmd ValidateConfigVersionCommand) erro
 // ValidateConfigVersion implements the command boundary for the Validate
 // step of the activation state machine.
 func (s *Service) ValidateConfigVersion(ctx context.Context, cmd ValidateConfigVersionCommand) (ValidateConfigVersionResult, error) {
-	// 1. validate command shape.
 	if err := validateValidateConfigVersionCommand(cmd); err != nil {
 		return ValidateConfigVersionResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enterSession(ctx, cmd.CallerSessionID, ActionConfigValidate,
 		policy.Resource{Type: "config", ID: string(cmd.ConfigVersionID)})
 	if err != nil {
@@ -57,15 +55,12 @@ func (s *Service) ValidateConfigVersion(ctx context.Context, cmd ValidateConfigV
 
 	var result ValidateConfigVersionResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5-6. load state and apply the validate/reject domain rule.
 		version, err := s.configManager.Validate(ctx, tx.Config(), cmd.ConfigVersionID)
 		if err != nil {
 			return err
 		}
 
-		// 7. persist the outbox event alongside the status transition.
 		eventType := "config.validated"
 		if version.Status == domain.ConfigRejected {
 			eventType = "config.rejected"
@@ -82,6 +77,5 @@ func (s *Service) ValidateConfigVersion(ctx context.Context, cmd ValidateConfigV
 		return ValidateConfigVersionResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }

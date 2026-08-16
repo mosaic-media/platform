@@ -39,12 +39,10 @@ func validateAddContentWorkCommand(cmd v1.AddContentWorkCommand) error {
 // authorize, open a UnitOfWork, apply the domain shape of a Work, persist it
 // with its outbox event in one transaction, and return the committed value.
 func (s *Service) AddContentWork(ctx context.Context, cmd v1.AddContentWorkCommand) (v1.AddContentWorkResult, error) {
-	// 1. validate command shape.
 	if err := validateAddContentWorkCommand(cmd); err != nil {
 		return v1.AddContentWorkResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionContentCreate, policy.Resource{Type: "content"})
 	if err != nil {
 		return v1.AddContentWorkResult{}, err
@@ -52,13 +50,12 @@ func (s *Service) AddContentWork(ctx context.Context, cmd v1.AddContentWorkComma
 
 	var result v1.AddContentWorkResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
 		now := s.clock.Now()
 		id := v1.NodeID(s.contentIDs.NewID())
 
-		// 5-6. apply the domain shape of a Work: it roots its own tree, so
-		// work id is its own id and there is no parent.
+		// A Work roots its own tree, so work id is its own id and there is no
+		// parent.
 		work := v1.Node{
 			ID:          id,
 			WorkID:      id,
@@ -74,7 +71,6 @@ func (s *Service) AddContentWork(ctx context.Context, cmd v1.AddContentWorkComma
 			UpdatedAt:   now,
 		}
 
-		// 7. persist state and the outbox event in the same transaction.
 		created, err := tx.Nodes().Create(ctx, work)
 		if err != nil {
 			return err
@@ -92,6 +88,5 @@ func (s *Service) AddContentWork(ctx context.Context, cmd v1.AddContentWorkComma
 		return v1.AddContentWorkResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }

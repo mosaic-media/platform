@@ -56,12 +56,10 @@ type ListWatchHistoryResult struct {
 // watched. An ordinary household account holds it, because it is reading its
 // own.
 func (s *Service) ListWatchHistory(ctx context.Context, q ListWatchHistoryQuery) (ListWatchHistoryResult, error) {
-	// 1. validate query shape.
 	if q.Caller.Session == "" {
 		return ListWatchHistoryResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, q.Caller, ActionPlaybackRead, policy.Resource{Type: "playback"})
 	if err != nil {
 		return ListWatchHistoryResult{}, err

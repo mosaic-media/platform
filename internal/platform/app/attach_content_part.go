@@ -43,12 +43,10 @@ func validateAttachContentPartCommand(cmd v1.AttachContentPartCommand) error {
 
 // AttachContentPart adds one playable rendering to an item.
 func (s *Service) AttachContentPart(ctx context.Context, cmd v1.AttachContentPartCommand) (v1.AttachContentPartResult, error) {
-	// 1. validate command shape.
 	if err := validateAttachContentPartCommand(cmd); err != nil {
 		return v1.AttachContentPartResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionContentCreate, policy.Resource{Type: "content"})
 	if err != nil {
 		return v1.AttachContentPartResult{}, err
@@ -56,11 +54,10 @@ func (s *Service) AttachContentPart(ctx context.Context, cmd v1.AttachContentPar
 
 	var result v1.AttachContentPartResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5-6. a Part is what plays, and only an item plays. Rejecting a work
-		// or container here gives a clearer error than the store's foreign
-		// key, and confirms the node exists.
+		// A Part is what plays, and only an item plays. Rejecting a work or
+		// container here gives a clearer error than the store's foreign key, and
+		// confirms the node exists.
 		node, err := tx.Nodes().FindByID(ctx, cmd.NodeID)
 		if err != nil {
 			return err
@@ -91,7 +88,6 @@ func (s *Service) AttachContentPart(ctx context.Context, cmd v1.AttachContentPar
 			UpdatedAt:    now,
 		}
 
-		// 7. persist state and the outbox event in the same transaction.
 		created, err := tx.Parts().Create(ctx, part)
 		if err != nil {
 			return err
@@ -109,6 +105,5 @@ func (s *Service) AttachContentPart(ctx context.Context, cmd v1.AttachContentPar
 		return v1.AttachContentPartResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }

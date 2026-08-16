@@ -1362,10 +1362,10 @@ func TestVirtualDetailOffersPlayAndAdd(t *testing.T) {
 	}
 }
 
-func TestInLibraryDetailShowsInLibraryMarker(t *testing.T) {
+func TestInLibraryDetailRendersFromMetadataWithNoAddAndNoBadge(t *testing.T) {
 	// An in-library ref renders the same rich detail from live metadata
-	// (sdk#3), differing only in the primary action — an In library marker, not
-	// Add to library — and does not fall back to a structural node read.
+	// (sdk#3), differing in its controls rather than its content, and does not
+	// fall back to a structural node read.
 	fake := &fakeQueries{
 		previewInLibrary: true, previewNodeID: "n-9",
 		previewMeta: v1.ContentMetadata{Title: "Already Here", Year: 2020},

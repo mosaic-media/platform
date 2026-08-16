@@ -41,12 +41,10 @@ func validateCreateRoleCommand(cmd CreateRoleCommand) error {
 
 // CreateRole persists a new role, following the command boundary.
 func (s *Service) CreateRole(ctx context.Context, cmd CreateRoleCommand) (CreateRoleResult, error) {
-	// 1. validate command shape.
 	if err := validateCreateRoleCommand(cmd); err != nil {
 		return CreateRoleResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enterSession(ctx, cmd.CallerSessionID, ActionRoleCreate,
 		policy.Resource{Type: "role"})
 	if err != nil {
@@ -62,7 +60,6 @@ func (s *Service) CreateRole(ctx context.Context, cmd CreateRoleCommand) (Create
 
 	var result CreateRoleResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
 		role := domain.Role{
 			ID:          domain.RoleID(s.ids.NewID()),
@@ -70,7 +67,6 @@ func (s *Service) CreateRole(ctx context.Context, cmd CreateRoleCommand) (Create
 			Permissions: toPermissions(cmd.Permissions),
 		}
 
-		// 7. persist state and the outbox event in the same transaction.
 		created, err := tx.Permissions().CreateRole(ctx, role)
 		if err != nil {
 			return err
@@ -88,7 +84,6 @@ func (s *Service) CreateRole(ctx context.Context, cmd CreateRoleCommand) (Create
 		return CreateRoleResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }
 

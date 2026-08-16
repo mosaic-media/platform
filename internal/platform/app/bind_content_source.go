@@ -46,12 +46,10 @@ func validateBindContentSourceCommand(cmd v1.BindContentSourceCommand) error {
 // weak one as pending_review so a person sees it rather than two works
 // silently merging because they share a title.
 func (s *Service) BindContentSource(ctx context.Context, cmd v1.BindContentSourceCommand) (v1.BindContentSourceResult, error) {
-	// 1. validate command shape.
 	if err := validateBindContentSourceCommand(cmd); err != nil {
 		return v1.BindContentSourceResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionContentBind, policy.Resource{Type: "content"})
 	if err != nil {
 		return v1.BindContentSourceResult{}, err
@@ -59,10 +57,9 @@ func (s *Service) BindContentSource(ctx context.Context, cmd v1.BindContentSourc
 
 	var result v1.BindContentSourceResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5-6. the node must exist. A binding to nothing is not identity
-		// resolution, it is a dangling row.
+		// The node must exist. A binding to nothing is not identity resolution,
+		// it is a dangling row.
 		if _, err := tx.Nodes().FindByID(ctx, cmd.NodeID); err != nil {
 			return err
 		}
@@ -80,9 +77,8 @@ func (s *Service) BindContentSource(ctx context.Context, cmd v1.BindContentSourc
 			UpdatedAt:       now,
 		}
 
-		// 7. persist state and the outbox event in the same transaction. A
-		// duplicate (provider, ref) surfaces as Conflict from the store —
-		// one source binds to at most one node.
+		// A duplicate (provider, ref) surfaces as Conflict from the store — one
+		// source binds to at most one node.
 		created, err := tx.SourceBindings().Create(ctx, binding)
 		if err != nil {
 			return err
@@ -100,7 +96,6 @@ func (s *Service) BindContentSource(ctx context.Context, cmd v1.BindContentSourc
 		return v1.BindContentSourceResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }
 

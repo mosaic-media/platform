@@ -40,12 +40,10 @@ func validateResolveContentBindingCommand(cmd v1.ResolveContentBindingCommand) e
 // Confirm, a decline is Reject, and a split is Confirm with MoveToNodeID —
 // the binding moves and the source's identity is never re-resolved (platform#9).
 func (s *Service) ResolveContentBinding(ctx context.Context, cmd v1.ResolveContentBindingCommand) (v1.ResolveContentBindingResult, error) {
-	// 1. validate command shape.
 	if err := validateResolveContentBindingCommand(cmd); err != nil {
 		return v1.ResolveContentBindingResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enter(ctx, cmd.Caller, ActionContentResolve,
 		policy.Resource{Type: "content", ID: string(cmd.BindingID)})
 	if err != nil {
@@ -54,9 +52,7 @@ func (s *Service) ResolveContentBinding(ctx context.Context, cmd v1.ResolveConte
 
 	var result v1.ResolveContentBindingResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5. load the binding under review.
 		binding, err := tx.SourceBindings().FindByID(ctx, cmd.BindingID)
 		if err != nil {
 			return err
@@ -64,11 +60,10 @@ func (s *Service) ResolveContentBinding(ctx context.Context, cmd v1.ResolveConte
 
 		now := s.clock.Now()
 
-		// 6. apply the resolution. State transitions are Platform operations,
-		// so they are performed here rather than by a method on the published
-		// model (platform#12). A split moves first — the target must exist — then
-		// confirms, keeping the source's identity (method, confidence)
-		// untouched.
+		// State transitions are Platform operations, so they are performed here
+		// rather than by a method on the published model (platform#12). A split
+		// moves first — the target must exist — then confirms, keeping the
+		// source's identity (method, confidence) untouched.
 		switch cmd.Resolution {
 		case v1.ResolveReject:
 			binding.Status = v1.BindingRejected
@@ -83,7 +78,6 @@ func (s *Service) ResolveContentBinding(ctx context.Context, cmd v1.ResolveConte
 		}
 		binding.UpdatedAt = now
 
-		// 7. persist state and the outbox event in the same transaction.
 		updated, err := tx.SourceBindings().Update(ctx, binding)
 		if err != nil {
 			return err
@@ -101,6 +95,5 @@ func (s *Service) ResolveContentBinding(ctx context.Context, cmd v1.ResolveConte
 		return v1.ResolveContentBindingResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }

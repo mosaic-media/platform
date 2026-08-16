@@ -172,22 +172,9 @@ func Launch(cfg Config) (*Module, error) {
 	// resolve.
 	inv := newInvocations()
 
-	// The egress proxy (platform#39). Every outbound call the module makes routes
-	// through it — HTTP_PROXY/HTTPS_PROXY below point the module's HTTP client at
-	// it — so the deny list that guarded the in-process client's dials guards
-	// this one's too, and every host the module contacts is attributed to it.
-	// One proxy per module makes that attribution inherent.
-	label := cfg.DeclaredManifest.ID
-	if label == "" {
-		label = filepath.Base(cfg.BinaryPath)
-	}
-	proxy, err := moduleproxy.Start(moduleproxy.Options{
-		ModuleID:     label,
-		AllowPrivate: cfg.AllowPrivateEgress,
-		Log:          cfg.Telemetry,
-	})
+	proxy, err := startEgressProxy(cfg)
 	if err != nil {
-		return nil, contracts.WrapError(contracts.Unavailable, "extension: starting egress proxy", err)
+		return nil, err
 	}
 	// The proxy outlives Launch only on success. Every error path below closes
 	// it here rather than at each return, so a failed launch cannot leak a
@@ -199,52 +186,8 @@ func Launch(cfg Config) (*Module, error) {
 		}
 	}()
 
-	cmd := exec.Command(cfg.BinaryPath) //nolint:gosec // the path is the Platform's own, verified at install before we see it (platform#49).
-	// Route the module's HTTP client through the proxy. Go's default transport
-	// reads these, so a module using an ordinary client — as every module does —
-	// routes through without any change to its code. NO_PROXY is cleared so
-	// nothing is exempted: the loopback the proxy itself listens on is reached by
-	// the module dialling the proxy, not by the module being allowed to bypass it
-	// for loopback targets.
-	cmd.Env = append(cmd.Environ(),
-		// The Mosaic-specific variable sdk/host reads to force all egress
-		// through the proxy, loopback included — which the standard variables
-		// below cannot do, because Go's ProxyFromEnvironment excludes loopback
-		// (platform#39; sdk/host's egress.go carries the detail).
-		host.EgressProxyEnv+"="+proxy.Addr(),
-		// The standard variables too, as defence in depth: a module not built
-		// against sdk/host, or one deliberately using ProxyFromEnvironment, still
-		// routes its non-loopback egress through the proxy.
-		"HTTP_PROXY="+proxy.Addr(),
-		"HTTPS_PROXY="+proxy.Addr(),
-		"NO_PROXY=",
-	)
-	if len(cfg.Env) > 0 {
-		cmd.Env = append(cmd.Env, cfg.Env...)
-	}
-
-	client := goplugin.NewClient(&goplugin.ClientConfig{
-		HandshakeConfig: host.Handshake,
-		Plugins: host.ClientPluginMap(
-			&resolvingContent{inner: cfg.Content, inv: inv},
-			cfg.Telemetry,
-			categoryOf,
-		),
-		Cmd: cmd,
-		AllowedProtocols: []goplugin.Protocol{
-			// gRPC only. net/rpc is Go-specific and would close the door on a
-			// module written in another language (sdk#7).
-			goplugin.ProtocolGRPC,
-		},
-		// A Unix socket rather than a loopback TCP port: no port allocation, no
-		// accidental network exposure, and filesystem permissions as the access
-		// control (platform#39).
-		UnixSocketConfig: &goplugin.UnixSocketConfig{},
-		// go-plugin logs the child's stderr through this. Left at its default
-		// for now; wiring it into the telemetry plane is sdk#7's open
-		// question, and guessing at it here would be inventing a mapping.
-		Managed: true,
-	})
+	cmd := moduleCommand(cfg, proxy)
+	client := newPluginClient(cfg, inv, cmd)
 
 	rpcClient, err := client.Client()
 	if err != nil {
@@ -280,6 +223,83 @@ func Launch(cfg Config) (*Module, error) {
 		invocations: inv,
 		proxy:       proxy,
 	}, nil
+}
+
+// startEgressProxy starts the module's own egress proxy (platform#39). Every
+// outbound call the module makes routes through it — moduleCommand's environment
+// points the module's HTTP client at it — so the deny list that guarded the
+// in-process client's dials guards this one's too, and every host the module
+// contacts is attributed to it. One proxy per module makes that attribution
+// inherent.
+func startEgressProxy(cfg Config) (*moduleproxy.Proxy, error) {
+	label := cfg.DeclaredManifest.ID
+	if label == "" {
+		label = filepath.Base(cfg.BinaryPath)
+	}
+	proxy, err := moduleproxy.Start(moduleproxy.Options{
+		ModuleID:     label,
+		AllowPrivate: cfg.AllowPrivateEgress,
+		Log:          cfg.Telemetry,
+	})
+	if err != nil {
+		return nil, contracts.WrapError(contracts.Unavailable, "extension: starting egress proxy", err)
+	}
+	return proxy, nil
+}
+
+// moduleCommand builds the command that runs the module binary, with its HTTP
+// client routed through proxy. Go's default transport reads these variables, so a
+// module using an ordinary client — as every module does — routes through without
+// any change to its code. NO_PROXY is cleared so nothing is exempted: the
+// loopback the proxy itself listens on is reached by the module dialling the
+// proxy, not by the module being allowed to bypass it for loopback targets.
+func moduleCommand(cfg Config, proxy *moduleproxy.Proxy) *exec.Cmd {
+	cmd := exec.Command(cfg.BinaryPath) //nolint:gosec // the path is the Platform's own, verified at install before we see it (platform#49).
+	cmd.Env = append(cmd.Environ(),
+		// The Mosaic-specific variable sdk/host reads to force all egress
+		// through the proxy, loopback included — which the standard variables
+		// below cannot do, because Go's ProxyFromEnvironment excludes loopback
+		// (platform#39; sdk/host's egress.go carries the detail).
+		host.EgressProxyEnv+"="+proxy.Addr(),
+		// The standard variables too, as defence in depth: a module not built
+		// against sdk/host, or one deliberately using ProxyFromEnvironment, still
+		// routes its non-loopback egress through the proxy.
+		"HTTP_PROXY="+proxy.Addr(),
+		"HTTPS_PROXY="+proxy.Addr(),
+		"NO_PROXY=",
+	)
+	if len(cfg.Env) > 0 {
+		cmd.Env = append(cmd.Env, cfg.Env...)
+	}
+	return cmd
+}
+
+// newPluginClient configures the go-plugin client that spawns cmd and speaks to
+// the module over it. The handshake it carries is the first of the two checks
+// [Launch] describes.
+func newPluginClient(cfg Config, inv *invocations, cmd *exec.Cmd) *goplugin.Client {
+	return goplugin.NewClient(&goplugin.ClientConfig{
+		HandshakeConfig: host.Handshake,
+		Plugins: host.ClientPluginMap(
+			&resolvingContent{inner: cfg.Content, inv: inv},
+			cfg.Telemetry,
+			categoryOf,
+		),
+		Cmd: cmd,
+		AllowedProtocols: []goplugin.Protocol{
+			// gRPC only. net/rpc is Go-specific and would close the door on a
+			// module written in another language (sdk#7).
+			goplugin.ProtocolGRPC,
+		},
+		// A Unix socket rather than a loopback TCP port: no port allocation, no
+		// accidental network exposure, and filesystem permissions as the access
+		// control (platform#39).
+		UnixSocketConfig: &goplugin.UnixSocketConfig{},
+		// go-plugin logs the child's stderr through this. Left at its default
+		// for now; wiring it into the telemetry plane is sdk#7's open
+		// question, and guessing at it here would be inventing a mapping.
+		Managed: true,
+	})
 }
 
 // checkManifest compares what the manifest file declared against what the

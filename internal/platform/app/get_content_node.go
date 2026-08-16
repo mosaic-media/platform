@@ -29,18 +29,15 @@ func validateGetContentNodeQuery(query v1.GetContentNodeQuery) error {
 // a caller descends one indexed step at a time rather than being handed a
 // shape it then has to guess the meaning of.
 func (s *Service) GetContentNode(ctx context.Context, query v1.GetContentNodeQuery) (v1.GetContentNodeResult, error) {
-	// 1. validate query shape.
 	if err := validateGetContentNodeQuery(query); err != nil {
 		return v1.GetContentNodeResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	if _, err := s.enter(ctx, query.Caller, ActionContentRead,
 		policy.Resource{Type: "content", ID: string(query.NodeID)}); err != nil {
 		return v1.GetContentNodeResult{}, err
 	}
 
-	// 4. load state through a read contract.
 	node, err := s.nodes.FindByID(ctx, query.NodeID)
 	if err != nil {
 		return v1.GetContentNodeResult{}, err

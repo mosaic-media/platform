@@ -49,17 +49,14 @@ func validateCreateLocalUserCommand(cmd CreateLocalUserCommand) error {
 	return nil
 }
 
-// CreateLocalUser implements the command order:
-// validate shape, authenticate, authorize, open a UnitOfWork, load state,
-// apply the domain rule (username uniqueness), persist the new user and
-// its outbox event in the same transaction, then return a Platform result.
+// CreateLocalUser adds a local account and the password credential it signs in
+// with. The account is created active and holds no role: granting one is a
+// separate command.
 func (s *Service) CreateLocalUser(ctx context.Context, cmd CreateLocalUserCommand) (CreateLocalUserResult, error) {
-	// 1. validate command shape.
 	if err := validateCreateLocalUserCommand(cmd); err != nil {
 		return CreateLocalUserResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	az, err := s.enterSession(ctx, cmd.CallerSessionID, ActionUserCreate, policy.Resource{Type: "user"})
 	if err != nil {
 		return CreateLocalUserResult{}, err
@@ -67,13 +64,11 @@ func (s *Service) CreateLocalUser(ctx context.Context, cmd CreateLocalUserComman
 
 	var result CreateLocalUserResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5. load state through contracts.
 		_, err := tx.Users().FindByUsername(ctx, cmd.Username)
 		switch {
 		case err == nil:
-			// 6. apply domain rules: usernames must be unique.
+			// Usernames must be unique.
 			return contracts.NewError(contracts.Conflict, "username already exists")
 		case contracts.CategoryOf(err) != contracts.NotFound:
 			return err
@@ -90,7 +85,6 @@ func (s *Service) CreateLocalUser(ctx context.Context, cmd CreateLocalUserComman
 			UpdatedAt:   now,
 		}
 
-		// 7. persist state and outbox events in the same transaction.
 		created, err := tx.Users().Create(ctx, newUser)
 		if err != nil {
 			return err
@@ -123,6 +117,5 @@ func (s *Service) CreateLocalUser(ctx context.Context, cmd CreateLocalUserComman
 		return CreateLocalUserResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
 }

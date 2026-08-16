@@ -110,12 +110,10 @@ func (r ListLibraryResult) HasMore() bool { return r.Offset+len(r.Works) < r.Tot
 // of it (platform#59). What differs per person is what they did with it, which is
 // a different query.
 func (s *Service) ListLibrary(ctx context.Context, q ListLibraryQuery) (ListLibraryResult, error) {
-	// 1. validate query shape.
 	if q.Caller.Session == "" {
 		return ListLibraryResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	if _, err := s.enter(ctx, q.Caller, ActionContentRead, policy.Resource{Type: "content"}); err != nil {
 		return ListLibraryResult{}, err
 	}
@@ -134,9 +132,8 @@ func (s *Service) ListLibrary(ctx context.Context, q ListLibraryQuery) (ListLibr
 		offset = 0
 	}
 
-	// 4. load state through a read contract. Works only: a household owns a
-	// series rather than sixty-four episodes of it, and the tree below a work is
-	// what the detail screen is for.
+	// Works only: a household owns a series rather than sixty-four episodes of
+	// it, and the tree below a work is what the detail screen is for.
 	query := contracts.NodeQuery{
 		Title:          q.Title,
 		MediaType:      q.MediaType,

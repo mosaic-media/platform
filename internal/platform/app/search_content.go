@@ -52,17 +52,14 @@ func validateSearchContentQuery(query v1.SearchContentQuery) error {
 // It is a query, so it uses a direct read contract rather than a UnitOfWork,
 // but it still authenticates and passes through policy before reading state.
 func (s *Service) SearchContent(ctx context.Context, query v1.SearchContentQuery) (v1.SearchContentResult, error) {
-	// 1. validate query shape.
 	if err := validateSearchContentQuery(query); err != nil {
 		return v1.SearchContentResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	if _, err := s.enter(ctx, query.Caller, ActionContentRead, policy.Resource{Type: "content"}); err != nil {
 		return v1.SearchContentResult{}, err
 	}
 
-	// 4. load state through a read contract.
 	nodes, err := s.nodes.Search(ctx, contracts.NodeQuery{
 		Title:             query.Title,
 		MediaType:         query.MediaType,
@@ -92,7 +89,6 @@ func (s *Service) FindContentByExternalID(ctx context.Context, query v1.FindCont
 		return v1.FindContentByExternalIDResult{}, contracts.NewError(contracts.InvalidArgument, "external id value is required")
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
 	if _, err := s.enter(ctx, query.Caller, ActionContentRead, policy.Resource{Type: "content"}); err != nil {
 		return v1.FindContentByExternalIDResult{}, err
 	}

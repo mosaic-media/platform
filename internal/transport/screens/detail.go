@@ -322,119 +322,156 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 	canImport := s.content.CallerCan(ctx, caller, app.ActionContentImport, "content")
 
 	if !res.InLibrary {
-		if canImport {
-			// Play comes first and Add second, which is the ordering platform#73
-			// argues for: a viewer wants to watch the thing, and adding it is
-			// what the Platform has to do to let them. Both are drawn only for a
-			// caller who may import, because pressing Play here adds it —
-			// the same authority, honestly gated (platform#44).
-			els = append(els, ui.Button("Play", "primary", ui.IconName("play"),
-				ui.OnTap(ui.Invoke(playPartAction, map[string]any{
-					paramRef: refInput(ref),
-					"title":  title,
-					"poster": s.art(m.Poster),
-				}))))
-			els = append(els, ui.Button("Add to library", "secondary", ui.IconName("plus"),
-				ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
-		}
-		if hasTrailer {
-			els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
-		}
-		return ui.Actions(els...)
+		return s.virtualHeroActions(ref, m, title, trailer, hasTrailer, canImport)
 	}
 
 	if playing != nil {
-		// Where this viewer got to, if anywhere (platform#26). The state is keyed
-		// on the item that has the bytes rather than on the work above it,
-		// because that is what a viewer resumes — an episode, not a series.
-		state, stateErr := s.content.GetPlaybackState(ctx, v1.GetPlaybackStateQuery{
-			Caller: caller, NodeID: playing.NodeID,
-		})
-		// Not fatal — a detail screen without a resume offset is still a detail
-		// screen — but not silent either. Swallowing this outright makes "Resume
-		// never appears" indistinguishable from "nothing has been watched",
-		// which is a difference only a log can carry.
-		if stateErr != nil {
-			telemetry.From(ctx).For("screens").Warn("reading playback state failed; offering Play instead of Resume",
-				telemetry.Identifier("node", string(playing.NodeID)),
-				telemetry.Err(stateErr))
-		}
-		resumable := state.Found && state.State.ResumeAt() > 0
-
-		playInput := map[string]any{
-			paramPartID: string(playing.ID),
-			"nodeId":    string(playing.NodeID),
-			"title":     title,
-			"poster":    s.art(m.Poster),
-		}
-
-		// Naming what is being played rather than the clock reading, when the
-		// thing has a name. "Resume S2 E7" tells a viewer of a series the one
-		// thing they wanted to know; "Resume 47:12" makes them open the episode
-		// list to find out which one it is. On a first play the name matters
-		// more, not less: it is the screen saying which episode this button
-		// picked, rather than picking one quietly.
-		episode := season.episodeOf(playing.NodeID)
-		label := "Play"
-		switch {
-		case resumable && episode != "":
-			label = "Resume " + episode
-		case resumable:
-			label = "Resume " + positionLabel(state.State.ResumeAt())
-		case episode != "":
-			label = "Play " + episode
-		}
-		els = append(els, ui.Button(label, "primary", ui.IconName("play"),
-			ui.OnTap(ui.Invoke(playPartAction, playInput))))
-
-		// The way to the candidate set (platform#71). Offered beside Play rather
-		// than instead of it: the ranking is right often enough that making
-		// everyone choose would be a worse default than choosing for them, and
-		// wrong often enough that there has to be a way through.
-		els = append(els, ui.Button("Sources", "secondary", ui.OnTap(ui.Navigate(screenSources, map[string]any{
-			paramNodeID: string(playing.NodeID),
-			"title":     title,
-			"poster":    s.art(m.Poster),
-		}))))
-
-		if resumable {
-			// Start over is offered rather than assumed, and it does not clear
-			// the position: someone who starts again and stops after five
-			// minutes should not have lost the hour they had before they will
-			// inevitably change their mind.
-			restart := map[string]any{}
-			for k, v := range playInput {
-				restart[k] = v
-			}
-			restart["restart"] = true
-			els = append(els, ui.Button("Start over", "secondary", ui.OnTap(ui.Invoke(playPartAction, restart))))
-		}
+		els = append(els, s.playbackActions(ctx, caller, m, title, playing, season)...)
 	}
 
 	if hasTrailer {
 		els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
 	}
 
-	// The square pills. Watched is a real toggle over playback state (platform#26)
-	// — the dispatch case has existed since the state store landed and no screen
-	// had ever emitted it, so the only way to mark something watched was to
-	// watch it.
+	els = append(els, heroPills(ref, playing, canImport)...)
+
+	return ui.Actions(els...)
+}
+
+// virtualHeroActions is the control row for a title nobody has materialised
+// yet (platform#18): play it, add it, or watch its trailer.
+//
+// Play comes first and Add second, which is the ordering platform#73 argues
+// for: a viewer wants to watch the thing, and adding it is what the Platform
+// has to do to let them. Both are drawn only for a caller who may import,
+// because pressing Play here adds it — the same authority, honestly gated
+// (platform#44).
+func (s *Service) virtualHeroActions(ref v1.ContentRef, m v1.ContentMetadata, title string,
+	trailer ui.Action, hasTrailer, canImport bool) ui.El {
+
+	els := make([]ui.El, 0, 3)
+	if canImport {
+		els = append(els, ui.Button("Play", "primary", ui.IconName("play"),
+			ui.OnTap(ui.Invoke(playPartAction, map[string]any{
+				paramRef: refInput(ref),
+				"title":  title,
+				"poster": s.art(m.Poster),
+			}))))
+		els = append(els, ui.Button("Add to library", "secondary", ui.IconName("plus"),
+			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
+	}
+	if hasTrailer {
+		els = append(els, ui.Button("Trailer", "secondary", ui.IconName("play"), ui.OnTap(trailer)))
+	}
+	return ui.Actions(els...)
+}
+
+// playbackActions are the controls a title with a playable Part carries: the
+// primary play or resume, the way into its candidate set, and a restart.
+func (s *Service) playbackActions(ctx context.Context, caller v1.Caller, m v1.ContentMetadata,
+	title string, playing *v1.Part, season seasonView) []ui.El {
+
+	state := s.resumeState(ctx, caller, playing)
+	resumable := state.Found && state.State.ResumeAt() > 0
+
+	playInput := map[string]any{
+		paramPartID: string(playing.ID),
+		"nodeId":    string(playing.NodeID),
+		"title":     title,
+		"poster":    s.art(m.Poster),
+	}
+
+	els := make([]ui.El, 0, 3)
+	episode := season.episodeOf(playing.NodeID)
+	label := playButtonLabel(episode, resumable, state)
+	els = append(els, ui.Button(label, "primary", ui.IconName("play"),
+		ui.OnTap(ui.Invoke(playPartAction, playInput))))
+
+	// The way to the candidate set (platform#71). Offered beside Play rather
+	// than instead of it: the ranking is right often enough that making
+	// everyone choose would be a worse default than choosing for them, and
+	// wrong often enough that there has to be a way through.
+	els = append(els, ui.Button("Sources", "secondary", ui.OnTap(ui.Navigate(screenSources, map[string]any{
+		paramNodeID: string(playing.NodeID),
+		"title":     title,
+		"poster":    s.art(m.Poster),
+	}))))
+
+	if resumable {
+		// Start over is offered rather than assumed, and it does not clear
+		// the position: someone who starts again and stops after five
+		// minutes should not have lost the hour they had before they will
+		// inevitably change their mind.
+		restart := map[string]any{}
+		for k, v := range playInput {
+			restart[k] = v
+		}
+		restart["restart"] = true
+		els = append(els, ui.Button("Start over", "secondary", ui.OnTap(ui.Invoke(playPartAction, restart))))
+	}
+	return els
+}
+
+// resumeState is where this viewer got to, if anywhere (platform#26). The state
+// is keyed on the item that has the bytes rather than on the work above it,
+// because that is what a viewer resumes — an episode, not a series.
+//
+// A failed read is not fatal — a detail screen without a resume offset is still
+// a detail screen — but it is not silent either, and the zero result it returns
+// then offers Play. Swallowing it outright makes "Resume never appears"
+// indistinguishable from "nothing has been watched", which is a difference only
+// a log can carry.
+func (s *Service) resumeState(ctx context.Context, caller v1.Caller, playing *v1.Part) v1.GetPlaybackStateResult {
+	state, err := s.content.GetPlaybackState(ctx, v1.GetPlaybackStateQuery{
+		Caller: caller, NodeID: playing.NodeID,
+	})
+	if err != nil {
+		telemetry.From(ctx).For("screens").Warn("reading playback state failed; offering Play instead of Resume",
+			telemetry.Identifier("node", string(playing.NodeID)),
+			telemetry.Err(err))
+	}
+	return state
+}
+
+// playButtonLabel names what is being played rather than the clock reading, when
+// the thing has a name. "Resume S2 E7" tells a viewer of a series the one thing
+// they wanted to know; "Resume 47:12" makes them open the episode list to find
+// out which one it is. On a first play the name matters more, not less: it is
+// the screen saying which episode this button picked, rather than picking one
+// quietly.
+func playButtonLabel(episode string, resumable bool, state v1.GetPlaybackStateResult) string {
+	switch {
+	case resumable && episode != "":
+		return "Resume " + episode
+	case resumable:
+		return "Resume " + positionLabel(state.State.ResumeAt())
+	case episode != "":
+		return "Play " + episode
+	}
+	return "Play"
+}
+
+// heroPills are the square secondary controls beside the hero's buttons.
+//
+// Watched is a real toggle over playback state (platform#26) — the dispatch case
+// has existed since the state store landed and no screen had ever emitted it, so
+// the only way to mark something watched was to watch it. Refresh re-imports an
+// in-library item to refresh its candidate releases (additive — nothing is
+// removed); it is offered explicitly rather than run on every view because an
+// aggregator fan-out costs seconds and most views never lead to a play.
+func heroPills(ref v1.ContentRef, playing *v1.Part, canImport bool) []ui.El {
+	els := make([]ui.El, 0, 2)
 	if playing != nil {
 		els = append(els, ui.IconButton("check", "Mark watched", "pill",
 			ui.OnTap(ui.Invoke(setWatchedAction, map[string]any{
 				"nodeId": string(playing.NodeID), "finished": true,
 			}))))
 	}
-	// Re-importing an in-library item refreshes its candidate releases
-	// (additive — nothing is removed). It is offered explicitly rather than run
-	// on every view because an aggregator fan-out costs seconds and most views
-	// never lead to a play.
 	if canImport {
 		els = append(els, ui.IconButton("refresh", "Refresh sources", "pill",
 			ui.OnTap(ui.Invoke(importContentMutation, map[string]any{paramRef: refInput(ref)}))))
 	}
-
-	return ui.Actions(els...)
+	return els
 }
 
 // playbackPanel is the glass panel docked beside the hero: what a viewer is
@@ -892,14 +929,7 @@ func titleWords(s string) string {
 // of variable depth — platform#9). A film's child is its feature item; a series'
 // children are its seasons.
 func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID string, params map[string]any) (sdui.Node, error) {
-	// The season the screen is on, read here so the query fetches that season's
-	// episodes and no others.
-	season := 0
-	if sv := stringParam(params, paramSeason); sv != "" {
-		if n, err := strconv.Atoi(sv); err == nil {
-			season = n
-		}
-	}
+	season := seasonParam(params)
 	res, err := s.content.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{
 		Caller: caller, NodeID: v1.NodeID(nodeID), Season: season,
 	})
@@ -916,16 +946,40 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 		return s.structuralDetail(n, res.Children), nil
 	}
 
-	m := res.Metadata
-	// The tree is the authority on what episodes exist, and the stored document
-	// deliberately carries none (platform#62). Projecting them back here is what
-	// lets one renderer serve both planes.
-	m.Episodes = app.EpisodesFromTree(res.Season, res.Episodes)
+	m := libraryMetadata(res)
+	ref := detailRef(m, n)
+	return s.renderDetail(ctx, caller, ref, app.PreviewContentResult{
+		Metadata: m, InLibrary: true, NodeID: n.ID,
+	}, app.SeasonNumbers(res.Children), params)
+}
 
-	// The node fills what the document does not. Artwork is the case that
-	// matters: it is stored on the node (platform#45) and re-ranked by the artwork
-	// pass (platform#47), so the node's copy is the better one and the document's
-	// is what its metadata provider happened to carry.
+// seasonParam is the season the screen is on, read here so the library query
+// fetches that season's episodes and no others. Zero when the screen names none
+// or names a non-number, which leaves the defaulting to the query.
+func seasonParam(params map[string]any) int {
+	sv := stringParam(params, paramSeason)
+	if sv == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(sv)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// libraryMetadata is the stored provider document completed from the node the
+// graph holds, which is what one detail renderer then serves for both planes.
+//
+// The tree is the authority on what episodes exist, and the stored document
+// deliberately carries none (platform#62), so they are projected back on. Artwork
+// is where the node wins outright: it is stored on the node (platform#45) and
+// re-ranked by the artwork pass (platform#47), so the node's copy is the better
+// one and the document's is what its metadata provider happened to carry.
+func libraryMetadata(res app.GetLibraryDetailResult) v1.ContentMetadata {
+	n := res.Node
+	m := res.Metadata
+	m.Episodes = app.EpisodesFromTree(res.Season, res.Episodes)
 	if p := n.Artwork.Poster; p != "" {
 		m.Poster = p
 	}
@@ -938,19 +992,19 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 	if m.Title == "" {
 		m.Title = n.Title
 	}
+	return m
+}
 
-	// The ref the document was fetched under, so the actions that need one — a
-	// franchise rail, a trailer — still work. Its media type comes from the node
-	// when the document has none, because the graph's is the canonical one
-	// (platform#11) and the kicker reads it.
+// detailRef is the ref the document was fetched under, so the actions that need
+// one — a franchise rail, a trailer — still work. Its media type comes from the
+// node when the document has none, because the graph's is the canonical one
+// (platform#11) and the kicker reads it.
+func detailRef(m v1.ContentMetadata, n v1.Node) v1.ContentRef {
 	ref := m.Ref
 	if ref.MediaType == "" {
 		ref.MediaType = n.MediaType
 	}
-
-	return s.renderDetail(ctx, caller, ref, app.PreviewContentResult{
-		Metadata: m, InLibrary: true, NodeID: n.ID,
-	}, app.SeasonNumbers(res.Children), params)
+	return ref
 }
 
 // structuralDetail is what a node with no stored description renders as: what
