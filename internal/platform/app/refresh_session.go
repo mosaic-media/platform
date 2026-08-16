@@ -40,7 +40,6 @@ type RefreshSessionResult struct {
 // the moment they use the new token, which is what made an opaque token worth
 // its store read (platform#43).
 func (s *Service) RefreshSession(ctx context.Context, cmd RefreshSessionCommand) (RefreshSessionResult, error) {
-	// 1. validate command shape.
 	if cmd.RefreshToken == "" {
 		return RefreshSessionResult{}, contracts.NewError(contracts.Unauthenticated, "a refresh token is required")
 	}
@@ -50,58 +49,67 @@ func (s *Service) RefreshSession(ctx context.Context, cmd RefreshSessionCommand)
 
 	var result RefreshSessionResult
 
-	// 4. open a UnitOfWork. Rotation is several writes — spending the old
-	// token, storing the new pair, moving the idle clock — and a crash between
-	// them would leave a client holding a token the server has spent and no
-	// replacement, which is a sign-out it could not explain.
+	// Rotation is several writes — spending the old token, storing the new pair,
+	// moving the idle clock — and a crash between them would leave a client
+	// holding a token the server has spent and no replacement, which is a
+	// sign-out it could not explain.
 	err := s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 2-3. the refresh token authenticates; nothing further authorises.
-		session, pair, err := s.sessionManager.Refresh(
-			ctx, tx.Sessions(), tx.Tokens(), cmd.RefreshToken, cmd.DeviceID)
-		if err != nil {
-			return err
-		}
-
-		// 7. persist state and the outbox event in the same transaction.
-		if err := tx.Outbox().Append(ctx, domain.OutboxEvent{
-			Event: s.newEvent(ctx, "session.refreshed", []byte(session.ID), string(session.UserID)),
-		}); err != nil {
-			return err
-		}
-
-		// Re-resolve what this account may do (platform#24). The stored set is
-		// the snapshot taken when the session was issued and a session lives
-		// ninety days, so a permission granted or withdrawn in that time would
-		// otherwise not reach the client's affordance gate until the next
-		// sign-in — which for a device that never signs out is never.
-		//
-		// The row keeps its issue-time value: nothing reads it, and the wire
-		// carries the current set.
-		session.Capabilities = s.sessionCapabilities(ctx, session.UserID)
-
-		result = RefreshSessionResult{Session: session, Tokens: pair}
-		return nil
+		var err error
+		result, err = s.rotateSessionWithin(ctx, tx, cmd)
+		return err
 	})
 	if err != nil {
-		// A compromised chain must be revoked outside the transaction that
-		// detected it, because that transaction is being rolled back: a
-		// revocation written inside it is undone by the error reporting it, and
-		// the attacker's descendant keeps working. An in-memory store cannot
-		// reproduce that failure.
 		if compromise, ok := sessions.CompromiseOf(err); ok {
-			if revokeErr := s.tokens.RevokeChain(ctx, compromise.ChainID, s.clock.Now()); revokeErr != nil {
-				telemetry.From(ctx).For("sessions").Error(
-					"a compromised refresh chain could not be revoked", telemetry.Err(revokeErr))
-			} else {
-				telemetry.From(ctx).For("sessions").Warn(
-					"revoked a refresh chain after a replayed or misdirected token",
-					telemetry.String("reason", compromise.Reason))
-			}
-			return RefreshSessionResult{}, contracts.NewError(contracts.Unauthenticated, compromise.Reason)
+			return RefreshSessionResult{}, s.revokeCompromisedChain(ctx, compromise)
 		}
 		return RefreshSessionResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
+}
+
+// rotateSessionWithin spends the presented refresh token for a new pair and
+// records the rotation, in one transaction.
+func (s *Service) rotateSessionWithin(ctx context.Context, tx contracts.Tx, cmd RefreshSessionCommand) (RefreshSessionResult, error) {
+	session, pair, err := s.sessionManager.Refresh(
+		ctx, tx.Sessions(), tx.Tokens(), cmd.RefreshToken, cmd.DeviceID)
+	if err != nil {
+		return RefreshSessionResult{}, err
+	}
+
+	if err := tx.Outbox().Append(ctx, domain.OutboxEvent{
+		Event: s.newEvent(ctx, "session.refreshed", []byte(session.ID), string(session.UserID)),
+	}); err != nil {
+		return RefreshSessionResult{}, err
+	}
+
+	// Re-resolve what this account may do (platform#24). The stored set is the
+	// snapshot taken when the session was issued and a session lives ninety days,
+	// so a permission granted or withdrawn in that time would otherwise not reach
+	// the client's affordance gate until the next sign-in — which for a device
+	// that never signs out is never.
+	//
+	// The row keeps its issue-time value: nothing reads it, and the wire carries
+	// the current set.
+	session.Capabilities = s.sessionCapabilities(ctx, session.UserID)
+
+	return RefreshSessionResult{Session: session, Tokens: pair}, nil
+}
+
+// revokeCompromisedChain ends the chain a replayed or misdirected token exposed,
+// and refuses the caller either way. It must run outside the transaction that
+// detected the compromise, because that transaction is being rolled back: a
+// revocation written inside it is undone by the error reporting it, and the
+// attacker's descendant keeps working. An in-memory store cannot reproduce that
+// failure.
+func (s *Service) revokeCompromisedChain(ctx context.Context, compromise sessions.Compromise) error {
+	if revokeErr := s.tokens.RevokeChain(ctx, compromise.ChainID, s.clock.Now()); revokeErr != nil {
+		telemetry.From(ctx).For("sessions").Error(
+			"a compromised refresh chain could not be revoked", telemetry.Err(revokeErr))
+	} else {
+		telemetry.From(ctx).For("sessions").Warn(
+			"revoked a refresh chain after a replayed or misdirected token",
+			telemetry.String("reason", compromise.Reason))
+	}
+	return contracts.NewError(contracts.Unauthenticated, compromise.Reason)
 }

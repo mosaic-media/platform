@@ -13,8 +13,9 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// issueStore is the PostgreSQL contracts.IssueStore: the resolution register
-// (platform#74).
+// issueStore is the PostgreSQL contracts.IssueStore: the resolution register —
+// durable, typed statements that something is operationally wrong with this
+// install, each held until resolved and offering Suggestions (platform#74).
 type issueStore struct {
 	q queryer
 }

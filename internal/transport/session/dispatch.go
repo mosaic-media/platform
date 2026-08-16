@@ -215,6 +215,17 @@ type playEnvelope struct {
 	Ref *importRef `json:"ref,omitempty"`
 }
 
+// playEnvelopeFromInput decodes a playPart action envelope.
+func playEnvelopeFromInput(input []byte) (playEnvelope, error) {
+	var env playEnvelope
+	if len(input) > 0 {
+		if err := json.Unmarshal(input, &env); err != nil {
+			return playEnvelope{}, contracts.NewError(contracts.InvalidArgument, "play part: input is not valid JSON")
+		}
+	}
+	return env, nil
+}
+
 // playPart resolves a Part to playable bytes, seals the result into a ticket and
 // returns the Player surface to push (platform#25, web#4).
 //
@@ -234,11 +245,9 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	// picked precisely to avoid re-encoding.
 	profile := s.clientProfile()
 
-	var env playEnvelope
-	if len(input) > 0 {
-		if err := json.Unmarshal(input, &env); err != nil {
-			return nil, contracts.NewError(contracts.InvalidArgument, "play part: input is not valid JSON")
-		}
+	env, err := playEnvelopeFromInput(input)
+	if err != nil {
+		return nil, err
 	}
 	// Playing something unowned adds it first (platform#73). The library gains
 	// things people bounce off after ninety seconds, and that cost is accepted:
@@ -272,95 +281,8 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		return nil, err
 	}
 
-	// What this viewer wants to hear (platform#83). Read per caller rather than
-	// from a package-level default, because language belongs to a person and
-	// several people share one library.
-	langs := playback.ParseLanguagePreference(h.svc.LanguagePreferenceFor(ctx, caller))
-
-	// Probe the winner, then decide per stream (platform#29). This is where a 4K
-	// HEVC release with four E-AC3 audio tracks becomes "copy the video, encode
-	// the English audio" rather than either a whole-file transcode or a silent
-	// film. The plan travels sealed inside the ticket, so the origin does not
-	// re-probe on every range request a seeking player makes.
-	info, probed := h.mediaInfo(ctx, caller, res)
-	plan := playback.Plan{DirectPlay: true}
-	if probed {
-		plan = playback.Decide(info, profile.codecs(), langs.Audio)
-		// A track chosen for this sitting overrides the one the preference
-		// picked (platform#71). Applied after Decide rather than inside it,
-		// because the plan's other decisions — whether the video is copied,
-		// whether the audio needs an encode — still have to be made for the
-		// track that was actually chosen.
-		plan = playback.WithAudioOverride(plan, info, profile.codecs(), env.AudioIndex)
-	}
-	// What they should read, after the release has had its say. A preference
-	// names what someone wants when they got the language they asked for; when
-	// they did not, this is where the Platform notices and escalates.
-	subtitles := langs.SubtitlesFor(plan.AudioLanguage)
-	// What the installed subtitle sources have for this item (platform#83). Asked
-	// on every play rather than stored, because a subtitle URL is perishable in
-	// the same way a stream address is — and best-effort, so a source that is
-	// down costs the extra tracks and never the playback.
-	external := h.externalSubtitles(ctx, caller, env.NodeID)
-	plan.External = external
-
-	// Offered as HLS renditions, which is why subtitles cost no client change
-	// (platform#83). Only on the transcoded path: a direct-played release is
-	// relayed byte for byte, so there is no playlist to declare a rendition in.
-	//
-	// A track that cannot be a rendition is burned into the picture instead
-	// (platform#83), which forces a video encode — so it can turn a release that
-	// would have direct-played into one that does not. That is the whole cost of
-	// typeset fidelity and of a Blu-ray's picture subtitles, and it is why the
-	// preference behind it is opt-in.
-	if probed && !plan.DirectPlay {
-		plan.Subtitles, plan.Burn, plan.Styled =
-			playback.DecideSubtitles(info.Subtitles, subtitles, langs.Styling)
-		// The same override for subtitles: it changes which track is on by
-		// default, and never which tracks are offered.
-		playback.WithSubtitleOverride(plan.Subtitles, plan.Styled, env.SubtitleIndex)
-	}
-
-	// One record saying what was chosen and what will happen to it. Playback has
-	// three independent places to go wrong — selection, probing, and the encode
-	// plan — and from the outside every one of them looks like "it still
-	// buffers". This makes which of them fired answerable from the log.
-	//
-	// The release name is the one field here that is not structural: it is
-	// free text from a third-party source and it names what someone is
-	// watching, so it is classified rather than written verbatim.
-	telemetry.From(ctx).For("playback").Info("stream chosen",
-		telemetry.Sensitive("release", res.Release),
-		telemetry.Int("candidates", res.Candidates),
-		telemetry.String("video_codec", res.VideoCodec),
-		telemetry.String("audio_codec", res.AudioCodec),
-		telemetry.Int("height", res.Height),
-		telemetry.Bool("direct_play", plan.DirectPlay),
-		telemetry.String("reason", plan.Reason),
-		// Which profile the choice was made against. Two clients asking for the
-		// same item can correctly get different releases, and without this the
-		// second one reads as the first one having gone wrong.
-		telemetry.String("capability_class", profile.class),
-		// Whether the aggregator was asked at all (platform#28). A cache that has
-		// silently stopped hitting is indistinguishable from one that was never
-		// warm — both just look like playback being slow.
-		telemetry.Bool("cached", res.Cached),
-		// Whether the bytes had to be probed again (platform#29). Once the
-		// aggregator call was cached this became the largest remaining cost
-		// between a click and a first frame, so it is the number to watch.
-		telemetry.Bool("probe_reused", probed && len(res.Probe) > 0),
-		// Which language they actually got, and whether the subtitle mode had to
-		// be raised because it was not the one they asked for. Both are
-		// invisible from the outside — a viewer sees a film in a language and
-		// cannot tell whether the Platform chose it or settled for it.
-		telemetry.String("audio_language", plan.AudioLanguage),
-		telemetry.String("subtitle_mode", string(subtitles.Mode)),
-		telemetry.Bool("subtitle_escalated", subtitles.Escalated),
-		// Whether subtitles forced a video encode (platform#83). This is the single
-		// most expensive thing a playback can decide to do, and from the outside
-		// it presents only as a release that suddenly plays badly — so the log
-		// has to be able to answer "was it the subtitles".
-		telemetry.Bool("subtitle_burned", plan.Burn != nil))
+	plan, subtitles, probed := h.planPlayback(ctx, caller, res, profile, env)
+	logStreamChosen(ctx, res, plan, profile, subtitles, probed)
 	// The part and the capability class ride sealed in the ticket so the origin
 	// can ask the source again when the address stops working (platform#28). A
 	// debrid link dies whenever its torrent leaves the provider's cache, so this
@@ -400,11 +322,104 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 	})
 	msgs := []*sessionv1.ServerMessage{regionMsg(ctx, s, playerRegion, sessionv1.RegionUpdate_REPLACE, node)}
 
-	// What to offer after this one (web#4), pushed as a second region update
-	// beside the player — the two-lane transport driving the region unprompted,
-	// not the client asking. Best-effort and after the mint, so a missing or slow
-	// lookup costs the "Next episode" control, never the play.
-	if next := h.nextEpisodeUp(ctx, caller, v1.NodeID(env.NodeID)); next != nil {
+	return h.appendNextEpisode(ctx, s, caller, env.NodeID, msgs), nil
+}
+
+// planPlayback probes the winner, then decides per stream what happens to it
+// (platform#29). This is where a 4K HEVC release with four E-AC3 audio tracks
+// becomes "copy the video, encode the English audio" rather than either a
+// whole-file transcode or a silent film. The plan travels sealed inside the
+// ticket, so the origin does not re-probe on every range request a seeking
+// player makes, and whether it was probed at all is reported back because an
+// unprobed release is relayed as it is.
+func (h *Handler) planPlayback(ctx context.Context, caller v1.Caller, res app.ResolvePlaybackResult, profile clientProfile, env playEnvelope) (playback.Plan, playback.SubtitleIntent, bool) {
+	// Read per caller rather than from a package-level default (platform#83):
+	// language belongs to a person and several people share one library.
+	langs := playback.ParseLanguagePreference(h.svc.LanguagePreferenceFor(ctx, caller))
+
+	info, probed := h.mediaInfo(ctx, caller, res)
+	plan := playback.Plan{DirectPlay: true}
+	if probed {
+		plan = playback.Decide(info, profile.codecs(), langs.Audio)
+		// A track chosen for this sitting overrides the one the preference
+		// picked (platform#71). Applied after Decide rather than inside it,
+		// because the plan's other decisions — whether the video is copied,
+		// whether the audio needs an encode — still have to be made for the
+		// track that was actually chosen.
+		plan = playback.WithAudioOverride(plan, info, profile.codecs(), env.AudioIndex)
+	}
+	subtitles := langs.SubtitlesFor(plan.AudioLanguage)
+	// Asked on every play rather than stored (platform#83), because a subtitle URL
+	// is perishable in the same way a stream address is.
+	external := h.externalSubtitles(ctx, caller, env.NodeID)
+	plan.External = external
+
+	// Offered as HLS renditions, which is why subtitles cost no client change
+	// (platform#83). Only on the transcoded path: a direct-played release is
+	// relayed byte for byte, so there is no playlist to declare a rendition in.
+	//
+	// A track that cannot be a rendition is burned into the picture instead
+	// (platform#83), which forces a video encode — so it can turn a release that
+	// would have direct-played into one that does not. That is the whole cost of
+	// typeset fidelity and of a Blu-ray's picture subtitles, and it is why the
+	// preference behind it is opt-in.
+	if probed && !plan.DirectPlay {
+		plan.Subtitles, plan.Burn, plan.Styled =
+			playback.DecideSubtitles(info.Subtitles, subtitles, langs.Styling)
+		// The same override for subtitles: it changes which track is on by
+		// default, and never which tracks are offered.
+		playback.WithSubtitleOverride(plan.Subtitles, plan.Styled, env.SubtitleIndex)
+	}
+	return plan, subtitles, probed
+}
+
+// logStreamChosen writes the one record saying what was chosen and what will
+// happen to it. Playback has three independent places to go wrong — selection,
+// probing, and the encode plan — and from the outside every one of them looks
+// like "it still buffers"; this makes which of them fired answerable from the
+// log. The release name is the one field that is not structural: free text from
+// a third-party source naming what someone is watching, so it is classified.
+func logStreamChosen(ctx context.Context, res app.ResolvePlaybackResult, plan playback.Plan, profile clientProfile, subtitles playback.SubtitleIntent, probed bool) {
+	telemetry.From(ctx).For("playback").Info("stream chosen",
+		telemetry.Sensitive("release", res.Release),
+		telemetry.Int("candidates", res.Candidates),
+		telemetry.String("video_codec", res.VideoCodec),
+		telemetry.String("audio_codec", res.AudioCodec),
+		telemetry.Int("height", res.Height),
+		telemetry.Bool("direct_play", plan.DirectPlay),
+		telemetry.String("reason", plan.Reason),
+		// Which profile the choice was made against. Two clients asking for the
+		// same item can correctly get different releases, and without this the
+		// second one reads as the first one having gone wrong.
+		telemetry.String("capability_class", profile.class),
+		// Whether the aggregator was asked at all (platform#28). A cache that has
+		// silently stopped hitting is indistinguishable from one that was never
+		// warm — both just look like playback being slow.
+		telemetry.Bool("cached", res.Cached),
+		// Whether the bytes had to be probed again (platform#29). Once the
+		// aggregator call was cached this became the largest remaining cost
+		// between a click and a first frame, so it is the number to watch.
+		telemetry.Bool("probe_reused", probed && len(res.Probe) > 0),
+		// Which language they actually got, and whether the subtitle mode had to
+		// be raised because it was not the one they asked for. Both are
+		// invisible from the outside — a viewer sees a film in a language and
+		// cannot tell whether the Platform chose it or settled for it.
+		telemetry.String("audio_language", plan.AudioLanguage),
+		telemetry.String("subtitle_mode", string(subtitles.Mode)),
+		telemetry.Bool("subtitle_escalated", subtitles.Escalated),
+		// Whether subtitles forced a video encode (platform#83). This is the single
+		// most expensive thing a playback can decide to do, and from the outside
+		// it presents only as a release that suddenly plays badly — so the log
+		// has to be able to answer "was it the subtitles".
+		telemetry.Bool("subtitle_burned", plan.Burn != nil))
+}
+
+// appendNextEpisode adds what to offer after this one (web#4) as a second region
+// update beside the player — the two-lane transport driving the region
+// unprompted, not the client asking. Best-effort and called after the mint, so a
+// missing or slow lookup costs the "Next episode" control, never the play.
+func (h *Handler) appendNextEpisode(ctx context.Context, s *liveSession, caller v1.Caller, nodeID string, msgs []*sessionv1.ServerMessage) []*sessionv1.ServerMessage {
+	if next := h.nextEpisodeUp(ctx, caller, v1.NodeID(nodeID)); next != nil {
 		label := "Next episode"
 		if next.label != "" {
 			label = "Next: " + next.label
@@ -412,7 +427,7 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		button := screens.NextEpisodeNode(label, next.partID, next.nodeID, next.title)
 		msgs = append(msgs, regionMsg(ctx, s, playerRegion, sessionv1.RegionUpdate_APPEND, button))
 	}
-	return msgs, nil
+	return msgs
 }
 
 // mediaInfo answers what the chosen release actually is, from storage when it is

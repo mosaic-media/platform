@@ -15,7 +15,9 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// upgradeStore is the pending-request half of platform#77.
+// upgradeStore holds the request side of an upgrade: the version somebody asked
+// the Supervisor to install, at most one outstanding, replaced by a later press
+// and settled once the install is running it (platform#77).
 type upgradeStore struct{ q queryer }
 
 // NewUpgradeStore builds the store over a pool.

@@ -31,7 +31,9 @@ type Deps struct {
 	Outbox      contracts.EventOutbox
 	Credentials contracts.CredentialStore
 
-	// The content model (platform#9).
+	// The content model: a containment tree of Nodes, the Parts on its items
+	// that point at the bytes, the Relations that associate nodes across trees,
+	// and the SourceBindings recording where a node came from (platform#9).
 	Nodes          contracts.NodeStore
 	Parts          contracts.PartStore
 	Relations      contracts.RelationStore

@@ -167,7 +167,8 @@ type Deps struct {
 	// LibraryRules is the direct read handle for what the library should
 	// contain (platform#60). Optional, like Jobs, and for the same reason.
 	LibraryRules contracts.LibraryRuleStore
-	// Issues is the resolution register (platform#74).
+	// Issues is the resolution register: what is wrong with this install, now
+	// (platform#74). contracts.IssueStore documents the idempotence rule.
 	Issues contracts.IssueStore
 	// Upgrades is where a request for a version is recorded for the Supervisor
 	// to carry out (platform#77). Nil is a build with no upgrade path, where

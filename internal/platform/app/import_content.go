@@ -53,84 +53,79 @@ func validateImportContentCommand(cmd ImportContentCommand) error {
 // the writes it already committed in place — import is not atomic across the
 // whole tree, by the same reasoning that lets it search between writes.
 func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (v1.ImportResult, error) {
-	// 1. validate command shape.
 	if err := validateImportContentCommand(cmd); err != nil {
 		return v1.ImportResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the invocation itself. Both
-	// gates, in that order, are what enter is.
 	az, err := s.enter(ctx, cmd.Caller, ActionContentImport, policy.Resource{Type: "content"})
 	if err != nil {
 		return v1.ImportResult{}, err
 	}
 
-	// 4. resolve the capability the ref names as its materialiser.
 	capability, ok := s.lookupCapability(cmd.Ref.Provider)
 	if !ok {
 		return v1.ImportResult{}, contracts.NewError(contracts.NotFound, "no capability registered under id "+cmd.Ref.Provider)
 	}
 
-	// 5. read the module's user-managed settings so it is invoked with the
-	// configuration a user set for it (platform#17). Absent settings read back as
-	// an empty document, never an error.
+	// The configuration a user set for this module (platform#17).
 	settings, err := s.readModuleSettings(ctx, cmd.Ref.Provider)
 	if err != nil {
 		return v1.ImportResult{}, err
 	}
 
-	// 6. invoke it, forwarding the caller so it acts as the invoking user and
-	// passing the Service as the ContentService it drives.
-	//
-	// The module's context is a separate variable, not a shadow of ctx: it
-	// carries the module's logger and telemetry surface (sdk#5) and dies
-	// with the span below, so Platform work after the call must not inherit it.
+	result, err := s.invokeImport(ctx, capability, cmd, settings)
+	if err != nil {
+		return v1.ImportResult{}, err
+	}
+
+	if result.WorkID != "" {
+		s.enrichImported(ctx, cmd.Caller, cmd.Ref, &result)
+	}
+
+	// Record that an import ran, for audit. The capability's own writes each
+	// emit their content events; this marks the invocation itself — so it is
+	// caused by the handler's span, not by the module span that has just ended.
+	s.publishAuditEvent(ctx, "content.import.invoked", []byte(cmd.Ref.Provider), string(az.userID))
+
+	return result, nil
+}
+
+// invokeImport runs the capability's own import inside a module span.
+//
+// The module's context is a separate variable, not a shadow of ctx: it carries
+// the module's logger and telemetry surface (sdk#5) and dies with the span, so
+// Platform work after the call must not inherit it.
+func (s *Service) invokeImport(ctx context.Context, capability v1.Capability, cmd ImportContentCommand, settings []byte) (v1.ImportResult, error) {
 	mctx, span := moduleSpan(ctx, cmd.Ref.Provider, "import")
 	result, err := capability.Import(mctx, s, v1.ImportRequest{
 		Caller: cmd.Caller, Ref: cmd.Ref, Settings: settings,
 	})
 	failSpan(span, err)
 	span.End()
-	if err != nil {
-		return v1.ImportResult{}, err
-	}
+	return result, err
+}
 
-	// 6b. fill in what plays (platform#46). The capability the ref named built the
-	// tree; a metadata module fills no stream role, so without this a title it
-	// described would sit in the library permanently unplayable while a stream
-	// source registered alongside was never asked.
-	//
-	// Deliberately after the module's own span has ended and outside any error
-	// path: these are best-effort, and an import that produced a tree has
-	// succeeded whether or not anything could be found to play.
-	if result.WorkID != "" {
-		// 6b0. fill in what it is, and what shape it is (platform#62). It must run
-		// first of the three because both of the others read the tree: the stream
-		// pass fills items with no Parts, so an episode this adds is enriched in
-		// the same import, and the artwork pass walks the seasons this may have
-		// just created.
-		//
-		// It is also what makes a re-import worth anything: every module dedups
-		// before writing and returns AlreadyKnown, so without this the second
-		// import of a title refreshes everything about it except its shape and
-		// its description.
-		s.enrichMetadata(ctx, cmd.Caller, cmd.Ref, result.WorkID)
-
-		s.enrichStreams(ctx, cmd.Caller, result.WorkID, &result)
-
-		// 6c. fill in what it looks like (sdk#6). Same shape as the stream pass:
-		// a dedicated artwork source fills no metadata role and is never named by
-		// a ref, so without this it would sit registered and never be asked about
-		// the title it has the best art for.
-		s.enrichArtwork(ctx, cmd.Caller, result.WorkID)
-	}
-
-	// 7. record that an import ran, for audit. The capability's own writes each
-	// emit their content events; this marks the invocation itself — so it is
-	// caused by the handler's span, not by the module span that has just ended.
-	s.publishAuditEvent(ctx, "content.import.invoked", []byte(cmd.Ref.Provider), string(az.userID))
-
-	return result, nil
+// enrichImported fills in what the capability the ref named could not: what the
+// title is and what shape it is (platform#62), what plays (platform#46), and what
+// it looks like (sdk#6). A metadata module fills no stream role, and an artwork
+// source is never named by a ref, so without these passes a described title would
+// sit permanently unplayable while a stream source registered alongside was never
+// asked — and the source with the best art for it never asked either.
+//
+// The metadata pass must run first because both of the others read the tree: the
+// stream pass fills items with no Parts, so an episode it adds is enriched in the
+// same import, and the artwork pass walks the seasons it may have just created.
+// It is also what makes a re-import worth anything — every module dedups before
+// writing and returns AlreadyKnown, so without it the second import of a title
+// refreshes everything about it except its shape and its description.
+//
+// Called after the module's own span has ended and outside any error path: these
+// are best-effort, and an import that produced a tree has succeeded whether or
+// not anything could be found to play.
+func (s *Service) enrichImported(ctx context.Context, caller v1.Caller, ref v1.ContentRef, result *v1.ImportResult) {
+	s.enrichMetadata(ctx, caller, ref, result.WorkID)
+	s.enrichStreams(ctx, caller, result.WorkID, result)
+	s.enrichArtwork(ctx, caller, result.WorkID)
 }
 
 // lookupCapability resolves a capability id against the registry, tolerating a

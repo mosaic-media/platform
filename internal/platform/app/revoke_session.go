@@ -45,63 +45,65 @@ func validateRevokeSessionCommand(cmd RevokeSessionCommand) error {
 
 // RevokeSession follows the command order for server-side session revocation.
 func (s *Service) RevokeSession(ctx context.Context, cmd RevokeSessionCommand) (RevokeSessionResult, error) {
-	// 1. validate command shape.
 	if err := validateRevokeSessionCommand(cmd); err != nil {
 		return RevokeSessionResult{}, err
 	}
 
-	// 2. authenticate the caller. Authorisation is deferred to inside the
-	// transaction, because it depends on whose session is being ended and that
-	// cannot be known before the target is read.
+	// Authentication only: authorisation is deferred to inside the transaction,
+	// because it depends on whose session is being ended and that cannot be known
+	// before the target is read. This is the one command whose steps 2 and 3 are
+	// separated.
 	userID, err := s.authenticate(ctx, domain.SessionCredential(cmd.CallerSessionID))
 	if err != nil {
 		return RevokeSessionResult{}, err
 	}
 	az := authorized{userID: userID}
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5. load state through contracts.
-		target, err := tx.Sessions().FindByID(ctx, cmd.TargetSessionID)
-		if err != nil {
-			return err
-		}
-
-		// 3. authorize: owning the target is what stands in for the grant.
-		//
-		// Ending your own session is signing out, which cannot be a privilege —
-		// an account that could not do it is one nobody can hand a shared
-		// television back from. Ending somebody else's is an administrative act
-		// and needs user.session.revoke.
-		//
-		// The check is here rather than at the top because it needs the target's
-		// owner, and the target has to be read to know it. That is why this is
-		// the one command whose steps 2 and 3 are separated.
-		if target.UserID != az.userID {
-			subject := policy.Subject{UserID: az.userID}
-			if err := s.authorize(ctx, subject, ActionSessionRevoke,
-				policy.Resource{Type: "session", ID: string(cmd.TargetSessionID)},
-				policy.PolicyContext{}); err != nil {
-				return err
-			}
-		}
-
-		// 6. apply domain rules: revoke the target session and every credential
-		// behind it. The refresh chain ends here rather than when an access
-		// token happens to expire (platform#58), so signing out takes effect at
-		// once.
-		if err := s.sessionManager.Revoke(ctx, tx.Sessions(), tx.Tokens(), cmd.TargetSessionID); err != nil {
-			return err
-		}
-
-		// 7. persist state and outbox events in the same transaction.
-		event := domain.OutboxEvent{Event: s.newEvent(ctx, "session.revoked", []byte(string(cmd.TargetSessionID)), string(az.userID))}
-		return tx.Outbox().Append(ctx, event)
+		return s.revokeSessionWithin(ctx, tx, az, cmd.TargetSessionID)
 	})
 	if err != nil {
 		return RevokeSessionResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return RevokeSessionResult{SessionID: cmd.TargetSessionID}, nil
+}
+
+// revokeSessionWithin loads the target session, authorises against its owner and
+// revokes it with every credential behind it, in one transaction.
+//
+// The refresh chain ends here rather than when an access token happens to expire
+// (platform#58), so signing out takes effect at once.
+func (s *Service) revokeSessionWithin(ctx context.Context, tx contracts.Tx, az authorized, targetSessionID domain.SessionID) error {
+	target, err := tx.Sessions().FindByID(ctx, targetSessionID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.authorizeRevocation(ctx, az, target, targetSessionID); err != nil {
+		return err
+	}
+
+	if err := s.sessionManager.Revoke(ctx, tx.Sessions(), tx.Tokens(), targetSessionID); err != nil {
+		return err
+	}
+
+	event := domain.OutboxEvent{Event: s.newEvent(ctx, "session.revoked", []byte(string(targetSessionID)), string(az.userID))}
+	return tx.Outbox().Append(ctx, event)
+}
+
+// authorizeRevocation makes owning the target stand in for the grant, and
+// requires user.session.revoke to end anybody else's session.
+//
+// Ending your own session is signing out, which cannot be a privilege — an
+// account that could not do it is one nobody can hand a shared television back
+// from. Ending somebody else's is an administrative act.
+func (s *Service) authorizeRevocation(ctx context.Context, az authorized, target domain.Session, targetSessionID domain.SessionID) error {
+	if target.UserID != az.userID {
+		subject := policy.Subject{UserID: az.userID}
+		return s.authorize(ctx, subject, ActionSessionRevoke,
+			policy.Resource{Type: "session", ID: string(targetSessionID)},
+			policy.PolicyContext{})
+	}
+	return nil
 }

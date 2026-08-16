@@ -51,36 +51,58 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	}
 	report.note(cats.Answer.From == app.AnswerSnapshot, cats.Answer.Stale, cats.Answer.TakenAt, cats.Answer.Failed)
 	if len(cats.Catalogs) == 0 {
-		// Two empty states, and keeping them apart is the point of this whole
-		// slice: an install with nothing configured is being told what to do, and
-		// an install whose sources are down is being told what is wrong. Only the
-		// first is the user's to act on, and rendering the second as the first
-		// sends somebody to fix something that is not broken.
 		return ui.Screen(s.sourcesEmptyState(cats.Answer)).Build(), nil
 	}
 
-	// How this viewer arranged their home (platform#59). One read, here, in the
-	// same pass that builds the screen — asking per row would be a round trip per
-	// row on the surface every session lands on.
-	//
+	// One read, in the same pass that builds the screen (platform#59): asking per
+	// row would be a round trip per row on the surface every session lands on.
 	// It is applied before the items are fetched, which is the point of doing it
-	// here rather than while assembling: a row this viewer hid must not cost a
+	// here rather than while assembling — a row this viewer hid must not cost a
 	// provider round trip to draw nothing with.
 	composition := s.content.HomeCompositionFor(ctx, caller)
 	catalogs := arrangeCatalogs(cats.Catalogs, composition)
 
-	// Render at most homeMaxRows rows. Each row's items are a remote round-trip
-	// when they are not already stored, so fetch them concurrently rather than
-	// serially — the landing page pays one round-trip instead of a sum. We fetch
-	// only the catalogs we render (the first homeMaxRows), bounding remote load
-	// to the visible rows.
-	//
-	// A catalog that neither answers nor has a stored answer still drops its row,
-	// which is unchanged — what changed is that the drop is counted and named
-	// rather than discarded, so a screen that lost every row can say why.
 	if len(catalogs) > homeMaxRows {
 		catalogs = catalogs[:homeMaxRows]
 	}
+	itemsByCatalog := s.fetchRowItems(ctx, caller, catalogs, refresh, report)
+
+	rows, picks, upNext := s.catalogRows(catalogs, itemsByCatalog)
+	if len(rows) == 0 {
+		// Every catalog answered emptily or not at all, and which of those it was
+		// is a distinction only the answers can make (platform#30).
+		return ui.Screen(s.sourcesEmptyState(mergedItemAnswer(itemsByCatalog))).Build(), nil
+	}
+
+	metas := s.enrichPicks(ctx, caller, picks)
+	heroSlides := s.heroSlidesFor(picks, metas)
+	heroed := len(heroSlides) > 0
+	sheet := s.homeSheet(ctx, caller, report, composition, rows, upNext, heroed)
+
+	// A Rotator auto-advances the full-viewport hero slides and the sheet rides up
+	// over their floor, both in the Screen's edge-to-edge bleed slot (the rails own
+	// their gutter), so the padded body collapses ($childCount 0).
+	bleed := make([]ui.El, 0, 2)
+	if heroed {
+		rotEls := make([]ui.El, 0, len(heroSlides)+1)
+		rotEls = append(rotEls, ui.Prop("interval", 6000))
+		rotEls = append(rotEls, heroSlides...)
+		bleed = append(bleed, ui.Component("Rotator", rotEls...))
+	}
+	bleed = append(bleed, sheet)
+	return ui.Screen(ui.Slot("bleed", bleed...)).Build(), nil
+}
+
+// fetchRowItems fetches the items of every catalog that will be rendered,
+// concurrently.
+//
+// Each row's items are a remote round-trip when they are not already stored, so
+// the landing page pays one round-trip instead of a sum. Only the catalogs that
+// are rendered are fetched, bounding remote load to the visible rows. A catalog
+// that neither answers nor has a stored answer leaves its slot empty and drops
+// its row, counted in the report rather than discarded, so a screen that lost
+// every row can say why.
+func (s *Service) fetchRowItems(ctx context.Context, caller v1.Caller, catalogs []app.ModuleCatalog, refresh bool, report *Report) []app.BrowseCatalogItemsResult {
 	itemsByCatalog := make([]app.BrowseCatalogItemsResult, len(catalogs))
 	var wg sync.WaitGroup
 	for i, c := range catalogs {
@@ -106,12 +128,13 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		}()
 	}
 	wg.Wait()
+	return itemsByCatalog
+}
 
-	// Assemble the page as a widget tree. The featured banners come from the top
-	// item of each of the first few non-empty catalogs (one further round-trip
-	// each to enrich them), spanning the Screen's full-bleed slot with the next
-	// slide's card docked on the hero floor; then a carousel row per non-empty
-	// catalog.
+// catalogRows builds a carousel row per non-empty catalog, and with them the
+// hero picks — the top item of each of the first few — and the "Trending now"
+// filmstrip the first of them contributes.
+func (s *Service) catalogRows(catalogs []app.ModuleCatalog, itemsByCatalog []app.BrowseCatalogItemsResult) ([]ui.El, []heroPick, ui.El) {
 	rows := make([]ui.El, 0, len(catalogs)+1)
 	var picks []heroPick
 	var upNext ui.El
@@ -120,31 +143,11 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		if len(items) == 0 {
 			continue
 		}
-		// The hero carousel takes the top item of each of the first few catalogs.
 		if len(picks) < homeHeroSlides {
 			picks = append(picks, heroPick{item: items[0], kicker: c.Catalog.Name})
 		}
 		if upNext == nil {
-			// "Trending now" — the items neighbouring the first featured one —
-			// leads the library. Posters, like every browse row: the landscape
-			// tile is reserved for continue-watching, where the 16:9 frame is
-			// carrying a progress bar and a resume affordance rather than just
-			// being a larger picture.
-			upCards := make([]ui.El, 0, homeUpNextItems)
-			for j := 1; j < len(items) && j <= homeUpNextItems; j++ {
-				it := items[j]
-				upCards = append(upCards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
-			}
-			if len(upCards) > 0 {
-				upNext = ui.Section("Trending now",
-					ui.Gap(4),
-					ui.ActionLabel("See all"),
-					ui.OnTap(ui.Navigate(screenCatalog, map[string]any{
-						paramModuleID: c.ModuleID, paramCatalogID: c.Catalog.ID, paramNativeType: c.Catalog.NativeType,
-						paramTitle: c.Catalog.Name,
-					})),
-					ui.Carousel(upCards...))
-			}
+			upNext = s.trendingSection(c, items)
 		}
 		cards := make([]ui.El, 0, homeMaxRowItems)
 		for j, it := range items {
@@ -165,21 +168,42 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 			})),
 			ui.Carousel(cards...)))
 	}
-	if len(rows) == 0 {
-		// The state platform#30 was written about. Every catalog answered emptily or
-		// not at all; whether that is a library with nothing in it or a set of
-		// sources that are down is a distinction only the answers can make, and
-		// the screen must not guess.
-		return ui.Screen(s.sourcesEmptyState(mergedItemAnswer(itemsByCatalog))).Build(), nil
-	}
+	return rows, picks, upNext
+}
 
-	// Enrich the featured picks concurrently — each is a further metadata
-	// round-trip for the backdrop, logo and synopsis a catalog card lacks. This
-	// happens in one pass, before any slide is built, because a slide needs its
-	// neighbour's artwork as well as its own: the up-next dock is a landscape
-	// tile, and a catalog item carries only a poster. Enriching first means that
-	// backdrop is one already being fetched for the neighbour's own slide, rather
-	// than a second round-trip for the same title.
+// trendingSection is the rail that leads the library: the items neighbouring the
+// first featured one, under the catalog they came from. Nil when there are none.
+//
+// Posters, like every browse row: the landscape tile is reserved for
+// continue-watching, where the 16:9 frame is carrying a progress bar and a
+// resume affordance rather than just being a larger picture.
+func (s *Service) trendingSection(c app.ModuleCatalog, items []v1.CatalogItem) ui.El {
+	upCards := make([]ui.El, 0, homeUpNextItems)
+	for j := 1; j < len(items) && j <= homeUpNextItems; j++ {
+		it := items[j]
+		upCards = append(upCards, s.contentCard(it.Ref, it.Title, it.Year, it.Poster, it.InLibrary))
+	}
+	if len(upCards) == 0 {
+		return nil
+	}
+	return ui.Section("Trending now",
+		ui.Gap(4),
+		ui.ActionLabel("See all"),
+		ui.OnTap(ui.Navigate(screenCatalog, map[string]any{
+			paramModuleID: c.ModuleID, paramCatalogID: c.Catalog.ID, paramNativeType: c.Catalog.NativeType,
+			paramTitle: c.Catalog.Name,
+		})),
+		ui.Carousel(upCards...))
+}
+
+// enrichPicks fetches each featured pick's backdrop, logo and synopsis — what a
+// catalog card lacks — concurrently, and nil for a pick that could not be read.
+//
+// In one pass before any slide is built, because a slide needs its neighbour's
+// artwork as well as its own: the up-next dock is a landscape tile and a catalog
+// item carries only a poster, so that backdrop is one already being fetched for
+// the neighbour's own slide rather than a second round-trip for the same title.
+func (s *Service) enrichPicks(ctx context.Context, caller v1.Caller, picks []heroPick) []*v1.ContentMetadata {
 	metas := make([]*v1.ContentMetadata, len(picks))
 	var hg sync.WaitGroup
 	for i, p := range picks {
@@ -194,17 +218,21 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		}()
 	}
 	hg.Wait()
+	return metas
+}
 
+// heroSlidesFor builds the hero carousel from the picks that enriched.
+//
+// Each slide docks the one after it — and the last docks the first, because the
+// rotation does — so the carousel says what is coming rather than only what is
+// here, and a viewer who wants it now can open it rather than waiting out the
+// dwell. A neighbour whose enrichment failed simply gets no dock.
+func (s *Service) heroSlidesFor(picks []heroPick, metas []*v1.ContentMetadata) []ui.El {
 	heroSlides := make([]ui.El, 0, len(picks))
 	for i, p := range picks {
 		if metas[i] == nil {
 			continue
 		}
-		// Each slide docks the one after it, so the carousel says what is coming
-		// rather than only what is here — and a viewer who wants it now can open
-		// it rather than waiting out the dwell. The last slide points back at the
-		// first, because the rotation does. A neighbour whose enrichment failed
-		// simply gets no dock.
 		var next *heroPick
 		var nextMeta *v1.ContentMetadata
 		if len(picks) > 1 {
@@ -213,20 +241,19 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		}
 		heroSlides = append(heroSlides, s.heroSlide(p, *metas[i], next, nextMeta))
 	}
+	return heroSlides
+}
 
-	// The home is a cinematic backdrop the content rides over. A Rotator auto-
-	// advances the full-viewport hero slides; the library then rides UP over the
-	// hero's floor, pulled into it by overlap so the first rail breaks the
-	// bottom edge of the artwork rather than starting cleanly below it. Both live
-	// in the Screen's edge-to-edge bleed slot (the rails own their gutter), so
-	// the padded body collapses ($childCount 0). When enrichment failed for every
-	// pick there is no hero and the rails stand alone.
-	//
-	// The overlap only applies when there is a hero to overlap. It is a negative
-	// offset into the artwork above, so with no hero it would pull the first rail
-	// up under the brand bar and crop its cards. The no-hero branch is the
-	// ordinary degraded screen under cache-first rendering, not a rare one.
-	heroed := len(heroSlides) > 0
+// homeSheet is the library that rides up over the hero's floor: the staleness
+// banner, continue watching, "Trending now", then a row per catalog.
+//
+// The overlap that pulls it into the artwork applies only when there is a hero to
+// overlap. It is a negative offset into the artwork above, so with no hero it
+// would pull the first rail up under the brand bar and crop its cards — and the
+// no-hero branch is the ordinary degraded screen under cache-first rendering,
+// not a rare one.
+func (s *Service) homeSheet(ctx context.Context, caller v1.Caller, report *Report,
+	composition app.HomeComposition, rows []ui.El, upNext ui.El, heroed bool) ui.El {
 	sheetStyle := map[string]any{
 		"direction": "column", "gap": 7,
 		"px": "gutter", "pb": 9,
@@ -239,22 +266,13 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	}
 	sheetEls := make([]ui.El, 0, len(rows)+3)
 	sheetEls = append(sheetEls, ui.Prop("style", sheetStyle))
-	// Staleness is shown, not hidden. A screen served from stored answers while
-	// its sources are unreachable says so, with its age — a two-day-old home
-	// beats an empty one, but only if nobody is being told it is live. It is
-	// drawn only when a source actually failed: a snapshot served while
-	// revalidation is quietly in flight is about to be replaced, and announcing
-	// every one of those would make the banner mean nothing.
 	if b := s.stalenessBanner(report); b != nil {
 		sheetEls = append(sheetEls, b)
 	}
-	// Continue watching leads the sheet: the most personal rail, above the
-	// browse rows below it. It is gated by having something in progress — an
-	// install with no playback consumer has nothing here and shows nothing
-	// (platform#24) — and then by whether this viewer wants it, which is the order
-	// platform#59 requires: capability omission composes ahead of preference, so a
-	// viewer cannot un-hide something they were never able to use, and a hidden
-	// row is not evidence of a permission.
+	// Continue watching leads the sheet: the most personal rail, above the browse
+	// rows below it. Capability omission composes ahead of preference, which is
+	// the order platform#59 requires — a viewer cannot un-hide something they were
+	// never able to use, and a hidden row is not evidence of a permission.
 	if !composition.Hides(homeRowContinue) {
 		if cw := s.continueWatchingSection(ctx, caller); cw != nil {
 			sheetEls = append(sheetEls, cw)
@@ -264,17 +282,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		sheetEls = append(sheetEls, upNext)
 	}
 	sheetEls = append(sheetEls, rows...)
-	sheet := ui.Component("Box", sheetEls...)
-
-	bleed := make([]ui.El, 0, 2)
-	if heroed {
-		rotEls := make([]ui.El, 0, len(heroSlides)+1)
-		rotEls = append(rotEls, ui.Prop("interval", 6000))
-		rotEls = append(rotEls, heroSlides...)
-		bleed = append(bleed, ui.Component("Rotator", rotEls...))
-	}
-	bleed = append(bleed, sheet)
-	return ui.Screen(ui.Slot("bleed", bleed...)).Build(), nil
+	return ui.Component("Box", sheetEls...)
 }
 
 // homeRowContinue is the continue-watching rail's key in a viewer's
@@ -513,14 +521,34 @@ func (s *Service) continueWatchingSection(ctx context.Context, caller v1.Caller)
 		return nil
 	}
 
-	// Each card needs its Work's poster and title, one indexed read apiece — a
-	// database read, not a metadata round-trip, because the art is stored
-	// (platform#45). Fetch them concurrently, as the hero enrichment does, so the
-	// rail costs one round-trip rather than a sum; a card whose read fails drops
-	// out rather than failing the rail.
-	cards := make([]ui.El, len(res.Items))
+	cards := s.continueCards(ctx, caller, res.Items)
+	if len(cards) == 0 {
+		return nil
+	}
+	// The count is the cards actually rendered rather than the query's total: one
+	// whose Work read failed dropped out, and a heading claiming twelve over a rail
+	// of eleven is a small lie that is very easy to ship.
+	//
+	// The track is the tile's own width — 16:9 stills at 328, not 2:3 posters at
+	// 196, and at the browse default the art collapses to a third of its height,
+	// the same defect the detail screen's cast and related rails had. The home's
+	// rails also sit tighter under their headings than a settings panel's sections
+	// do: 14 rather than 24. Both are the design's, measured.
+	return ui.Section("Continue watching",
+		ui.Subtitle(strconv.Itoa(len(cards))),
+		ui.Gap(4),
+		ui.Carousel(ui.ItemWidth(328), ui.Group(cards...)))
+}
+
+// continueCards renders one card per in-progress item, concurrently, dropping
+// the ones whose Work could not be read. Each card is its Work's poster and
+// title, one indexed read apiece — a database read, not a metadata round-trip,
+// because the art is stored (platform#45) — so the rail costs one round-trip
+// rather than a sum.
+func (s *Service) continueCards(ctx context.Context, caller v1.Caller, items []v1.InProgressItem) []ui.El {
+	cards := make([]ui.El, len(items))
 	var wg sync.WaitGroup
-	for i, item := range res.Items {
+	for i, item := range items {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -535,24 +563,7 @@ func (s *Service) continueWatchingSection(ctx context.Context, caller v1.Caller)
 			out = append(out, c)
 		}
 	}
-	if len(out) == 0 {
-		return nil
-	}
-	// The count beside the heading, as the mockups draw it. It is the number of
-	// cards actually rendered rather than the query's total: a card whose Work
-	// read failed dropped out above, and a heading claiming twelve over a rail of
-	// eleven is a small lie that is very easy to ship.
-	// The rail's track is the tile's own width. These are 16:9 stills at 328,
-	// not 2:3 posters at 196, and left at the browse default the art collapses
-	// to a third of its height — the same defect the detail screen's cast and
-	// related rails had.
-	//
-	// The home's rails sit tighter under their headings than a settings panel's
-	// sections do: 14 rather than 24. Both are the design's, measured.
-	return ui.Section("Continue watching",
-		ui.Subtitle(strconv.Itoa(len(out))),
-		ui.Gap(4),
-		ui.Carousel(ui.ItemWidth(328), ui.Group(out...)))
+	return out
 }
 
 // continueCard renders one continue-watching item: the work's poster with a

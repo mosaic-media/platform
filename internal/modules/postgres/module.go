@@ -120,7 +120,8 @@ type ContractSet struct {
 	// contain (platform#60). Writes go through the UnitOfWork, where a rule and
 	// the event announcing it commit together.
 	LibraryRules contracts.LibraryRuleStore
-	// Issues is the resolution register (platform#74).
+	// Issues is the resolution register: what is wrong with this install, now
+	// (platform#74). contracts.IssueStore documents the idempotence rule.
 	Issues contracts.IssueStore
 	// Upgrades records what somebody asked the Supervisor to install
 	// (platform#77), which is the one remedy on the register the Platform cannot

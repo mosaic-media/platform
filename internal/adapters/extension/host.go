@@ -308,11 +308,14 @@ func checkManifest(declared, running v1.Manifest) error {
 	// below; that the running bytes are the ones the manifest vouched for is the
 	// digest check at install, which no self-reported string can add to.
 
-	// Every role the manifest file declared must be one the binary also declares.
-	// The reverse is allowed: a binary reporting fewer roles than its manifest
-	// claimed is the failure this catches, while a binary reporting more is a
-	// manifest that is merely out of date, and refusing that would make a module
-	// unlaunchable over a documentation lag.
+	return checkDeclaredRoles(declared, running)
+}
+
+// checkDeclaredRoles refuses a binary that does not serve every role its
+// manifest file declared. The reverse is allowed: a binary reporting more is a
+// manifest that is merely out of date, and refusing that would make a module
+// unlaunchable over a documentation lag.
+func checkDeclaredRoles(declared, running v1.Manifest) error {
 	runningRoles := make(map[v1.Role]bool, len(running.Provides))
 	for _, r := range running.Provides {
 		runningRoles[r] = true

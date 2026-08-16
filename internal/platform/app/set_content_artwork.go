@@ -53,13 +53,10 @@ func validateSetContentArtworkCommand(cmd v1.SetContentArtworkCommand) error {
 // command that cannot see why it was called. A caller adding to what is there
 // reads, merges and writes back.
 func (s *Service) SetContentArtwork(ctx context.Context, cmd v1.SetContentArtworkCommand) (v1.SetContentArtworkResult, error) {
-	// 1. validate command shape.
 	if err := validateSetContentArtworkCommand(cmd); err != nil {
 		return v1.SetContentArtworkResult{}, err
 	}
 
-	// 2-3. authenticate the caller and authorize the action.
-	//
 	// content.create rather than a new action: this is curating the library, the
 	// same authority that adds the node in the first place, and an ordinary
 	// household account deliberately does not hold it (see roles.go). When a user
@@ -72,39 +69,42 @@ func (s *Service) SetContentArtwork(ctx context.Context, cmd v1.SetContentArtwor
 
 	var result v1.SetContentArtworkResult
 
-	// 4. open a UnitOfWork.
 	err = s.uow.WithinTx(ctx, func(ctx context.Context, tx contracts.Tx) error {
-		// 5. load state through contracts. Any kind of node may carry artwork —
-		// a work has key art, a season container its own poster, an item a still
-		// — so there is no kind check here, unlike attaching a Part.
-		node, err := tx.Nodes().FindByID(ctx, cmd.NodeID)
-		if err != nil {
-			return err
-		}
-
-		// 6. apply. The whole value is replaced; everything else on the node is
-		// left exactly as it was found.
-		node.Artwork = cmd.Artwork
-		node.UpdatedAt = s.clock.Now()
-
-		// 7. persist state and the outbox event in the same transaction.
-		updated, err := tx.Nodes().Update(ctx, node)
-		if err != nil {
-			return err
-		}
-		if err := tx.Outbox().Append(ctx, domain.OutboxEvent{
-			Event: s.newEvent(ctx, "content.artwork.set", []byte(string(updated.ID)), string(az.userID)),
-		}); err != nil {
-			return err
-		}
-
-		result = v1.SetContentArtworkResult{Node: updated}
-		return nil
+		var err error
+		result, err = s.setNodeArtworkWithin(ctx, tx, az, cmd)
+		return err
 	})
 	if err != nil {
 		return v1.SetContentArtworkResult{}, err
 	}
 
-	// 8. return a Platform result type.
 	return result, nil
+}
+
+// setNodeArtworkWithin replaces the node's artwork and appends the event that
+// says so, in one transaction.
+//
+// Any kind of node may carry artwork — a work has key art, a season container
+// its own poster, an item a still — so there is no kind check here, unlike
+// attaching a Part.
+func (s *Service) setNodeArtworkWithin(ctx context.Context, tx contracts.Tx, az authorized, cmd v1.SetContentArtworkCommand) (v1.SetContentArtworkResult, error) {
+	node, err := tx.Nodes().FindByID(ctx, cmd.NodeID)
+	if err != nil {
+		return v1.SetContentArtworkResult{}, err
+	}
+
+	node.Artwork = cmd.Artwork
+	node.UpdatedAt = s.clock.Now()
+
+	updated, err := tx.Nodes().Update(ctx, node)
+	if err != nil {
+		return v1.SetContentArtworkResult{}, err
+	}
+	if err := tx.Outbox().Append(ctx, domain.OutboxEvent{
+		Event: s.newEvent(ctx, "content.artwork.set", []byte(string(updated.ID)), string(az.userID)),
+	}); err != nil {
+		return v1.SetContentArtworkResult{}, err
+	}
+
+	return v1.SetContentArtworkResult{Node: updated}, nil
 }

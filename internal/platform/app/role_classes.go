@@ -59,7 +59,8 @@ const (
 type RoleClass struct {
 	// Name is the class's stable identifier, for diagnostics and onboarding.
 	Name string
-	// Arity and Mutability are the class's properties, per platform#38.
+	// Arity is how many implementations may be selected to fill the class;
+	// Mutability is what changing that selection costs (platform#38).
 	Arity      Arity
 	Mutability Mutability
 	// Required is whether a serving Mosaic must have this class filled. Metadata

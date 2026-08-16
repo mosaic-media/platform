@@ -34,40 +34,15 @@ import (
 // shows them, each with a switch and a pair of move controls.
 func (s *Service) homeRowsPanel(ctx context.Context, caller v1.Caller, nav settingsNavModel) (sdui.Node, error) {
 	// The same read home makes, so the panel offers exactly the rows home would
-	// draw. Cache-first (platform#30), so opening settings while a source is down
-	// still lists that source's rows rather than quietly losing the arrangement
-	// they are part of.
+	// draw — and cache-first (platform#30), so opening settings while a source is
+	// down still lists its rows rather than losing the arrangement they are in.
 	cats, err := s.content.BrowseCatalogs(ctx, app.BrowseCatalogsQuery{Caller: caller})
 	if err != nil {
 		return nil, err
 	}
 	composition := s.content.HomeCompositionFor(ctx, caller)
 
-	// Capability omission composes first (platform#24), which here means the panel
-	// offers a row only if the caller could have it: the continue-watching rail
-	// is listed because every signed-in viewer has playback state of their own,
-	// and the catalog rows are whatever the installed sources actually offer. A
-	// row nobody can reach is not offered to be hidden.
-	type homeRow struct {
-		key     string
-		label   string
-		summary string
-	}
-	rows := []homeRow{{
-		key:     homeRowContinue,
-		label:   "Continue watching",
-		summary: "What you started and have not finished. Only ever yours.",
-	}}
-	seen := map[string]bool{homeRowContinue: true}
-	for _, c := range cats.Catalogs {
-		key := homeRowKey(c)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		rows = append(rows, homeRow{key: key, label: c.Catalog.Name, summary: c.ModuleID})
-	}
-
+	rows := offeredHomeRows(cats.Catalogs)
 	keys := make([]string, 0, len(rows))
 	byKey := make(map[string]homeRow, len(rows))
 	for _, r := range rows {
@@ -81,30 +56,7 @@ func (s *Service) homeRowsPanel(ctx context.Context, caller v1.Caller, nav setti
 
 	els := make([]ui.El, 0, len(arranged))
 	for i, key := range arranged {
-		row := byKey[key]
-		hidden := composition.Hides(key)
-		els = append(els, ui.SettingsRow(row.label,
-			ui.Summary(row.summary),
-			ui.Group(
-				// Disabled rather than absent at the ends of the list. A control
-				// that vanishes moves the ones beside it, so the button under the
-				// pointer changes meaning between one press and the next.
-				homeMoveButton("Up", composition, keys, key, true, i == 0),
-				homeMoveButton("Down", composition, keys, key, false, i == len(arranged)-1),
-				// The switch says its state, not the row's name. Repeating the
-				// label beside the control it belongs to is noise on a row that
-				// has already said it — and "Shown"/"Hidden" is the one thing a
-				// switch cannot say for itself.
-				//
-				// A finding rather than a choice: Switch has no accessible name
-				// in the contract (contracts#14), so a screen reader hears "on"
-				// and nothing else whatever this text says — the Text beside it
-				// is a sibling, not a label. Fixing that is a vocabulary change,
-				// not a word here.
-				ui.Toggle(homeVisibilityLabel(hidden),
-					ui.On(!hidden),
-					ui.OnTap(setHomeComposition(composition.Toggle(key, !hidden)))),
-			)))
+		els = append(els, homeRowSetting(byKey[key], composition, keys, i == 0, i == len(arranged)-1))
 	}
 
 	body := ui.Stack("vertical", 0, els...).Build()
@@ -114,7 +66,60 @@ func (s *Service) homeRowsPanel(ctx context.Context, caller v1.Caller, nav setti
 		body), nil
 }
 
-// homeVisibilityLabel is what the switch beside a row says about it.
+// homeRow is one row a viewer's home can show, as this panel lists it.
+type homeRow struct {
+	key     string
+	label   string
+	summary string
+}
+
+// offeredHomeRows is every row this caller could have on their home: the
+// continue-watching rail, then whatever the installed sources offer.
+//
+// Capability omission composes first (platform#24) — the rail because every
+// signed-in viewer has playback state of their own, the catalog rows because a
+// source declared them. A row nobody can reach is not offered to be hidden.
+func offeredHomeRows(catalogs []app.ModuleCatalog) []homeRow {
+	rows := []homeRow{{
+		key:     homeRowContinue,
+		label:   "Continue watching",
+		summary: "What you started and have not finished. Only ever yours.",
+	}}
+	seen := map[string]bool{homeRowContinue: true}
+	for _, c := range catalogs {
+		key := homeRowKey(c)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		rows = append(rows, homeRow{key: key, label: c.Catalog.Name, summary: c.ModuleID})
+	}
+	return rows
+}
+
+// homeRowSetting is one row of the panel: its name, its place, and its switch.
+func homeRowSetting(row homeRow, composition app.HomeComposition, keys []string, first, last bool) ui.El {
+	hidden := composition.Hides(row.key)
+	return ui.SettingsRow(row.label,
+		ui.Summary(row.summary),
+		ui.Group(
+			homeMoveButton("Up", composition, keys, row.key, true, first),
+			homeMoveButton("Down", composition, keys, row.key, false, last),
+			// A finding rather than a choice: Switch has no accessible name in
+			// the contract (contracts#14), so a screen reader hears "on" and
+			// nothing else whatever this text says — the Text beside it is a
+			// sibling, not a label. Fixing that is a vocabulary change, not a
+			// word here.
+			ui.Toggle(homeVisibilityLabel(hidden),
+				ui.On(!hidden),
+				ui.OnTap(setHomeComposition(composition.Toggle(row.key, !hidden)))),
+		))
+}
+
+// homeVisibilityLabel is what the switch beside a row says about it: its state,
+// not the row's name. Repeating the label beside the control it belongs to is
+// noise on a row that has already said it, and "Shown"/"Hidden" is the one thing
+// a switch cannot say for itself.
 func homeVisibilityLabel(hidden bool) string {
 	if hidden {
 		return "Hidden"
@@ -123,7 +128,9 @@ func homeVisibilityLabel(hidden bool) string {
 }
 
 // homeMoveButton is one end of a row's ordering control, carrying the
-// composition that results from pressing it.
+// composition that results from pressing it. It is disabled rather than absent
+// at the ends of the list: a control that vanishes moves the ones beside it, so
+// the button under the pointer changes meaning between one press and the next.
 //
 // A worded button rather than a chevron pair, and that is a finding rather than
 // a preference: the client's glyph set has chevron-down and no chevron-up, and

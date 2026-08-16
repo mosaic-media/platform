@@ -53,11 +53,6 @@ func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableC
 		return SearchAvailableContentResult{}, nil
 	}
 
-	// Fan the query out to the providers concurrently; each is an independent
-	// remote round-trip. fanOut preserves provider order and the two error paths:
-	// a settings read that fails aborts the query, a provider that is down is
-	// skipped (nil, nil) so its plane empties without blanking the others.
-	//
 	// The fallback tier answers only when nothing else found the title. The
 	// Platform does no cross-provider dedup (module-cinemeta#1 records this), so
 	// two general metadata sources answering one query is the same title twice —
@@ -66,44 +61,48 @@ func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableC
 	results, err := fanOutPreferred(ctx, s.capabilities.SearchProviders(),
 		func(e SearchProviderEntry) bool { return e.Fallback },
 		func(ctx context.Context, e SearchProviderEntry) ([]v1.SearchResult, error) {
-			settings, err := s.readModuleSettings(ctx, e.ModuleID)
-			if err != nil {
-				return nil, err
-			}
-			// A span per provider, inside the fan-out: several addons are
-			// queried at once and the slow one is invisible in any aggregate.
-			// The error below is deliberately swallowed — one unreachable addon
-			// must not fail the whole search — so the span is the only place a
-			// provider that failed is distinguished from one that returned
-			// nothing.
-			//
-			// The module's context is bound to a separate variable rather than
-			// shadowing ctx. moduleSpan rebinds the logger and installs the
-			// module's telemetry surface (sdk#5), so anything the Platform does
-			// afterwards under that context would be recorded as the module's
-			// work, and beneath a span that has already ended. The dedup below
-			// is Platform work.
-			mctx, span := moduleSpan(ctx, e.ModuleID, "search")
-			resp, err := e.Provider.Search(mctx, v1.SearchRequest{
-				Caller: q.Caller, Settings: settings, Text: q.Text, MediaType: q.MediaType, Limit: q.Limit,
-			})
-			failSpan(span, err)
-			if err != nil {
-				span.End()
-				return nil, nil
-			}
-			span.SetAttributes(telemetry.Int("results", len(resp.Results)))
-			span.End()
-			out := resp.Results
-			for i := range out {
-				out[i].InLibrary, out[i].NodeID = s.resolveInLibrary(ctx, az, out[i].Ref)
-			}
-			return out, nil
+			return s.searchOneProvider(ctx, az, q, e)
 		})
 	if err != nil {
 		return SearchAvailableContentResult{}, err
 	}
 	return SearchAvailableContentResult{Results: results}, nil
+}
+
+// searchOneProvider queries one provider under its own span and marks each hit
+// that is already in the library.
+func (s *Service) searchOneProvider(ctx context.Context, az authorized, q SearchAvailableContentQuery, e SearchProviderEntry) ([]v1.SearchResult, error) {
+	settings, err := s.readModuleSettings(ctx, e.ModuleID)
+	if err != nil {
+		return nil, err
+	}
+	// A span per provider, inside the fan-out: several addons are queried at once
+	// and the slow one is invisible in any aggregate. The error below is
+	// deliberately swallowed — one unreachable addon must not fail the whole
+	// search — so the span is the only place a provider that failed is
+	// distinguished from one that returned nothing.
+	//
+	// The module's context is bound to a separate variable rather than shadowing
+	// ctx. moduleSpan rebinds the logger and installs the module's telemetry
+	// surface (sdk#5), so anything the Platform does afterwards under that context
+	// would be recorded as the module's work, and beneath a span that has already
+	// ended. The dedup below is Platform work.
+	mctx, span := moduleSpan(ctx, e.ModuleID, "search")
+	resp, err := e.Provider.Search(mctx, v1.SearchRequest{
+		Caller: q.Caller, Settings: settings, Text: q.Text, MediaType: q.MediaType, Limit: q.Limit,
+	})
+	failSpan(span, err)
+	if err != nil {
+		span.End()
+		return nil, nil
+	}
+	span.SetAttributes(telemetry.Int("results", len(resp.Results)))
+	span.End()
+	out := resp.Results
+	for i := range out {
+		out[i].InLibrary, out[i].NodeID = s.resolveInLibrary(ctx, az, out[i].Ref)
+	}
+	return out, nil
 }
 
 // resolveInLibrary reports whether a virtual item's ref already resolves to a
