@@ -40,14 +40,13 @@ func (s *Service) searchScreen(ctx context.Context, caller v1.Caller, params map
 // searchOverview is the unfocused result set: one row per media type, capped,
 // each headed by the type and enterable from that heading.
 //
-// The cap is the point. An unfocused search used to render every result of every
-// type as a wrapping grid, so a viewer who knew they wanted a series scrolled
-// past forty films to reach one — and the further pages made that worse, because
-// paging a mixed list deepens whichever type already dominated. A row per type
-// answers "what is there" in a screenful; entering a type answers "show me all
-// of them", and that is the list worth paging.
+// The cap is the point. Rendering every result of every type as one wrapping
+// grid makes a viewer who knows they want a series scroll past forty films to
+// reach one, and paging a mixed list only deepens whichever type already
+// dominated. A row per type answers "what is there" in a screenful; entering a
+// type answers "show me all of them", and that is the list worth paging.
 //
-// It asks for more than it renders so a row can be filled for the *quieter*
+// It asks for more than it renders so a row can be filled for the quieter
 // types too: the providers rank by relevance, not by type, and a page-sized
 // sample of a popular film title is all films.
 func (s *Service) searchOverview(ctx context.Context, caller v1.Caller, text string, field ui.El) (sdui.Node, error) {
@@ -114,12 +113,12 @@ func (s *Service) searchOverview(ctx context.Context, caller v1.Caller, text str
 //
 // This is where lazy loading belongs and where it now is. The query carries the
 // type down to the providers rather than filtering after the fact, so a page is
-// a page *of this type* — paging a mixed list to find more series is what the
+// a page of this type — paging a mixed list to find more series is what the
 // overview's cap exists to stop.
 func (s *Service) focusedSearch(ctx context.Context, caller v1.Caller, text string,
 	focus v1.MediaType, params map[string]any, field ui.El) (sdui.Node, error) {
 
-	// Ask for one more than the page needs. That extra result is the *only*
+	// Ask for one more than the page needs. That extra result is the only
 	// honest evidence there is another page (contracts#16): a page that happens to be
 	// full says nothing, and a client inferring "more" from a full count asks for
 	// a page that does not exist. The extra is never rendered.
@@ -152,7 +151,7 @@ func (s *Service) focusedSearch(ctx context.Context, caller v1.Caller, text stri
 	}
 	grid := []ui.El{ui.Group(cards...)}
 	if hasMore {
-		// `query` rather than `navigate`: a further page is not somewhere the
+		// query rather than navigate: a further page is not somewhere the
 		// back button should return to. A viewer who scrolled through five pages
 		// should get one press back to where they came from, not five.
 		grid = append(grid,
@@ -229,8 +228,8 @@ func mediaTypeHeading(mt v1.MediaType) string {
 const searchPageSize = 24
 
 // searchRowSize is how many results of one type the unfocused search shows.
-// One line, which is the whole point: enough to recognise whether what you want
-// is in there, and not so many that the next type is off the screen.
+// One line: enough to recognise whether what you want is in there, and not so
+// many that the next type is off the screen.
 const searchRowSize = 12
 
 // searchOverviewSample is how deep the unfocused search looks before capping.
@@ -245,11 +244,10 @@ const searchOverviewSample = 96
 // always-present top-bar field already holds the query. Its stable id lets React
 // keep it focused as the results below re-render.
 //
-// It says that in the payload, through `hidden` + `responsive`, rather than
-// through the `kind` hook it used to carry. A `kind` needs a matching rule in
-// the client's stylesheet, which puts a client release in the path of a layout
-// decision — the thing `responsive` exists to avoid, and why `kind` is
-// deprecated in the contract.
+// It says that in the payload, through hidden plus responsive, rather than
+// through a kind hook. A kind needs a matching rule in the client's stylesheet,
+// which puts a client release in the path of a layout decision — the thing
+// responsive exists to avoid, and why kind is deprecated in the contract.
 func (s *Service) searchField(text string) ui.El {
 	return ui.Component("Box",
 		ui.Prop("style", map[string]any{

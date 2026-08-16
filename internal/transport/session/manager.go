@@ -52,20 +52,19 @@ type route struct {
 	params map[string]any
 }
 
-// liveSession is one client session, keyed by its **session id** (platform#13,
-// platform#58). It owns the outbound mailbox (history + seq), the current route and
-// the input-coalescing state. Its zero value is not usable; build it with
+// liveSession is one client session, keyed by its session id (platform#13,
+// platform#58). It owns the outbound mailbox (history + seq), the current route
+// and the input-coalescing state. Its zero value is not usable; build it with
 // newLiveSession.
 //
-// It used to be keyed by the value the client presents, which was the session
-// id until the credential became a bearer pair. An access token rotates every
-// few minutes, so keying by it would orphan this whole structure on every
-// refresh — cursor, route and mailbox — and the client would see a reconnect it
-// did not ask for each time its credential turned over.
+// Key it by the session id, never by the access token the client presents. That
+// token rotates every few minutes, so keying by it would orphan the cursor,
+// route and mailbox on every refresh and show the client a reconnect it did not
+// ask for.
 type liveSession struct {
 	ref string
 
-	// callerMu guards the credential the *current* caller presented. It changes
+	// callerMu guards the credential the current caller presented. It changes
 	// whenever the client refreshes, which is routine, so it is read under a
 	// lock rather than fixed at construction.
 	callerMu sync.Mutex
@@ -85,9 +84,9 @@ type liveSession struct {
 	profile   clientProfile
 	// chromeScreen is the screen whose chrome the client was last sent.
 	chromeScreen string
-	// vocab is what the client declared it can *render*, guarded by the same
-	// lock and for the same reason: Attach writes it and every later push reads
-	// it. The two declarations arrive on the same call and are never read apart.
+	// vocab is what the client declared it can render, guarded by the same lock
+	// and for the same reason: Attach writes it and every later push reads it.
+	// The two declarations arrive on the same call and are never read apart.
 	vocab vocabulary.Client
 
 	// input-debounce state (contracts#5's server-side coalescing, moved from the
@@ -161,7 +160,7 @@ func (s *liveSession) clearNotice(id string) {
 	delete(s.notices, id)
 }
 
-// noticesExcept lists the standing notices under prefix that are *not* justified
+// noticesExcept lists the standing notices under prefix that are not justified
 // by the given set of still-failing names — the ones to retract.
 func (s *liveSession) noticesExcept(prefix string, keep []string) []string {
 	s.noticeMu.Lock()
@@ -274,14 +273,13 @@ func (s *liveSession) nextLocked(cursor uint64) *sessionv1.ServerMessage {
 //
 // A Subscribe stream only carries traffic when the server has something to say,
 // so a user reading a page sends nothing for minutes — and an idle HTTP
-// connection is exactly what proxies, load balancers and container port
-// forwarders reap. The client then correctly reports "Reconnecting" for a stream
-// nothing was wrong with, and a reader who has touched nothing sees the
-// connection drop repeatedly.
+// connection is what proxies, load balancers and container port forwarders reap,
+// leaving the client reporting "Reconnecting" for a stream nothing was wrong
+// with.
 //
-// Well inside the 60s that intermediaries commonly use, and cheap: an empty
-// ServerMessage carries no body, so a client ignores it by the same default
-// branch that ignores a message type it does not know.
+// The value is well inside the 60s that intermediaries commonly use, and cheap:
+// an empty ServerMessage carries no body, so a client ignores it by the same
+// default branch that ignores a message type it does not know.
 const keepaliveInterval = 20 * time.Second
 
 // serve is the single sender goroutine for a Subscribe stream. It supersedes any
@@ -304,8 +302,8 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 	// Bind the session identity once; every line below inherits it. The ref is
 	// an opaque session reference (platform#13) — credential-adjacent, and never
 	// safe to write verbatim — so it is digested rather than dropped, which
-	// keeps two records about one session tied together without the log
-	// holding the reference itself.
+	// keeps two records about one session tied together without the log holding
+	// the reference itself.
 	lg := telemetry.From(ctx).For("session").With(telemetry.Identifier("session", s.ref))
 
 	started := time.Now()
@@ -319,9 +317,8 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 		superseded := s.epoch != myEpoch
 		closed := s.closed
 		s.mu.Unlock()
-		// Why a stream ended is the question that cannot be answered after the
-		// fact without recording it, and every one of these looks identical to a
-		// user: the page says "Reconnecting".
+		// Record why the stream ended: every reason looks identical to a user
+		// ("Reconnecting"), and none is recoverable after the fact.
 		lg.Info("stream closed",
 			telemetry.Duration("elapsed", time.Since(started).Round(time.Millisecond)),
 			telemetry.String("reason", streamEndReason(ctx, superseded, closed)))
@@ -342,7 +339,7 @@ func (s *liveSession) serve(ctx context.Context, cursor uint64, onConnect func()
 	}()
 
 	// A fresh or rebuilt connect gets the shell and current content pushed
-	// before draining; these enqueue with seqs after `from`, so the loop sends
+	// before draining; these enqueue with seqs after from, so the loop sends
 	// them next.
 	if rebuild {
 		onConnect()
@@ -421,9 +418,9 @@ func streamEndReason(ctx context.Context, superseded, closed bool) string {
 // stopTimers cancels any pending debounced work, so a timer does not fire
 // against a discarded session.
 //
-// The position is *not* discarded with it — the Handler flushes it first, in
-// reap and in Shutdown. Discarding it here would make being reaped the one way
-// to lose exactly the position that mattered most.
+// The pending playback position is not discarded with it: the Handler flushes it
+// first, in reap and in Shutdown. Dropping it here would make being reaped the
+// one way to lose exactly the position that mattered most.
 func (s *liveSession) stopTimers() {
 	s.stopInput()
 	s.cancelProgress()
@@ -452,12 +449,12 @@ func (s *liveSession) currentRoute() route {
 	return s.current
 }
 
-// The chrome the client is currently wearing.
+// shellChrome is the chrome the client is currently wearing.
 //
 // Tracked on the session rather than derived from the route, because the
-// question being asked is "does the frame the client already has still fit",
-// and the route has moved by the time that is asked. It starts empty, so the
-// first render after connect always settles it.
+// question being asked is "does the frame the client already has still fit", and
+// the route has moved by the time that is asked. It starts empty, so the first
+// render after connect always settles it.
 func (s *liveSession) shellChrome() string {
 	s.routeMu.Lock()
 	defer s.routeMu.Unlock()
@@ -572,18 +569,15 @@ func (m *Manager) session(ref string) *liveSession {
 // End closes one session and forgets it: its sender goroutine returns, its
 // stream ends, and its live state is discarded.
 //
-// It is what a *revocation* needs and reaping does not provide. Signing out
-// revokes the credential server-side, and without this the client carried on
-// rendering: the push lane is a long-lived stream that makes no call to be
-// refused, so nothing on either side noticed until the access token expired
-// ten minutes later. A sign-out that takes ten minutes is not a sign-out, and
-// on a shared device it is the whole feature failing.
+// Revocation needs this and reaping does not provide it. The push lane is a
+// long-lived stream that makes no call to be refused, so a credential revoked
+// server-side goes unnoticed on both sides until the access token expires — a
+// sign-out that only takes effect ten minutes later.
 //
-// Ending the stream is also what makes it *one* path in the client: a dropped
-// stream is a reconnect, the reconnect presents a revoked credential, and the
-// client takes the same route it takes for any refused session — clear the
-// pair, ask for the door. Nothing in the client has to know a sign-out
-// happened.
+// Ending the stream also keeps the client on one path: a dropped stream is a
+// reconnect, the reconnect presents a revoked credential, and the client takes
+// the route it takes for any refused session — clear the pair, ask for the door.
+// Nothing in the client has to know a sign-out happened.
 func (m *Manager) End(ref string) {
 	m.mu.Lock()
 	s := m.sessions[ref]

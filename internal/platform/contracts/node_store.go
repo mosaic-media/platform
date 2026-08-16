@@ -52,23 +52,21 @@ type NodeStore interface {
 
 	// Count is how many nodes Search would match, ignoring Limit and Offset.
 	//
-	// It exists because a browse surface over the library can state a *real*
-	// total, which no other surface in Mosaic can. A provider's catalog is
-	// paged by the provider and its size is unknown, so the catalog screen says
-	// "128+"; the library is the install's own rows, and a screen that showed
-	// "128+" over them would be understating something it can count. That
-	// difference is the whole reason this method is here rather than the caller
-	// measuring the page it happens to hold.
+	// It exists so a browse surface over the library can state a real total,
+	// which no other surface in Mosaic can: a provider's catalog is paged by
+	// the provider and its size is unknown, so the catalog screen says "128+",
+	// while the library is the install's own rows and can be counted. The
+	// caller cannot get this by measuring the page it happens to hold.
 	Count(ctx context.Context, query NodeQuery) (int, error)
 
 	// Facets returns the distinct values a browse surface can offer as
 	// narrowings, over the works the query already matches.
 	//
-	// **It reads the library rather than a vocabulary, and that is the whole
-	// point.** A facet built from a fixed list offers chips that match nothing
-	// and omits the ones that would — and this library's genres are several
-	// sources' words, unreconciled, so no list written anywhere could be right.
-	// What a user is offered is exactly what is on the shelf.
+	// It reads the library rather than a vocabulary. A facet built from a
+	// fixed list offers chips that match nothing and omits the ones that
+	// would, and this library's genres are several sources' words,
+	// unreconciled, so no list written anywhere could be right. What a user is
+	// offered is exactly what is on the shelf.
 	//
 	// A facet's own narrowing is ignored when computing that facet's set, so the
 	// chips do not disappear as one is selected; every other criterion applies,
@@ -99,12 +97,11 @@ type NodeStore interface {
 // Facets are the values a browse surface can narrow by, counted over what the
 // rest of the query already matches.
 //
-// Only genres today. The streaming-service facet is not here and is not an
-// omission: availability lives in a module's own attributes document, which the
-// Platform stores uninterpreted (platform#9), so the Platform cannot enumerate the
-// services in it without learning a module's key. That set is built from what
-// the Platform *does* model — see the availability index — rather than by
-// reaching into somebody else's document.
+// The service facet is not read from a module's attributes document: the
+// Platform stores that uninterpreted (platform#9) and cannot enumerate the
+// services in it without learning a module's key. It is built from what the
+// Platform does model — see the availability index — rather than by reaching
+// into somebody else's document.
 type Facets struct {
 	// Genres are the distinct genres present, ordered by how many works carry
 	// them and then alphabetically, so a facet row leads with the ones worth
@@ -113,7 +110,7 @@ type Facets struct {
 	// Services are the distinct streaming services present, on the same terms,
 	// from the Platform's stored availability.
 	//
-	// **The count is of works whose availability was fetched at all**, which is
+	// The count is of works whose availability was fetched at all, which is
 	// smaller than the library and says so on the screen. A service is offered
 	// only when something is currently recorded on it, so a service every title
 	// has left disappears from the row at the next refresh rather than standing
@@ -136,10 +133,9 @@ type FacetValue struct {
 // and a zero-valued field matches everything, so the zero query with a limit
 // is "the first N nodes".
 //
-// This is the first filter struct in the contract set. The stores elsewhere
-// take discrete arguments because their reads have one criterion each;
-// content search genuinely has several, and a method per combination would
-// multiply without end.
+// It is a struct where other stores take discrete arguments: their reads have
+// one criterion each, while content search has several, and a method per
+// combination would multiply without end.
 type NodeQuery struct {
 	// Title matches case-insensitively anywhere in the title. It is a
 	// substring rather than a prefix because a user searching "alchemist"
@@ -148,7 +144,7 @@ type NodeQuery struct {
 	// MediaType narrows to one media type, already normalised by the store.
 	MediaType v1.MediaType
 	// Kind narrows to works, containers or items. Searching for works alone
-	// is the common case — a capability asks whether a *show* exists, not
+	// is the common case — a capability asks whether a show exists, not
 	// whether some episode does.
 	Kind v1.NodeKind
 	// AttributesContain narrows to nodes whose attributes document contains
@@ -164,11 +160,11 @@ type NodeQuery struct {
 	// a driver error, which crosses the boundary as Internal rather than as
 	// the InvalidArgument it is.
 	AttributesContain []byte
-	// Genres narrows to nodes carrying **every** genre listed. Empty means no
+	// Genres narrows to nodes carrying every genre listed. Empty means no
 	// filter.
 	//
 	// Conjunctive rather than disjunctive, because that is what a facet control
-	// means when two chips are lit: "crime *and* comedy", not "either". One chip
+	// means when two chips are lit: "crime and comedy", not "either". One chip
 	// reads the same under both rules, so the choice only shows itself when a
 	// user has asked to narrow and the union would have widened instead.
 	//
@@ -177,10 +173,10 @@ type NodeQuery struct {
 	// Fiction" are two genres because two sources say so, and a synonym table
 	// would be the Platform inventing a fact about somebody else's data.
 	Genres []string
-	// WatchProviders narrows to works recorded as available on **every** service
+	// WatchProviders narrows to works recorded as available on every service
 	// listed, in the stored region. Empty means no filter.
 	//
-	// It reads the Platform's own projection of `ContentMetadata.Watch` (see
+	// It reads the Platform's own projection of ContentMetadata.Watch (see
 	// WatchAvailabilityStore) and not any module's attributes document, so any
 	// metadata provider that answers with availability populates it and no
 	// module's key reaches the Platform. A work whose availability has never
@@ -198,6 +194,6 @@ type NodeQuery struct {
 	//
 	// The order Search returns is total and stable (title, then id), which is
 	// what makes offset paging correct here: an unordered offset would show and
-	// hide rows at random as pages were turned. Count is ignored by both.
+	// hide rows at random as pages were turned.
 	Offset int
 }

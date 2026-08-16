@@ -19,16 +19,14 @@ import (
 
 // Settings › Problems — the client path to the resolution register (platform#74).
 //
-// **The register lands with a screen or it does not land.** Findings with no
-// client path are the exact debt that document exists to stop accruing, so this
-// is not a follow-up: a durable typed record of what is wrong, readable only by
-// querying PostgreSQL, would be a log line with a table behind it.
+// The register needs a client path: a durable typed record of what is wrong,
+// readable only by querying PostgreSQL, is a log line with a table behind it.
 //
-// **The words are here and the meaning is not.** A finding travels as a type, a
+// The words are here and the meaning is not. A finding travels as a type, a
 // context and a reference; this file turns those into sentences, and a
-// suggestion into a control. That is the ADR's rule — a Suggestion carries no
-// prose — and it is what lets a second client say the same thing differently,
-// or in another language, without the Platform changing.
+// suggestion into a control. A Suggestion carries no prose, which is what lets a
+// second client say the same thing differently, or in another language, without
+// the Platform changing.
 
 const (
 	// sectionFindings is the settings section this panel fills.
@@ -48,11 +46,10 @@ func (s *Service) findingsPanel(ctx context.Context, caller v1.Caller, nav setti
 
 	body := []sdui.Node{}
 	if len(result.Issues) == 0 {
-		// **Said plainly rather than left blank.** An empty register is the
-		// ordinary state of a working install, and a panel that draws nothing
-		// in it reads as a panel that failed to load — which would teach
-		// somebody to distrust the one screen that has to be believed on the
-		// day it is not empty.
+		// Said plainly rather than left blank. An empty register is the ordinary
+		// state of a working install, and a panel that draws nothing in it reads
+		// as a panel that failed to load — which would teach somebody to distrust
+		// the one screen that has to be believed on the day it is not empty.
 		body = append(body, ui.EmptyState("check", "Nothing is wrong.",
 			ui.Summary("Mosaic records anything it could not do here — a module that will not "+
 				"start, an update that was rolled back — so it is still here when you come "+
@@ -108,17 +105,17 @@ func issueHeadline(issue domain.Issue) string {
 	case domain.IssueProvisionFailed:
 		return "Mosaic could not download what it needs to run"
 	case domain.IssueUpgradeAvailable:
-		// **The one headline here that is not about something being wrong.** It
-		// is on this panel because the register is where an install says what
-		// needs a person's attention, and it reads as an offer rather than a
-		// fault so nobody arrives thinking their Mosaic is broken.
+		// The one headline here that is not about something being wrong. It is
+		// on this panel because the register is where an install says what needs
+		// a person's attention, and it reads as an offer rather than a fault so
+		// nobody arrives thinking their Mosaic is broken.
 		return fmt.Sprintf("Version %s is available", issue.Reference)
 	case domain.IssueUpgradeFailed:
 		return fmt.Sprintf("The update to %s could not be installed", issue.Reference)
 	default:
 		// A type this build does not know cannot reach here — the store
 		// CHECK-constrains it and RaiseIssue refuses it — but a row written by
-		// a *newer* build and read by this one can. Naming it beats drawing a
+		// a newer build and read by this one can. Naming it beats drawing a
 		// blank row, and it says plainly that the reader is the stale one.
 		return fmt.Sprintf("A problem this version does not recognise (%s)", issue.Type)
 	}
@@ -127,10 +124,10 @@ func issueHeadline(issue domain.Issue) string {
 // issueDetail is the second line: since when, how often, and what the failure
 // actually said.
 //
-// **The count is here because one failure and a fortnight of them are different
-// problems** and the row would otherwise read identically. So is "first seen":
-// it is what answers "did this start when I updated last week", which is the
-// question somebody actually has.
+// The count is here because one failure and a fortnight of them are different
+// problems and the row would otherwise read identically. So is "first seen": it
+// answers "did this start when I updated last week", which is the question
+// somebody actually has.
 func issueDetail(issue domain.Issue, now time.Time) string {
 	detail := fmt.Sprintf("First seen %s", relativeTime(issue.FirstSeen, now))
 	if issue.Occurrences > 1 {
@@ -150,7 +147,7 @@ func issueDetail(issue domain.Issue, now time.Time) string {
 
 // suggestionControl turns a suggestion type into a control.
 //
-// **This is the one place a suggestion becomes words** (platform#74): the type
+// This is the one place a suggestion becomes words (platform#74): the type
 // carries no prose, so a second client renders the same set differently, or in
 // another language, with nothing on the server changing.
 func suggestionControl(s domain.SuggestionType) (label, variant string, ok bool) {

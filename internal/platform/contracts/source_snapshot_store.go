@@ -12,13 +12,12 @@ import (
 // SourceSnapshot is the last good answer a source gave to one question, kept so
 // a screen built on that answer can be drawn again without asking (platform#30).
 //
-// **It holds items, never a rendered tree**, and that is the whole design rather
-// than an efficiency. Artwork URLs are signed with a process-scoped key and
-// playback tickets are sealed with another, both regenerated on boot — so a
-// cached `UINode` tree comes back after a restart full of URLs signed by a key
-// that no longer exists. The images fail and the page *looks* right, which is
-// the worst failure mode available. A snapshot of the items re-renders through
-// the current key and is either correct or visibly stale.
+// It holds items, never a rendered tree. Artwork URLs are signed with a
+// process-scoped key and playback tickets are sealed with another, both
+// regenerated on boot, so a cached UINode tree comes back after a restart full
+// of URLs signed by a key that no longer exists: the images fail while the page
+// looks right. A snapshot of the items re-renders through the current key and
+// is either correct or visibly stale.
 type SourceSnapshot struct {
 	// Source is the module that answered. Snapshots are keyed by it so a
 	// provider that has been uninstalled and replaced cannot have its answers
@@ -30,7 +29,7 @@ type SourceSnapshot struct {
 	// and does not interpret the questions.
 	Key string
 	// Document is the answer, marshalled. Opaque for the reason
-	// `node_metadata`'s is (platform#62): the shape is the SDK's, and a field the
+	// node_metadata's is (platform#62): the shape is the SDK's, and a field the
 	// SDK adds should cost no migration.
 	Document []byte
 	// TakenAt is when the source gave this answer. It is what "how old is this
@@ -43,23 +42,22 @@ type SourceSnapshot struct {
 // SourceSnapshotStore persists the last good answer per source and question
 // (platform#30).
 //
-// **Durable, in the Platform's own storage**, because the point is surviving a
-// process restart, which an in-memory cache cannot. It also means a source being
-// down for an hour is survivable rather than fatal, which is the more common
-// case of the two.
+// It lives in the Platform's own durable storage because the point is
+// surviving a process restart, which an in-memory cache cannot; it also makes
+// a source being down for an hour survivable rather than fatal.
 //
-// It is a cache in that every row can be rebuilt by asking the source again, and
-// durable state in that a home screen renders from it with nothing reachable.
-// Both are true, and the second is why it is a Platform store rather than
-// something a module owns.
+// It is a cache in that every row can be rebuilt by asking the source again,
+// and durable state in that a home screen renders from it with nothing
+// reachable. The second is why it is a Platform store rather than something a
+// module owns.
 type SourceSnapshotStore interface {
 	// Put stores or replaces one answer. Replacing rather than merging: a
 	// snapshot is one source's whole answer at one moment, and merging two would
 	// produce a page no source ever served.
 	Put(ctx context.Context, snapshot SourceSnapshot) error
 
-	// Get reads one answer. A question never asked is **NotFound**, which a
-	// caller reads as "there is nothing to render from, so ask and wait" — the
-	// cold install, which is the only render that should be slow.
+	// Get reads one answer. A question never asked is NotFound, which a caller
+	// reads as "there is nothing to render from, so ask and wait" — the cold
+	// install, which is the only render that should be slow.
 	Get(ctx context.Context, source, key string) (SourceSnapshot, error)
 }

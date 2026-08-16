@@ -20,11 +20,11 @@ import (
 // opening a file directly, deliberately coarsely, so honouring it is cheaper
 // than arguing with it and it puts the filesystem behind a port either way.
 //
-// **The directory is bounded, not accumulated.** A transcode is not kept: the
-// caller deletes segments behind the playhead and the whole directory goes when
-// the session ends, so a playback costs a window of seconds rather than the
-// size of the release. That is not tidiness — a release can be tens of
-// gigabytes and the deployments this targets have far less disk than that.
+// The directory is bounded, not accumulated. A transcode is not kept: the caller
+// deletes segments behind the playhead and the whole directory goes when the
+// session ends, so a playback costs a window of seconds rather than the size of
+// the release. A release can be tens of gigabytes and the deployments this
+// targets have far less disk than that.
 
 // ErrBadSegmentName reports a name that is not a plain file in the directory.
 var ErrBadSegmentName = errors.New("filesystem: segment name is not a bare filename")
@@ -71,10 +71,10 @@ func (d *tempSegmentDir) Path() string { return d.dir }
 
 // resolve rejects anything that is not a bare filename.
 //
-// **The name reaches this from a URL path**, so traversal is a live concern
-// rather than a theoretical one: without this, `..%2f..%2fetc%2fpasswd` reads
-// whatever the process can. The handler validates too; this is the layer that
-// owns the filesystem and so is the layer that must not be talked out of it.
+// The name reaches this from a URL path, so traversal is a live concern: without
+// this, ..%2f..%2fetc%2fpasswd reads whatever the process can. The handler
+// validates too; this is the layer that owns the filesystem and so is the layer
+// that must not be talked out of it.
 func (d *tempSegmentDir) resolve(name string) (string, error) {
 	if name == "" || name != filepath.Base(name) || strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
 		return "", ErrBadSegmentName

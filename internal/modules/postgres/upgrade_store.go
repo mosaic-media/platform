@@ -23,10 +23,10 @@ func NewUpgradeStore(pool *pgxpool.Pool) contracts.UpgradeStore { return &upgrad
 
 // Request replaces whatever was pending.
 //
-// **Settling the old one first is what makes the unique index hold**, and
-// replacing rather than refusing is deliberate: the second press is the one
-// that reflects what the person currently wants, and refusing it would leave an
-// install waiting on a version somebody changed their mind about.
+// Settling the old one first is what makes the unique index hold, and it
+// replaces rather than refuses because the second press is the one that reflects
+// what the person currently wants: refusing it would leave an install waiting on
+// a version somebody changed their mind about.
 func (s *upgradeStore) Request(ctx context.Context, request domain.UpgradeRequest) error {
 	if _, err := s.q.Exec(ctx,
 		`UPDATE upgrade_requests SET settled_at = now() WHERE settled_at IS NULL`); err != nil {

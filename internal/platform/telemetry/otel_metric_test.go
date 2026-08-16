@@ -75,10 +75,10 @@ func TestAHistogramKeepsItsDistribution(t *testing.T) {
 	}
 }
 
-// **The cap is what stops third-party code exhausting the host**, and the thing
-// it must not do is lose the measurement: a counter that under-reports is worse
-// than one whose breakdown is coarse, because the number a person reads is then
-// quietly wrong.
+// The cap is what stops third-party code exhausting the host, and the thing it
+// must not do is lose the measurement: a counter that under-reports is worse
+// than one whose breakdown is coarse, because the number a person reads is
+// then quietly wrong.
 func TestTheSeriesCapFoldsRatherThanDrops(t *testing.T) {
 	c := telemetry.NewMetricCollector()
 

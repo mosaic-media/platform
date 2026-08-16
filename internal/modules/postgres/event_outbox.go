@@ -15,11 +15,11 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// eventOutbox is the PostgreSQL contracts.EventOutbox. Append is written to
-// run inside the same UnitOfWork transaction as the state change it records,
-// so state and event commit atomically. It persists the full event envelope
-// and the delivery failure-tracking columns; the worker that reads
-// unpublished rows, publishes them and drives RecordFailure is a later slice.
+// eventOutbox is the PostgreSQL contracts.EventOutbox. Append is written to run
+// inside the same UnitOfWork transaction as the state change it records, so
+// state and event commit atomically. It persists the full event envelope and the
+// delivery failure-tracking columns; internal/platform/events.Worker is what
+// reads unpublished rows, publishes them and drives RecordFailure.
 type eventOutbox struct {
 	q      queryer
 	policy domain.DeliveryPolicy
@@ -27,7 +27,7 @@ type eventOutbox struct {
 
 // NewEventOutbox builds a pool-backed EventOutbox. In practice Append runs
 // through a UnitOfWork; the direct constructor exists for read-side callers
-// (the future outbox worker) and tests.
+// (the outbox worker) and tests.
 func NewEventOutbox(pool *pgxpool.Pool) contracts.EventOutbox {
 	return &eventOutbox{q: pool, policy: domain.DefaultDeliveryPolicy()}
 }

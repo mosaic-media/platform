@@ -47,19 +47,17 @@ func viewer() domain.User {
 	}
 }
 
-// The list is a way in, not just a list. Before this it drew four names and
-// nothing to press.
+// TestThePeoplePanelLeadsIntoEachAccount pins that the list is a way in, not
+// just a list. Before this it drew four names and nothing to press.
 func TestThePeoplePanelLeadsIntoEachAccount(t *testing.T) {
 	fake := peopleService(admin(), viewer())
 	fake.currentUser = admin()
 	node := render(t, &Service{content: fake}, "settings", map[string]any{"section": "people"})
 
-	// **Asserted on the control, not on the row's props.** The first version of
-	// this test checked that the row carried an `action` — which it did, and
-	// which SettingsRow reads nothing of, so the assertion passed over a list
-	// that could not be clicked. A prop nobody renders is exactly as absent as
-	// no prop at all, and only a test that looks for the rendered control can
-	// tell the difference.
+	// Asserted on the control, not on the row's props. SettingsRow reads no
+	// action prop, so a test checking that the row carries one passes over a
+	// list that cannot be clicked: a prop nobody renders is exactly as absent
+	// as no prop at all.
 	var buttons []sdui.Node
 	findAll(node, "Button", &buttons)
 	var opened bool
@@ -78,9 +76,10 @@ func TestThePeoplePanelLeadsIntoEachAccount(t *testing.T) {
 	}
 }
 
-// A caller who cannot create accounts is not invited to try. The failure this
-// prevents is specific and memorable: being refused *after* typing somebody
-// else's password into a form.
+// TestSomebodyWhoCannotCreateAccountsIsNotOfferedTo pins that a caller who
+// cannot create accounts is not invited to try. The failure this prevents is
+// specific and memorable: being refused after typing somebody else's password
+// into a form.
 func TestSomebodyWhoCannotCreateAccountsIsNotOfferedTo(t *testing.T) {
 	fake := peopleService(admin(), viewer())
 	fake.currentUser = admin()
@@ -92,8 +91,9 @@ func TestSomebodyWhoCannotCreateAccountsIsNotOfferedTo(t *testing.T) {
 	}
 }
 
-// platform#44's offer side: the form says what it will actually grant, computed
-// from the grantor's own authority rather than from the preset.
+// TestTheNewAccountFormNamesWhatItWillGrant pins platform#44's offer side: the
+// form says what it will actually grant, computed from the grantor's own
+// authority rather than from the preset.
 func TestTheNewAccountFormNamesWhatItWillGrant(t *testing.T) {
 	fake := peopleService(admin())
 	fake.currentUser = admin()
@@ -109,7 +109,7 @@ func TestTheNewAccountFormNamesWhatItWillGrant(t *testing.T) {
 	}
 	// And it does not offer what the preset does not carry. A viewer preset
 	// conferring user.create would be the escalation the whole rule exists to
-	// prevent, and a form that *said* it would is how nobody notices.
+	// prevent, and a form that said it would is how nobody notices.
 	if strings.Contains(text, "user.create") {
 		t.Error("the viewer form claims it will grant user.create")
 	}
@@ -118,8 +118,9 @@ func TestTheNewAccountFormNamesWhatItWillGrant(t *testing.T) {
 	}
 }
 
-// A person's panel answers what they hold, in both the forms that differ: the
-// roles they were given and the flattened set the policy engine decides with.
+// TestAPersonsPanelSaysWhatTheyHold pins that a person's panel answers what
+// they hold, in both the forms that differ: the roles they were given and the
+// flattened set the policy engine decides with.
 func TestAPersonsPanelSaysWhatTheyHold(t *testing.T) {
 	fake := peopleService(admin(), viewer())
 	fake.currentUser = admin()
@@ -149,9 +150,10 @@ func TestAPersonsPanelSaysWhatTheyHold(t *testing.T) {
 	}
 }
 
-// An account holding nothing cannot sign in, which is a state a half-finished
-// creation leaves behind. The panel names it and offers the step that was
-// missed rather than looking like an ordinary account.
+// TestAnAccountWithNoRoleSaysSoAndOffersOne pins that an account holding
+// nothing cannot sign in, which is a state a half-finished creation leaves
+// behind. The panel names it and offers the step that was missed rather than
+// looking like an ordinary account.
 func TestAnAccountWithNoRoleSaysSoAndOffersOne(t *testing.T) {
 	fake := peopleService(admin(), viewer())
 	fake.currentUser = admin()
@@ -168,9 +170,10 @@ func TestAnAccountWithNoRoleSaysSoAndOffersOne(t *testing.T) {
 	}
 }
 
-// Suspending yourself is the one outcome with no recovery: on the ordinary
-// household install there is one administrator, and they would lock themselves
-// out with nothing left to unlock it with.
+// TestYouAreNotOfferedAControlThatLocksYouOut pins that suspending yourself is
+// the one outcome with no recovery: on the ordinary household install there is
+// one administrator, and they would lock themselves out with nothing left to
+// unlock it with.
 func TestYouAreNotOfferedAControlThatLocksYouOut(t *testing.T) {
 	fake := peopleService(admin())
 	fake.currentUser = admin()
@@ -191,8 +194,9 @@ func TestYouAreNotOfferedAControlThatLocksYouOut(t *testing.T) {
 	}
 }
 
-// A suspended account offers the way back, and says what suspension did and did
-// not cost — because "suspended" on its own reads as "deleted" to most people.
+// TestASuspendedAccountOffersReactivation pins that a suspended account offers
+// the way back, and says what suspension did and did not cost — because
+// "suspended" on its own reads as "deleted" to most people.
 func TestASuspendedAccountOffersReactivation(t *testing.T) {
 	suspended := viewer()
 	suspended.Status = domain.UserSuspended
@@ -247,11 +251,12 @@ func writeStrings(v any, b *strings.Builder) {
 	}
 }
 
-// An affordance a caller could not exercise is not drawn (platform#24).
+// TestTheLibraryControlsAreNotDrawnForSomebodyWhoCannotCurate pins that an
+// affordance a caller could not exercise is not drawn (platform#24).
 //
 // The detail screen offered "Add to library" to everybody, because everybody
 // was one account holding everything. The first ordinary account pressed it and
-// got nothing at all: curating the library is `content.import`, which the viewer
+// got nothing at all: curating the library is content.import, which the viewer
 // preset does not carry.
 func TestTheLibraryControlsAreNotDrawnForSomebodyWhoCannotCurate(t *testing.T) {
 	viewerOnly := &fakeQueries{
@@ -278,9 +283,10 @@ func TestTheLibraryControlsAreNotDrawnForSomebodyWhoCannotCurate(t *testing.T) {
 	}
 }
 
-// Settings must open for an ordinary account. The nav reads the module list,
-// which authorises `module.read` — administrator authority — so a viewer got
-// "no role grants module.read" where their own Account panel should have been.
+// TestSettingsOpensForSomebodyWhoHoldsNothingAdministrative pins that settings
+// must open for an ordinary account. The nav reads the module list, which
+// authorises module.read — administrator authority — so a viewer got "no role
+// grants module.read" where their own Account panel should have been.
 func TestSettingsOpensForSomebodyWhoHoldsNothingAdministrative(t *testing.T) {
 	fake := &fakeQueries{
 		currentUser: viewer(),

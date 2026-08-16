@@ -18,8 +18,8 @@ import (
 
 // collectionsScreen is the admin's entry to curation: the collections the
 // enabled modules expose, each a row that opens the catalog's items. Browsing is
-// a read — nothing is published until an item's materialise action runs (ADR
-// 0028).
+// a read — nothing is published until an item's materialise action runs
+// (platform#18).
 func (s *Service) collectionsScreen(ctx context.Context, caller v1.Caller) (sdui.Node, error) {
 	res, err := s.content.ListModuleCatalogs(ctx, app.ListModuleCatalogsQuery{Caller: caller})
 	if err != nil {
@@ -104,7 +104,7 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 	grid := []ui.El{ui.Group(cards...)}
 	if hasMore {
 		// The narrowing travels with the page, for the same reason it does on
-		// the library screen: a `query` re-renders the whole window, and a
+		// the library screen: a query re-renders the whole window, and a
 		// next-page action that dropped the filters would widen the browse
 		// mid-scroll with nothing to show for it.
 		next := map[string]any{
@@ -139,10 +139,10 @@ func (s *Service) catalogScreen(ctx context.Context, caller v1.Caller, params ma
 
 // filterParam is the screen param a provider's filter is carried in.
 //
-// Namespaced, because a filter's name is a *source's* own parameter — TMDB's is
-// literally `with_genres` — and the screen's params are a Platform namespace
-// holding `page`, `moduleId` and the rest. A source that happened to name a
-// filter `page` would otherwise silently take over the paging.
+// Namespaced, because a filter's name is a source's own parameter — TMDB's is
+// literally with_genres — and the screen's params are a Platform namespace
+// holding page, moduleId and the rest. A source that happened to name a
+// filter page would otherwise silently take over the paging.
 func filterParam(name string) string { return "filter." + name }
 
 // catalogFilters reads the declaration for the catalog being rendered.
@@ -168,8 +168,8 @@ func (s *Service) catalogFilters(ctx context.Context, caller v1.Caller, moduleID
 // selectedFilters reads the params back into the selection, keeping only values
 // the catalog actually declared.
 //
-// **A value that is not on the declared list is dropped here rather than sent**,
-// because a provider is required to *refuse* one — which is right, and which
+// A value that is not on the declared list is dropped here rather than sent,
+// because a provider is required to refuse one — which is right, and which
 // would turn a stale link into an error screen instead of a browse. The module's
 // refusal is the guarantee; this is the screen not asking a question it can see
 // is stale.
@@ -213,7 +213,7 @@ func catalogFacetRows(declared []v1.CatalogFilter, selected map[string]string, m
 				paramModuleID: moduleID, paramCatalogID: catalogID,
 				paramNativeType: nativeType, paramTitle: name,
 			}
-			// Every *other* filter's selection is preserved, so two rows compose
+			// Every other filter's selection is preserved, so two rows compose
 			// rather than each clearing the other.
 			for _, other := range declared {
 				if other.Name != f.Name {
@@ -238,7 +238,7 @@ func catalogFacetRows(declared []v1.CatalogFilter, selected map[string]string, m
 			if o.Value != selected[f.Name] {
 				params[filterParam(f.Name)] = o.Value
 			}
-			// When it *is* the selection, the param is simply absent, so pressing
+			// When it is the selection, the param is simply absent, so pressing
 			// the lit chip clears it — the control is reversible by the press
 			// that set it rather than needing somewhere separate to go.
 			chips = append(chips, ui.FilterChip(o.Label, o.Value == selected[f.Name],
@@ -265,7 +265,7 @@ func countLabel(n int, hasMore bool) string {
 
 // spotlightFromItem is the catalog screen's banner: the leading item, enriched
 // with the backdrop its card lacks, as a wide hero over the grid. It is the
-// `detail` hero variant rather than the home's `feature` — a collection's
+// detail hero variant rather than the home's feature — a collection's
 // spotlight introduces the row beneath it and must not fill the viewport the
 // grid is supposed to occupy.
 //

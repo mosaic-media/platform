@@ -17,23 +17,20 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Storing what a source said, and growing the tree from it (platform#62).
-//
-// The two failures this closes were both found by opening a library the
-// maintenance job had filled: a detail screen with nothing on it, and a series
-// that gained a season and never grew.
+// Storing what a source said, and growing the tree from it (platform#62). The
+// two properties pinned here are that a detail has something to draw with, and
+// that a series that gains a season grows.
 
 // seriesModule is a module that materialises a series and describes it. Its
 // episode list is a field, so a test can make the source gain a season between
-// two runs — which is the thing that was broken and could not be seen from
-// inside the Platform.
+// two runs.
 type seriesModule struct {
 	// watch is where this title can be streamed, as a provider reports it. nil
 	// is a provider that answered with nothing, which is a real answer and the
 	// one the refresh turns on.
 	watch *v1.WatchAvailability
 	id    string
-	// episodes is what the metadata role reports, and it is deliberately *not*
+	// episodes is what the metadata role reports, and it is deliberately not
 	// what Import builds: a real module builds the tree it knew about when the
 	// title was first materialised and never revisits it.
 	episodes []v1.EpisodePreview
@@ -219,8 +216,8 @@ func TestImportStoresWhatTheSourceSaid(t *testing.T) {
 	if len(detail.Metadata.Cast) != 1 {
 		t.Fatalf("stored cast = %v, want the source's", detail.Metadata.Cast)
 	}
-	// **The document carries no episodes**: the tree is the authority, and a
-	// second copy would disagree with it the moment the tree grew.
+	// The document carries no episodes: the tree is the authority, and a second
+	// copy would disagree with it the moment the tree grew.
 	if len(detail.Metadata.Episodes) != 0 {
 		t.Fatalf("the stored document carries %d episodes; the tree is the authority", len(detail.Metadata.Episodes))
 	}
@@ -280,9 +277,9 @@ func TestASeriesThatGainsASeasonGrows(t *testing.T) {
 		t.Fatal("season 2 was never created")
 	}
 
-	// **And it adds only what is missing.** A third run over an unchanged source
-	// must not duplicate anything, which is what makes the pass safe to run on a
-	// schedule.
+	// And it adds only what is missing: a third run over an unchanged source
+	// must not duplicate anything, which is what makes the pass safe to run on
+	// a schedule.
 	if _, err := svc.ImportContent(ctx, app.ImportContentCommand{Caller: caller, Ref: seriesRef("tmdb")}); err != nil {
 		t.Fatalf("third ImportContent: %v", err)
 	}
@@ -314,7 +311,7 @@ func TestAnEpisodeThatLeavesTheSourceStays(t *testing.T) {
 	}
 }
 
-// An episode the *module* created carries no still, because a module building a
+// An episode the module created carries no still, because a module building a
 // tree has none per episode. The pass fills the gap and never overrules a choice
 // that was already made.
 func TestTheTreeTopUpFillsAMissingEpisodeStill(t *testing.T) {
@@ -476,11 +473,9 @@ func TestOpeningASeasonRendersItsSeries(t *testing.T) {
 
 // The watch-availability refresh (roadmap M2.5).
 //
-// **The surface this feeds was withheld on purpose until this existed.** Both
-// halves of the grouping worked long before: a provider answers with
-// availability and the store filters on it. What did not exist was anything that
-// re-asked — and availability churns monthly, so a group saying "on Netflix"
-// about a title that left in March is worse than an absent group.
+// A provider answers with availability and the store filters on it; what these
+// pin is that something re-asks. Availability churns monthly, so a group saying
+// "on Netflix" about a title that left in March is worse than an absent group.
 
 func TestImportProjectsAvailabilityForTheFacet(t *testing.T) {
 	ctx := context.Background()
@@ -659,11 +654,11 @@ func TestAFailedRefreshIsNotACheck(t *testing.T) {
 // A title already in the library gains its genres, which is the difference
 // between a facet that works on a fresh install and one that works at all.
 //
-// **Every module dedups before writing**, so a title the library already holds
-// is never re-added and never reaches `AddContentWork` again — the path that
-// carries genres. Without the enrichment pass backfilling them, every library
-// that predates the column stays permanently outside the feature, and silently:
-// an empty facet row is indistinguishable from a library nobody has tagged.
+// Every module dedups before writing, so a title the library already holds never
+// reaches AddContentWork again — the path that carries genres. Without the
+// enrichment pass backfilling them, a library that predates the column stays
+// outside the feature silently: an empty facet row is indistinguishable from a
+// library nobody has tagged.
 func TestAnExistingWorkGainsItsGenres(t *testing.T) {
 	ctx := context.Background()
 	mod := &seriesModule{id: "tmdb", buildSeasons: 1, buildPerSeason: 1, episodes: episodesFor(1, 1)}

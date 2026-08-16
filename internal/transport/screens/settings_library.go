@@ -24,12 +24,12 @@ import (
 //
 // Two things this panel is arranged around.
 //
-// **A rule is created from a catalog you are looking at, not from a form with a
-// module id in it.** Typing a catalog id into a box is how you make a rule that
+// A rule is created from a catalog you are looking at, not from a form with a
+// module id in it. Typing a catalog id into a box is how you make a rule that
 // silently matches nothing; picking the row the collections screen already shows
 // cannot be misspelled.
 //
-// **Nothing is created before its consequence is shown.** Choosing a collection
+// Nothing is created before its consequence is shown. Choosing a collection
 // opens a confirmation that has evaluated the rule: how many titles it matches,
 // how many the library already has, the first few by name, and what the first
 // run will therefore add. platform#60 calls the first run the one most likely to
@@ -123,10 +123,9 @@ func (s *Service) libraryRulesPanel(ctx context.Context, caller v1.Caller, nav s
 // libraryRuleRow is one rule: what it says, what it last did, and the two things
 // that can be done to it.
 //
-// The controls sit in the row's own slot rather than as an `action` on the row.
-// **A SettingsRow reads no `action`** — setting one compiles, renders, changes
-// nothing and reports nothing, which is how the People list shipped as a list
-// nobody could click.
+// The controls sit in the row's own slot rather than as an action on the row.
+// A SettingsRow reads no action prop: setting one compiles, renders, changes
+// nothing and reports nothing.
 func (s *Service) libraryRuleRow(listing app.LibraryRuleListing, canManage bool) ui.El {
 	rule := listing.Rule
 
@@ -156,7 +155,7 @@ func (s *Service) libraryRuleRow(listing app.LibraryRuleListing, canManage bool)
 	return ui.SettingsRow(rule.Name, els...)
 }
 
-// libraryRuleSummary is the line under a rule's name: what it is a rule *over*,
+// libraryRuleSummary is the line under a rule's name: what it is a rule over,
 // its bound, and — when its module has gone — that it is degraded rather than
 // working.
 func libraryRuleSummary(listing app.LibraryRuleListing) string {
@@ -232,7 +231,7 @@ func degradedRulesBanner(rules []app.LibraryRuleListing) *ui.Element {
 }
 
 // addLibraryRuleSection offers the collections the installed modules expose, as
-// the thing a rule is made *from*.
+// the thing a rule is made from.
 //
 // A rule over a catalog nobody can see is a rule nobody can check, so the offer
 // is the same list the collections screen browses. A module that contributes no
@@ -271,10 +270,9 @@ func (s *Service) addLibraryRuleSection(ctx context.Context, caller v1.Caller) (
 // newLibraryRulePanel is the confirmation: what this rule would do, before it
 // exists.
 //
-// It **evaluates the rule to say so**, which is the whole point — a count of
-// what a source actually offers, how much of it the library already has, and the
-// first few titles by name so a mistyped catalog is visible rather than
-// discovered a run later.
+// It evaluates the rule to say so: a count of what a source actually offers, how
+// much of it the library already has, and the first few titles by name, so a
+// mistyped catalog is visible rather than discovered a run later.
 func (s *Service) newLibraryRulePanel(ctx context.Context, caller v1.Caller, nav settingsNavModel, params map[string]any) (sdui.Node, error) {
 	moduleID := stringParam(params, paramAddModule)
 	catalogID := stringParam(params, paramAddCatalog)

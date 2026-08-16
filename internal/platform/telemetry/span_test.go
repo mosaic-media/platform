@@ -125,8 +125,8 @@ func TestSpanRecordsFailureAndCategory(t *testing.T) {
 	}
 }
 
-// TestSpanEndIsIdempotent — every seam uses `defer span.End()` and several also
-// End explicitly on an error path, so a double End must not double-write.
+// TestSpanEndIsIdempotent: every seam defers End and several also call it
+// explicitly on an error path, so a double End must not double-write.
 func TestSpanEndIsIdempotent(t *testing.T) {
 	sink := &captureSpans{}
 	ctx, _ := spanCtx(sink)
@@ -189,15 +189,13 @@ func TestUnendedSpanIsNeverRecorded(t *testing.T) {
 	}
 }
 
-// One journey, end to end, with nothing losing coherence in the middle of it.
-//
-// **This is the property the conversion to OpenTelemetry had to preserve**
-// (sdk#8), and it is asserted over a whole request rather than a pair of
-// spans: an inbound traceparent from a client, an entry span, a handler, a
-// module invocation and a SQL statement, with a log record emitted at every
-// level. Every one of them must carry the *same* trace id — a conversion
-// producing a valid trace id per hop would pass every test that checks one
-// exists, and would leave a support report joinable to nothing.
+// One journey, end to end, with nothing losing coherence in the middle of it
+// (sdk#8). It is asserted over a whole request rather than a pair of spans: an
+// inbound traceparent from a client, an entry span, a handler, a module
+// invocation and a SQL statement, with a log record emitted at every level.
+// Every one of them must carry the same trace id — an implementation producing
+// a valid trace id per hop would pass every test that checks one exists, and
+// would leave a support report joinable to nothing.
 func TestAWholeJourneyKeepsOneTraceAcrossSpansAndLogs(t *testing.T) {
 	caller := telemetry.NewTraceContext()
 	sink := &captureSpans{}

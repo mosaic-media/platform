@@ -15,7 +15,7 @@ import (
 // TestCapabilityClassIsOrderIndependent is the property the resolution cache
 // rests on (platform#28). Two clients with identical abilities must land in one
 // class however they happened to list them — a client that enumerates its codecs
-// from a Set, or in whatever order `canPlayType` was probed, does not get a cache
+// from a Set, or in whatever order canPlayType was probed, does not get a cache
 // of its own. The failure this guards against is silent: a fragmented cache
 // still returns correct answers, it just never seems to be warm.
 func TestCapabilityClassIsOrderIndependent(t *testing.T) {
@@ -93,9 +93,9 @@ func TestUndeclaredProfileFallsBackToTheBrowserAssumption(t *testing.T) {
 	}
 }
 
-// TestDeclaredProfileIsWhatSelectionRanksOn walks the path the roadmap called
-// out: the hard-coded browser preference at the playPart call site is gone, and
-// what a client declared on Attach is what reaches selection.
+// TestDeclaredProfileIsWhatSelectionRanksOn proves what a client declared on
+// Attach is what reaches selection, rather than a preference fixed at the
+// playPart call site.
 func TestDeclaredProfileIsWhatSelectionRanksOn(t *testing.T) {
 	s := newLiveSession("ref", time.Now())
 	s.setProfile(profileFrom(&sessionv1.ClientProfile{
@@ -142,15 +142,15 @@ func TestEncodeHeightIsCappedForAnUncappedClient(t *testing.T) {
 	}
 }
 
-// TestEncodeHeightIsCappedForAnHonestlyTallClient is the same asymmetry in the
-// direction that shipped broken, and it is the common case rather than an edge
-// one: a Retina laptop reports 1200 CSS pixels at devicePixelRatio 2 and
+// TestEncodeHeightIsCappedForAnHonestlyTallClient is the same asymmetry for a
+// client that did declare a ceiling, which is the common case rather than an
+// edge one: a Retina laptop reports 1200 CSS pixels at devicePixelRatio 2 and
 // correctly declares 2400.
 //
-// The cap was applied only to clients that declared *nothing*, so a client that
-// answered honestly got its panel's number used as the encoder's. Playing a 4K
-// HDR release then pinned currentTime at 0 while ffmpeg held two cores
-// tone-mapping and encoding 2160p h264 in real time, which no home server does.
+// Applying the cap only to clients that declared nothing leaves an honest one
+// with its panel's number used as the encoder's. Playing a 4K HDR release then
+// pins currentTime at 0 while ffmpeg holds two cores tone-mapping and encoding
+// 2160p h264 in real time, which no home server does.
 //
 // Selection is deliberately untouched: the declared height still ranks
 // candidates, so a 4K display is still offered 4K releases and still

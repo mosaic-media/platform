@@ -17,29 +17,25 @@ import (
 
 // The candidate set behind one item, ranked and explained (platform#71).
 //
-// Selection already picks a release and reports what it chose out of how many
-// (platform#27). What it could not do is show its working, and that made two
-// different situations look identical from a screen: a ranking that picked
-// badly, and an item that only ever had one candidate. **"Nothing changed" is
-// the same picture either way**, which is why the count was added in the first
-// place — and a count on its own still cannot be acted on.
+// Selection picks a release and reports what it chose out of how many
+// (platform#27), but a count alone cannot be acted on: a ranking that picked
+// badly and an item that only ever had one candidate look identical from a
+// screen.
 //
-// So this returns the list rather than its length, in the order ranking would
-// take them, each carrying why it sits where it does. The screen over it is a
-// picker; the same list with nothing in it is the honest no-candidate state,
-// which is the other half of the same problem.
+// This returns the list rather than its length, in the order ranking would take
+// them, each carrying why it sits where it does. The same list with nothing in
+// it is the no-candidate state.
 
 // PlaybackSourcesQuery asks what could be played for one item.
 type PlaybackSourcesQuery struct {
 	Caller v1.Caller
-	// NodeID is the item. A source list belongs to the thing being watched
-	// rather than to one of its releases: asking "what else is there" from a
-	// release the viewer wants to move away from is the whole use.
+	// NodeID is the item. A source list belongs to the thing being watched rather
+	// than to one of its releases: the use is asking "what else is there" from a
+	// release the viewer wants to move away from.
 	NodeID v1.NodeID
-	// Prefer is the calling client's profile, so the ranking shown is the
-	// ranking that would actually be used. Ranking a picker against a different
-	// profile than the play would use is worse than not ranking at all — the
-	// order would be advice the Platform then ignores.
+	// Prefer is the calling client's profile, so the ranking shown is the ranking
+	// that would actually be used. Ranking a picker against a different profile
+	// than the play would use makes the order advice the Platform then ignores.
 	Prefer PlaybackPreference
 }
 
@@ -58,10 +54,8 @@ type PlaybackSource struct {
 	// Chosen marks the one ranking would take, so the picker can say which is
 	// already in force rather than making a viewer infer it from the order.
 	Chosen bool
-	// Direct reports that this release needs no transcoding on this client.
-	// It is the single most useful fact about a candidate on a home server,
-	// because it is the difference between a play that costs nothing and one
-	// that may not keep up.
+	// Direct reports that this release needs no transcoding on this client — the
+	// difference between a play that costs nothing and one that may not keep up.
 	Direct bool
 	// Why explains this candidate's standing in one phrase — what will have to
 	// happen to play it, or that nothing will. Empty for a release with nothing
@@ -82,11 +76,11 @@ type PlaybackSourcesResult struct {
 // PlaybackSources lists the candidate releases for an item, ranked for this
 // client (platform#71).
 //
-// It ranks and does not resolve. Resolution is a call per candidate to an
+// It ranks and must not resolve. Resolution is a call per candidate to an
 // aggregator that takes hundreds of milliseconds, so resolving twenty to draw a
-// list would spend the entire latency budget of a play on a screen the viewer
-// may only be glancing at. A picker names releases; picking one is an ordinary
-// play, and that is where its address is fetched.
+// list would spend the whole latency budget of a play on a screen the viewer may
+// only be glancing at. Picking one is an ordinary play, and that is where its
+// address is fetched.
 func (s *Service) PlaybackSources(ctx context.Context, q PlaybackSourcesQuery) (PlaybackSourcesResult, error) {
 	if q.Caller.Session == "" {
 		return PlaybackSourcesResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
@@ -105,10 +99,9 @@ func (s *Service) PlaybackSources(ctx context.Context, q PlaybackSourcesQuery) (
 	if err != nil {
 		return PlaybackSourcesResult{}, err
 	}
-	// Nothing playable is a legitimate answer and not an error. An item can be in
-	// the library with no candidate at all — a metadata-only import, or a source
-	// that has since stopped offering it — and reporting that as a failure is
-	// exactly the presentation this exists to replace.
+	// Nothing playable is a legitimate answer and not an error: an item can be in
+	// the library with no candidate at all, from a metadata-only import or a
+	// source that has stopped offering it.
 	if len(parts) == 0 {
 		return PlaybackSourcesResult{}, nil
 	}
@@ -124,10 +117,10 @@ func (s *Service) PlaybackSources(ctx context.Context, q PlaybackSourcesQuery) (
 		})
 	}
 
-	// Highest score first, and the source's own order breaks a tie. A stable
-	// tiebreak matters more than it sounds: without one the list reorders
-	// between two renders of the same screen, and a viewer reaching for the
-	// third row gets whatever landed there this time.
+	// Highest score first, and the source's own order breaks a tie. The tiebreak
+	// must stay stable: without one the list reorders between two renders of the
+	// same screen, and a viewer reaching for the third row gets whatever landed
+	// there this time.
 	order := make(map[v1.PartID]float64, len(parts))
 	for _, p := range parts {
 		order[p.ID] = p.NaturalOrder
@@ -147,14 +140,17 @@ func (s *Service) PlaybackSources(ctx context.Context, q PlaybackSourcesQuery) (
 // playability reports whether a release plays untouched on this client, and says
 // what would have to happen if not.
 //
-// The phrasing is deliberately about *this* client rather than about the file. A
-// release is not "bad"; it is undecodable by the thing asking, and the same
-// release on a television may be the best answer there is. Every phrase here
-// names the work, because the work is what a viewer is choosing between.
+// The phrasing is about this client rather than about the file: a release is not
+// bad, it is undecodable by the thing asking, and the same release on a
+// television may be the best answer there is. Every phrase names the work a play
+// would cost, because that is what a viewer is choosing between.
+//
+// Codec comparisons lower-case the Part's codec before the lookup, so the
+// preference sets must be keyed in lower case.
 func playability(p v1.Part, prefer PlaybackPreference) (bool, string) {
 	if prefer.Empty() {
-		// Nothing declared, so nothing can be claimed. Silence is the honest
-		// answer rather than an optimistic "plays directly".
+		// Nothing declared, so nothing can be claimed. Silence rather than an
+		// optimistic "plays directly".
 		return false, ""
 	}
 
@@ -181,8 +177,7 @@ func playability(p v1.Part, prefer PlaybackPreference) (bool, string) {
 //
 // Resolution, codecs and size, in the order somebody scanning a list reads them.
 // Missing fields are omitted rather than rendered as "unknown": a module's parse
-// is best-effort (platform#27), so an absent codec is ordinary and a column of
-// "unknown" would say only that the parse is best-effort.
+// is best-effort (platform#27), so an absent codec is ordinary.
 func qualitySummary(p v1.Part) string {
 	var parts []string
 	if p.Height > 0 {
@@ -228,20 +223,20 @@ type PlayableAfterImportQuery struct {
 type PlayableAfterImportResult struct {
 	NodeID v1.NodeID
 	PartID v1.PartID
-	// Ambiguous reports that the work has more than one playable item — a
-	// series. It is a distinct answer rather than an error because it is the
-	// *correct* outcome: adding a series and then guessing an episode would be
-	// worse than adding it and letting the viewer choose.
+	// Ambiguous reports that the work has more than one playable item — a series.
+	// It is a distinct answer rather than an error because it is the correct
+	// outcome: adding a series and guessing an episode is worse than adding it
+	// and letting the viewer choose.
 	Ambiguous bool
 }
 
 // PlayableAfterImport finds the release to start, for a work materialised by a
 // play (platform#73).
 //
-// **A film is one item and a series is many, and the difference is the whole
-// function.** Materialising a film from a Play button should start it; doing the
-// same for a series would have to guess an episode, and the honest answer there
-// is to have added the series and re-drawn the screen with its episodes on it.
+// A film is one item and a series is many, which is the whole function.
+// Materialising a film from a Play button should start it; doing the same for a
+// series would have to guess an episode, so the answer there is to have added
+// the series and re-drawn the screen with its episodes on it.
 func (s *Service) PlayableAfterImport(ctx context.Context, q PlayableAfterImportQuery) (PlayableAfterImportResult, error) {
 	if q.Caller.Session == "" {
 		return PlayableAfterImportResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")

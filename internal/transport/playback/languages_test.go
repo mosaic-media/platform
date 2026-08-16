@@ -129,10 +129,9 @@ func TestAnUnknownModeFallsBackRatherThanRefusing(t *testing.T) {
 	}
 }
 
-// TestTheDefaultMatchesWhatTheInstallDidBefore is deliberate rather than
-// incidental: introducing a preference must not change what anyone was already
-// watching. A viewer's playback changes when they change their setting, not when
-// this lands.
+// TestTheDefaultMatchesWhatTheInstallDidBefore pins the default against the
+// install-wide list, so introducing a preference changes nobody's playback until
+// they change their own setting.
 func TestTheDefaultMatchesWhatTheInstallDidBefore(t *testing.T) {
 	if !reflect.DeepEqual(DefaultLanguagePreference().Audio, PreferredLanguages) {
 		t.Errorf("default audio = %v, want the install-wide list it replaces (%v)",

@@ -19,12 +19,9 @@ import (
 // The source picker, and the honest answer when there is nothing to pick
 // (platform#71).
 //
-// **`SourcePicker` has been in the contract the whole time and nothing emitted
-// it.** That is the shape this screen fixes: a definition exists, a client can
-// render it, and no server surface ever sent one — so selection's answer was
-// visible only as a number in a log. The screen is composed entirely from the
-// vocabulary that already existed, which is the rule working rather than a
-// coincidence.
+// SourcePicker is a definition the contract already carried and no server
+// surface emitted, which left selection's answer visible only as a number in a
+// log. This screen is composed entirely from vocabulary that already existed.
 
 // sourcesScreen lists what could be played for one item, ranked for this client.
 func (s *Service) sourcesScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
@@ -67,10 +64,9 @@ func headingFor(title string) string {
 // summaryFor is the sentence under the heading, and it is where the count
 // finally says something actionable.
 //
-// One candidate is worth stating explicitly. "Nothing changed when I picked a
+// One candidate is stated explicitly, because "nothing changed when I picked a
 // different source" and "there was only ever one source" are the same picture
-// from the outside, and the whole reason selection reported a count at all was
-// that they were indistinguishable.
+// from the outside.
 func summaryFor(res app.PlaybackSourcesResult) string {
 	switch {
 	case res.Total == 0:
@@ -101,7 +97,7 @@ func noSources() ui.El {
 // sourceRows renders each candidate as a row the picker can draw and press.
 //
 // Pressing one is an ordinary play of that Part — there is no "switch source"
-// action and there does not need to be, because choosing a release *is* naming
+// action and there does not need to be, because choosing a release is naming
 // which Part to play. That is why this screen needed no new action kind.
 func sourceRows(sources []app.PlaybackSource, nodeID, title string, params map[string]any) []any {
 	rows := make([]any, 0, len(sources))

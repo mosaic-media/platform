@@ -12,36 +12,29 @@ import (
 
 // Sealing credential material that cannot be hashed (platform#79).
 //
-// **A password is hashed and a TOTP secret cannot be.** A code is computed from
-// the secret, so the Platform must be able to read it back — which makes the
-// row strictly more dangerous than `password_credentials.hash`: anyone who
-// reads it mints valid codes for that account forever, and nothing about the
-// account looks wrong afterwards.
+// A password is hashed; a TOTP secret cannot be, because a code is computed
+// from the secret and so the Platform must read it back. That makes the row
+// strictly more dangerous than password_credentials.hash: anyone who reads it
+// mints valid codes for that account forever, and nothing about the account
+// looks wrong afterwards.
 //
 // Encryption at rest does not defend against an attacker who has the running
-// process, and it is not claimed to. What it defends against is the way this
-// data actually escapes: a database backup, a replica, a dump pasted into an
-// issue, a disk that left the building. Those carry the table and not the key.
+// process, and does not claim to. It defends against the way this data actually
+// escapes: a database backup, a replica, a dump pasted into an issue, a disk
+// that left the building. Those carry the table and not the key.
 //
-// **The accepted failure mode is stated rather than discovered: lose the key
-// and every enrolled user falls back to their recovery codes.** That is what
-// recovery codes are for, and it is the trade taken deliberately — the
-// alternative is a secret sitting in every backup in plaintext.
+// The accepted failure mode: lose the key and every enrolled user falls back to
+// their recovery codes.
 
-// sealedPrefix versions the envelope.
-//
-// **A format that cannot say what it is cannot be changed.** Without this, a
-// later algorithm or key-derivation change would surface as an authentication
-// failure that looks exactly like a corrupt row, and there would be no way to
-// tell an old value from a broken one. With it, an unrecognised version is a
-// specific, reportable error and a migration has something to branch on.
+// sealedPrefix versions the envelope, so a later algorithm or key-derivation
+// change surfaces as a specific, reportable error on an unrecognised version
+// rather than as an authentication failure indistinguishable from a corrupt row.
 const sealedPrefix = "v1."
 
 // SecretSealer encrypts and decrypts values that must be recoverable.
 //
-// It holds the key rather than taking one per call, because a caller that
-// chooses a key per call is a caller that can choose the wrong one, and the
-// only correct key here is the install's.
+// It holds the key rather than taking one per call: the only correct key here is
+// the install's, and a per-call key is one a caller can get wrong.
 type SecretSealer struct {
 	key [32]byte
 }
@@ -57,9 +50,9 @@ func NewSecretSealer(material []byte) *SecretSealer {
 //
 // AES-256-GCM, so the result is authenticated: a row somebody edited by hand
 // fails to open rather than decrypting to something plausible. The nonce is
-// random per call and travels with the ciphertext, which is why sealing the
-// same secret twice produces different strings — and why a test must never
-// assert on the exact output.
+// random per call and travels with the ciphertext, so sealing the same secret
+// twice produces different strings and a test must never assert on the exact
+// output.
 func (s *SecretSealer) Seal(plaintext string) (string, error) {
 	if s == nil {
 		return "", fmt.Errorf("crypto: no sealer configured")
@@ -73,11 +66,10 @@ func (s *SecretSealer) Seal(plaintext string) (string, error) {
 
 // Open reverses Seal.
 //
-// **Every failure here is reported, never swallowed into an empty value.** A
-// secret that will not open is either a wrong key or a tampered row, and both
-// are situations an operator has to be told about — silently treating it as "no
-// factor enrolled" would turn a key problem into an account that quietly stopped
-// asking for its second factor, which is the worst way this could fail.
+// Every failure is reported, never swallowed into an empty value. A secret that
+// will not open is either a wrong key or a tampered row, and treating it as "no
+// factor enrolled" would leave an account that quietly stopped asking for its
+// second factor.
 func (s *SecretSealer) Open(sealed string) (string, error) {
 	if s == nil {
 		return "", fmt.Errorf("crypto: no sealer configured")
@@ -100,10 +92,7 @@ func (s *SecretSealer) Open(sealed string) (string, error) {
 	return string(plaintext), nil
 }
 
-// IsSealed reports whether a stored value carries the envelope.
-//
-// It exists for the one case that will come up: a value written before sealing
-// existed, or by a build that had no key. A caller can tell that apart from a
-// wrong key and say so, rather than reporting a decryption failure for a value
-// that was never encrypted.
+// IsSealed reports whether a stored value carries the envelope. It lets a caller
+// tell a value written before sealing existed, or by a build with no key, from
+// one that fails to open under a wrong key.
 func IsSealed(value string) bool { return strings.HasPrefix(value, sealedPrefix) }

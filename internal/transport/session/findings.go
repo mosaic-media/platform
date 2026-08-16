@@ -18,10 +18,10 @@ import (
 
 // Acting on a finding (platform#74).
 //
-// **Applying a suggestion is an ordinary action on the ordinary lane.** Repair
-// is not a privileged back channel: it authorises like every other command, its
-// visible result arrives on the push lane like every other one, and the panel
-// is re-rendered afterwards because the register it drew has changed.
+// Applying a suggestion is an ordinary action on the ordinary lane. Repair is
+// not a privileged back channel: it authorises like every other command, its
+// visible result arrives on the push lane like every other one, and the panel is
+// re-rendered afterwards because the register it drew has changed.
 
 // suggestionInput is what the panel's control sends.
 type suggestionInput struct {
@@ -52,11 +52,10 @@ func (h *Handler) applySuggestion(ctx context.Context, s *liveSession, caller v1
 		return nil, err
 	}
 
-	// **Two different sentences, because they are two different outcomes.** A
-	// suggestion that ran and did not resolve the situation is not a failure —
-	// nothing errored — but telling somebody "Done" when the problem is still
-	// on the screen they are about to be shown is how a surface loses their
-	// trust in one step.
+	// Two sentences, because these are two outcomes. A suggestion that ran and
+	// did not resolve the situation is not a failure — nothing errored — but
+	// saying "Done" when the problem is still on the screen the caller is about
+	// to be shown would be a lie.
 	message := "That did not fix it — the problem is still open."
 	if result.Cleared {
 		message = "Sorted."

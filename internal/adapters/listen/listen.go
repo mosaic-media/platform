@@ -2,6 +2,9 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
+// Package listen binds a listener whose transport is decided by the shape of its
+// address. It is not module-shaped and implements no contract, which is what
+// puts it in adapters rather than modules.
 package listen
 
 import (
@@ -12,12 +15,7 @@ import (
 	"strings"
 )
 
-// Package listen binds a listener whose transport is decided by the shape of
-// its address. It is not module-shaped and implements no contract, which is
-// what puts it in `adapters` rather than `modules`.
-//
-// On binds the address: an absolute path is a Unix socket, anything else is
-// TCP.
+// On binds the address: an absolute path is a Unix socket, anything else is TCP.
 //
 // Both of the Platform's listeners are sockets in the shipped install, so the
 // Supervisor is the only way to reach either (platform#75). One setting decides

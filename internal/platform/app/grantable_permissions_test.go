@@ -28,8 +28,8 @@ func holds(t *testing.T, actions []policy.Action, want policy.Action) bool {
 	return false
 }
 
-// TestGrantorIsNeverOfferedWhatTheyLack is the whole point. A reduced
-// administrator assembling a new admin must not be shown telemetry at all.
+// TestGrantorIsNeverOfferedWhatTheyLack: a reduced administrator assembling a
+// new admin must not be shown telemetry at all.
 func TestGrantorIsNeverOfferedWhatTheyLack(t *testing.T) {
 	ctx := context.Background()
 	svc, db, _, session := importFixture(t)

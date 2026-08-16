@@ -133,9 +133,9 @@ func Start(ctx context.Context, name string, attrs ...Field) (context.Context, *
 	span := &Span{span: otelSpan, trace: current}
 
 	// Rebind both the trace and the logger, so log records emitted inside this
-	// span carry *its* span id rather than its parent's. Without this a log
-	// line and the span it happened in would agree on the trace and disagree
-	// on where in it, which is worse than having no span id at all.
+	// span carry its span id rather than its parent's. Without this a log line
+	// and the span it happened in would agree on the trace and disagree on
+	// where in it, which is worse than having no span id at all.
 	ctx = TraceInto(ctx, current)
 	ctx = Into(ctx, lg.WithTrace(current))
 	return ctx, span
@@ -212,8 +212,8 @@ func (s *Span) Fail(category string, err error) {
 	s.span.SetAttributes(attributeOf(Err(err)))
 }
 
-// End completes the span and writes it. It is idempotent, so `defer span.End()`
-// alongside an explicit End on an error path is safe rather than a double
+// End completes the span and writes it. It is idempotent, so a deferred End
+// alongside an explicit one on an error path is safe rather than a double
 // write.
 func (s *Span) End() {
 	if s == nil {

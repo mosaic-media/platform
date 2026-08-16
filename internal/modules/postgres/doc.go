@@ -9,9 +9,9 @@
 // through internal/composition/builtin the same way a future external Module
 // would be discovered.
 //
-// It owns SQL and row mapping and never lets a pgx row, SQLSTATE code or
-// other driver internal escape: every error a store returns passes through
-// mapError into one of the seven Platform error categories. The outbox
-// worker and event publishing are a later slice; this module provides
-// EventOutbox persistence only.
+// It owns SQL and row mapping and never lets a pgx row, SQLSTATE code or other
+// driver internal escape: every error a store returns passes through mapError
+// into one of the seven Platform error categories. It provides EventOutbox
+// persistence; the worker that drains and publishes those rows is
+// internal/platform/events.
 package postgres

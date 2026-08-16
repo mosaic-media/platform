@@ -61,16 +61,13 @@ func TestALabelStandsInForAMissingTitle(t *testing.T) {
 	}
 }
 
-// TestEveryFieldTheTwoTypesShareIsCarried is the general form, and it is the
-// test that would have caught the original defect rather than describing it.
+// TestEveryFieldTheTwoTypesShareIsCarried pins the mapping in general form.
 //
-// `StreamLink` and `AttachContentPartCommand` name their descriptive fields
-// identically **on purpose** — the SDK says so: "a consumer copying a link onto
-// a Part should be moving values across, not translating them." So any field
-// the two types share by name *and* type is one this mapping owes, and a new one
-// added to both and forgotten here is exactly the mistake that already happened
-// once. Reflection asks the types rather than a list somebody has to remember to
-// extend.
+// StreamLink and AttachContentPartCommand name their descriptive fields
+// identically on purpose — the SDK says "a consumer copying a link onto a Part
+// should be moving values across, not translating them" — so any field the two
+// types share by name and type is one partCommandFor owes. Reflection asks the
+// types rather than a list somebody has to remember to extend.
 //
 // Fields named differently on the two sides — Title and Label become
 // EditionLabel — are outside this check by construction, and covered above.

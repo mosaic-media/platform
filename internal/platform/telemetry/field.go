@@ -26,17 +26,18 @@ const identifierPrefix = "id:"
 // Field is one structured field of a record. Redaction is enforced twice, on
 // purpose (platform#34):
 //
-//   - **At construction.** Sensitive, Secret and Identifier never carry the
+//   - At construction. Sensitive, Secret and Identifier never carry the
 //     original value forward — it is replaced or digested before the Field
 //     exists. So the sensitive string is never buffered, never queued, never
 //     written to a sink and never present in a heap dump of this package. A
-//     scrubber that runs at export cannot offer that at any price, because by
-//     then the value has already travelled.
-//   - **At emit.** Any Field whose Redaction is not domain.RedactionNone is
-//     replaced again on the way out. This catches the case construction cannot:
-//     a Field built as a struct literal rather than through a constructor. Its
-//     Redaction is then the zero value, which is not RedactionNone, so it fails
-//     closed — a field somebody forgot to classify is redacted, not leaked.
+//     scrubber that runs at export cannot offer that, because by then the
+//     value has already travelled.
+//   - At emit. Any Field whose Redaction is not domain.RedactionNone is
+//     replaced again on the way out. This catches the case construction
+//     cannot: a Field built as a struct literal rather than through a
+//     constructor. Its Redaction is then the zero value, which is not
+//     RedactionNone, so it fails closed — a field somebody forgot to classify
+//     is redacted, not leaked.
 //
 // The second check is what makes the first safe to rely on rather than a
 // convention that holds until someone writes Field{Key: …, Value: …} by hand.

@@ -31,17 +31,14 @@ type RefreshSessionResult struct {
 
 // RefreshSession rotates a session's credential pair.
 //
-// **Step 2 of the command boundary is the refresh token itself**, exactly as
-// the password credential plays that role in AuthenticateLocalUser: there is no
-// caller session to look up, because the whole point of this call is that the
-// caller's access token has expired. There is deliberately no step 3 either —
-// no policy action gates it, because refreshing is not a new authority, it is
-// the continuation of one already granted. A user whose permissions were
-// trimmed while they were away gets the same reduced set the moment they use
-// the new token, which is the property that made an opaque token worth its
-// store read (platform#43).
-//
-// The register's `refreshSession` row stops being *never worked* here.
+// Step 2 of the command boundary is the refresh token itself, exactly as the
+// password credential plays that role in AuthenticateLocalUser: there is no
+// caller session to look up, because the point of this call is that the caller's
+// access token has expired. There is deliberately no step 3 either — no policy
+// action gates it, because refreshing continues an authority already granted. A
+// user whose permissions were trimmed while they were away gets the reduced set
+// the moment they use the new token, which is what made an opaque token worth
+// its store read (platform#43).
 func (s *Service) RefreshSession(ctx context.Context, cmd RefreshSessionCommand) (RefreshSessionResult, error) {
 	// 1. validate command shape.
 	if cmd.RefreshToken == "" {
@@ -72,31 +69,25 @@ func (s *Service) RefreshSession(ctx context.Context, cmd RefreshSessionCommand)
 			return err
 		}
 
-		// Re-resolve what this account may do (platform#24). The stored set is the
-		// snapshot taken when the session was issued, and a session lives ninety
-		// days; a permission granted or withdrawn in that time would otherwise
-		// not reach the client's affordance gate until the next sign-in, which
-		// for a device that never signs out is never. Rotation happens every few
-		// minutes, so this is the natural place for it, and it costs one role
-		// read on a call that is already a transaction.
+		// Re-resolve what this account may do (platform#24). The stored set is
+		// the snapshot taken when the session was issued and a session lives
+		// ninety days, so a permission granted or withdrawn in that time would
+		// otherwise not reach the client's affordance gate until the next
+		// sign-in — which for a device that never signs out is never.
 		//
-		// The row keeps its issue-time value. Nothing reads it, the wire carries
-		// the current set, and adding a store write to keep a column nobody
-		// consumes in step would be work in the wrong direction.
+		// The row keeps its issue-time value: nothing reads it, and the wire
+		// carries the current set.
 		session.Capabilities = s.sessionCapabilities(ctx, session.UserID)
 
 		result = RefreshSessionResult{Session: session, Tokens: pair}
 		return nil
 	})
 	if err != nil {
-		// A compromised chain must be revoked *outside* the transaction that
+		// A compromised chain must be revoked outside the transaction that
 		// detected it, because that transaction is being rolled back: a
-		// revocation written inside it would be undone by the very error
-		// reporting it, and the attacker's descendant would keep working.
-		//
-		// This is the bug the wire test found. Everything below the seam was
-		// correct and the rollback silently undid it, which is exactly the
-		// shape of failure an in-memory store cannot reproduce.
+		// revocation written inside it is undone by the error reporting it, and
+		// the attacker's descendant keeps working. An in-memory store cannot
+		// reproduce that failure.
 		if compromise, ok := sessions.CompromiseOf(err); ok {
 			if revokeErr := s.tokens.RevokeChain(ctx, compromise.ChainID, s.clock.Now()); revokeErr != nil {
 				telemetry.From(ctx).For("sessions").Error(

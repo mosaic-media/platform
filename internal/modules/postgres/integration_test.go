@@ -60,11 +60,11 @@ func TestPostgresPassesContractSuite(t *testing.T) {
 	contract.RunAll(t, factory)
 }
 
-// TestApplicationServicesRunAgainstPostgres proves the application services
-// from the earlier slices work through the real Postgres adapter with NO
-// changes to the application service code — only the wired contracts differ
-// from the in-memory fakes. If this required editing internal/platform/app,
-// the contracts would not be adapter-agnostic.
+// TestApplicationServicesRunAgainstPostgres proves the application services work
+// through the real Postgres adapter with no change to the application service
+// code — only the wired contracts differ from the in-memory fakes. If this
+// required editing internal/platform/app, the contracts would not be
+// adapter-agnostic.
 func TestApplicationServicesRunAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
 
@@ -218,9 +218,10 @@ func seedRoleGrant(ctx context.Context, pool *pgxpool.Pool, userID domain.UserID
 	return nil
 }
 
-// noopPublisher is a contracts.EventPublisher that drops events. The real
-// in-process bus is a later slice; the application service only needs a
-// publisher present for its non-transactional audit path.
+// noopPublisher is a contracts.EventPublisher that drops events. These tests are
+// not about delivery — the real bus is internal/platform/events — and the
+// application service only needs a publisher present for its non-transactional
+// audit path.
 type noopPublisher struct{}
 
 func (noopPublisher) Publish(context.Context, domain.Event) error { return nil }
@@ -232,8 +233,9 @@ type noopSubscription struct{}
 
 func (noopSubscription) Unsubscribe() {}
 
-// reversibleVerifier is a deliberately insecure test PasswordVerifier. Real
-// Argon2id hashing belongs to a future crypto adapter.
+// reversibleVerifier is a deliberately insecure test PasswordVerifier, so these
+// tests do not pay for a key derivation. The production hasher is Argon2id in
+// internal/adapters/crypto.
 type reversibleVerifier struct{}
 
 func (reversibleVerifier) Hash(plaintext string) (string, error) {

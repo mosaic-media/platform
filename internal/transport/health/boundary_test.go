@@ -14,18 +14,22 @@ import (
 	"testing"
 )
 
-// forbiddenImportPrefixes mirror internal/transport/auth's own boundary
-// check: no transport may import the concrete Postgres module or a raw SQL
-// driver — the same rule, generalized to every transport.
+// forbiddenImportPrefixes mirror internal/transport/auth's own boundary check:
+// no transport may import the concrete Postgres module or a raw SQL driver. The
+// two copies state the same rule and should stay in step.
 var forbiddenImportPrefixes = []string{
 	"github.com/mosaic-media/platform/internal/modules/postgres",
 	"github.com/jackc/pgx",
 	"database/sql",
 }
 
-// TestHandoffDoesNotImportPostgresOrRawSQL parses every file's actual
-// import declarations (go/parser, not a text grep), so it cannot be fooled
-// by a comment or miss an import written differently than expected.
+// TestHandoffDoesNotImportPostgresOrRawSQL parses every file's actual import
+// declarations (go/parser, not a text grep), so it cannot be fooled by a comment
+// or miss an import written differently than expected.
+//
+// It reads this directory only and skips entries that are directories, so adding
+// a subdirectory to this package's tree means making the walk recurse or the new
+// files go unchecked.
 func TestHandoffDoesNotImportPostgresOrRawSQL(t *testing.T) {
 	dir := packageDir(t)
 
@@ -60,6 +64,8 @@ func TestHandoffDoesNotImportPostgresOrRawSQL(t *testing.T) {
 	}
 }
 
+// packageDir locates this test file's own directory via runtime.Caller, so the
+// check works regardless of the working directory go test was invoked from.
 func packageDir(t *testing.T) string {
 	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)

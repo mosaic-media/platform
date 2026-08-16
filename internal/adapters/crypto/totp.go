@@ -25,18 +25,17 @@ import (
 // property that makes it usable on the LAN-only installs a passkey can never
 // reach.
 //
-// **SHA-1 is correct here and is not a lapse.** RFC 6238 permits SHA-256 and
-// SHA-512, and essentially no authenticator app implements them — Google
-// Authenticator, Aegis and several password managers ignore the `algorithm`
-// parameter entirely and assume SHA-1. Choosing a stronger digest would produce
-// codes that silently disagree with whatever the user scanned the QR into,
-// which fails as "wrong code" and is undiagnosable from either end. The
-// construction is HMAC rather than a bare hash, so SHA-1's collision weakness
-// is not what is being relied on.
+// SHA-1 is correct here rather than a lapse. RFC 6238 permits SHA-256 and
+// SHA-512, and essentially no authenticator app implements them: Google
+// Authenticator, Aegis and several password managers ignore the algorithm
+// parameter entirely and assume SHA-1. A stronger digest would produce codes
+// that silently disagree with whatever the user scanned the QR into, which fails
+// as "wrong code" and is undiagnosable from either end. The construction is HMAC
+// rather than a bare hash, so SHA-1's collision weakness is not relied on.
 //
-// **This adapter is pure.** It holds no state, reads no clock of its own and
-// stores nothing: the caller supplies the instant and owns the secret. That is
-// what lets the replay rule live in the application service where the last-used
+// This adapter is pure: it holds no state, reads no clock of its own and stores
+// nothing — the caller supplies the instant and owns the secret. That is what
+// lets the replay rule live in the application service where the last-used
 // counter is stored, rather than in a component that would have to grow a
 // database to enforce it.
 
@@ -55,12 +54,12 @@ type TOTPAuthenticator struct {
 // NewTOTPAuthenticator returns an authenticator with the parameters every
 // authenticator app assumes: six digits over thirty seconds.
 //
-// **One period of skew either side, which is a deliberate 90-second window.**
-// Phone clocks drift, and a user typing a code that appears correct and is
-// rejected has no way to tell drift from a wrong secret. Zero skew makes
-// enrolment fail for a population whose clocks are slightly off; a wider window
-// multiplies the guessing surface for no further benefit, since a human enters
-// a code within seconds of reading it.
+// One period of skew either side gives a 90-second window. Phone clocks drift,
+// and a user typing a code that appears correct and is rejected has no way to
+// tell drift from a wrong secret. Zero skew makes enrolment fail for a
+// population whose clocks are slightly off; a wider window multiplies the
+// guessing surface for no further benefit, since a human enters a code within
+// seconds of reading it.
 func NewTOTPAuthenticator() *TOTPAuthenticator {
 	return &TOTPAuthenticator{digits: 6, period: 30 * time.Second, skew: 1}
 }
@@ -75,9 +74,9 @@ const totpSecretBytes = 20
 
 // GenerateSecret returns a new shared secret, base32-encoded without padding.
 //
-// Base32 rather than base64 or hex because it is what `otpauth://` URIs carry
-// and what a person can retype from a screen without ambiguity — the alphabet
-// has no `0`/`O` or `1`/`l` pair.
+// Base32 rather than base64 or hex because it is what otpauth:// URIs carry and
+// what a person can retype from a screen without ambiguity — the alphabet has no
+// 0/O or 1/l pair.
 func (a *TOTPAuthenticator) GenerateSecret() (string, error) {
 	buf := make([]byte, totpSecretBytes)
 	if _, err := rand.Read(buf); err != nil {
@@ -100,13 +99,12 @@ func (a *TOTPAuthenticator) Code(secret string, at time.Time) (string, error) {
 // Verify reports whether code is valid for secret at an instant, and returns
 // the counter step it matched.
 //
-// **The step is returned so the caller can refuse a replay.** A code is valid
-// for the whole period it belongs to, so without recording the step that was
-// spent, the same six digits work again for up to a minute — long enough for a
-// code read over a shoulder or relayed by a proxy to be used a second time.
-// This adapter cannot enforce that itself, because it stores nothing; the
-// application service holds the last accepted step and requires the next to be
-// greater.
+// The step is returned so the caller can refuse a replay. A code is valid for
+// the whole period it belongs to, so without recording the step that was spent
+// the same six digits work again for up to a minute — long enough for a code
+// read over a shoulder or relayed by a proxy to be used a second time. This
+// adapter cannot enforce that itself because it stores nothing; the application
+// service holds the last accepted step and requires the next to be greater.
 //
 // A malformed secret verifies nothing and is an error rather than a silent
 // non-match: it means stored credential material is corrupt, which is a
@@ -139,7 +137,7 @@ func (a *TOTPAuthenticator) Verify(secret, code string, at time.Time) (int64, bo
 	return matched, found == 1, nil
 }
 
-// ProvisioningURI renders the `otpauth://` URI an authenticator app consumes,
+// ProvisioningURI renders the otpauth:// URI an authenticator app consumes,
 // usually by scanning it as a QR code.
 //
 // The issuer appears twice — once as a label prefix and once as a parameter —
@@ -218,7 +216,7 @@ func normaliseCode(code string) string {
 }
 
 // recoveryCodeGroups and recoveryCodeGroupLen shape a recovery code as
-// `xxxxx-xxxxx`: ten characters of the base32 alphabet, so 50 bits of entropy.
+// xxxxx-xxxxx: ten characters of the base32 alphabet, so 50 bits of entropy.
 //
 // Enough that guessing is not a threat, short enough to be written on paper and
 // retyped correctly — which is the whole point of the artefact, since it is
@@ -235,7 +233,7 @@ const recoveryAlphabet = "abcdefghjkmnpqrstuvwxyz23456789"
 
 // GenerateRecoveryCodes returns n single-use recovery codes.
 //
-// **They are what stands between a lost phone and a lost account**, and on a
+// They are what stands between a lost phone and a lost account, and on a
 // self-hosted server there is nobody to appeal to. The caller stores only their
 // hashes (domain.RecoveryFactor holds a hash and never a code) and shows the
 // plaintext exactly once.
@@ -264,11 +262,10 @@ func generateRecoveryCode() (string, error) {
 			out.WriteByte('-')
 		}
 		// The alphabet's length is not a power of two, so indexing a uniform
-		// byte by it is very slightly biased. It is stated rather than hidden:
-		// 256 mod 31 leaves eight values marginally over-represented, which
-		// costs a fraction of a bit against a 50-bit code and is not a
-		// meaningful reduction. Rejection sampling would remove it and is not
-		// worth the loop.
+		// byte by it is very slightly biased: 256 mod 31 leaves eight values
+		// marginally over-represented, costing a fraction of a bit against a
+		// 50-bit code. Rejection sampling would remove it and is not worth the
+		// loop.
 		out.WriteByte(recoveryAlphabet[int(b)%len(recoveryAlphabet)])
 	}
 	return out.String(), nil

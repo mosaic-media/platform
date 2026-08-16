@@ -18,16 +18,16 @@ import (
 // attributes (platform#29).
 //
 // The Platform owns the top-level namespacing of that document and the playback
-// transport owns what lives under this key. That split is deliberate: attributes
-// are unvalidated by design (platform#9), so the only thing worth enforcing here
-// is that one writer's document cannot silently erase another's.
+// transport owns what lives under this key. Attributes are unvalidated by design
+// (platform#9), so the only thing enforced here is that one writer's document
+// cannot silently erase another's.
 const ProbeAttribute = "probe"
 
 // RecordPartProbeCommand carries what a probe learned about a release's bytes,
 // to be stored on the Part it describes.
 //
 // The scalar fields and Probe are not alternatives. The scalars are the summary
-// that candidate ranking and a detail screen read (platform#27); Probe is the whole
+// candidate ranking and a detail screen read (platform#27); Probe is the whole
 // track list, which the scalars cannot express and the per-stream decision
 // cannot do without.
 type RecordPartProbeCommand struct {
@@ -48,10 +48,9 @@ type RecordPartProbeCommand struct {
 }
 
 // PartProbe is the stored probe document on a Part, nil when it has none
-// (platform#29). It is the read half of what RecordPartProbe writes, exported
-// because the emit-side describes a release it is not about to play: a detail
-// screen states what a release *is* — codecs, tracks, languages — and those
-// answers are already sitting in the Part, decoded by nobody.
+// (platform#29). It is the read half of what RecordPartProbe writes, exported so
+// the emit-side can state what a release is — codecs, tracks, languages —
+// without being about to play it.
 //
 // Nil for a Part that has not been probed, which is the ordinary state before
 // something has been played once. A caller renders less rather than failing.
@@ -64,22 +63,16 @@ type RecordPartProbeResult struct {
 
 // RecordPartProbe writes a probe result onto the Part it describes (platform#29).
 //
-// This is what makes a probe worth running. A probe describes bytes, and bytes
-// do not change: the second play of a release re-derived exactly the same answer
-// at exactly the same cost, and once the resolution cache removed the aggregator
-// call, that re-derivation *was* the remaining latency between a click and a
-// first frame.
+// A probe describes bytes, and bytes do not change, so re-deriving the same
+// answer on every play is the remaining latency between a click and a first
+// frame once the resolution cache has removed the aggregator call.
 //
-// It is a write on a read path, which is unusual enough to justify. The caller
-// has already been authorised to read this content and to play it; what is
-// recorded is a fact about a file rather than anything about the person, and it
-// would be identical whoever triggered it. Recording it authorises
-// `content.bind`, because writing to the content graph is a write — which used
-// to mean a read-only viewer could not warm this cache, and re-probed on every
-// play forever. **The playback transport now records as the system principal**
-// (platform#13): this handler is unchanged, the gate is unchanged, and what
-// changed is who the caller is. The event's actor is the system rather than the
-// viewer, which is the honest attribution — nobody asked for this write.
+// It is a write on a read path. What is recorded is a fact about a file rather
+// than anything about the person, and it would be identical whoever triggered
+// it — but it writes to the content graph, so it authorises content.bind. The
+// playback transport therefore records as the system principal (platform#13):
+// the gate is unchanged and a read-only viewer can still warm the cache, and
+// the event's actor is the system, since nobody asked for this write.
 func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeCommand) (RecordPartProbeResult, error) {
 	// 1. validate command shape.
 	if cmd.Caller.Session == "" {
@@ -111,11 +104,9 @@ func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeComman
 		// 6. apply domain rules.
 		//
 		// The probe is authoritative and overwrites whatever the module parsed
-		// from the release name — that is the entire point of platform#29, which
-		// demoted parsing to a ranking hint after it read a container out of a
-		// query parameter and got it wrong. An empty field is still left alone:
-		// a probe that could not determine something has not learned that the
-		// thing is absent.
+		// from the release name (platform#29, which demoted parsing to a ranking
+		// hint). An empty field is still left alone: a probe that could not
+		// determine something has not learned that the thing is absent.
 		if cmd.Container != "" {
 			part.Container = cmd.Container
 		}
@@ -132,9 +123,9 @@ func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeComman
 			part.Height = cmd.Height
 		}
 		// HDRFormat is assigned unconditionally, because "" is a real answer
-		// here and the important one: a release the module's dialect table
-		// guessed was HDR from its name, and the bytes say is not, must lose the
-		// guess. Leaving it would keep tone-mapping an SDR file forever.
+		// here: a release the module guessed was HDR from its name, and the
+		// bytes say is not, must lose the guess, or the Platform tone-maps an
+		// SDR file forever.
 		part.HDRFormat = cmd.HDRFormat
 		if cmd.SizeBytes > 0 {
 			part.SizeBytes = cmd.SizeBytes
@@ -173,9 +164,8 @@ func (s *Service) RecordPartProbe(ctx context.Context, cmd RecordPartProbeComman
 //
 // Merging rather than replacing, even though nothing else writes Part attributes
 // today. Attributes are the open extension point of the content model
-// (platform#9), so something else writing one is a matter of time, and the failure
-// if it does — a second writer silently erasing the first — is the kind that
-// shows up as missing data long after the change that caused it.
+// (platform#9), and a second writer silently erasing the first shows up as
+// missing data long after the change that caused it.
 func mergeAttribute(existing []byte, key string, value []byte) ([]byte, error) {
 	doc := map[string]json.RawMessage{}
 	if len(existing) > 0 {

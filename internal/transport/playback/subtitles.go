@@ -13,13 +13,12 @@ import (
 // Which embedded subtitle tracks a playback offers, and which one is on
 // (platform#83's second half, platform#83).
 //
-// **Offering is not selecting**, and the whole file turns on that distinction.
-// A viewer's preference decides what comes on by itself; it does not decide what
+// Offering is not selecting, and the whole file turns on that distinction. A
+// viewer's preference decides what comes on by itself; it does not decide what
 // they are allowed to reach. So every embedded track becomes a rendition the
-// player lists, and exactly one — or none — is marked default. That is also the
-// only part of a track picker (M3 item 6) this slice delivers, and it delivers
-// it by not building one: the player already has a subtitle menu, and a
-// rendition is how it gets populated.
+// player lists, and exactly one — or none — is marked default. There is no track
+// picker to build: the player already has a subtitle menu, and a rendition is
+// how it gets populated.
 
 // SubtitleDelivery is one subtitle track offered to the client.
 type SubtitleDelivery struct {
@@ -59,10 +58,10 @@ const (
 	// what they look like — ASS and SSA, which is what anime releases use for
 	// signs, songs and captions placed over the picture.
 	//
-	// A rendition keeps the words, the bold and the italics, and **loses the
-	// position, the colour, the size and the alignment**. Measured: a cue
-	// authored `{\pos(640,120)\c&H00FF00&\fs72}` over a doorway arrived as
-	// ordinary bold text at the bottom of the screen.
+	// A rendition keeps the words, the bold and the italics, and loses the
+	// position, the colour, the size and the alignment: a cue authored
+	// {\pos(640,120)\c&H00FF00&\fs72} over a doorway arrives as ordinary bold
+	// text at the bottom of the screen.
 	SubtitleTypeset
 	// SubtitleGraphic is a track of pictures rather than words — PGS from a
 	// Blu-ray, VobSub from a DVD, DVB from a broadcast. There is no text in it
@@ -93,20 +92,20 @@ func formOf(codec string) SubtitleForm {
 //
 // It is the last resort and it is priced like one: burning forces a video
 // encode, because there is no way to draw on frames that are being copied
-// through untouched. **It also fixes the choice for the whole playback** — a
-// burned track cannot be switched off in the player's menu, since by then it is
-// part of the picture.
+// through untouched. It also fixes the choice for the whole playback — a burned
+// track cannot be switched off in the player's menu, since by then it is part of
+// the picture.
 type BurnedSubtitle struct {
 	// Index is the stream's index in the source, used by the overlay path.
 	Index int `json:"i"`
-	// Ordinal is the track's position among the source's *subtitle* streams,
-	// which is the numbering the `subtitles` filter's `si` option counts in and
-	// is not the same as Index.
+	// Ordinal is the track's position among the source's subtitle streams, which
+	// is the numbering the subtitles filter's si option counts in, and is not the
+	// same as Index.
 	Ordinal int `json:"o"`
-	// Graphic selects the delivery. A picture track is composited with
-	// `overlay`, reading the stream this run already has open; a text track is
-	// rendered by libass, which can only read a file and therefore opens the
-	// source a second time.
+	// Graphic selects the delivery. A picture track is composited with overlay,
+	// reading the stream this run already has open; a text track is rendered by
+	// libass, which can only read a file and therefore opens the source a second
+	// time.
 	Graphic bool `json:"g,omitempty"`
 	// Label is what the track is, for telling a viewer what they are watching.
 	Label string `json:"n,omitempty"`
@@ -117,26 +116,25 @@ type BurnedSubtitle struct {
 //
 // The rule is platform#83's, applied to a list that already exists:
 //
-//   - **Every deliverable track is offered**, in the order the container carries
+//   - Every deliverable track is offered, in the order the container carries
 //     them. A menu that hid tracks would make the preference an access control
 //     over the release rather than a default over it.
-//   - **At most one is default, and only in a language the viewer asked for.**
-//     "A language nobody asked for is never selected" is the ADR's wording and it
-//     is about selection: a subtitle track in a language somebody cannot read
-//     occupies the screen and communicates nothing, so it is listed and left off.
-//   - **`off` defaults nothing**, having already survived the escalation.
+//   - At most one is default, and only in a language the viewer asked for. A
+//     subtitle track in a language somebody cannot read occupies the screen and
+//     communicates nothing, so it is listed and left off.
+//   - off defaults nothing, having already survived the escalation.
 //
-// Within a preferred language the mode picks between what is there: `forced`
-// wants a track the release marks forced and takes a full one only if there is
-// no forced track to be had, `full` wants the other way round. Neither invents a
+// Within a preferred language the mode picks between what is there: forced wants
+// a track the release marks forced and takes a full one only if there is no
+// forced track to be had, full wants the other way round. Neither invents a
 // track — a release with only forced subtitles and a viewer who asked for full
 // gets the forced one, which is more than nothing and is what the release has.
 //
-// **Burning is decided last and only when there is no other way**, which is the
-// whole shape of platform#83. The chosen track is burned when it is graphic — there
-// being no text in it to send — or when it is typeset and this viewer asked to
-// see it as authored. Everything else is a rendition, because a rendition costs
-// nothing and a burn costs a video encode.
+// Burning is decided last and only when there is no other way. The chosen track
+// is burned when it is graphic — there being no text in it to send — or when it
+// is typeset and this viewer asked to see it as authored. Everything else is a
+// rendition, because a rendition costs nothing and a burn costs a video
+// encode.
 //
 // When a track is burned nothing is offered beside it. The burned track is
 // already in the picture, and listing it again would draw it twice.
@@ -163,9 +161,9 @@ func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, styling Subt
 		return renditions(all), nil, nil
 	}
 
-	// The choice is made over *every* track, graphic ones included. A release
-	// whose only English subtitles are a Blu-ray's pictures must still be able
-	// to answer someone who asked for English.
+	// The choice is made over every track, graphic ones included. A release
+	// whose only English subtitles are a Blu-ray's pictures must still be able to
+	// answer someone who asked for English.
 	n := defaultSubtitle(all, intent)
 	if n < 0 {
 		return renditions(all), nil, nil
@@ -196,15 +194,14 @@ func DecideSubtitles(tracks []SubtitleTrack, intent SubtitleIntent, styling Subt
 // StyledSubtitle is a track offered to the client as it was authored, for a
 // client that can draw it (platform#83).
 //
-// It rides beside the flattened rendition rather than replacing it. That is the
-// whole reason this costs nothing to get wrong: a client that cannot render the
-// script ignores this and uses the rendition, and one that can renders the
-// signs where the author put them.
+// It rides beside the flattened rendition rather than replacing it, so a client
+// that cannot render the script ignores this and uses the rendition, and one
+// that can renders the signs where the author put them.
 type StyledSubtitle struct {
 	// Index is the stream's index in the source.
 	Index int `json:"i"`
 	// Ordinal is its position among the source's subtitle streams, which is what
-	// the extraction's `-map 0:s:N` counts in.
+	// the extraction's -map 0:s:N counts in.
 	Ordinal int `json:"o"`
 	// Language is the track's language code.
 	Language string `json:"l,omitempty"`
@@ -243,10 +240,9 @@ func styled(all []SubtitleDelivery, tracks []SubtitleTrack, chosen SubtitleDeliv
 
 // renditions drops the tracks that cannot be one.
 //
-// A graphic track offered as a WebVTT rendition is the bug this function exists
-// to prevent, and it shipped: the extraction fails, the origin answers 200 with
-// an empty document, and the player lists a subtitle track that draws nothing
-// for the length of the film.
+// A graphic track offered as a WebVTT rendition is what this exists to prevent:
+// the extraction fails, the origin answers 200 with an empty document, and the
+// player lists a subtitle track that draws nothing for the length of the film.
 func renditions(all []SubtitleDelivery) []SubtitleDelivery {
 	var out []SubtitleDelivery
 	for _, s := range all {
@@ -258,7 +254,7 @@ func renditions(all []SubtitleDelivery) []SubtitleDelivery {
 }
 
 // subtitleOrdinal reports a stream's position among the source's subtitle
-// streams, which is what the `subtitles` filter's `si` option counts in.
+// streams, which is what the subtitles filter's si option counts in.
 func subtitleOrdinal(tracks []SubtitleTrack, index int) int {
 	for i, t := range tracks {
 		if t.Index == index {
@@ -343,13 +339,13 @@ var subtitleLanguageNames = map[string]string{
 
 // subtitleWindow is how much of the release one subtitle segment covers.
 //
-// **Ten times the video segment, and the ratio is the point.** A subtitle
-// segment costs one ffmpeg run and one range read over the container, because
-// subtitle packets are interleaved with the video and there is no way to reach
-// the text without reading past the pictures. Cutting subtitles on the video's
-// six-second grid would pay that cost ten times as often for the same bytes,
-// and HLS does not require the renditions to share a grid — only to describe the
-// same running time.
+// Ten times the video segment, and the ratio is the point. A subtitle segment
+// costs one ffmpeg run and one range read over the container, because subtitle
+// packets are interleaved with the video and there is no way to reach the text
+// without reading past the pictures. Cutting subtitles on the video's six-second
+// grid would pay that cost ten times as often for the same bytes, and HLS does
+// not require the renditions to share a grid — only to describe the same running
+// time.
 //
 // A minute is also comfortably more than any player reads ahead, so the window
 // is fetched long before the video reaches it.
@@ -361,8 +357,8 @@ const subtitleWindow = 60 * time.Second
 // it, like PlaylistName and for the same reason: a second spelling of the same
 // path is exactly the drift this avoids.
 //
-// `.ass` rather than a generic extension because it is what the file is, and a
-// client choosing a renderer reads the extension before it reads a byte.
+// The .ass extension rather than a generic one because it is what the file is,
+// and a client choosing a renderer reads the extension before it reads a byte.
 func StyledSubtitleName(i int) string { return "styled" + strconv.Itoa(i) + ".ass" }
 
 // styledSubtitleOf reads a styled-track index out of a resource name, accepting
@@ -387,17 +383,16 @@ const assMimeType = "text/x-ssa"
 
 // escapeFilterValue renders a value safe to put inside an ffmpeg filtergraph.
 //
-// **There are two levels of escaping and both apply**, which is why the result
-// looks wrong. A filtergraph is parsed once to split filters and their options,
-// and each option value is unescaped again — so a colon in a URL needs a
-// backslash to survive the option level, and that backslash needs a backslash to
-// survive the graph level. `https://host/x` becomes `https\\://host/x`.
+// There are two levels of escaping and both apply, which is why the result looks
+// wrong. A filtergraph is parsed once to split filters and their options, and
+// each option value is unescaped again — so a colon in a URL needs a backslash to
+// survive the option level, and that backslash needs a backslash to survive the
+// graph level: https://host/x becomes https\\://host/x.
 //
-// Measured, because it fails silently rather than loudly: a single-escaped URL
-// makes ffmpeg read `//host` as the value of an unrelated option and report
-// "unable to parse option value as image size", after which it renders the video
-// with no subtitles on it and exits successfully. Double-escaped, the same URL
-// with a query string burned its cues at exactly the right timestamps.
+// It fails silently rather than loudly. A single-escaped URL makes ffmpeg read
+// //host as the value of an unrelated option and report "unable to parse option
+// value as image size", after which it renders the video with no subtitles on it
+// and exits successfully.
 func escapeFilterValue(s string) string {
 	// Option level: a backslash, then the characters that separate options.
 	s = strings.ReplaceAll(s, `\`, `\\`)
@@ -496,12 +491,12 @@ func WithSubtitleOverride(offered []SubtitleDelivery, styled []StyledSubtitle, i
 
 // ExternalSubtitle is a subtitle file a module found somewhere else (platform#83).
 //
-// It differs from every other track here in one way that decides the design:
-// **it is already a complete file, and it is not in the release.** So there is
-// nothing to extract and no container to read past — the origin fetches it,
-// converts it if it is not already WebVTT, and serves it. That is far cheaper
-// than the embedded path, which is why a remote source with no subtitles of its
-// own is better served this way than by extraction.
+// It differs from every other track here in one way that decides the design: it
+// is already a complete file, and it is not in the release. So there is nothing
+// to extract and no container to read past — the origin fetches it, converts it
+// if it is not already WebVTT, and serves it. That is far cheaper than the
+// embedded path, which is why a remote source with no subtitles of its own is
+// better served this way than by extraction.
 type ExternalSubtitle struct {
 	// URL is where the module said the file is. It is sealed in the ticket and
 	// never sent to a client: a module resolves and the Platform serves

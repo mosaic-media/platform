@@ -18,11 +18,11 @@ import (
 
 // Service hosts Platform application command and query handlers. It holds
 // direct read access to SessionStore, UserStore and CredentialStore for
-// authentication and query paths, and a UnitOfWork for the transactional
-// write path — the same contracts, reached through the shape appropriate
-// to each operation. It is the enforcement point for policy
-// decisions: the policy.PolicyDecisionPoint only decides; Service is what
-// actually refuses to mutate state on a deny.
+// authentication and query paths, and a UnitOfWork for the transactional write
+// path — the same contracts, reached through the shape appropriate to each
+// operation. It is the enforcement point for policy decisions: the
+// policy.PolicyDecisionPoint only decides; Service is what refuses to mutate
+// state on a deny.
 type Service struct {
 	uow              contracts.UnitOfWork
 	sessionStore     contracts.SessionStore
@@ -54,9 +54,8 @@ type Service struct {
 
 	// telemetryMaintenance creates and drops the partitions stored telemetry
 	// lives in (platform#36). Optional: a Service built without one refuses
-	// PurgeTelemetry with Unavailable, which is what a test service or a
-	// deployment with no queryable sink should do rather than pretending a
-	// sweep happened.
+	// PurgeTelemetry with Unavailable rather than reporting a sweep that did
+	// not happen.
 	telemetryMaintenance contracts.TelemetryMaintenanceStore
 	// jobs is the background-work queue (platform#13's no-user case). Optional
 	// for the same reason.
@@ -64,43 +63,35 @@ type Service struct {
 	// libraryRules is the direct read handle for what the library should
 	// contain (platform#60). Writes go through the UnitOfWork like every other
 	// mutation. Optional: a Service built without one reports no rules and
-	// refuses to write any, which is the honest answer for a test service —
-	// and it is what makes the maintenance handler a no-op rather than a panic
-	// in a build with no store.
+	// refuses to write any, which is what makes the maintenance handler a
+	// no-op rather than a panic in a build with no store.
 	libraryRules contracts.LibraryRuleStore
 	// nodeMetadata is the direct read handle for what a provider said about a
 	// materialised title (platform#62). Optional: a Service built without one
-	// renders a library detail from the node alone, which is what every detail
-	// did before the store existed.
+	// renders a library detail from the node alone.
 	nodeMetadata contracts.NodeMetadataStore
 	// snapshots is the direct handle for the last good answer a source gave
-	// (platform#30) — what a source-backed screen renders from when the source is
-	// slow, cold or down. Optional: a Service built without one asks its
-	// providers on every render and shows an empty screen when they all fail,
-	// which is what every build did before the store existed and is the
-	// behaviour the store was added to stop.
+	// (platform#30) — what a source-backed screen renders from when the source
+	// is slow, cold or down. Optional: a Service built without one asks its
+	// providers on every render and shows an empty screen when they all fail.
 	snapshots contracts.SourceSnapshotStore
 	// watchAvailability is the direct handle for the queryable projection of
-	// where a work can be watched (roadmap M2.5). Optional, on the same terms as
-	// nodeMetadata: a Service built without one stores no availability and
-	// offers no streaming-service facet, which is what every build did before
-	// the store existed.
+	// where a work can be watched (roadmap M2.5). Optional: a Service built
+	// without one stores no availability and offers no streaming-service facet.
 	watchAvailability contracts.WatchAvailabilityStore
 	// issues is the resolution register (platform#74) — what is wrong with this
-	// install, now. Optional on the same terms as the stores above: a Service
-	// built without one reports an empty register and records nothing, which
-	// is what every build did before it existed and is honest for a test
-	// service. It is a direct handle rather than transactional because the
-	// detectors are boot paths and background work, not somebody's command.
+	// install, now. Optional: a Service built without one reports an empty
+	// register and records nothing. It is a direct handle rather than
+	// transactional because the detectors are boot paths and background work,
+	// not somebody's command.
 	issues contracts.IssueStore
 	// upgrades records what somebody asked the Supervisor to install
-	// (platform#77). The Platform cannot perform an upgrade, so this is a request
-	// rather than an action.
+	// (platform#77). The Platform cannot perform an upgrade, so this is a
+	// request rather than an action.
 	upgrades contracts.UpgradeStore
 	// instance is what this install calls itself, held outside PostgreSQL
-	// (platform#54). Optional: a Service built without one has no name to report
-	// and records none when a server is claimed, which is what a test service
-	// or a deployment with no writable path should do.
+	// (platform#54). Optional: a Service built without one has no name to
+	// report and records none when a server is claimed.
 	instance contracts.InstanceIdentityStore
 
 	// systemSession is the opaque reference SystemCaller hands out. Minted per
@@ -109,13 +100,12 @@ type Service struct {
 	systemSession string
 }
 
-// Deps are the collaborators a Service is built from. They are passed as a named
-// struct rather than positionally because the list is long and several members
-// share a type: IDs and ContentIDs are both contracts.IDGenerator, and swapping
-// them would compile cleanly while silently crossing the platform and content id
-// generators. Named fields make each dependency explicit at the call site and
-// remove that transposition footgun. Field names mirror the composition root's
-// ContractSet so wiring reads Sessions: set.Sessions, etc.
+// Deps are the collaborators a Service is built from. They are passed as a
+// named struct rather than positionally because several members share a type:
+// IDs and ContentIDs are both contracts.IDGenerator, and swapping them would
+// compile cleanly while silently crossing the platform and content id
+// generators. Field names mirror the composition root's ContractSet so wiring
+// reads Sessions: set.Sessions, etc.
 type Deps struct {
 	UnitOfWork  contracts.UnitOfWork
 	Sessions    contracts.SessionStore
@@ -133,8 +123,8 @@ type Deps struct {
 	// is a read that must not open a transaction (platform#25).
 	Parts contracts.PartStore
 	// PlaybackResolutions caches resolved locations per capability class
-	// (platform#28). Optional: a Service built without one simply resolves through
-	// the provider every time, which is what happened before the cache existed.
+	// (platform#28). Optional: a Service built without one resolves through the
+	// provider every time.
 	PlaybackResolutions contracts.PlaybackResolutionStore
 	// PlaybackStates is the direct read handle for where a viewer got to
 	// (platform#26). Writes go through the UnitOfWork like every other mutation.
@@ -146,10 +136,10 @@ type Deps struct {
 	Events           contracts.EventPublisher
 	PasswordVerifier domain.PasswordVerifier
 	Capabilities     *CapabilityRegistry
-	// Extensions is the runtime extension-module lifecycle (platform#51), injected
-	// by the composition root. Optional: a Service built without one refuses
-	// install and uninstall with Unavailable and reports no installed set, which
-	// is the right behaviour for a test service or a build with extensions off.
+	// Extensions is the runtime extension-module lifecycle (platform#51),
+	// injected by the composition root. Optional: a Service built without one
+	// refuses install and uninstall with Unavailable and reports no installed
+	// set.
 	Extensions     ExtensionManager
 	ModuleSettings contracts.ModuleSettingsStore
 	// UserPreferences is the direct read handle for a user's own settings.
@@ -170,9 +160,9 @@ type Deps struct {
 	// and drops the ones retention has run out on. It is what PurgeTelemetry
 	// drives, and PurgeTelemetry is what the retention job calls.
 	TelemetryMaintenance contracts.TelemetryMaintenanceStore
-	// Jobs is the background-work queue (platform#13). Optional: a Service built
-	// without one reports no jobs and refuses the job queries with
-	// Unavailable, which is the honest answer for a build with no runner.
+	// Jobs is the background-work queue (platform#13). Optional: a Service
+	// built without one reports no jobs and refuses the job queries with
+	// Unavailable.
 	Jobs contracts.JobStore
 	// LibraryRules is the direct read handle for what the library should
 	// contain (platform#60). Optional, like Jobs, and for the same reason.
@@ -180,20 +170,20 @@ type Deps struct {
 	// Issues is the resolution register (platform#74).
 	Issues contracts.IssueStore
 	// Upgrades is where a request for a version is recorded for the Supervisor
-	// to carry out (platform#77). Nil is a build with no upgrade path, where the
-	// suggestion is refused rather than silently doing nothing.
+	// to carry out (platform#77). Nil is a build with no upgrade path, where
+	// the suggestion is refused rather than silently doing nothing.
 	Upgrades contracts.UpgradeStore
 	// NodeMetadata is the direct read handle for stored descriptive metadata
-	// (platform#62). Optional: without it nothing is stored and nothing is read,
-	// and a detail falls back to what the node itself carries.
+	// (platform#62). Optional: without it nothing is stored and nothing is
+	// read, and a detail falls back to what the node itself carries.
 	NodeMetadata contracts.NodeMetadataStore
 	// Snapshots is the direct handle for the last good answer a source gave
 	// (platform#30). Optional: without it every source-backed screen asks its
 	// providers live and renders nothing when they all fail.
 	Snapshots         contracts.SourceSnapshotStore
 	WatchAvailability contracts.WatchAvailabilityStore
-	// Instance is the durable identity file (platform#54) — the one store that is
-	// deliberately not PostgreSQL, so a server's name outlives its database.
+	// Instance is the durable identity file (platform#54) — the one store that
+	// is deliberately not PostgreSQL, so a server's name outlives its database.
 	// Optional, and an absent one is a Platform with no name rather than a
 	// failure.
 	Instance contracts.InstanceIdentityStore
@@ -243,11 +233,10 @@ func NewService(d Deps) *Service {
 }
 
 // authenticate resolves the caller identity behind a credential. It is step 2
-// of the command boundary and the equivalent gate for
-// queries: it runs before any policy or state check, and failure stops
-// processing immediately.
+// of the command boundary and the equivalent gate for queries: it runs before
+// any policy or state check, and failure stops processing immediately.
 //
-// The credential is an **access token** since platform#58, not a session id: it
+// The credential is an access token since platform#58, not a session id: it
 // resolves to a session, is minutes-lived where the session is months-lived,
 // and rotates where the session does not.
 func (s *Service) authenticate(ctx context.Context, credential domain.SessionCredential) (domain.UserID, error) {
@@ -274,24 +263,21 @@ func (s *Service) authenticateCaller(ctx context.Context, caller v1.Caller) (dom
 	return p.userID, nil
 }
 
-// authorize resolves step 3 of the command boundary (and the equivalent
-// query gate): it asks the PolicyDecisionPoint whether subject may perform
-// action on resource, translates a denial into a PermissionDenied contract
-// error, and publishes an audit event for the denial. This is the
-// enforcement point the deny-cannot-mutate-state
-// guarantee depends on: every command and query calls this before opening
-// a UnitOfWork or reading state.
+// authorize resolves step 3 of the command boundary (and the equivalent query
+// gate): it asks the PolicyDecisionPoint whether subject may perform action on
+// resource, translates a denial into a PermissionDenied contract error, and
+// publishes an audit event for the denial. Every command and query must call
+// this before opening a UnitOfWork or reading state; that ordering is what the
+// deny-cannot-mutate-state guarantee rests on.
 func (s *Service) authorize(ctx context.Context, subject policy.Subject, action policy.Action, resource policy.Resource, policyContext policy.PolicyContext) error {
 	// The one point every command and query passes through, so it is where the
-	// *operation* gets named in a trace (platform#33, seam 4). A Connect span says
-	// "Invoke"; this says which action Invoke dispatched to, which is the
-	// difference between knowing a request happened and knowing what it did.
+	// operation gets named in a trace (platform#33, seam 4). A Connect span
+	// says "Invoke"; this says which action Invoke dispatched to.
 	//
-	// This is the cheap half of seam 4. It does not bracket the handler's full
-	// duration — that would mean a call at the top of each of twenty handlers —
-	// but the expensive parts of a handler are already spanned beneath it: the
-	// transaction (seam 5), its statements (seam 6) and any module it invokes
-	// (seam 8). What remains unattributed is handler arithmetic.
+	// The span does not bracket the handler's full duration, only the policy
+	// evaluation. The expensive parts of a handler are spanned beneath it
+	// anyway: the transaction (seam 5), its statements (seam 6) and any module
+	// it invokes (seam 8). What remains unattributed is handler arithmetic.
 	ctx, span := telemetry.Start(ctx, "authorize "+string(action),
 		telemetry.String("action", string(action)),
 		telemetry.String("resource", resource.Type))
@@ -306,9 +292,9 @@ func (s *Service) authorize(ctx context.Context, subject policy.Subject, action 
 	if !decision.Allowed {
 		s.publishAuditEvent(ctx, "authorization.denied", []byte(string(action)), string(subject.UserID))
 		denied := contracts.NewError(contracts.PermissionDenied, decision.Reason)
-		// A denial is a real outcome worth finding in a trace, not an
-		// exceptional one — it is the single most useful span when someone
-		// reports that a button does nothing.
+		// A denial is failed on the span deliberately: it is an ordinary
+		// outcome, and the one span worth finding when someone reports that a
+		// button does nothing.
 		span.Fail(string(contracts.PermissionDenied), denied)
 		return denied
 	}
@@ -316,42 +302,38 @@ func (s *Service) authorize(ctx context.Context, subject policy.Subject, action 
 }
 
 // authorized is proof that a caller cleared both boundary gates —
-// authenticate (step 2) and authorize (step 3) — for one action. It is the
-// Platform's inside voice: a function taking an authorized is being called
-// from within a handler that has already passed the boundary; a function
-// taking a v1.Caller is an entry point that has not.
+// authenticate (step 2) and authorize (step 3) — for one action. A function
+// taking an authorized is being called from within a handler that has already
+// passed the boundary; a function taking a v1.Caller is an entry point that
+// has not.
 //
-// Go has no annotations and no runtime proxies, so this guarantee cannot be
-// woven in around a method the way a Java container weaves @PreAuthorize. It
-// is carried in the type instead. The struct is unexported and enter is its
-// only constructor, so a helper that requires one cannot be reached without
-// the gates having run — and, the half that matters more here, cannot
-// *repeat* them, because being inside is now something the signature can say.
+// The struct is unexported and enter is its only constructor, so a helper that
+// requires one cannot be reached without the gates having run — and cannot
+// repeat them, because being inside the boundary is something the signature
+// can now say.
 //
-// That is the defect this exists to close. Before it, an internal helper had
-// no way to express "already inside", so it reached for the only shape
-// available — a public Service method — and paid a full authenticate plus
-// authorize per call. Ten search results meant ten session reads, ten policy
-// evaluations and ten role reads for one user action, none of which could
-// decide anything the one at the top of the handler had not already decided.
+// Do not call a public Service method from inside a handler to reach its
+// logic: that re-runs the whole boundary. Take an authorized and read the
+// stores directly instead. One search returning ten results otherwise costs
+// ten session reads, ten policy evaluations and ten role reads, none of which
+// can decide anything the gate at the top of the handler has not.
 //
 // The caller is retained rather than discarded because forwarding it into a
-// module is legitimate and must stay possible: a module's own writes
-// re-authorise as the invoking user (platform#13), which is the whole reason it
-// is handed a Caller and not a Service with the boundary pre-cleared. That is
-// a deliberate act at a module seam, not something a helper does by accident.
+// module must stay possible: a module's own writes re-authorise as the
+// invoking user (platform#13), which is why it is handed a Caller and not a
+// Service with the boundary pre-cleared.
 type authorized struct {
 	userID domain.UserID
 	caller v1.Caller
 	// system marks work the Platform did on its own initiative rather than for
 	// a person (platform#13). A handler reads it only to describe what it did —
-	// an event actor, a log line — never to decide what it may do, which is
-	// the policy decision point's answer and was already given.
+	// an event actor, a log line — never to decide what it may do, which is the
+	// policy decision point's answer and was already given.
 	system bool
 }
 
 // enter runs the two boundary gates once and returns the proof. It is the
-// entry-point preamble every handler shares, in one place, so the sequence
+// entry-point preamble every handler shares, so the sequence
 // authenticate-then-authorize is a property of this function rather than of
 // each handler remembering it in the right order.
 func (s *Service) enter(ctx context.Context, caller v1.Caller, action policy.Action, resource policy.Resource) (authorized, error) {
@@ -361,8 +343,8 @@ func (s *Service) enter(ctx context.Context, caller v1.Caller, action policy.Act
 	}
 	// The system principal goes through the same authorize call as anyone
 	// else, carrying a flag the engine reads (platform#13). It is not a branch
-	// around the gate: the decision is still the policy decision point's, it
-	// is still spanned and still refusable, and moving it here would put an
+	// around the gate: the decision stays the policy decision point's, still
+	// spanned and still refusable. Short-circuiting it here would put an
 	// authorization rule in the enforcement point.
 	subject := policy.Subject{UserID: p.userID, System: p.system}
 	if err := s.authorize(ctx, subject, action, resource, policy.PolicyContext{}); err != nil {
@@ -373,40 +355,32 @@ func (s *Service) enter(ctx context.Context, caller v1.Caller, action policy.Act
 
 // enterSession is enter for the handlers that take a raw domain.SessionID
 // rather than the published v1.Caller — the users, roles, sessions and config
-// families, which predate the content surface and were never part of it.
+// families, which predate the content surface.
 //
-// **Those handlers' CallerSessionID fields carry an access token, not a session
-// id** (platform#58). The field name and its type are unchanged because renaming
-// fifteen fields and the hundred call sites that construct them is churn this
-// change does not need — but the mismatch is named here, at the one place the
-// conversion happens, rather than left for a reader to discover.
+// Those handlers' CallerSessionID fields carry an access token, not a session
+// id (platform#58). The field name and its type were left alone; the mismatch
+// is named here, at the one place the conversion happens.
 //
-// Two forms rather than one because the two families genuinely differ at the
-// signature: a v1.Caller is the opaque reference a module or client holds
-// (platform#13), a SessionID is the Platform's own identifier. Converting one to
-// the other here rather than at each call site keeps that distinction where it
-// belongs — in the type the handler accepts — instead of scattering
-// domain.SessionID(caller.Session) across twenty files.
+// Two forms rather than one because the families differ at the signature: a
+// v1.Caller is the opaque reference a module or client holds (platform#13), a
+// SessionID is the Platform's own identifier. Converting here rather than at
+// each call site keeps domain.SessionID(caller.Session) out of twenty files.
 func (s *Service) enterSession(ctx context.Context, session domain.SessionID, action policy.Action, resource policy.Resource) (authorized, error) {
 	return s.enter(ctx, v1.Caller{Session: string(session)}, action, resource)
 }
 
-// newEvent builds an Event envelope for eventType with the
-// given payload and actor, stamping a fresh id and both occurrence and record
-// timestamps from the Service clock. In synchronous command handling
-// OccurredAt and RecordedAt coincide. Audit events carry identifying data
-// (usernames, session ids), so they default to RedactionSensitive — redacted
-// from support bundles.
+// newEvent builds an Event envelope for eventType with the given payload and
+// actor, stamping a fresh id and both occurrence and record timestamps from the
+// Service clock. In synchronous command handling OccurredAt and RecordedAt
+// coincide. Audit events carry identifying data (usernames, session ids), so
+// they default to RedactionSensitive — redacted from support bundles.
 func (s *Service) newEvent(ctx context.Context, eventType string, payload []byte, actor string) domain.Event {
 	now := s.clock.Now()
-	// CorrelationID and CausationID carried a "empty until request-scoped
-	// propagation exists" note from the day the envelope was written. This is
-	// that propagation (platform#32): the correlation id is the trace id, so an
-	// event row, the log lines around it, and the span that produced it share
-	// one key — and no second identifier had to be invented to get there.
+	// The correlation id is the trace id (platform#32), so an event row, the
+	// log lines around it and the span that produced it share one key.
 	//
-	// A context with no trace yields empty ids, exactly as before. Background
-	// work that has no request behind it should not manufacture one.
+	// A context with no trace yields empty ids. Background work with no request
+	// behind it should not manufacture one.
 	tc, _ := telemetry.TraceFrom(ctx)
 	return domain.Event{
 		ID:             domain.EventID(s.ids.NewID()),
@@ -422,9 +396,9 @@ func (s *Service) newEvent(ctx context.Context, eventType string, payload []byte
 }
 
 // publishAuditEvent publishes an audit event through the runtime event
-// backbone. Publication is best-effort: a delivery failure
-// must never mask the authorization or authentication outcome that
-// triggered it, so the error is intentionally discarded.
+// backbone. Publication is best-effort: a delivery failure must never mask the
+// authorization or authentication outcome that triggered it, so the error is
+// discarded deliberately.
 func (s *Service) publishAuditEvent(ctx context.Context, eventType string, payload []byte, actor string) {
 	_ = s.events.Publish(ctx, s.newEvent(ctx, eventType, payload, actor))
 }

@@ -13,31 +13,28 @@ import (
 
 // The segmented transcode's playlist (platform#82).
 //
-// **It is computed, not observed**, and that is the whole reason segmenting
-// replaces byte addressing. The origin cannot know how many bytes a transcode
-// will produce — it advertised the source's size and then wrote whatever ffmpeg
-// made of it, which for a re-encoded release differs by an order of magnitude —
-// but it does know how *long* the release is, because ffprobe measured it. A
-// playlist is a statement about time, so it can be emitted in full before a
-// single byte exists, and a player can seek anywhere in it immediately.
+// It is computed, not observed, and that is why segmenting replaces byte
+// addressing. The origin cannot know how many bytes a transcode will produce —
+// advertising the source's size and then writing whatever ffmpeg makes of it
+// differs by an order of magnitude for a re-encoded release — but it does know
+// how long the release is, because ffprobe measured it. A playlist is a
+// statement about time, so it can be emitted in full before a single byte
+// exists, and a player can seek anywhere in it immediately.
 //
-// Nothing here starts a transcode or touches ffmpeg. That separation is
-// deliberate: this is the part of platform#82 that is pure arithmetic over a
-// duration, and it is the part that can be checked without a decoder — which
-// matters in a slice whose every previous design passed its unit tests and
-// failed in a browser.
+// Nothing here starts a transcode or touches ffmpeg. Keep it that way: this is
+// the part of platform#82 that is pure arithmetic over a duration, and so the part
+// that can be checked without a decoder.
 
 // encodedSegmentLength is the segment length the origin chooses when it is
 // re-encoding the video and therefore places the keyframes itself.
 //
-// Six, following Jellyfin and `remux`. It bounds two costs in opposite
-// directions: a seek to an unproduced position costs one ffmpeg restart, so
-// shorter segments make a scrub cheaper, while every segment costs a container
-// header and a request, so longer ones make a play cheaper. Neither is near a
-// cliff at six.
+// Six, following Jellyfin and remux. It bounds two costs in opposite directions:
+// a seek to an unproduced position costs one ffmpeg restart, so shorter segments
+// make a scrub cheaper, while every segment costs a container header and a
+// request, so longer ones make a play cheaper. Neither is near a cliff at six.
 //
-// **Where the video is copied it is what ffmpeg is asked for and not what it
-// produces** — the source's keyframes decide, so a release with ten-second
+// Where the video is copied this is what ffmpeg is asked for and not what it
+// produces — the source's keyframes decide, so a release with ten-second
 // keyframes yields ten-second segments however this is set. The nominal grid
 // tolerates that, because a seek restarts at the position the playlist names
 // rather than inheriting where the previous segment happened to end
@@ -96,7 +93,7 @@ const HLSMimeType = mediaPlaylistType
 
 // mediaPlaylist renders the whole playlist for a release of this length.
 //
-// **There is no master playlist, because there is one rendition.** A master
+// There is no master playlist here, because there is one rendition. A master
 // exists to let a client choose between variants, and Mosaic serves exactly one:
 // platform#82 puts a real bitrate ladder out of scope, because a menu of unrelated
 // releases cannot supply aligned renditions at any level of effort. Emitting a
@@ -106,12 +103,12 @@ const HLSMimeType = mediaPlaylistType
 // expect in a codec that does not arrive. Both hls.js and Safari accept a media
 // playlist directly.
 //
-// `VOD` with a closing `EXT-X-ENDLIST` is the load-bearing part. An `EVENT`
-// playlist says "more may be appended", which makes a player treat everything
-// past the last listed segment as not yet existing and refuse to seek there.
-// Declaring the whole thing up front is what makes an unproduced position
-// seekable, and it is honest: the segment list is derived from a duration that
-// was measured, not from output that has been observed.
+// VOD with a closing EXT-X-ENDLIST is what makes it work. An EVENT playlist
+// says "more may be appended", which makes a player treat everything past the
+// last listed segment as not yet existing and refuse to seek there. Declaring
+// the whole thing up front is what makes an unproduced position seekable, and it
+// is honest: the segment list is derived from a duration that was measured, not
+// from output that has been observed.
 func mediaPlaylist(total, length time.Duration, segmentURI func(n int) string) string {
 	count := segmentCount(total, length)
 
@@ -163,10 +160,10 @@ const videoPlaylistName = "v.m3u8"
 // A master is emitted only when there are subtitles to declare. The comment on
 // mediaPlaylist gives the reasons not to have one — a round trip, and a CODECS
 // string the origin can only guess at before the transcode runs — and neither is
-// answered by this; they are outweighed. **A subtitle rendition is the one thing
-// a player cannot be told about any other way**, and being told about it through
-// HLS is what makes subtitles cost no client change at all: the player already
-// has a menu, a track selector and a renderer for them.
+// answered by this; they are outweighed. A subtitle rendition is the one thing a
+// player cannot be told about any other way, and being told about it through HLS
+// is what makes subtitles cost no client change at all: the player already has a
+// menu, a track selector and a renderer for them.
 //
 // CODECS is still omitted, so the objection that mattered is avoided rather than
 // accepted: a wrong CODECS makes a browser refuse a stream, and an absent one

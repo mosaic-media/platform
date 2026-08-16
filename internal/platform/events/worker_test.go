@@ -65,12 +65,10 @@ func TestWorkerRunOncePublishesAndMarksPublished(t *testing.T) {
 	}
 }
 
-// TestWorkerRunOnceRecordsFailureInsteadOfSilentlyDropping is the exit
-// criterion "a subscriber failure results in retry per the failure-tracking
-// logic, not silent drop": when the subscriber fails, RunOnce must call
-// RecordFailure (proven here via the fake's bookkeeping) rather than
-// swallowing the error and marking the event published, or simply losing
-// track of it.
+// TestWorkerRunOnceRecordsFailureInsteadOfSilentlyDropping pins that a
+// subscriber failure is retried rather than dropped: RunOnce must call
+// RecordFailure — proven here through the fake's bookkeeping — rather than
+// swallowing the error and marking the event published, or losing track of it.
 func TestWorkerRunOnceRecordsFailureInsteadOfSilentlyDropping(t *testing.T) {
 	clock := newTestClock(testNow)
 	outbox := newFakeOutbox(clock)

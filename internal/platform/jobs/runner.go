@@ -20,7 +20,7 @@ import (
 // it returns an error to be retried or — once the attempts are spent —
 // dead-lettered.
 //
-// A handler must be **idempotent**. At-least-once is the only delivery a
+// A handler must be idempotent. At-least-once is the only delivery a
 // claim-and-lease queue can offer: a process that dies between finishing the
 // work and recording the outcome leaves a job that will be reclaimed and run
 // again, and no amount of care inside the runner removes that window.

@@ -22,15 +22,15 @@ import (
 // extprobe fetches a URL during Import using http.Get — the same default-client
 // shape a real module uses — and signals the outcome in the import's Parts
 // count: 1 if the fetch was allowed, 0 if it was refused. What is under test is
-// whether the call was *permitted*, not what it returned, so the count is what
-// the test reads.
+// whether the call was permitted, not what it returned, so the count is what the
+// test reads.
 //
 // The target is a loopback server, which is the case that matters and the one a
 // naive HTTP_PROXY misses: Go's ProxyFromEnvironment bypasses the proxy for
 // loopback, so this passing at all depends on sdk/host (host/v0.2.0) forcing the
 // transport through the proxy regardless. If that force regressed, the default
-// case here would start *allowing* the fetch — a loopback SSRF reopening — and
-// this test would fail.
+// case here would start allowing the fetch — a loopback SSRF reopening — and this
+// test would fail.
 
 func fetchThroughProbe(t *testing.T, url string, allowPrivate bool) (allowed bool) {
 	t.Helper()

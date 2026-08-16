@@ -7,12 +7,11 @@
 // sdk#7).
 //
 // It lives under internal/adapters/ rather than internal/modules/ because of
-// what it is: internal/modules/ holds built-in modules that *implement* a
-// Platform contract in this process (Postgres implements StorageAdapter), and
-// this implements none — it adapts an external process into a published
-// contract, which is what an adapter does. It is worth stating because the
-// package-tier model in CLAUDE.md names three tiers and this is the first thing
-// that is host *of* a tier rather than a member of one.
+// what it is: internal/modules/ holds built-in modules that implement a Platform
+// contract in this process (Postgres implements StorageAdapter), and this
+// implements none — it adapts an external process into a published contract,
+// which is what an adapter does. Of the three package tiers, this is the host of
+// one rather than a member of any.
 //
 // Nothing above the capability registry knows this package exists. That is the
 // property platform#39 is arranged around: ImportContent, provider resolution and
@@ -46,7 +45,7 @@ type Config struct {
 	// download lands, not at every launch of an already-verified binary.
 	BinaryPath string
 
-	// DeclaredManifest is what the module's *manifest file* claimed, read
+	// DeclaredManifest is what the module's manifest file claimed, read
 	// without executing the binary (platform#40). The running binary is checked
 	// against it at connect time — see [Launch].
 	//
@@ -64,15 +63,15 @@ type Config struct {
 
 	// Env is extra environment for the module process, appended to the
 	// Platform's own. It exists for the lifecycle tests to drive a controlled
-	// crash; a production launch leaves it empty, and the egress design (ADR
-	// 0064) deliberately does not pass module *configuration* this way — module
+	// crash; a production launch leaves it empty, and the egress design
+	// (platform#39) deliberately does not pass module configuration this way — module
 	// settings are the opaque document (platform#17), not the environment. The
 	// egress proxy address below is the exception, and it is Platform plumbing
 	// rather than module configuration.
 	Env []string
 
-	// AllowPrivateEgress is the operator override on the egress proxy (ADR
-	// 0064): the module may reach loopback, RFC1918 and link-local targets. It
+	// AllowPrivateEgress is the operator override on the egress proxy
+	// (platform#39): the module may reach loopback, RFC1918 and link-local targets. It
 	// defaults off, so a module fetching a user-supplied URL cannot reach the
 	// host's own network. A test whose fake upstream is on loopback sets it, the
 	// same override an operator sets for a service on their LAN.
@@ -131,7 +130,7 @@ func (m *Module) LiveInvocations() int {
 //
 // The Platform owns the process rather than the Supervisor (platform#39): a module
 // crash must be a degraded capability rather than a Generation event, and the
-// Platform is the only component that knows whether a module is *answering* as
+// Platform is the only component that knows whether a module is answering as
 // opposed to merely running.
 func (m *Module) Close() {
 	if m.client != nil {
@@ -148,10 +147,10 @@ func (m *Module) Close() {
 // Two checks run before it returns, in the order platform#39 requires — declaration
 // first, then enforcement:
 //
-//  1. **go-plugin's handshake**, which refuses a binary that is not a Mosaic
-//     module or was built against a different SDK major version.
-//  2. **The manifest check**: the running binary's manifest must agree with what
-//     the manifest file declared, including that every declared role is one the
+//  1. go-plugin's handshake, which refuses a binary that is not a Mosaic module
+//     or was built against a different SDK major version.
+//  2. The manifest check: the running binary's manifest must agree with what the
+//     manifest file declared, including that every declared role is one the
 //     binary actually serves. A mismatch refuses the connection rather than
 //     leaving a module registered under an identity it does not have.
 //
@@ -208,7 +207,7 @@ func Launch(cfg Config) (*Module, error) {
 	// the module dialling the proxy, not by the module being allowed to bypass it
 	// for loopback targets.
 	cmd.Env = append(cmd.Environ(),
-		// The Mosaic-specific variable sdk/host reads to force *all* egress
+		// The Mosaic-specific variable sdk/host reads to force all egress
 		// through the proxy, loopback included — which the standard variables
 		// below cannot do, because Go's ProxyFromEnvironment excludes loopback
 		// (platform#39; sdk/host's egress.go carries the detail).
@@ -300,21 +299,20 @@ func checkManifest(declared, running v1.Manifest) error {
 			"extension: manifest declares id %q but the binary reports %q", declared.ID, running.ID))
 	}
 	// Version is deliberately not compared. The manifest's version is the release
-	// tag the publisher stamped (`build-manifest -version` overrides the build's
-	// own, so the catalogue reads `v0.24.0`), whereas the binary self-reports its
-	// build-graph version (`0.24.0+dirty`, `(devel)`), which is formatted
-	// differently and carries a VCS-dirty marker a clean tag never will. They name
-	// the same release by two conventions, so equality is the wrong test. Identity
-	// is the id and roles below; that the running bytes ARE the ones the manifest
-	// vouched for is the digest check at install, which no self-reported string can
-	// add to. A live install caught this: a correctly published module was refused
-	// only because its self-reported version was spelled differently from its tag.
+	// tag the publisher stamped (build-manifest -version overrides the build's
+	// own, so the catalogue reads v0.24.0), whereas the binary self-reports its
+	// build-graph version (0.24.0+dirty, (devel)), which is formatted differently
+	// and carries a VCS-dirty marker a clean tag never will. They name the same
+	// release by two conventions, so equality is the wrong test and comparing
+	// them refuses correctly published modules. Identity is the id and roles
+	// below; that the running bytes are the ones the manifest vouched for is the
+	// digest check at install, which no self-reported string can add to.
 
-	// Every role the manifest file declared must be one the binary also
-	// declares. The reverse is allowed: a binary reporting *fewer* roles than
-	// its manifest claimed is the failure this catches, while a binary
-	// reporting more is a manifest that is merely out of date, and refusing
-	// that would make a module unlaunchable over a documentation lag.
+	// Every role the manifest file declared must be one the binary also declares.
+	// The reverse is allowed: a binary reporting fewer roles than its manifest
+	// claimed is the failure this catches, while a binary reporting more is a
+	// manifest that is merely out of date, and refusing that would make a module
+	// unlaunchable over a documentation lag.
 	runningRoles := make(map[v1.Role]bool, len(running.Provides))
 	for _, r := range running.Provides {
 		runningRoles[r] = true

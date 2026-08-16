@@ -39,18 +39,17 @@ const (
 )
 
 // DevRepositoryURLEnv and DevRepositoryKeyEnv name the two variables a
-// *development build* reads to point the official repository at a local one
-// (platform#55): a registry the dev stack builds and signs from the sibling module
-// checkouts, so a one-line change to an extension module is exercised through
-// the real install path without a tag, a release and a registry publish.
+// development build reads to point the official repository at a local one
+// (platform#55): a registry the dev stack builds and signs from the sibling
+// module checkouts, so a one-line change to an extension module is exercised
+// through the real install path without a tag, a release and a registry publish.
 //
-// **This build ignores them unless it was built with the `mosaicdev` tag**, and
-// the names are declared here — always compiled — precisely so that statement
-// has somewhere to live and something to test. `devRepositoryOverride` is the
-// only reader, and the untagged half of it (devregistry_off.go) reads no
-// environment at all; the whole mechanism is absent from a shipped binary rather
-// than switched off in one. See devregistry.go for why that is the guard rather
-// than a runtime check.
+// A build ignores them unless it was built with the mosaicdev tag. The names are
+// declared here — always compiled — so that claim has something to test.
+// devRepositoryOverride is the only reader, and the untagged half of it
+// (devregistry_off.go) reads no environment at all; the whole mechanism is absent
+// from a shipped binary rather than switched off in one. See devregistry.go for
+// why that is the guard rather than a runtime check.
 const (
 	DevRepositoryURLEnv = "MOSAIC_DEV_REPOSITORY_URL"
 	DevRepositoryKeyEnv = "MOSAIC_DEV_REPOSITORY_KEY"
@@ -58,10 +57,10 @@ const (
 
 // devOverride is a development repository standing in for the official one: the
 // base URL its index is fetched from, and the key that index is verified
-// against. Both halves are replaced together and neither is optional — the
-// point of the override is to exercise *verification* against a development
-// key, so a URL without a key (or a key without a URL) is a configuration
-// error, not a partial override.
+// against. Both halves are replaced together and neither is optional — the point
+// of the override is to exercise verification against a development key, so a URL
+// without a key (or a key without a URL) is a configuration error, not a partial
+// override.
 //
 // The type is declared here so both halves of devRepositoryOverride share one
 // signature. Only the tagged half can ever produce a non-zero one.
@@ -77,7 +76,7 @@ type devOverride struct {
 // In a development build (platform#55) the URL and key may be replaced from the
 // environment. Everything downstream is unchanged: the index signature is
 // verified, the manifests are authenticated by it, and each binary is checked
-// against its signed digest. What changes is *whose* key vouches for the
+// against its signed digest. What changes is whose key vouches for the
 // catalogue, which is the one thing a local loop has to be able to change. The
 // returned repository is then not [Repository.Official] — it is demonstrably
 // not Mosaic's — which is what the boot warning turns on.

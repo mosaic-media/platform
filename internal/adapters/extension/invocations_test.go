@@ -50,9 +50,8 @@ func TestModuleNeverSeesTheRealSessionReference(t *testing.T) {
 	}
 }
 
-// The property the design exists for: a handle stops resolving the instant the
-// invocation returns. There is no window, which is why platform#39 refused a
-// short-TTL token — a TTL *is* a window.
+// A handle stops resolving the instant the invocation returns. There is no
+// window, which is why platform#39 refused a short-TTL token: a TTL is a window.
 func TestARetainedHandleStopsResolvingWhenTheInvocationReturns(t *testing.T) {
 	content := &capturingContent{}
 	m := launch(t, content)

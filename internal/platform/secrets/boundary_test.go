@@ -35,18 +35,20 @@ var scannedRoots = []string{
 	filepath.Join("internal", "transport"),
 }
 
-// TestApplicationServicesAndModulesDoNotReadFilesDirectly is the static
-// check for the Secret broker exit criterion: no package outside
-// internal/platform/secrets (and the internal/adapters/filesystem helper it
-// uses privately) reads credential files directly. It is a coarse,
-// text-level scan rather than an AST/import-level check, but it is a real
-// regression guard, not a tautology: today nothing in the scanned roots'
-// production code performs ANY direct file read at all (migrations use
-// go:embed, config versions live in a ConfigStore, ...), so a future
-// change that adds one will be caught here. _test.go files are excluded:
-// the rule is about production code paths that could run against real
-// credentials, not a test reading back a fixture (a temp support bundle,
-// a temp log file) it wrote itself.
+// TestApplicationServicesAndModulesDoNotReadFilesDirectly asserts that no
+// package outside internal/platform/secrets (and the
+// internal/adapters/filesystem helper it uses privately) reads credential
+// files directly.
+//
+// It is a text-level scan rather than an AST or import-level check, so it can
+// only match the spellings in forbiddenFileReadPatterns. Nothing in the
+// scanned roots' production code performs any direct file read today —
+// migrations use go:embed, config versions live in a ConfigStore — so the
+// scan has no exemptions to carry and a change that adds one is caught.
+//
+// _test.go files are excluded: the rule is about production code paths that
+// could run against real credentials, not a test reading back a fixture it
+// wrote itself.
 func TestApplicationServicesAndModulesDoNotReadFilesDirectly(t *testing.T) {
 	root := moduleRoot(t)
 

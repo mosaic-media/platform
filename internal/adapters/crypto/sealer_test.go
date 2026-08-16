@@ -27,9 +27,8 @@ func TestSealRoundTrips(t *testing.T) {
 	}
 }
 
-// **The point of the exercise: the secret must not be readable in the stored
-// value.** This is the whole defence — a backup, a replica or a dump carries
-// the table and not the key.
+// The secret must not be readable in the stored value. That is the whole
+// defence: a backup, a replica or a dump carries the table and not the key.
 func TestTheSecretIsNotRecoverableFromTheSealedValue(t *testing.T) {
 	const secret = "JBSWY3DPEHPK3PXP"
 	sealer := crypto.NewSecretSealer([]byte("an install key"))
@@ -68,8 +67,8 @@ func TestSealingIsRandomised(t *testing.T) {
 	}
 }
 
-// **A tampered row must fail to open rather than decrypt to something
-// plausible.** GCM authenticates, and this is what says so.
+// A tampered row must fail to open rather than decrypt to something plausible.
+// GCM authenticates, and this is what says so.
 func TestATamperedValueDoesNotOpen(t *testing.T) {
 	sealer := crypto.NewSecretSealer([]byte("an install key"))
 	sealed, err := sealer.Seal("JBSWY3DPEHPK3PXP")
@@ -90,10 +89,10 @@ func TestATamperedValueDoesNotOpen(t *testing.T) {
 	}
 }
 
-// **The envelope is what makes a later key or algorithm change possible.**
-// Without a version, such a change surfaces as an authentication failure
-// indistinguishable from a corrupt row; with one, an unrecognised version is a
-// specific error and a migration has something to branch on.
+// The envelope is what makes a later key or algorithm change possible. Without a
+// version, such a change surfaces as an authentication failure indistinguishable
+// from a corrupt row; with one, an unrecognised version is a specific error and
+// a migration has something to branch on.
 func TestTheEnvelopeIsVersionedAndRecognisable(t *testing.T) {
 	sealer := crypto.NewSecretSealer([]byte("an install key"))
 	sealed, err := sealer.Seal("JBSWY3DPEHPK3PXP")

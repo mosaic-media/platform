@@ -14,35 +14,30 @@ import (
 
 // Artwork enrichment (sdk#6), and the selection rule (platform#47).
 //
-// Artwork used to arrive as a by-product of asking a question about *titles*:
-// whichever module described the content supplied whatever art it happened to
-// carry. A dedicated artwork database is a different kind of source — it has no
-// titles, no search and no catalogs, so it is never named by a ref and no
-// existing role fits it. Without a pass like this one it would sit registered
-// and never be asked about the title it has the best art for.
+// A dedicated artwork database has no titles, no search and no catalogs, so it
+// is never named by a ref and no other role fits it. Without this pass it would
+// sit registered and never be asked about the title it has the best art for.
 //
-// It is the same shape as enrichStreams and differs in one way that matters:
-// **it does not stop at the first provider that answers.** Candidates from
-// several sources union into one set rather than competing for a slot, because
-// platform#47 makes them additive and attributable — so there is no first-wins rule
-// here and no cross-provider dedup problem left open.
+// It is the same shape as enrichStreams with one difference: it does not stop at
+// the first provider that answers. Candidates from several sources union into
+// one set rather than competing for a slot, because platform#47 makes them
+// additive and attributable.
 
 // artworkCandidateCap bounds how many candidates are kept per slot per node.
 //
-// platform#47 names the cap in the design rather than leaving it to be discovered:
-// a real artwork database returns dozens of posters per title, the document is
-// read on every list render, and an unbounded set would grow the hot path of
-// every rail in the library to make a picker marginally more complete. Twelve is
-// enough to choose from and small enough not to notice.
+// A real artwork database returns dozens of posters per title and the document
+// is read on every list render, so an unbounded set would grow the hot path of
+// every rail in the library. Twelve is enough to choose from and small enough
+// not to notice.
 const artworkCandidateCap = 12
 
 // enrichArtwork resolves artwork for a materialised work and its seasons.
 //
-// **Best-effort by construction**, exactly as the stream pass is: every failure
-// path logs and continues. A provider that is unreachable, unconfigured, or
-// simply does not know the title must not lose a user the work they just added —
-// keeping the art the metadata module already supplied is a correct outcome, and
-// it is what a deployment with no artwork provider produces anyway.
+// Best-effort by construction, like the stream pass: every failure path logs and
+// continues. A provider that is unreachable, unconfigured, or that does not know
+// the title must not lose a user the work they just added — keeping the art the
+// metadata module supplied is a correct outcome and is what a deployment with no
+// artwork provider produces anyway.
 func (s *Service) enrichArtwork(ctx context.Context, caller v1.Caller, workID v1.NodeID) {
 	providers := s.capabilities.ArtworkProviders()
 	if len(providers) == 0 {
@@ -63,17 +58,16 @@ func (s *Service) enrichArtwork(ctx context.Context, caller v1.Caller, workID v1
 	// no id of its own for it (platform#46).
 	identities := sharedIdentitiesOf(work)
 	if len(identities) == 0 {
-		// A source keyed only to itself is unenrichable by design rather than by
-		// oversight. Cinemeta binds only `imdb`, which is enough for films and
-		// not for television at a source that keys series on TVDB — a real and
-		// visible limit, recorded in sdk#6 rather than papered over.
+		// A source keyed only to itself is unenrichable by design. Cinemeta
+		// binds only imdb, which is enough for films and not for television at
+		// a source that keys series on TVDB — a limit recorded in sdk#6.
 		return
 	}
 
 	// The work itself, then each season container. Episodes are deliberately not
-	// enriched: a metadata provider already returns every episode still in one
-	// call, and asking an artwork database per episode would be a request per
-	// episode for data the Platform has in bulk.
+	// enriched: a metadata provider returns every episode still in one call, so
+	// asking an artwork database per episode would be a request per episode for
+	// data the Platform has in bulk.
 	targets := []struct {
 		node   v1.Node
 		season int
@@ -204,20 +198,18 @@ func dedupeArtworkCandidates(candidates []v1.ArtworkCandidate) []v1.ArtworkCandi
 // rankArtworkCandidates sorts the set best-first within each slot and applies
 // the per-slot cap.
 //
-// **This is platform#47's selection rule, and it is deliberately boring.** The
-// point of the candidate set is having somewhere to record a *choice*; the rule
-// is what fills the slot until a user makes one. It prefers, in order:
+// This is platform#47's selection rule: what fills a slot until a user records a
+// choice. It prefers, in order:
 //
-//  1. **Textless, for the slots that sit under something.** A backdrop or
-//     landscape with a title burned into it is wrong behind a hero that draws its
-//     own clearlogo on top — this is the single change most visible to a viewer,
-//     and it is invisible to a rule that only counts votes.
-//  2. **The source's own rank**, which is a vote count where a source has one.
-//     Ranks are not compared across sources because they are not comparable
-//     (see v1.ArtworkCandidate.Rank); they order within one source's entries and
-//     the tie-break below settles the rest.
-//  3. **Provider order**, which is stable module-id order — an arbitrary but
-//     fixed answer, so the same import twice produces the same selection.
+//  1. Textless, for the slots that sit under something. A backdrop or landscape
+//     with a title burned into it is wrong behind a hero that draws its own
+//     clearlogo on top, and no vote count can express that.
+//  2. The source's own rank, which is a vote count where a source has one. Ranks
+//     are not compared across sources because they are not comparable (see
+//     v1.ArtworkCandidate.Rank); they order within one source's entries and the
+//     tie-break below settles the rest.
+//  3. Provider order, which is stable module-id order — arbitrary but fixed, so
+//     the same import twice produces the same selection.
 //
 // The sort is stable, so candidates equal under every rule keep the order they
 // were gathered in: the node's existing art before anything a provider added.
@@ -251,8 +243,8 @@ func rankArtworkCandidates(candidates []v1.ArtworkCandidate) []v1.ArtworkCandida
 	return out
 }
 
-// prefersTextless reports whether a slot is one that sits *under* other
-// elements, where burned-in text is a defect rather than a variant.
+// prefersTextless reports whether a slot sits under other elements, where
+// burned-in text is a defect rather than a variant.
 //
 // A poster is the counter-case and the reason this is not a blanket rule: a
 // poster's typography is part of the artwork, and preferring a textless one

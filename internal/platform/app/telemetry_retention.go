@@ -10,10 +10,10 @@ import (
 	"time"
 )
 
-// Retention field names, matching config.PlatformSchema. Named here rather than
-// written as literals at the read site so the schema and the reader cannot
-// drift on a spelling — the failure would be a configured value that silently
-// never takes effect, which is the worst shape this kind of bug has.
+// Retention field names, matching config.PlatformSchema. Named as constants
+// rather than written as literals at the read site so the schema and the reader
+// cannot drift on a spelling: the failure would be a configured value that
+// silently never takes effect.
 const (
 	fieldRetentionLogsDays   = "telemetry.retention.logs_days"
 	fieldRetentionTracesHrs  = "telemetry.retention.traces_hours"
@@ -53,16 +53,15 @@ var DefaultTelemetryRetention = TelemetryRetention{
 // falling back to the defaults for anything unset or unreadable.
 //
 // It never fails. Retention governs a background sweep, and a Platform that
-// refused to start — or a sweep that refused to run — because a config value
-// was malformed would turn a typo into an outage while the disk fills. An
-// unusable value takes the default and the caller can say so.
+// refused to start — or a sweep that refused to run — because a config value was
+// malformed would turn a typo into an outage while the disk fills. An unusable
+// value takes the default.
 func (s *Service) TelemetryRetention(ctx context.Context) (out TelemetryRetention) {
 	out = DefaultTelemetryRetention
-	// A *named* result, so the deferred floor below actually reaches the
-	// caller. With a local it does not: defer can only mutate a named return,
-	// and the earlier version silently returned whatever configuration asked
-	// for — including an audit retention of one day. The test is what caught
-	// it, which is the argument for testing a floor rather than trusting it.
+	// The result must stay a named return, or the deferred floor below never
+	// reaches the caller: defer can only mutate a named return, and with a
+	// local this silently returns whatever configuration asked for, including
+	// an audit retention of one day.
 	defer func() {
 		// Applied last, so it holds regardless of where the value came from
 		// and regardless of which return path was taken.

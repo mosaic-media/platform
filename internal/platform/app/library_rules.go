@@ -15,23 +15,21 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Library rules (platform#60) — the durable, administrator-owned statement of what
-// the library should contain, and the read that evaluates one.
+// Library rules (platform#60) — the durable, administrator-owned statement of
+// what the library should contain, and the read that evaluates one.
 //
 // The evaluation lives here beside the management commands rather than in the
-// maintenance job, because a rule has to be *evaluated before it is saved*: the
-// first run of a new rule is the one most likely to surprise its author, so the
+// maintenance job, because a rule has to be evaluated before it is saved: the
 // surface that creates one says what it will do before it does it. Preview and
-// reconcile therefore walk the same code, and a preview that disagreed with the
-// run it previewed would be worse than no preview at all.
+// reconcile must therefore walk the same code, or a preview says something the
+// run it previewed does not.
 
 // ActionLibraryRuleRead is reading what the library should contain.
 //
-// Its own action rather than `content.read`, and the distinction is real: the
-// library is shared and everyone who may see it sees all of it (platform#59),
-// while the rules are the install's *policy* about the library. Who decided
-// that a household owns every episode of something is administrative
-// information about the install, not a fact about the content.
+// Its own action rather than content.read: the library is shared and everyone
+// who may see it sees all of it (platform#59), while the rules are the install's
+// policy about the library — administrative information, not a fact about the
+// content.
 const ActionLibraryRuleRead policy.Action = "library.rule.read"
 
 // ActionLibraryRuleManage is writing one — creating, enabling, disabling or
@@ -42,14 +40,13 @@ const ActionLibraryRuleManage policy.Action = "library.rule.manage"
 // statement, and whether the install can act on it right now.
 type LibraryRuleListing struct {
 	Rule domain.LibraryRule
-	// Available is whether the module the rule names is registered and fills
-	// the role the rule needs.
+	// Available is whether the module the rule names is registered and fills the
+	// role the rule needs.
 	//
-	// **A rule survives its module being uninstalled** (platform#60): the row
-	// stays, and this is how the surface says so. It is computed per read
-	// rather than stored, because "is that extension installed" is a fact about
-	// now and a stored copy would be wrong from the moment somebody removed
-	// one — the failure being a rule that reads as healthy and does nothing.
+	// A rule survives its module being uninstalled (platform#60): the row stays,
+	// and this is how the surface says so. It must be computed per read rather
+	// than stored — a stored copy goes wrong the moment somebody uninstalls a
+	// module, leaving a rule that reads as healthy and does nothing.
 	Available bool
 }
 
@@ -76,9 +73,8 @@ func (s *Service) ListLibraryRules(ctx context.Context, q ListLibraryRulesQuery)
 		return ListLibraryRulesResult{}, err
 	}
 	if s.libraryRules == nil {
-		// No store is no rules, not an error: a build without one has never
-		// been told what its library should contain, which is the same answer
-		// as a build that has been told nothing.
+		// No store is no rules, not an error: a build without one has never been
+		// told what its library should contain.
 		return ListLibraryRulesResult{}, nil
 	}
 	rules, err := s.libraryRules.List(ctx, domain.LibraryRuleFilter{EnabledOnly: q.EnabledOnly})
@@ -133,11 +129,10 @@ type CreateLibraryRuleResult struct {
 
 // CreateLibraryRule stores a rule.
 //
-// It deliberately does **not** evaluate the rule as a side effect of creating
-// it. Materialising a hundred titles because somebody pressed Save is the
-// surprise platform#60 names, and the honest arrangement is that saving states an
-// intention and a run acts on it — with a preview in between, which is what
-// PreviewLibraryRule is for.
+// It must not evaluate the rule as a side effect of creating it: materialising a
+// hundred titles because somebody pressed Save is the surprise platform#60 names.
+// Saving states an intention, a run acts on it, and PreviewLibraryRule is what
+// goes in between.
 func (s *Service) CreateLibraryRule(ctx context.Context, cmd CreateLibraryRuleCommand) (CreateLibraryRuleResult, error) {
 	// 1. validate command shape.
 	rule, err := s.validateNewLibraryRule(cmd)
@@ -181,9 +176,8 @@ func (s *Service) CreateLibraryRule(ctx context.Context, cmd CreateLibraryRuleCo
 
 // validateNewLibraryRule checks a proposed rule and returns it trimmed.
 //
-// It is shared with the preview, which is what makes "say what it will do
-// before it does it" possible: a preview of a rule that would be refused on
-// save is a preview of nothing.
+// It is shared with the preview, so a preview cannot describe a rule that would
+// be refused on save.
 func (s *Service) validateNewLibraryRule(cmd CreateLibraryRuleCommand) (domain.LibraryRule, error) {
 	if cmd.Caller.Session == "" {
 		return domain.LibraryRule{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
@@ -241,12 +235,11 @@ type SetLibraryRuleEnabledCommand struct {
 
 // SetLibraryRuleEnabled stops or resumes a rule without discarding it.
 //
-// It exists because the alternative to turning a rule off is deleting it, and
-// deleting is how a statement of intent gets lost: a source that became
-// expensive, or a catalog that started returning the wrong thing, is a reason to
-// stop adding and not a reason to forget what was asked for. Disabling never
-// removes anything the rule already materialised — rules add and do not remove,
-// and that holds when the rule stops running.
+// The alternative to turning a rule off is deleting it, which loses the
+// statement of intent: a source that became expensive is a reason to stop adding
+// and not a reason to forget what was asked for. Disabling never removes
+// anything the rule already materialised — rules add and do not remove, and that
+// holds when the rule stops running.
 func (s *Service) SetLibraryRuleEnabled(ctx context.Context, cmd SetLibraryRuleEnabledCommand) (CreateLibraryRuleResult, error) {
 	if cmd.Caller.Session == "" {
 		return CreateLibraryRuleResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
@@ -300,12 +293,11 @@ type DeleteLibraryRuleCommand struct {
 	RuleID domain.LibraryRuleID
 }
 
-// DeleteLibraryRule removes the rule and **nothing it materialised**.
+// DeleteLibraryRule removes the rule and nothing it materialised.
 //
-// That is the whole shape of platform#60's "rules add and never remove", applied to
-// the rule itself. Deleting a rule that had pulled in two hundred titles must
-// not delete two hundred titles: a source's churn is not a household's decision,
-// and neither is an administrator tidying up their rules.
+// platform#60's "rules add and never remove" applies to the rule itself:
+// deleting a rule that had pulled in two hundred titles must not delete two
+// hundred titles.
 func (s *Service) DeleteLibraryRule(ctx context.Context, cmd DeleteLibraryRuleCommand) error {
 	if cmd.Caller.Session == "" {
 		return contracts.NewError(contracts.InvalidArgument, "caller is required")
@@ -334,11 +326,10 @@ func (s *Service) DeleteLibraryRule(ctx context.Context, cmd DeleteLibraryRuleCo
 
 // PreviewLibraryRuleQuery asks what a rule would do.
 //
-// It takes the rule's fields rather than an id, because the moment it is most
-// needed is **before the rule exists**: an author about to save one should be
-// told how many titles it will pull in and how many of them the library already
-// has. Passing RuleID instead previews a stored rule, which is the same question
-// asked later.
+// It takes the rule's fields rather than an id because the moment it is most
+// needed is before the rule exists: an author about to save one should be told
+// how many titles it will pull in and how many the library already has. Passing
+// RuleID instead previews a stored rule.
 type PreviewLibraryRuleQuery struct {
 	Caller v1.Caller
 	RuleID domain.LibraryRuleID
@@ -357,9 +348,8 @@ type PreviewLibraryRuleQuery struct {
 type PreviewLibraryRuleResult struct {
 	// Matched is how many items the source offered within the bound.
 	Matched int
-	// AlreadyInLibrary is how many of those the library already holds. It is
-	// the number that turns "this will add 100 titles" into "this will add 12",
-	// which is usually the difference between alarming and reassuring.
+	// AlreadyInLibrary is how many of those the library already holds — what
+	// turns "this will add 100 titles" into "this will add 12".
 	AlreadyInLibrary int
 	// WouldAdd is Matched minus AlreadyInLibrary — what the first run creates.
 	WouldAdd int
@@ -368,9 +358,9 @@ type PreviewLibraryRuleResult struct {
 	Bound int
 	// Truncated is whether the source had more to give at the bound.
 	Truncated bool
-	// Sample is the first few titles, so the author can see whether the rule
-	// says what they meant. A count alone cannot show that a catalog id was
-	// mistyped into somebody else's collection.
+	// Sample is the first few titles, so the author can see whether the rule says
+	// what they meant. A count alone cannot show that a catalog id was mistyped
+	// into somebody else's collection.
 	Sample []string
 }
 
@@ -398,8 +388,8 @@ func (s *Service) PreviewLibraryRule(ctx context.Context, q PreviewLibraryRuleQu
 	}
 
 	// Previewed as the person asking, not as the system principal. The run acts
-	// as the install because its writes are the install's (platform#13); a preview
-	// writes nothing and is somebody looking at a source, so it is theirs.
+	// as the install because its writes are the install's (platform#13); a
+	// preview writes nothing and is somebody looking at a source.
 	matches, truncated, err := s.evaluateLibraryRule(ctx, az, q.Caller, rule)
 	if err != nil {
 		return PreviewLibraryRuleResult{}, err
@@ -450,16 +440,14 @@ type libraryRuleMatch struct {
 // evaluateLibraryRule reads a rule's source and returns what it matched, up to
 // the rule's bound. It writes nothing.
 //
-// **One implementation for the preview and the run**, which is the property that
-// makes a preview worth showing. It reports truncation separately from the match
-// count so a caller can say "the first 40 of more" rather than "40", which is
-// the difference between a bound and a total.
+// One implementation for the preview and the run, which is what makes a preview
+// worth showing. It reports truncation separately from the match count so a
+// caller can say "the first 40 of more" rather than "40".
 func (s *Service) evaluateLibraryRule(ctx context.Context, az authorized, caller v1.Caller, rule domain.LibraryRule) ([]libraryRuleMatch, bool, error) {
 	if !s.ruleModuleAvailable(rule) {
-		// Degraded, and said so rather than returning an empty match set. A
-		// rule whose module is gone matching nothing and a rule whose catalog
-		// is empty matching nothing are different facts, and only one of them
-		// is something an administrator can fix.
+		// Degraded, and said so rather than returning an empty match set: a
+		// rule whose module is gone and a rule whose catalog is empty both
+		// match nothing, and only one of them is something to fix.
 		return nil, false, contracts.NewError(contracts.NotFound,
 			"the module this rule names ("+rule.ModuleID+") is not installed, or no longer does what the rule needs")
 	}
@@ -487,17 +475,17 @@ func (s *Service) evaluateCollectionRule(ctx context.Context, az authorized, cal
 		if err != nil {
 			// A source that fails on the first page fails the rule; one that
 			// fails partway keeps what it gave. A partial evaluation is a
-			// legitimate outcome for a pass that adds and never removes.
+			// legitimate outcome for a pass that adds and never removes, and
+			// is reported as truncated.
 			if len(matches) == 0 {
 				return nil, false, err
 			}
 			return matches, true, nil
 		}
 		if len(page.Items) == 0 {
-			// A provider that returned nothing has nothing further, whatever it
-			// says about HasMore — the same guard the catalog screen carries,
-			// and without it a wrong HasMore is an unbounded loop over an empty
-			// page.
+			// A provider that returned nothing has nothing further, whatever
+			// it says about HasMore. Without this guard a wrong HasMore is an
+			// unbounded loop over an empty page.
 			break
 		}
 		for _, item := range page.Items {
@@ -581,9 +569,9 @@ func describeLibraryRule(rule domain.LibraryRule) string {
 }
 
 // logLibraryRule records one rule's outcome in the Platform log, beside the job
-// log line the run writes. Two records rather than one because they answer to
-// different readers: this one joins the trace waterfall, and the job log is
-// what an administrator reads on the rule.
+// log line the run writes. Two records rather than one because they have
+// different readers: this one joins the trace waterfall, and the job log is what
+// an administrator reads on the rule.
 func logLibraryRule(ctx context.Context, rule domain.LibraryRule, run domain.LibraryRuleRun) {
 	telemetry.From(ctx).For("library").Info("library rule evaluated",
 		telemetry.String("rule", rule.Name),

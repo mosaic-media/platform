@@ -62,12 +62,12 @@ func breadcrumbFor(screen string) string {
 // shellScreen is the server-emitted application frame (platform#21): the chrome the
 // current screen wears, and the content region it renders into.
 //
-// It takes the route, which it did not before. The frame used to be emitted once
-// per session and never again, which is why the settings side of the app wore
-// the media side's floating pills: there was no moment at which anything could
-// have decided otherwise. It is re-pushed when a navigation changes the chrome —
-// not on every navigation, because the tree is identical for every screen on the
-// same side and re-sending it would be a payload per tap for no change.
+// It takes the route because the chrome depends on it: a frame emitted once per
+// session leaves the settings side of the app wearing the media side's floating
+// pills, with no moment at which anything could decide otherwise. It is re-pushed
+// when a navigation changes the chrome — not on every navigation, because the
+// tree is identical for every screen on the same side and re-sending it would be
+// a payload per tap for no change.
 func (s *Service) shellScreen(ctx context.Context, caller v1.Caller, screen string) (sdui.Node, error) {
 	chrome := chromeFor(screen)
 
@@ -94,15 +94,14 @@ func (s *Service) shellScreen(ctx context.Context, caller v1.Caller, screen stri
 			// The install's own shelf, above the sources it was filled from.
 			// Library and Collections are adjacent and are not the same room:
 			// one is what this household owns, the other is what a module
-			// offers — and until this row existed there was no way at all to
-			// look at the first.
+			// offers.
 			navItem("Library", "grid", screenLibrary),
 			navItem("Collections", "list", screenCollections),
 			navItem("Settings", "settings", screenSettings),
 		),
 		// The search bar owns the centre of the top bar and is always present, so
 		// there is no Search nav item. Typing takes over the content region (a live
-		// `input`); clearing it returns to the current screen.
+		// input); clearing it returns to the current screen.
 		ui.Slot("topbar",
 			ui.Component("SearchBar", ui.Prop("placeholder", "Search for anime, movies, shows…")),
 		),
@@ -112,13 +111,11 @@ func (s *Service) shellScreen(ctx context.Context, caller v1.Caller, screen stri
 
 // accountMenu is the frame's who-you-are cluster.
 //
-// It renders per caller, which the shell did not do before: the initial was the
-// literal letter "A" for every account on every install, which nobody could see
-// was wrong while there was only ever one account and it happened to be called
-// Adam. A shell that says the same thing to four people is the exact failure
-// this milestone exists to end.
+// It renders per caller. A shell that says the same thing to four people —
+// a fixed initial, a fixed name — is the failure multi-user exists to end, and
+// it is invisible on an install with one account.
 //
-// **Sign out lives here and nowhere else.** platform#58's device list ends other
+// Sign out lives here and nowhere else. platform#58's device list ends other
 // devices and deliberately draws no control for the one you are looking
 // through, on the grounds that signing yourself out belongs on its own
 // affordance rather than inside a list of devices. This is that affordance: the

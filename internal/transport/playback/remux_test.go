@@ -49,7 +49,7 @@ func TestRemuxTicketWithoutFFmpegSaysSo(t *testing.T) {
 }
 
 // fakeFFmpeg writes fixed bytes to stdout and ignores every argument, which is
-// all this needs: what is under test is the *response shape* the origin puts
+// all this needs: what is under test is the response shape the origin puts
 // around a remux, not what ffmpeg produces.
 func fakeFFmpeg(t *testing.T, output string) string {
 	t.Helper()
@@ -64,18 +64,14 @@ func fakeFFmpeg(t *testing.T, output string) string {
 	return bin
 }
 
-// TestRemuxedResponseIsNotSeekable now pins the **fallback**, which is what this
-// test became when the seekable path landed.
+// TestRemuxedResponseIsNotSeekable pins the fallback the origin serves when
+// there is no duration to segment against.
 //
 // A plan with no Duration cannot map a byte offset to a timestamp, so there is
-// nothing to restart ffmpeg at and the origin serves the old honest pipe:
+// nothing to restart ffmpeg at and the origin serves the unseekable pipe:
 // Accept-Ranges: none, 200, the whole stream. That case is real — a source that
 // reports no duration — and saying so is better than synthesising a timeline and
 // sending a player to a position that does not exist.
-//
-// It previously pinned the *only* remux behaviour, and its comment said this
-// test is what would have to change when the segmenter landed rather than the
-// behaviour changing quietly. That is what happened.
 func TestRemuxedResponseIsNotSeekable(t *testing.T) {
 	const output = "fragmented-mp4-bytes"
 
@@ -186,14 +182,13 @@ func TestFFmpegHeaderArgUsesCRLF(t *testing.T) {
 	}
 }
 
-// TestRemuxFailureIsNotASuccessfulEmptyStream pins the honest failure, and it is
-// pinned because the dishonest one shipped.
+// TestRemuxFailureIsNotASuccessfulEmptyStream pins the honest failure.
 //
-// serveRemuxed used to write 200 before reading a byte, so an ffmpeg that died
-// on its own arguments produced a successful response with an empty body. The
-// player reported only "format not supported", the access log said status=200,
-// and ffmpeg's stderr — the one place that knew — was the one place nobody
-// looked. A FLAC track the MP4 muxer refuses presented as a broken file.
+// serveRemuxed must read a byte before writing its status. Writing 200 first
+// makes an ffmpeg that died on its own arguments produce a successful response
+// with an empty body: the player reports only "format not supported", the access
+// log says status=200, and ffmpeg's stderr — the one place that knows — is the
+// one place nobody looks.
 func TestRemuxFailureIsNotASuccessfulEmptyStream(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake is a shell script")
@@ -231,8 +226,9 @@ func TestRemuxFailureIsNotASuccessfulEmptyStream(t *testing.T) {
 	}
 }
 
-// The success path still streams, so the probe-before-status change did not turn
-// a working remux into a buffered one or lose the leading bytes.
+// TestRemuxSuccessStillStreamsFromTheFirstByte pins that the success path still
+// streams, so the probe-before-status change did not turn a working remux into
+// a buffered one or lose the leading bytes.
 func TestRemuxSuccessStillStreamsFromTheFirstByte(t *testing.T) {
 	const output = "fragmented-mp4-bytes"
 

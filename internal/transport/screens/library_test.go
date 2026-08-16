@@ -54,9 +54,10 @@ func TestTheLibraryScreenStatesARealTotal(t *testing.T) {
 	}
 }
 
-// A card must open something the install owns, by node id. A card built from a
-// ref would send the detail back to the provider that sourced it, which is the
-// one thing a library screen must not depend on.
+// TestALibraryCardOpensTheNodeTheInstallOwns pins that a card must open
+// something the install owns, by node id. A card built from a ref would send
+// the detail back to the provider that sourced it, which is the one thing a
+// library screen must not depend on.
 func TestALibraryCardOpensTheNodeTheInstallOwns(t *testing.T) {
 	fake := libraryService(libraryWorks(3))
 	node := render(t, &Service{content: fake}, "library", nil)
@@ -76,13 +77,13 @@ func TestALibraryCardOpensTheNodeTheInstallOwns(t *testing.T) {
 	}
 }
 
-// The library scrolls lazily rather than paging (contracts#16): the grid says it is
-// a page of something longer and what fetches the rest, and the client asks as
-// the end comes into view.
+// TestTheLibraryScrollsLazily pins that the library scrolls lazily rather than
+// paging (contracts#16): the grid says it is a page of something longer and
+// what fetches the rest, and the client asks as the end comes into view.
 //
-// **`hasMore` is computed from the total, not from the page being full.** A full
-// page is not evidence of another, and a client that inferred one would ask for
-// a page that does not exist — which is the whole reason the server states it.
+// hasMore is computed from the total, not from the page being full. A full page
+// is not evidence of another, and a client that inferred one would ask for a
+// page that does not exist — which is why the server states it.
 func TestTheLibraryScrollsLazily(t *testing.T) {
 	fake := libraryService(libraryWorks(140))
 	svc := &Service{content: fake}
@@ -108,7 +109,7 @@ func TestTheLibraryScrollsLazily(t *testing.T) {
 	}
 
 	// The next page is the whole window again, not just its tail: a query
-	// *replaces* the content region, so the screen must carry everything loaded
+	// replaces the content region, so the screen must carry everything loaded
 	// so far or scrolling would throw away what is above.
 	second := render(t, svc, "library", map[string]any{"page": float64(1)})
 	if got := countCards(second); got != 120 {
@@ -127,9 +128,10 @@ func TestTheLibraryScrollsLazily(t *testing.T) {
 	}
 }
 
-// A lazy list that silently stops loading is indistinguishable from one that
-// reached the end — and the count above it would be visibly larger than what is
-// on screen, with nothing to explain the gap.
+// TestTheLibraryScrollStopsAndSaysSo pins that a lazy list that silently stops
+// loading is indistinguishable from one that reached the end — and the count
+// above it would be visibly larger than what is on screen, with nothing to
+// explain the gap.
 func TestTheLibraryScrollStopsAndSaysSo(t *testing.T) {
 	fake := libraryService(libraryWorks(900))
 	node := render(t, &Service{content: fake}, "library", map[string]any{"page": float64(20)})
@@ -172,10 +174,11 @@ func TestTheLibraryScreenWhenThereIsNothingInIt(t *testing.T) {
 	}
 }
 
-// A link into a library that has since shrunk must not read as an empty
-// library. The two states say different things because they are different
-// facts: one is a new install, the other is a stale link, and telling somebody
-// with an empty library to go back to the start would be nonsense.
+// TestAWindowThatCameBackEmptyIsNotAnEmptyLibrary pins that a link into a
+// library that has since shrunk must not read as an empty library. The two
+// states say different things because they are different facts: one is a new
+// install, the other is a stale link, and telling somebody with an empty
+// library to go back to the start would be nonsense.
 func TestAWindowThatCameBackEmptyIsNotAnEmptyLibrary(t *testing.T) {
 	fake := libraryService(nil)
 	fake.libraryTotal = 10
@@ -193,9 +196,8 @@ func TestAWindowThatCameBackEmptyIsNotAnEmptyLibrary(t *testing.T) {
 	}
 }
 
-// The nav row is the whole reason this screen is reachable. Without it the
-// screen exists and nobody finds it, which is the shape of the register's
-// entries rather than of a shipped feature.
+// TestTheShellOffersTheLibrary pins the nav row that makes the screen
+// reachable: without it the screen exists and nobody finds it.
 func TestTheShellOffersTheLibrary(t *testing.T) {
 	fake := &fakeQueries{currentUser: domain.User{ID: "u-1", Username: "sam"}, allow: map[string]bool{}}
 	node := render(t, &Service{content: fake}, "shell", map[string]any{"screen": "home"})
@@ -213,8 +215,8 @@ func TestTheShellOffersTheLibrary(t *testing.T) {
 	}
 }
 
-// Guards the count sentence itself, because it is the one string on this screen
-// somebody reads as a fact about their own server.
+// TestLibraryCountLabel guards the count sentence itself, because it is the one
+// string on this screen somebody reads as a fact about their own server.
 func TestLibraryCountLabel(t *testing.T) {
 	for _, tc := range []struct {
 		total int
@@ -226,8 +228,9 @@ func TestLibraryCountLabel(t *testing.T) {
 	}
 }
 
-// A long-running series is read one season at a time (platform#62), and the screen
-// must still say what the *series* is rather than what the read was.
+// TestASeriesCountsItsSeasonsNotTheOneItLoaded pins that a long-running series
+// is read one season at a time (platform#62), and the screen must still say
+// what the series is rather than what the read was.
 //
 // This is the defect the worst case in a real library exposed: a programme with
 // seventy-five seasons announced itself as "Series · 1 season" over a selector
@@ -333,7 +336,7 @@ func TestSelectingAGenreNarrowsTheLibraryAndSaysSo(t *testing.T) {
 		t.Fatalf("cards = %d, want the 2 Drama works", got)
 	}
 
-	// **The row that offered the chip is still the whole row.** A facet computed
+	// The row that offered the chip is still the whole row. A facet computed
 	// over the narrowed set would leave one chip lit and no way back to the
 	// others, which is a control that consumes itself.
 	chips := chipLabels(tree)
@@ -355,9 +358,10 @@ func TestAnUnselectedLibraryHasNoAllChip(t *testing.T) {
 	}
 }
 
-// A stale link naming a genre nothing carries must not say the library is
-// empty. It holds six titles, and telling somebody otherwise because they
-// followed an old link is the screen lying about the library.
+// TestANarrowingThatMatchesNothingIsNotAnEmptyLibrary pins that a stale link
+// naming a genre nothing carries must not say the library is empty. It holds
+// six titles, and telling somebody otherwise because they followed an old link
+// is the screen lying about the library.
 func TestANarrowingThatMatchesNothingIsNotAnEmptyLibrary(t *testing.T) {
 	svc := libraryService(genreWorks())
 	tree := render(t, &Service{content: svc}, "library", map[string]any{paramGenre: "Westerns"})

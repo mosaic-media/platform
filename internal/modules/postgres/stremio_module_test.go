@@ -28,8 +28,8 @@ import (
 // platform module must not import an extension module (platform#49/0081). What is
 // under test is the Platform's path — registry -> ImportContent -> capability ->
 // ContentService — and the writes it makes on the module's behalf, not Stremio's
-// addon parsing, which is the module's own test. That the *real* module works
-// over this path is proven by the runtime-install integration surface.
+// addon parsing, which is the module's own test. The real module over this path
+// is covered by the runtime-install integration surface.
 //
 // Unlike TestReferenceCapabilityAgainstPostgres, which calls a capability
 // directly, this drives it through the registry and the ImportContent command.

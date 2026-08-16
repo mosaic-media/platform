@@ -23,8 +23,8 @@ type playbackResolutionStore struct {
 // NewPlaybackResolutionStore builds a pool-backed PlaybackResolutionStore.
 //
 // Pool-backed rather than transaction-scoped, unlike most stores here, because
-// the cache is written *after* the stream has started — it must not be inside
-// the unit of work of anything, and it has no outbox event to commit with.
+// the cache is written after the stream has started — it must not be inside the
+// unit of work of anything, and it has no outbox event to commit with.
 func NewPlaybackResolutionStore(pool *pgxpool.Pool) contracts.PlaybackResolutionStore {
 	return &playbackResolutionStore{q: pool}
 }

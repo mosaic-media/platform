@@ -19,12 +19,7 @@ import (
 
 // The People section: the doors on multi-user (platform#44, roadmap M1.3).
 //
-// Every command behind these panels — CreateLocalUser, ListUsers, GetUserByID,
-// SetUserStatus, CreateRole, GrantRole, GetRolesForUser, GetGrantsForUser,
-// GetEffectivePermissions — was complete, tested, transactional and reachable
-// by nobody. This file is the doors.
-//
-// **The offer is computed from what the caller holds** (platform#44). A grantor
+// The offer is computed from what the caller holds (platform#44). A grantor
 // never sees a permission they do not have — not greyed out, absent — because
 // the list comes from their own grants rather than from a filter applied to
 // every permission the Platform knows. That is the offer side; CreateRole's own
@@ -37,7 +32,7 @@ const (
 	paramUserID = "userId"
 	// paramPreset names which starting selection a new-account form is filling
 	// in. It is a param rather than a field on the form because changing it
-	// changes what the form *offers*, which only the server can recompute — a
+	// changes what the form offers, which only the server can recompute — a
 	// select the client could change would leave the permission list beside it
 	// describing the preset that was chosen a moment ago.
 	paramPreset = "preset"
@@ -81,11 +76,9 @@ func (s *Service) peoplePanel(ctx context.Context, caller v1.Caller, nav setting
 		rows := make([]ui.El, 0, len(res.Users))
 		for _, u := range res.Users {
 			// The way in is a control in the row's own slot, not an action on
-			// the row. **A SettingsRow reads no `action`**, so setting one
-			// compiled, rendered, changed nothing and reported nothing — the
-			// props bag accepts anything, which is how ui.Subtitle came to be
-			// set on a Stack for the whole life of a screen. The Devices
-			// section already had the right idiom and this now matches it.
+			// the row. A SettingsRow reads no action prop, so setting one
+			// compiles, renders, changes nothing and reports nothing — a props
+			// bag accepts anything.
 			rows = append(rows, ui.SettingsRow(displayNameOf(u),
 				ui.Summary(personSummary(s.rolesFor(ctx, caller, u.ID), u.Username)),
 				ui.Value(titleWords(string(u.Status))),
@@ -116,7 +109,7 @@ func (s *Service) peoplePanel(ctx context.Context, caller v1.Caller, nav setting
 // three it knows about, so an administrator who cannot create roles sees no
 // invitation to try. A control that leads to a form whose submit will be
 // refused is the dead end platform#24 exists to remove, and it is worse on this
-// screen than anywhere else: being told you may not create an account *after*
+// screen than anywhere else: being told you may not create an account after
 // typing somebody's password in is the version of that failure people remember.
 func (s *Service) addAccountSection(ctx context.Context, caller v1.Caller) *ui.Element {
 	if !s.content.CallerCan(ctx, caller, app.ActionUserCreate, "user") {
@@ -169,7 +162,7 @@ func presetArticle(preset string) string {
 
 // newAccountPanel is the create-account form.
 //
-// **What it will grant is shown before anything is typed**, as the exact set
+// What it will grant is shown before anything is typed, as the exact set
 // the Platform computed for this grantor. Two people opening this form can
 // legitimately see different lists, because the list is their own authority
 // narrowed by the preset; a form that showed the preset's full set and then

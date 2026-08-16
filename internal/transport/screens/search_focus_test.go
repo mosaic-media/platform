@@ -22,8 +22,9 @@ func manyResults(n int, mt v1.MediaType, prefix string) []v1.SearchResult {
 	return out
 }
 
-// The unfocused search caps each type at a row. Without it a viewer who knows
-// they want a series scrolls past every film the providers ranked higher.
+// TestSearchOverviewCapsEachTypeToARow pins that the unfocused search caps each
+// type at a row. Without it a viewer who knows they want a series scrolls past
+// every film the providers ranked higher.
 func TestSearchOverviewCapsEachTypeToARow(t *testing.T) {
 	fake := &fakeQueries{results: append(
 		manyResults(40, v1.MediaMovie, "film"),
@@ -57,7 +58,8 @@ func TestSearchOverviewCapsEachTypeToARow(t *testing.T) {
 	}
 }
 
-// A focused search is one type, in full, and this is where lazy loading lives.
+// TestFocusedSearchFiltersAndPages pins that a focused search is one type, in
+// full, and this is where lazy loading lives.
 func TestFocusedSearchFiltersAndPages(t *testing.T) {
 	fake := &fakeQueries{results: manyResults(searchPageSize+5, v1.MediaTVSeries, "show")}
 	node := render(t, &Service{content: fake}, "search",

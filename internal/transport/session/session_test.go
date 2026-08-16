@@ -137,14 +137,14 @@ func TestInvokeToast(t *testing.T) {
 	}
 }
 
-// TestSilentActionsAreOnlyThePeriodicOnes guards a bug that would have shipped
-// looking like a feature request.
+// TestSilentActionsAreOnlyThePeriodicOnes pins which actions pass without a
+// toast or a re-render.
 //
 // Invoke's default is to confirm and re-render, which is right for something a
 // person pressed. A player reports its position every fifteen seconds, so under
-// that default a playing film would have raised a "Done" toast four times a
-// minute and re-rendered the screen underneath itself each time — tearing down
-// the very player that was reporting.
+// that default a playing film raises a "Done" toast four times a minute and
+// re-renders the screen underneath itself each time, tearing down the very
+// player that was reporting.
 func TestSilentActionsAreOnlyThePeriodicOnes(t *testing.T) {
 	if !silentAction("reportProgress") {
 		t.Error("reportProgress would toast and re-render on every position report")

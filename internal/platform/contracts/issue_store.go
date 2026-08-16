@@ -13,12 +13,11 @@ import (
 // IssueStore persists the resolution register (platform#74): what is wrong with
 // this install, now.
 //
-// **Raise is idempotent on the situation, not on the detection.** A module that
+// Raise is idempotent on the situation, not on the detection. A module that
 // fails to start on every boot is one Issue that has been happening since
 // Tuesday, not one per boot — so raising the same (type, context, reference)
 // again moves LastSeen and increments Occurrences, and never moves FirstSeen.
-// That is the whole difference between this and an event stream, and getting it
-// wrong turns a register into a log with a table behind it.
+// That is the whole difference between this and an event stream.
 type IssueStore interface {
 	// Raise records a finding, or records that an existing one happened again.
 	// It returns the stored Issue, so a caller can tell a new situation from a

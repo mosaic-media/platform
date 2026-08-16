@@ -203,11 +203,11 @@ func (s *credentialStore) DeleteTOTP(ctx context.Context, userID domain.UserID) 
 }
 
 func (s *credentialStore) ConsumeTOTPStep(ctx context.Context, userID domain.UserID, step int64) (bool, error) {
-	// **One statement, and that is the point.** A read-then-write would let two
-	// sign-ins racing with the same stolen code both see the old watermark and
-	// both accept it, which is exactly the replay the watermark exists to
-	// refuse. The `<` in the WHERE clause is what decides it, in the one place
-	// only one caller can win.
+	// One statement, deliberately. A read-then-write would let two sign-ins
+	// racing with the same stolen code both see the old watermark and both
+	// accept it, which is exactly the replay the watermark exists to refuse. The
+	// comparison in the WHERE clause is what decides it, in the one place only
+	// one caller can win.
 	tag, err := s.q.Exec(ctx,
 		`UPDATE totp_credentials SET last_used_step = $2
 		 WHERE user_id = $1 AND last_used_step < $2`,

@@ -4,26 +4,25 @@
 
 // Command rangeprobe measures whether a resolved stream URL honours HTTP Range.
 //
-// It exists because M3 slice 4 branches on the answer and nothing in this
-// repository knows it. The roadmap says a remuxed stream cannot be seeked, which
-// is true and is a statement about *this origin's* implementation — ffmpeg's
-// fragmented MP4 goes down a pipe, so there is no index to range over. It says
-// nothing about the upstream, and the upstream is what decides which of two
-// incompatible segmenter designs is buildable:
+// It exists because nothing in this repository knows that answer. "A remuxed
+// stream cannot be seeked" is a statement about this origin's implementation —
+// ffmpeg's fragmented MP4 goes down a pipe, so there is no index to range over
+// — and says nothing about the upstream. The upstream is what decides which of
+// two incompatible segmenter designs is buildable:
 //
-//   - **Upstream honours Range.** ffmpeg can seek the source over HTTP, so a
-//     segment can be produced with `-ss` at a keyframe for the cost of one
+//   - Upstream honours Range: ffmpeg can seek the source over HTTP, so a
+//     segment can be produced with -ss at a keyframe for the cost of one
 //     ranged fetch. Restart-at-offset is cheap, and the reference designs that
 //     assume a local seekable file port across more or less intact.
-//   - **Upstream ignores Range.** Every `-ss` re-downloads from byte zero. A
+//   - Upstream ignores Range: every -ss re-downloads from byte zero. A
 //     restart-per-seek design is then catastrophic rather than merely wasteful,
 //     and the only workable shape is a file-backed cache that accumulates bytes
 //     once and lets readers seek within what has landed.
 //
-// The same answer settles a second question the roadmap treats as known: the
-// direct-relay path already forwards Range upstream and relays Content-Range and
-// the 206 back, so "a directly relayed stream is seekable" is *conditional* on
-// the upstream, and has never been checked against a real debrid CDN.
+// The same answer settles a second question: the direct-relay path forwards
+// Range upstream and relays Content-Range and the 206 back, so "a directly
+// relayed stream is seekable" is conditional on the upstream, and has never
+// been checked against a real debrid CDN.
 //
 // This is deliberately a tool and not a test. It reaches a live third-party CDN
 // using a credential that exists only on a developer's machine, so it must never
@@ -200,9 +199,9 @@ func probe(client *http.Client, target string) error {
 	}
 	// A server may refuse HEAD and still range perfectly well — a real debrid
 	// proxy answers 405 here — so a failed HEAD is reported and then ignored
-	// entirely. Its Content-Length in that case describes the *error body*, and
-	// treating 31 bytes of "method not allowed" as the file's size is how this
-	// tool once concluded a 48 GB film was too small to seek within.
+	// entirely. Its Content-Length in that case describes the error body, and
+	// treating 31 bytes of "method not allowed" as the file's size makes a
+	// 48 GB film look too small to seek within.
 	size := head.total
 	if head.code >= 300 {
 		size = 0
@@ -231,10 +230,10 @@ func probe(client *http.Client, target string) error {
 
 	// 3. A range from the middle of the file — the seek a player actually
 	// performs, and the request a non-compliant CDN answers from byte zero.
-	// Half way in when the size is known, and only then a fixed floor — asking
+	// Half way in when the size is known, and only then a fixed floor: asking
 	// past the end earns a 416, which is a correct answer to a wrong question
-	// and reads as an inconclusive probe. A real film is tens of gigabytes so
-	// this never bit in production; a 1 MB sample is what found it.
+	// and reads as an inconclusive probe. Only a small sample exposes that; a
+	// real film is tens of gigabytes.
 	var offset int64
 	switch {
 	case size > 2048:
@@ -306,8 +305,8 @@ type result struct {
 	contentRange string
 	// length is this response's own body length; total is the size of the whole
 	// resource. They differ on every 206 — a partial response is 1024 bytes long
-	// and describes a 48 GB file — and conflating them made this tool call a
-	// feature film too small to seek within.
+	// and describes a 48 GB file — so conflating them makes a feature film look
+	// too small to seek within.
 	length int64
 	total  int64
 	body   []byte

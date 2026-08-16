@@ -47,12 +47,11 @@ func (m *Manager) Draft(ctx context.Context, store contracts.ConfigStore, payloa
 	return store.Save(ctx, version)
 }
 
-// Validate checks a Draft version's payload against the schema — every
-// field registered, and every Secret field holding a well-formed secret://
-// reference rather than a raw value — and moves it to Validated or Rejected.
-// Both outcomes are a successful
-// call, not a Platform error — rejection is a normal, informative result
-// of the validate transition, not a failure to validate.
+// Validate checks a Draft version's payload against the schema — every field
+// registered, and every Secret field holding a well-formed secret:// reference
+// rather than a raw value — and moves it to Validated or Rejected. Both
+// outcomes are a successful call: rejection is a result of the validate
+// transition, not a failure to validate.
 func (m *Manager) Validate(ctx context.Context, store contracts.ConfigStore, id domain.ConfigVersionID) (domain.ConfigVersion, error) {
 	version, err := store.FindByID(ctx, id)
 	if err != nil {
@@ -85,10 +84,9 @@ func (m *Manager) Validate(ctx context.Context, store contracts.ConfigStore, id 
 	return store.UpdateStatus(ctx, version.MarkValidated(now, "schema and policy checks passed"))
 }
 
-// ActivationOutcome is the result of Activate. Activated is true only when
-// the change was Hot-classified and applied immediately; otherwise the
-// version remains Validated and ReloadClass reports what is required
-// before it can take effect.
+// ActivationOutcome is the result of Activate or ApplyPending. Activated is
+// true when the call made the version Active; otherwise ReloadClass reports
+// the escalation still required before it can take effect.
 type ActivationOutcome struct {
 	Version     domain.ConfigVersion
 	Activated   bool
@@ -98,12 +96,12 @@ type ActivationOutcome struct {
 // ApplyPending applies the version waiting for an escalation, if the
 // escalation that has just happened is enough to carry it.
 //
-// `granted` is what the caller can vouch for having done: a Platform that has
+// granted is what the caller can vouch for having done: a Platform that has
 // just started grants Restart, because restarting is exactly what it did. The
 // class is re-derived rather than read back from the record, because it is a
-// function of the diff against whatever is Active *now* — storing it at
-// request time would be persisting a derived value that a later activation
-// could invalidate.
+// function of the diff against whatever is Active now — storing it at request
+// time would be persisting a derived value that a later activation could
+// invalidate.
 //
 // A version needing more than was granted is left alone rather than refused:
 // a Generation-class change survives a restart it was never going to be
@@ -143,15 +141,14 @@ func (m *Manager) ApplyPending(ctx context.Context, store contracts.ConfigStore,
 	return ActivationOutcome{Version: applied, Activated: true, ReloadClass: class}, nil
 }
 
-// Activate attempts to activate a Validated version. It diffs the
-// candidate's payload against the currently Active version's payload (none
-// if this is the first activation) and classifies the change by the most
-// restrictive reload class among the changed fields. A Hot-only change
-// activates immediately, superseding the previous Active version in the
-// same call. Any more restrictive change is correctly classified and
-// flagged rather than fake-applied: the version stays Validated, and
-// escalating it (a restart, a new Generation via Supervisor, or the
-// recovery flow) is a later slice's responsibility.
+// Activate attempts to activate a Validated version. It diffs the candidate's
+// payload against the currently Active version's payload (none if this is the
+// first activation) and classifies the change by the most restrictive reload
+// class among the changed fields. A Hot-only change activates immediately,
+// superseding the previous Active version in the same call. Anything more
+// restrictive is classified rather than fake-applied: the version moves to
+// Pending and waits for an escalation — a restart, a new Generation via the
+// Supervisor, or the recovery flow — which ApplyPending then carries out.
 func (m *Manager) Activate(ctx context.Context, store contracts.ConfigStore, id domain.ConfigVersionID) (ActivationOutcome, error) {
 	version, err := store.FindByID(ctx, id)
 	if err != nil {

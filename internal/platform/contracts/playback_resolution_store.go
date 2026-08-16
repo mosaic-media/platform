@@ -19,12 +19,11 @@ import (
 // spending that between a click and a first frame is the entire latency budget
 // on one call.
 //
-// It is deliberately *not* on Tx. Every other store there is joined to a
+// It is deliberately not on Tx. Every other store there is joined to a
 // transaction because its write must commit with an outbox event; this one has
-// no event and nothing to be atomic with. More to the point, platform#28 requires
-// the write not to block the stream — a user waiting on a database write in
-// order to watch a film is the wrong trade in the one place latency was the
-// whole point — so it is written after serving begins, outside any unit of work.
+// no event and nothing to be atomic with. More to the point, platform#28
+// requires the write not to block the stream, so it is written after serving
+// begins, outside any unit of work.
 type PlaybackResolutionStore interface {
 	// Get returns the cached resolution for a part and capability class, or
 	// NotFound when that pair has never been resolved.
@@ -35,7 +34,7 @@ type PlaybackResolutionStore interface {
 	Get(ctx context.Context, partID, capabilityClass string) (domain.PlaybackResolution, error)
 	// Set upserts one resolution.
 	//
-	// A failed link is overwritten rather than deleted, because the *candidate*
+	// A failed link is overwritten rather than deleted, because the candidate
 	// was never wrong — only its address changed. Deleting would throw away a
 	// key that is about to be written again with a different value.
 	Set(ctx context.Context, res domain.PlaybackResolution) error

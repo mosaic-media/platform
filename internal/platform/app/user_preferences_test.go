@@ -110,7 +110,7 @@ func TestUserPreferenceRequiresAnAuthenticatedCaller(t *testing.T) {
 }
 
 // TestBoolPreferenceFallsBackRatherThanFailing is the rule that keeps a
-// preference from ever breaking a request: it decides what to *show*, so an
+// preference from ever breaking a request: it decides what to show, so an
 // unset key, a wrong type or an unreadable store must all yield the default.
 func TestBoolPreferenceFallsBackRatherThanFailing(t *testing.T) {
 	ctx := context.Background()

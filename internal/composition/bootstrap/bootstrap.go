@@ -45,9 +45,8 @@ const superuserRoleName = "Superuser"
 //
 // The account it creates is the superuser (platform#44): the one privileged
 // account established out-of-band, from which all other authority is
-// allocated. Every later account is created *by* this one and starts with
-// less. It is idempotent: an existing
-// user is left untouched and Created is false.
+// allocated. Every later account is created by this one and starts with less.
+// It is idempotent — an existing user is left untouched and created is false.
 //
 // The whole seeding runs in one transaction, so a partial admin (a user with
 // no role, say) can never be left behind for a later run to skip over.
@@ -95,22 +94,18 @@ func EnsureAdmin(
 			return err
 		}
 
-		// **Find the role before creating it**, because the role name is unique
-		// and an install claimed through the setup wizard already has one.
-		//
-		// Creating it unconditionally worked for the case this bootstrap was
-		// written for — an unclaimed server, seeded by environment variables
-		// before anybody has touched it — and failed the whole boot with a
-		// duplicate-key error on the case that turns out to matter more: adding
-		// an administrator to an install that already has one. That is the way
-		// back into a deployment whose only login has been lost, and it is worth
-		// having precisely when nothing else is available.
+		// Find the role before creating it: the role name is unique, and an
+		// install claimed through the setup wizard already has one. Creating
+		// it unconditionally fails the whole boot with a duplicate-key error
+		// when an administrator is added to an install that already has one —
+		// which is the way back into a deployment whose only login has been
+		// lost.
 		//
 		// The existing role's permissions are left exactly as they are.
 		// ReconcileOwnerRole below is what maintains them, on every boot and
 		// however the owner was created; widening them from here would let a
-		// bootstrap silently re-grant authority an administrator had deliberately
-		// narrowed.
+		// bootstrap silently re-grant authority an administrator had
+		// deliberately narrowed.
 		role, err := tx.Permissions().FindRoleByName(ctx, superuserRoleName)
 		if contracts.CategoryOf(err) == contracts.NotFound {
 			role, err = tx.Permissions().CreateRole(ctx, domain.Role{
@@ -136,22 +131,19 @@ func EnsureAdmin(
 // ReconcileOwnerRole brings the install owner's role back in line with the
 // Platform's current action set, on every boot, however the owner was created.
 //
-// **It exists because claiming made the old reconciliation unreachable.** That
-// one runs inside EnsureAdmin, which runs only when the environment-variable
-// bootstrap is configured — so a server claimed through the setup wizard has an
-// owner whose role is a snapshot taken at the moment of claiming and never
-// touched again. Upgrade that install, and the owner cannot grant the action
-// the upgrade added: not to anybody, ever, because an authority the root of
-// every grant does not hold can never be delegated. It is the same defect
-// reconcileSuperuser was written for, arriving by a door that did not exist
-// when it was written.
+// It is needed because reconcileSuperuser runs inside EnsureAdmin, which runs
+// only when the environment-variable bootstrap is configured — so a server
+// claimed through the setup wizard would otherwise have an owner whose role is
+// a snapshot taken at the moment of claiming and never touched again. Upgrade
+// that install and the owner cannot grant the action the upgrade added, to
+// anybody, ever, because an authority the root of every grant does not hold
+// can never be delegated.
 //
-// It matches the role by **name**, which the structural check below deliberately
-// does not. The two are answering different questions: that one is repairing an
-// install whose role may be called anything, because it was seeded by a build
-// that named it differently; this one is maintaining a role the claim itself
-// created and named, one boot ago or a hundred. A name is safe to match on when
-// you are the thing that wrote it.
+// It matches the role by name, which the structural check below deliberately
+// does not. The two answer different questions: that one repairs an install
+// whose role may be called anything, because it was seeded by a build that
+// named it differently; this one maintains a role the claim itself created and
+// named. A name is safe to match on when you are the thing that wrote it.
 //
 // Writes nothing when nothing changed, so an ordinary boot costs one read.
 func ReconcileOwnerRole(ctx context.Context, uow contracts.UnitOfWork, perms []domain.Permission) (bool, error) {
@@ -179,26 +171,21 @@ func ReconcileOwnerRole(ctx context.Context, uow contracts.UnitOfWork, perms []d
 // reconcileSuperuser brings the owner account's role back in line with the
 // Platform's current action set.
 //
-// A preset is *snapshotted* into a role row when the role is created, so adding
+// A preset is snapshotted into a role row when the role is created, so adding
 // an action to the Platform never reaches an account that already exists. That
 // is correct for every other role — an administrator's authority should not
 // silently widen because the software was upgraded — and wrong for exactly one:
 // the superuser is the root of every other grant, and an authority it does not
-// hold can never be given to anyone. An install would quietly become unable to
-// delegate a permission it now has.
+// hold can never be given to anyone. Without this, adding an action leaves a
+// running install unable to delegate a permission it now has, with nothing
+// failing.
 //
-// It was found the way these things are: a new action was added, the tests
-// passed, and playback progress silently failed to record on a running install
-// whose admin had been seeded before that action existed.
-//
-// **It matches on "this account holds exactly one role", not on the role's
-// name.** Matching by name was the first attempt and it failed against the very
-// install that motivated this: that account's role is called "Administrator",
-// because it was seeded by a build that named it differently. A name is a label
-// someone may have changed; holding a single role is the structural signature of
-// an account nobody has reshaped. An account holding several has been arranged
-// deliberately, and re-granting everything to it would undo that arrangement on
-// the next restart — a worse failure than the one this fixes.
+// It matches on "this account holds exactly one role", not on the role's name.
+// A name is a label someone may have changed — a seeded owner role may be
+// called "Administrator" — while holding a single role is the structural
+// signature of an account nobody has reshaped. An account holding several has
+// been arranged deliberately, and re-granting everything to it would undo that
+// arrangement on the next restart.
 func reconcileSuperuser(ctx context.Context, tx contracts.Tx, userID domain.UserID, perms []domain.Permission) error {
 	roles, err := tx.Permissions().RolesForUser(ctx, userID)
 	if err != nil {

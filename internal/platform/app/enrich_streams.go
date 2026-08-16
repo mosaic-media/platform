@@ -15,35 +15,29 @@ import (
 
 // Stream enrichment (platform#46).
 //
-// Materialising used to be one module's whole job: the ref named a capability,
-// that capability built the tree and attached whatever Parts it could. That
-// stopped working when metadata became its own tier. `module-tmdb` and
-// `module-cinemeta` fill no stream role — they describe content, they do not
-// index it — so a title materialised from either is a Work and a season/episode
-// tree with nothing playable in it, while a stream source sits registered
-// alongside, able to resolve that exact title, and never asked.
-//
-// So import is two steps now. The capability the ref names builds the tree, and
-// then this asks every registered stream provider to fill in what plays.
+// Import is two steps: the capability the ref names builds the tree, and then
+// this asks every registered stream provider to fill in what plays. A metadata
+// module fills no stream role, so a title materialised from one is a Work and a
+// season/episode tree with nothing playable in it while a stream source sits
+// registered alongside, able to resolve that exact title.
 
 // enrichStreams resolves playable locations for the items of a materialised
 // work and attaches them as Parts.
 //
-// It is **best-effort by construction**: every failure path here logs and
-// continues. A stream source that is down, unconfigured, or simply does not know
-// the title must not lose a user the work they just added — an item with no
-// Parts is a valid outcome, and it is exactly what a metadata-only deployment
-// produces.
+// Best-effort by construction: every failure path here logs and continues. A
+// stream source that is down, unconfigured, or that does not know the title must
+// not lose a user the work they just added — an item with no Parts is a valid
+// outcome and is what a metadata-only deployment produces.
 func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1.NodeID, result *v1.ImportResult) {
 	providers := s.capabilities.StreamProviders()
 	if len(providers) == 0 {
 		return
 	}
-	// The parts read handle is what makes this idempotent — without it there is
-	// no way to tell an item that needs filling from one already filled, and a
+	// The parts read handle is what makes this idempotent: without it there is no
+	// way to tell an item that needs filling from one already filled, and a
 	// re-import would attach a second copy of every release. A Service composed
-	// without it (a test building a subset of Deps) therefore does not enrich
-	// rather than enriching unsafely. The serving composition always sets it.
+	// without it does not enrich rather than enriching unsafely; the serving
+	// composition always sets it.
 	if s.parts == nil {
 		return
 	}
@@ -61,7 +55,7 @@ func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1
 	}
 
 	// The identities a stream provider might recognise. A provider is handed the
-	// work's *shared* external ids rather than a native one, because it did not
+	// work's shared external ids rather than a native one, because it did not
 	// source this content and holds no id of its own for it. Sorted so a run is
 	// reproducible rather than depending on map order.
 	identities := sharedIdentitiesOf(work)
@@ -72,12 +66,11 @@ func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1
 	}
 
 	for _, item := range items {
-		// Only items with nothing playable. This is what makes the pass
+		// Only items with nothing playable, which is what makes the pass
 		// idempotent: re-importing a title that already has releases does not
-		// attach a second copy of them, while an item that got none the first
-		// time — because no stream source was installed yet — is filled in on
-		// the next import. It also means a module that attached its own Parts
-		// keeps them and is not second-guessed.
+		// attach a second copy, while an item that got none the first time is
+		// filled in on the next import. It also leaves a module that attached
+		// its own Parts alone.
 		existing, err := s.parts.ListByNode(ctx, item.ID)
 		if err != nil {
 			telemetry.From(ctx).Warn("stream enrichment could not read existing parts",
@@ -143,11 +136,10 @@ func (s *Service) enrichStreams(ctx context.Context, caller v1.Caller, workID v1
 
 // attachResolvedStreams writes one provider's stream locations onto an item.
 //
-// It goes through the public command exactly as a module would, and that is
-// deliberate rather than an oversight about the boundary rule: this is a
-// module's work being done on a module's behalf, so it should pay the same
-// authorisation and take the same path a Stremio import takes for every Part it
-// attaches.
+// It goes through the public command exactly as a module would, deliberately:
+// this is a module's work being done on a module's behalf, so it pays the same
+// authorisation and takes the same path a module's own import takes for every
+// Part it attaches.
 func (s *Service) attachResolvedStreams(ctx context.Context, caller v1.Caller, nodeID v1.NodeID, moduleID string, streams []v1.StreamLink, result *v1.ImportResult) {
 	for i, stream := range streams {
 		cmd := partCommandFor(nodeID, i, stream)
@@ -165,19 +157,15 @@ func (s *Service) attachResolvedStreams(ctx context.Context, caller v1.Caller, n
 // partCommandFor translates one resolved candidate into the command that
 // attaches it.
 //
-// **It is a separate function because the translation is where this pass lost
-// what a module told it, and nothing could see that happening.** The
-// descriptive fields exist on `StreamLink` and on `AttachContentPartCommand`
-// under the same names and the same types — deliberately, so that moving a
-// candidate onto a Part is a copy rather than a translation — and this pass
-// carried four of them and dropped the rest. A module parsed the container and
-// both codecs at its own boundary (module-stremio-addons#2), and every candidate it resolved
-// arrived at the Platform saying less than its source had said, so the probe
-// was the only thing that ever knew what a release was.
+// Every descriptive field on StreamLink must be carried across. The fields exist
+// on StreamLink and on AttachContentPartCommand under the same names and types
+// deliberately, so moving a candidate onto a Part is a copy rather than a
+// translation; a field dropped here silently discards what a module parsed at
+// its own boundary (module-stremio-addons#2) and leaves the probe as the only
+// thing that ever knows what a release is.
 //
-// Naming the mapping gives it somewhere a test can reach without standing up a
-// Service and a boundary, which is why the drop survived: enrichment had no test
-// at all.
+// It is a separate function so a test can reach the mapping without standing up
+// a Service and a boundary.
 func partCommandFor(nodeID v1.NodeID, order int, stream v1.StreamLink) v1.AttachContentPartCommand {
 	return v1.AttachContentPartCommand{
 		NodeID: nodeID, Role: v1.PartEdition,
@@ -187,22 +175,18 @@ func partCommandFor(nodeID v1.NodeID, order int, stream v1.StreamLink) v1.Attach
 		NaturalOrder: float64(order),
 		Location:     stream.Location,
 		SizeBytes:    stream.SizeBytes,
-		// The three the source knew and this pass discarded. They are a parse of
-		// release text rather than a measurement — the probe still settles what a
-		// release actually is (platform#29) — but they are what makes a candidate
-		// list rankable before anything has been fetched, which is what item 6's
-		// selection needs and had nothing to read.
+		// A parse of release text rather than a measurement — the probe still
+		// settles what a release actually is (platform#29) — but it is what makes
+		// a candidate list rankable before anything has been fetched, which is
+		// what selection reads.
 		Container:  stream.Container,
 		VideoCodec: stream.VideoCodec,
 		AudioCodec: stream.AudioCodec,
-		// And the three the SDK added after this mapping was written, which the
-		// same reflection guard caught the moment they existed. They are the
-		// inputs to the two most expensive outcomes a Platform can choose:
+		// The inputs to the two most expensive outcomes selection can choose:
 		// sending a client more pixels than it can display, and tone-mapping a
-		// stream it cannot render. Neither was rankable before a fetch —
-		// `Quality` is a display label rather than a number, and nothing carried
-		// dynamic range at all — so a source offering an HDR and an SDR cut of
-		// one title could not be told to prefer the one that plays untouched.
+		// stream it cannot render. Quality is a display label rather than a
+		// number, so without these a source offering an HDR and an SDR cut of one
+		// title cannot be told to prefer the one that plays untouched.
 		Width:     stream.Width,
 		Height:    stream.Height,
 		HDRFormat: stream.HDRFormat,
@@ -220,15 +204,13 @@ func editionLabelOf(stream v1.StreamLink) string {
 
 // sharedIdentitiesOf reads the work's external ids into a stable, ordered list.
 //
-// Every scheme is offered rather than the Platform choosing between them:
-// which identities a source speaks is the source's business, and preferring one
-// here would be a policy invented in the kernel. Declining an unrecognised
-// scheme is cheap on the module side — it is a comparison, not a request.
+// Every scheme is offered rather than the Platform choosing between them: which
+// identities a source speaks is the source's business. Declining an unrecognised
+// scheme is cheap on the module side — a comparison, not a request.
 //
 // The value is the SDK's own v1.ExternalIdentity rather than a private struct,
 // because sdk#6's artwork request carries the whole set across the module
-// boundary and there is no reason for the Platform to hold a second shape for
-// the same pair.
+// boundary and the Platform should not hold a second shape for the same pair.
 func sharedIdentitiesOf(work v1.Node) []v1.ExternalIdentity {
 	if len(work.ExternalIDs) == 0 {
 		return nil
@@ -269,8 +251,7 @@ func indexWork(workID v1.NodeID, nodes []v1.Node) (work v1.Node, byID map[v1.Nod
 // season container's NaturalOrder is its season number and an episode item's is
 // its episode number, which is what every module that builds a tree already
 // writes. A film's feature item hangs directly off the work and has neither, so
-// it reports zeroes — which is exactly what a provider reads as "not an
-// episode".
+// it reports zeroes, which a provider reads as "not an episode".
 func coordinatesOf(item v1.Node, byID map[v1.NodeID]v1.Node) (season, episode int) {
 	if item.ParentID == nil {
 		return 0, 0

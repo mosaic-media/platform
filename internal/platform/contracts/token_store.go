@@ -33,10 +33,10 @@ type TokenStore interface {
 	// it was this call that spent it.
 	//
 	// The boolean is the reuse detection, and it has to be answered by the
-	// **store** rather than by a read followed by a write: two refreshes
-	// arriving together would both read an unspent token and both proceed,
-	// which is a race that hands out two live chains from one credential. A
-	// conditional update makes exactly one of them the winner.
+	// store rather than by a read followed by a write: two refreshes arriving
+	// together would both read an unspent token and both proceed, handing out
+	// two live chains from one credential. A conditional update makes exactly
+	// one of them the winner.
 	MarkRefreshUsed(ctx context.Context, hash string, at time.Time) (spentHere bool, err error)
 
 	// RevokeChain revokes every unspent token in a chain and every access

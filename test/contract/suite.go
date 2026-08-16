@@ -454,10 +454,10 @@ func RunCredentialStoreContract(t *testing.T, newDeps Factory) {
 			t.Fatalf("SaveTOTP: %v", err)
 		}
 
-		// **This is the replay guard.** A code stays valid for its whole
-		// period, so without a spent-step watermark the same six digits work
-		// again for up to a minute — long enough for a code read over a
-		// shoulder, or relayed by a proxy, to be used twice.
+		// The replay guard. A code stays valid for its whole period, so without
+		// a spent-step watermark the same six digits work again for up to a
+		// minute — long enough for a code read over a shoulder, or relayed by
+		// a proxy, to be used twice.
 		ok, err := d.Credentials.ConsumeTOTPStep(c, uid, 100)
 		if err != nil || !ok {
 			t.Fatalf("first use of step 100 = %v, %v; want accepted", ok, err)

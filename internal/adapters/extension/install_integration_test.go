@@ -19,24 +19,24 @@ import (
 // TestRuntimeInstallFromOfficialRegistry is the whole extension pipeline, live
 // and end to end, with zero compile-time dependency on any extension module.
 //
-// This is where the decoupling moved the "a real module runs out of process"
-// proof (platform#49, platform#51): the platform module must not import an extension
-// module, so instead of building one from an import, the Platform *installs* one
-// at runtime the way a user would — fetching the signed index from the official
-// registry, verifying it against the key compiled into this binary, downloading
-// the platform's binary and checking its digest — then spawns it and confirms it
-// serves. It imports the SDK and the Platform's own packages and nothing else.
+// The platform module must not import an extension module (platform#49,
+// platform#51), so rather than building one from an import, the Platform installs
+// one at runtime the way a user would — fetching the signed index from the
+// official registry, verifying it against the key compiled into this binary,
+// downloading the platform's binary and checking its digest — then spawns it and
+// confirms it serves. It imports the SDK and the Platform's own packages and
+// nothing else.
 //
-// It is behind the `integration` build tag because it reaches the live registry
+// It is behind the integration build tag because it reaches the live registry
 // (GitHub Pages) and GitHub releases; the default gate is hermetic and excludes
-// it. A dedicated CI job runs `go test -tags integration ./...`.
+// it. A dedicated CI job runs go test -tags integration ./....
 func TestRuntimeInstallFromOfficialRegistry(t *testing.T) {
-	// Every extension module the official registry catalogues, so this proves not
-	// one module but the whole published set installs and — the risk slice 2.2
-	// named — actually *serves* out of process: a stray stdout write, a global, or
-	// an init that misbehaves corrupts the handshake, and only spawning the real
-	// binary catches it. Each names one role it must declare, checked so a module
-	// that came up empty is not counted as working.
+	// Every extension module the official registry catalogues, so this covers the
+	// whole published set rather than one module, and covers whether each one
+	// serves out of process: a stray stdout write, a global, or an init that
+	// misbehaves corrupts the handshake, and only spawning the real binary catches
+	// it. Each names one role it must declare, checked so a module that came up
+	// empty is not counted as working.
 	modules := []struct {
 		id       string
 		wantRole v1.Role

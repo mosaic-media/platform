@@ -21,11 +21,10 @@ import (
 // auth transport tests exercise the real command boundary — authenticate,
 // authorize, transaction, outbox — rather than a mocked Service.
 //
-// It is the rig the GraphQL resolver tests used, carried over when platform#37
-// retired that transport and trimmed to what auth needs: users, sessions,
-// password credentials, roles and the outbox. Config and content stores are nil
-// here rather than fakes nothing exercises, so a method that starts reaching
-// for one fails loudly instead of passing against a stub.
+// It carries only what auth needs: users, sessions, password credentials, roles
+// and the outbox. Config and content stores are nil rather than fakes nothing
+// exercises, so a method that starts reaching for one fails loudly instead of
+// passing against a stub.
 type fakeDB struct {
 	mu        sync.Mutex
 	users     map[domain.UserID]domain.User
@@ -143,10 +142,9 @@ func (s fakeUserStore) Update(_ context.Context, user domain.User) (domain.User,
 	return user, nil
 }
 
-// List answers over the seeded users, because the pre-session bootstrap reads
-// it to decide whether this server has been claimed (platform#57). It used to be a
-// stub returning nothing, which made a seeded server look unclaimed — a fake
-// that lies about the store it stands in for.
+// List answers over the seeded users, because the pre-session bootstrap reads it
+// to decide whether this server has been claimed (platform#57). A stub returning
+// nothing would make a seeded server look unclaimed.
 func (s fakeUserStore) List(context.Context) ([]domain.User, error) {
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
@@ -419,11 +417,8 @@ func (fakePermissionStore) AttributesForUser(context.Context, domain.UserID) ([]
 	return nil, nil
 }
 
-// CreateRole and GrantRole record, rather than accepting and forgetting. They
-// used to do neither, which was fine while nothing in this package created a
-// role; the claim does, and a test that could not read back what authority the
-// owner ended up with would assert the one thing about claiming that matters
-// least.
+// CreateRole and GrantRole record rather than accepting and forgetting, so a
+// test can read back what authority a claim left the owner holding.
 func (s fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (domain.Role, error) {
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()

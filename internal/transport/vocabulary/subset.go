@@ -14,19 +14,17 @@ import (
 // Subset returns the definitions a tree needs and no more, transitively closed
 // (platform#57).
 //
-// **The subset is a security property, not an optimisation.** The bootstrap
-// response is the one payload an unauthenticated party can enumerate, so it
-// must describe a doorway and nothing else — and the pressure on it will always
-// be to send the library, because that is one line shorter and always works.
-// This function is the answer, and the test beside it asserts the result is
+// The subset is a security property, not an optimisation. The bootstrap response
+// is the one payload an unauthenticated party can enumerate, so it must describe
+// a doorway and nothing else. Do not replace it with the whole library because
+// that is shorter and always works; the test beside it asserts the result is
 // strictly smaller than what it was given.
 //
 // Transitively, because a definition's template may name another component:
 // ExtensionCard expands into a Badge, RelatedRail into a Carousel. A one-level
-// pass would serve a tree whose components resolve and whose components'
-// components do not, which renders as an Unknown placeholder in the middle of
-// an otherwise correct screen — the exact failure platform#57 exists to stop,
-// arrived at from the other end.
+// pass serves a tree whose components resolve and whose components' components
+// do not, which renders as an Unknown placeholder in the middle of an otherwise
+// correct screen.
 //
 // A type the library does not define is not an error: it is a primitive, or a
 // module's own namespaced type, and neither has a definition to send.
@@ -48,8 +46,8 @@ func Subset(library []byte, tree *sduiv1.UINode) ([]byte, error) {
 	}
 
 	// Breadth-first over the closure. Iterative rather than recursive because
-	// the input is data: a definition library with a reference cycle in it
-	// would blow the stack, and `seen` makes a cycle terminate instead.
+	// the input is data: a definition library with a reference cycle in it would
+	// blow the stack, and seen makes a cycle terminate instead.
 	need := map[string]bool{}
 	queue := nodeTypes(tree)
 	for len(queue) > 0 {
@@ -129,8 +127,8 @@ func nodeTypes(node *sduiv1.UINode) []string {
 	return out
 }
 
-// structTypes finds node-shaped values inside a props bag: any object carrying
-// a string `type`. It is deliberately generous — a false positive is a name the
+// structTypes finds node-shaped values inside a props bag: any object carrying a
+// string type. It is deliberately generous — a false positive is a name the
 // library does not define, which costs nothing, while a false negative is a
 // missing definition.
 func structTypes(s *structpb.Struct) []string {

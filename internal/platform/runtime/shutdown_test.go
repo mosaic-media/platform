@@ -15,14 +15,11 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/runtime"
 )
 
-// TestShutdownDrainsInFlightOutboxEventBeforeReturning is the Supervisor exit
-// criterion, proven by simulation rather than by merely
-// asserting the hook exists: the worker's background poll loop is given a
-// one-hour interval, so its own ticker cannot possibly fire during this
-// test. An event is appended while the worker is "running" (in-flight
-// outbox work), then Shutdown is called. If Shutdown did not perform its
-// own final drain, the event would still be unpublished when this test
-// checks — the only way it gets checkpointed here is Shutdown's own doing.
+// TestShutdownDrainsInFlightOutboxEventBeforeReturning pins that Shutdown
+// performs its own final drain rather than relying on the poll loop. The
+// worker's background interval is set to an hour so its ticker cannot fire
+// during the test; an event appended while the worker is running is therefore
+// published only if Shutdown drained it.
 func TestShutdownDrainsInFlightOutboxEventBeforeReturning(t *testing.T) {
 	outbox := newFakeOutbox()
 	bus := events.NewBus()

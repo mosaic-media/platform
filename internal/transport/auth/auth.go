@@ -7,10 +7,10 @@
 // already holding a session, and it is what a client calls before it can open
 // the two-lane SessionService of contracts#5.
 //
-// It replaced the GraphQL signIn/signOut mutations. Like every transport in
-// this repository it is a projection surface only: each method calls exactly
-// one application command and translates its result — boundary_test.go
-// enforces that it never reaches a store or a module directly.
+// Like every transport in this repository it is a projection surface only: each
+// method calls exactly one application command and translates its result, and
+// boundary_test.go enforces by parsing imports that it never reaches a store or
+// a module directly.
 package auth
 
 import (

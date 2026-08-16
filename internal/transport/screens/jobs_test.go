@@ -40,10 +40,11 @@ func jobFixtures() []domain.Job {
 	}
 }
 
+// TestJobsNavRowIsHiddenWithoutTheGrant pins that job.read and telemetry.read
+// are separate gates rather than one.
 func TestJobsNavRowIsHiddenWithoutTheGrant(t *testing.T) {
 	// Expert mode on, telemetry.read held, job.read not: the Diagnostics group
-	// exists and the Jobs row inside it does not. That is the whole reason the
-	// two are separate actions.
+	// exists and the Jobs row inside it does not.
 	fake := &fakeQueries{
 		settingsUI: minimalSettingsUI(), canReadTelemetry: true, canReadJobs: false, expertModeOn: true,
 	}
@@ -69,9 +70,10 @@ func TestJobsNavRowAppearsWithTheGrant(t *testing.T) {
 	}
 }
 
-// A caller who holds job.read and NOT telemetry.read still gets the expert-mode
-// control, because there is something behind it for them. Without this the
-// switch would be drawn from one permission and gate two.
+// TestExpertModeIsOfferedForJobReadAlone pins that a caller who holds job.read
+// and NOT telemetry.read still gets the expert-mode control, because there is
+// something behind it for them. Without this the switch would be drawn from one
+// permission and gate two.
 func TestExpertModeIsOfferedForJobReadAlone(t *testing.T) {
 	fake := &fakeQueries{
 		settingsUI: minimalSettingsUI(), canReadTelemetry: false, canReadJobs: true, expertModeOn: true,
@@ -133,8 +135,9 @@ func TestJobsScreenListsTheQueueAndLinksIntoEachJob(t *testing.T) {
 	}
 }
 
-// A retry waiting out its backoff is not the same state as a job that has never
-// run, and the screen must not present it as one.
+// TestARetryWaitingOnItsBackoffIsMarkedAsSuch pins that a retry waiting out its
+// backoff is not the same state as a job that has never run, and the screen
+// must not present it as one.
 func TestARetryWaitingOnItsBackoffIsMarkedAsSuch(t *testing.T) {
 	fake := &fakeQueries{
 		settingsUI: minimalSettingsUI(), canReadTelemetry: true, canReadJobs: true,

@@ -14,15 +14,14 @@ import (
 	"time"
 )
 
-// Probing (platform#29). What a release *is* cannot be read off its name: the same
+// Probing (platform#29). What a release is cannot be read off its name: the same
 // fact lives in a different field per addon, a release title lies, and the
-// container hint has already been found hiding in a query parameter. ffprobe
-// asks the bytes instead — and it range-requests the header rather than
-// downloading the file, so asking is cheap even when the file is thirty
-// gigabytes.
+// container hint has been found hiding in a query parameter. ffprobe asks the
+// bytes instead — and it range-requests the header rather than downloading the
+// file, so asking is cheap even when the file is thirty gigabytes.
 //
-// It answers the question that actually decides playback, which the container
-// never did: **which audio tracks are here, in what codec, in what language.**
+// It answers the question that decides playback, which the container never did:
+// which audio tracks are here, in what codec, in what language.
 
 // probeTimeout bounds a probe. ffprobe against a remote URL is a couple of
 // range requests; if it has not answered in this long the source is unwell and
@@ -225,12 +224,12 @@ func primaryFormat(name string) string {
 
 // hdrFormat names the release's dynamic range.
 //
-// The codec tag is checked *first*, and that ordering is the point. Dolby Vision
+// The codec tag is checked first, and that ordering is the point. Dolby Vision
 // profile 5 carries no HDR10 base layer, so its transfer characteristic is often
 // unset or misleading — judging by transfer alone reports it as SDR, the video
 // gets copied through, and the client renders its ICtCp data as BT.2020: the
-// purple-and-green picture. The `dvhe`/`dvh1`/`dvav`/`dva1` tags identify it
-// when nothing else does.
+// purple-and-green picture. The dvhe/dvh1/dvav/dva1 tags identify it when
+// nothing else does.
 func hdrFormat(transfer, profile, codecTag string) string {
 	tag := strings.ToLower(strings.TrimSpace(codecTag))
 	switch tag {

@@ -61,10 +61,9 @@ func TestRaisingTheSameSituationIsOneIssue(t *testing.T) {
 	if again.Occurrences != 2 {
 		t.Errorf("occurrences = %d after two detections, want 2", again.Occurrences)
 	}
-	// **first_seen is the number that answers "did this start when I updated
-	// last week".** An upsert that moved it would make every finding look new
-	// on every boot, which is the failure that is hardest to notice because the
-	// row is otherwise perfect.
+	// first_seen is the number that answers "did this start when I updated last
+	// week". An upsert that moved it would make every finding look new on every
+	// boot — hard to notice, because the row is otherwise perfect.
 	if !again.FirstSeen.Equal(monday) {
 		t.Errorf("first seen moved to %v — it must stay at the first detection", again.FirstSeen)
 	}

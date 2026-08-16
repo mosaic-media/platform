@@ -31,12 +31,11 @@ import (
 
 // The bearer pair over the real wire (platform#58).
 //
-// This is the test the browser had to find first. An expired access token used
-// to reach the screen builders and come back as an error *rendered into the
-// content region*, so the client saw a successful call carrying a picture of a
-// failure — nothing to retry on, and a page that said "Platform unavailable"
-// about a Platform that was perfectly available. The transport authenticates
-// now, and this is what says so.
+// The transport authenticates before the screen builders run. A transport that
+// did not would let an expired access token reach them and come back as an error
+// rendered into the content region: a successful call carrying a picture of a
+// failure, with nothing for the client to retry on and a page saying "Platform
+// unavailable" about a Platform that is available.
 
 func bearerFixture(t *testing.T) (*httptest.Server, *postgres.ContractSet, context.Context) {
 	t.Helper()
@@ -104,8 +103,8 @@ func TestAnExpiredAccessTokenIsRefusedByTheTransportRatherThanRendered(t *testin
 		t.Fatalf("Attach with a live credential: %v", err)
 	}
 
-	// Twenty-five hours later — past the fixed lifetime a session used to have
-	// — the access token has expired and the refresh token has not.
+	// Twenty-five hours later: the access token has expired and the refresh
+	// token has not.
 	if _, err := cs.Pool.Exec(ctx,
 		`UPDATE session_access_tokens SET expires_at = expires_at - interval '25 hours'`); err != nil {
 		t.Fatalf("expire the access token: %v", err)
@@ -122,9 +121,9 @@ func TestAnExpiredAccessTokenIsRefusedByTheTransportRatherThanRendered(t *testin
 			"retry-on-Unauthenticated if the transport says so", got)
 	}
 
-	// And the client's answer to that is a refresh, after which it is signed in
-	// again with no re-authentication. This is the exit criterion: come back
-	// past the old twenty-four hours and still be signed in.
+	// The client's answer to that is a refresh, after which it is signed in
+	// again with no re-authentication: come back a day later and still be signed
+	// in.
 	out, err := authClient.Refresh(ctx, connect.NewRequest(&authv1.RefreshRequest{
 		RefreshToken: pair.GetRefreshToken(), DeviceId: "browser-1",
 	}))
@@ -159,7 +158,8 @@ func TestAnExpiredAccessTokenIsRefusedByTheTransportRatherThanRendered(t *testin
 	}
 }
 
-// Revoking a device ends it at once — the other half of the exit criterion.
+// Revoking a device ends its session at once, and leaves the other devices
+// signed in.
 func TestRevokingADeviceEndsItImmediatelyOverTheWire(t *testing.T) {
 	server, cs, ctx := bearerFixture(t)
 	authClient := authv1connect.NewAuthServiceClient(server.Client(), server.URL)

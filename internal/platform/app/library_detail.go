@@ -16,14 +16,12 @@ import (
 
 // Reading a library item's detail out of the object graph (platform#62).
 //
-// It is the read the Library screen needed and did not have. A card there opens
-// its node by **id** — the whole point of a screen over the graph is that it
-// still opens when the source is down — and sdk#3's detail is keyed by a
-// **ref** and re-derived from the provider on every render, so the two never
-// met and the node-id path fell back to a title and a list of children.
+// A Library card opens its node by id, so that the screen still opens when the
+// source is down. sdk#3's detail is keyed by a ref and re-derived from the
+// provider on every render, so it cannot serve that path.
 //
 // One query rather than three calls from the emit-side, because it is one
-// question: what does the install know about this title? The alternative was a
+// question: what does the install know about this title? The alternative is a
 // screen making a node read, a tree read and a document read, each through its
 // own boundary, and getting the ordering between them right.
 
@@ -35,13 +33,11 @@ type GetLibraryDetailQuery struct {
 	// Season narrows the episode read to one season. Zero takes the first
 	// numbered one, which is what a screen opened with no season param wants.
 	//
-	// It is on the *query* rather than applied by the caller afterwards, and
-	// that is the whole point of this shape: a work is read a season at a time
-	// because some works are enormous. A daily news programme in this library
-	// has 75 seasons and 21,428 episodes, and reading the tree whole to draw
-	// seven rows took **a second** — not because PostgreSQL minds 21,000 rows,
-	// which it does not, but because sorting and marshalling them per render is
-	// a cost paid for nothing.
+	// It is on the query rather than applied by the caller afterwards, because a
+	// work must be read a season at a time: some works are enormous. A daily news
+	// programme with 75 seasons and 21,428 episodes takes a second to read whole
+	// in order to draw seven rows — not because PostgreSQL minds 21,000 rows, but
+	// because sorting and marshalling them per render is paid for nothing.
 	Season int
 }
 
@@ -55,8 +51,8 @@ type GetLibraryDetailResult struct {
 	// what a work with no stored description shows as its contents.
 	Children []v1.Node
 	// Episodes are the selected season's items, in order. Together with Children
-	// they are the *authority* on what exists, which is why the stored document
-	// deliberately carries no episodes (platform#62).
+	// they are the authority on what exists, which is why the stored document
+	// carries no episodes (platform#62).
 	Episodes []v1.Node
 	// Season is which season Episodes belongs to, resolved from the query — so a
 	// caller rendering a selector knows which one is lit without repeating the
@@ -66,17 +62,15 @@ type GetLibraryDetailResult struct {
 	// was ever stored.
 	//
 	// The flag rather than an empty struct, because "never enriched" and
-	// "enriched and the source said little" are different facts: the first is a
-	// node materialised before this existed or whose provider has never been
-	// reachable, and a caller renders a plainer screen for it rather than an
-	// apologetic one.
+	// "enriched and the source said little" are different facts, and a caller
+	// renders a plainer screen for the first rather than an apologetic one.
 	Metadata    v1.ContentMetadata
 	HasMetadata bool
 }
 
 // GetLibraryDetail reads one work, its tree and its stored description.
 //
-// It authorises `content.read`, the same action every other library read takes:
+// It authorises content.read, the same action every other library read takes:
 // there is one shared library and everybody who may see it may see all of it
 // (platform#59).
 func (s *Service) GetLibraryDetail(ctx context.Context, q GetLibraryDetailQuery) (GetLibraryDetailResult, error) {
@@ -100,9 +94,9 @@ func (s *Service) GetLibraryDetail(ctx context.Context, q GetLibraryDetailQuery)
 	if err != nil {
 		return GetLibraryDetailResult{}, err
 	}
-	// A season opened directly is rendered as its series, because a season has
-	// no description of its own and nobody navigating to one wants a screen that
-	// says less than the one they came from.
+	// A season opened directly is rendered as its series: a season has no
+	// description of its own, so the screen would say less than the one it was
+	// reached from.
 	work := node
 	if node.WorkID != node.ID {
 		work, err = s.nodes.FindByID(ctx, node.WorkID)
@@ -117,10 +111,8 @@ func (s *Service) GetLibraryDetail(ctx context.Context, q GetLibraryDetailQuery)
 	}
 	out := GetLibraryDetailResult{Node: work, Children: children}
 
-	// Which season to read, and then only that season. Two indexed reads over
-	// the seasons and one season's episodes, rather than one read of the whole
-	// work — which is the difference between a screen that opens instantly for a
-	// long-running series and one that does not.
+	// Which season to read, and then only that season: two indexed reads rather
+	// than one read of the whole work. See GetLibraryDetailQuery.Season.
 	out.Season = pickSeason(children, q.Season)
 	for _, child := range children {
 		if child.Kind != v1.NodeContainer || int(child.NaturalOrder) != out.Season {
@@ -151,10 +143,9 @@ func (s *Service) GetLibraryDetail(ctx context.Context, q GetLibraryDetailQuery)
 // pickSeason resolves which season to read: the one asked for when the work has
 // it, otherwise the first numbered one.
 //
-// Season zero is skipped when a numbered season exists, because a series' specials
-// are not what somebody opening it came for — the same default the season
-// selector has always applied, moved here so the read and the selector cannot
-// disagree about which season is lit.
+// Season zero is skipped when a numbered season exists, because a series'
+// specials are not what somebody opening it came for. The season selector must
+// apply the same default, which is why the rule lives here rather than in both.
 func pickSeason(children []v1.Node, want int) int {
 	first, found := 0, false
 	for _, child := range children {
@@ -172,12 +163,11 @@ func pickSeason(children []v1.Node, want int) int {
 	return first
 }
 
-// SeasonNumbers is the season a work has, in order — what a season selector is
+// SeasonNumbers is the seasons a work has, in order — what a season selector is
 // drawn from.
 //
-// It comes from the *containers* rather than from the episodes, which is what
-// lets a detail screen list seventy-five seasons while having read only one of
-// them. Deriving it from episodes was what forced the whole tree to be read.
+// It must come from the containers rather than the episodes, which is what lets
+// a detail screen list seventy-five seasons while having read only one of them.
 func SeasonNumbers(children []v1.Node) []int {
 	var out []int
 	for _, n := range children {
@@ -192,10 +182,10 @@ func SeasonNumbers(children []v1.Node) []int {
 // EpisodesFromTree projects one season's materialised items into the episode
 // preview shape the detail screen renders.
 //
-// **The tree is the authority and the document carries no episodes** (platform#62),
-// so this is the one direction the projection runs for a library item. It is
-// exported because the emit-side is what needs it and this is a pure function of
-// its arguments — putting it on the query result would make it look like
+// The tree is the authority and the stored document carries no episodes
+// (platform#62), so this is the one direction the projection runs for a library
+// item. It is exported because the emit-side needs it and it is a pure function
+// of its arguments; putting it on the query result would make it look like
 // something the store returned.
 //
 // A season container's NaturalOrder is its season number and an episode item's
@@ -223,17 +213,14 @@ func EpisodesFromTree(season int, episodes []v1.Node) []v1.EpisodePreview {
 
 // episodeStill is an episode's image, wherever it was filed.
 //
-// **Two slots, because the fleet disagrees.** An episode still is
-// landscape-shaped and `ArtworkLandscape` is where this Platform writes one, but
-// `module-tmdb` has always written it to `Poster` — it is the image the episode
-// *has*, and a module choosing the wrong slot for it is not something a read
-// should punish a viewer for. Reading both is what turned every episode row in
-// the product from a grey rectangle into a still; preferring landscape is what
-// keeps a deliberate choice winning over a historical one.
+// Two slots, because the fleet disagrees. An episode still is landscape-shaped
+// and Artwork.Landscape is where this Platform writes one, but module-tmdb
+// writes it to Poster. Reading both is what draws an episode row at all;
+// preferring landscape keeps a deliberate choice winning over the fallback.
 //
-// The honest fix is for the module to file it as a landscape, which is a change
-// in that repository and a release of it. This is the read-side accommodation
-// until then, and it is written down rather than left as a mysterious fallback.
+// The fix is for the module to file it as a landscape, which is a change in that
+// repository and a release of it. This is the read-side accommodation until
+// then.
 func episodeStill(art v1.Artwork) string {
 	if art.Landscape != "" {
 		return art.Landscape

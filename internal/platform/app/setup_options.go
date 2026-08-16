@@ -14,35 +14,33 @@ import (
 // SetupOptions is what the setup doorway can offer a household to choose from
 // (platform#54).
 //
-// Today that is one list: where its streams come from. The concept's other five
-// steps were dropped because the capability behind them does not exist, and the
-// two that remain — naming the server and creating the owner — need nothing
-// read from anywhere.
+// Today that is one list: where its streams come from. The other steps that
+// remain — naming the server and creating the owner — need nothing read from
+// anywhere.
 type SetupOptions struct {
 	// StreamSources are the extension modules in the trusted repository that
 	// fill the stream role, in the order the repository lists them.
 	StreamSources []ExtensionCatalogueEntry
 	// Problem says why the list is empty when it should not have been. An
-	// unreachable repository during setup is a common and recoverable thing —
-	// a household on a slow connection, a first boot before DNS settles — and a
-	// step that silently offers nothing reads as a step that has no options.
+	// unreachable repository during setup is common and recoverable — a slow
+	// connection, a first boot before DNS settles — and a step that silently
+	// offers nothing reads as a step that has no options.
 	Problem string
 }
 
 // SetupOptions reads the choices the setup doorway offers.
 //
-// **It is unauthenticated, and it is the only unauthenticated read that leaves
-// this machine.** Two things bound it. It refuses on a claimed server, so it is
+// It is unauthenticated, and the only unauthenticated read that leaves this
+// machine. Two things bound it: it refuses on a claimed server, so it is
 // reachable only in the window a claim is, and the bootstrap that reaches it is
-// already rate-limited as the one pre-authentication surface (platform#57). What
-// it discloses is a public signed index published on the internet: the caller
-// learns nothing about this install from it that they could not learn by
-// fetching the same file themselves.
+// rate-limited as the one pre-authentication surface (platform#57). What it
+// discloses is a public signed index published on the internet, so the caller
+// learns nothing about this install they could not learn by fetching the same
+// file themselves.
 //
-// It never fails. A repository that will not answer costs the third step's
-// options and not the claim — a household can name its server, create its owner
-// and add a source later from Settings, which is the same path an install that
-// skipped the step takes.
+// It never fails. A repository that will not answer costs the stream-source
+// options and not the claim: a household can name its server, create its owner
+// and add a source later from Settings.
 func (s *Service) SetupOptions(ctx context.Context) SetupOptions {
 	if !s.ServerState(ctx).Claimable() {
 		return SetupOptions{}
@@ -71,10 +69,9 @@ func (s *Service) SetupOptions(ctx context.Context) SetupOptions {
 
 // providesRole reports whether a catalogued module fills role.
 //
-// Matched on the declared role rather than on the module's id, because the
-// setup step is asking a question about capability — "can this give me
-// something to play" — and a hard-coded list of module names would be a second,
-// silent copy of the registry that goes stale the first time it grows.
+// Match on the declared role rather than on the module's id: the setup step asks
+// a question about capability, and a hard-coded list of module names would be a
+// second, silent copy of the registry that goes stale the first time it grows.
 func providesRole(e ExtensionCatalogueEntry, role v1.Role) bool {
 	for _, r := range e.Provides {
 		if v1.Role(r) == role {

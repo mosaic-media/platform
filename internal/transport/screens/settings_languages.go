@@ -27,7 +27,7 @@ import (
 // Every control carries the whole document that pressing it produces, computed
 // here where the current preference is already in hand. That is the settings
 // screen's established shape (the home rows do the same) and it is what keeps
-// `setPreference` a generic action that stores an uninterpreted value: the
+// setPreference a generic action that stores an uninterpreted value: the
 // client echoes a decision rather than composing one.
 
 // languageChoices are the languages offered, by the code ffprobe reports.
@@ -36,7 +36,7 @@ import (
 // somebody reads: a list of several hundred is not a preference, it is a search
 // problem. Nothing stops a stored document naming a code that is not here — the
 // value is uninterpreted and the decision matches on the code — so this bounds
-// what the *screen* offers and not what the Platform honours.
+// what the screen offers and not what the Platform honours.
 var languageChoices = []struct{ code, label string }{
 	{"eng", "English"},
 	{"jpn", "Japanese"},
@@ -74,7 +74,7 @@ func (s *Service) languagesPanel(ctx context.Context, caller v1.Caller, nav sett
 
 	// The mode, and the sentence under it is the part worth reading. It is the
 	// only place a viewer is told that what they pick here describes the case
-	// where the Platform *could* give them the audio they asked for — and that
+	// where the Platform could give them the audio they asked for — and that
 	// it will show more when it could not.
 	modes := ui.Stack("horizontal", 2,
 		modeButton(current, playback.SubtitlesOff, "Off"),
@@ -162,7 +162,7 @@ func stylingButton(current playback.LanguagePreference, styling playback.Subtitl
 // setLanguages is the action a control emits: this caller's own language
 // preference, set to the document that control produces.
 //
-// It reuses `setPreference` rather than growing an action of its own, exactly as
+// It reuses setPreference rather than growing an action of its own, exactly as
 // the home composition does. The store keeps the value uninterpreted and the
 // playback decision owns its meaning, which is the same rule module settings
 // follow (platform#17).

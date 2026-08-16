@@ -26,8 +26,7 @@ const ActionExtensionManage policy.Action = "extension.manage"
 //
 // It is an interface here so the app package depends only on it, not on the
 // extension adapter it fronts. The composition root implements it
-// (internal/composition/extensions.Manager) and injects it — the same shape by
-// which the Service holds every other capability it does not itself contain.
+// (internal/composition/extensions.Manager) and injects it.
 type ExtensionManager interface {
 	// Install fetches, verifies, spawns and records a module from a trusted
 	// repository; the record is the durable install (platform#51).
@@ -53,8 +52,8 @@ type ExtensionCatalogueEntry struct {
 	Version    string
 	Provides   []string
 	// Description is the module's own sentence about what it is, from its signed
-	// manifest. Empty for a module that publishes none — the capabilities still
-	// say what it can do, which is what the Platform can vouch for anyway.
+	// manifest. Empty for a module that publishes none; the capabilities still
+	// say what it can do, which is what the Platform can vouch for.
 	Description string
 }
 
@@ -106,10 +105,10 @@ func fromDomainInstalled(d domain.InstalledExtension) InstalledExtension {
 // authenticate, authorize, then delegate.
 //
 // It does not open a UnitOfWork. Installing is a side-effectful process
-// operation, not a pure state write, and its persistence lives with the manager
-// that also spawns the process; the manager rolls the process back if the record
-// cannot be written, so the two do not drift. The act is audited through the
-// manager's telemetry rather than the outbox.
+// operation rather than a state write, and its persistence lives with the
+// manager that also spawns the process; the manager rolls the process back if
+// the record cannot be written, so the two do not drift. The act is audited
+// through the manager's telemetry rather than the outbox.
 func (s *Service) InstallExtension(ctx context.Context, cmd InstallExtensionCommand) (InstalledExtension, error) {
 	if cmd.Caller.Session == "" {
 		return InstalledExtension{}, contracts.NewError(contracts.InvalidArgument, "caller is required")

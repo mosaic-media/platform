@@ -54,7 +54,7 @@ func TestPresetsNest(t *testing.T) {
 }
 
 // TestAdministratorPresetOmitsInsight — an administrator runs the install, which
-// does not require watching the people using it. It *can* be granted telemetry
+// does not require watching the people using it. It can be granted telemetry
 // individually; this only pins what the preset starts from.
 func TestAdministratorPresetOmitsInsight(t *testing.T) {
 	held := make(map[policy.Action]bool)
@@ -68,7 +68,7 @@ func TestAdministratorPresetOmitsInsight(t *testing.T) {
 			t.Fatalf("the administrator preset must not include %q", a)
 		}
 	}
-	// It *does* include granting. An administrator managing accounts is the
+	// It does include granting. An administrator managing accounts is the
 	// normal case, and it is safe precisely because the delegation check bounds
 	// what they can pass on by what they hold (platform#44).
 	if !held[app.ActionRoleGrant] {

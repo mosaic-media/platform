@@ -12,7 +12,7 @@
 //
 //   - go-plugin's handshake over a real Unix socket, in a real child process
 //   - a manifest read back across the boundary
-//   - Import calling *back* into the Platform's ContentService, within the
+//   - Import calling back into the Platform's ContentService, within the
 //     invocation, carrying the Caller handle it was given
 //   - three provider roles, so role dispatch is exercised, and the five it does
 //     not fill, so the refusal path is too
@@ -56,10 +56,10 @@ type probeSettings struct {
 // provider interface — so declaring exactly what is implemented, and leaving
 // five unfilled, is what makes this a usable test of both directions.
 //
-// Search was the original and proves dispatch. Stream and subtitles are here
-// for a narrower reason: they are the two roles carrying fields that a
-// `module.proto` without them drops silently, and the only way to show a field
-// crossing for real is a role served by a real child process.
+// Search proves dispatch. Stream and subtitles are here for a narrower reason:
+// they are the two roles carrying fields that a module.proto without them drops
+// silently, and the only way to show a field crossing for real is a role served
+// by a real child process.
 type probe struct{}
 
 func (probe) Manifest() v1.Manifest {
@@ -178,7 +178,7 @@ func (probe) Streams(_ context.Context, req v1.StreamRequest) (v1.StreamResponse
 }
 
 // Subtitles echoes the coordinates it was handed back through the response,
-// which is the only way to observe the *outbound* leg from the Platform side:
+// which is the only way to observe the outbound leg from the Platform side:
 // nothing the caller can read reports what the child actually received, and a
 // request arriving with two zeroes resolves the wrong episode without erroring.
 //
@@ -198,7 +198,7 @@ func main() {
 	// backoff and crash-loop policy can be exercised against a process that
 	// actually dies rather than one whose crash is imagined.
 	//
-	// The exit is armed *before* Serve and fires from a goroutine, so the
+	// The exit is armed before Serve and fires from a goroutine, so the
 	// handshake completes first and go-plugin reports a live process that then
 	// dies — which is the case the monitor must catch. Exiting before Serve
 	// would instead fail the launch, a different path the tests cover separately.

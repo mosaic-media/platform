@@ -12,9 +12,8 @@ import (
 )
 
 // The subset is the security property of the one payload an unauthenticated
-// party can enumerate (platform#57), and the pressure on it will always be to send
-// the library instead — one line shorter, and it always works. These are what
-// say it did not.
+// party can enumerate (platform#57). These tests are what refuse the shorter
+// answer of sending the whole library.
 
 func TestSubsetIsStrictlySmallerThanTheLibrary(t *testing.T) {
 	tree := ui.Screen(ui.Title("Mosaic"), ui.Section("Sign in", ui.Banner("hello", ui.ToneInfo))).Build()
@@ -51,11 +50,11 @@ func TestSubsetIsStrictlySmallerThanTheLibrary(t *testing.T) {
 	}
 }
 
-// The closure is transitive because definition templates name other
-// components: ExtensionCard expands into a Badge, RelatedRail into a Carousel.
-// A one-level pass serves a tree whose components resolve and whose components'
-// components do not, which draws an Unknown placeholder inside an otherwise
-// correct screen.
+// TestSubsetFollowsComponentsNamedByTemplates pins the transitive closure.
+// Definition templates name other components — ExtensionCard expands into a
+// Badge, RelatedRail into a Carousel — so a one-level pass serves a tree whose
+// components resolve and whose components' components do not, drawing an Unknown
+// placeholder inside an otherwise correct screen.
 func TestSubsetFollowsComponentsNamedByTemplates(t *testing.T) {
 	tree := ui.ExtensionCard("Something", ui.Summary("a module")).Build()
 
@@ -79,9 +78,10 @@ func TestSubsetFollowsComponentsNamedByTemplates(t *testing.T) {
 	}
 }
 
-// A component can be carried in a prop rather than as a child — an overlay's
-// body is the case in the shipped surface — and one missed there is a
-// placeholder in the middle of a screen.
+// TestSubsetFindsComponentsCarriedInProps pins that a component can be carried
+// in a prop rather than as a child — an overlay's body is the case in the
+// shipped surface — and one missed there is a placeholder in the middle of a
+// screen.
 func TestSubsetFindsComponentsCarriedInProps(t *testing.T) {
 	tree := ui.Button("Install…", "quiet",
 		ui.OnTap(ui.Overlay(ui.SurfaceModal, ui.ExtensionCard("Something")))).Build()
@@ -102,8 +102,9 @@ func TestSubsetFindsComponentsCarriedInProps(t *testing.T) {
 	}
 }
 
-// A type nothing defines is a primitive or a module's own namespaced type.
-// Neither has a definition to send, and neither is an error.
+// TestSubsetIgnoresTypesTheLibraryDoesNotDefine pins that a type nothing
+// defines is a primitive or a module's own namespaced type. Neither has a
+// definition to send, and neither is an error.
 func TestSubsetIgnoresTypesTheLibraryDoesNotDefine(t *testing.T) {
 	tree := ui.Component("acme.WeirdThing").Build()
 	names, err := vocabulary.SubsetNames(vocabulary.Library(), tree)
@@ -115,8 +116,9 @@ func TestSubsetIgnoresTypesTheLibraryDoesNotDefine(t *testing.T) {
 	}
 }
 
-// Two subsets of the same tree must be byte-identical, so a diff of what the
-// Platform served is readable and a cache key over it is stable.
+// TestSubsetIsDeterministic pins that two subsets of the same tree must be
+// byte-identical, so a diff of what the Platform served is readable and a cache
+// key over it is stable.
 func TestSubsetIsDeterministic(t *testing.T) {
 	tree := ui.Screen(ui.Title("Mosaic"), ui.Section("Sign in", ui.Banner("hello", ui.ToneInfo))).Build()
 	first, err := vocabulary.Subset(vocabulary.Library(), tree)

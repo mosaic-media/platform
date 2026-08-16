@@ -15,9 +15,9 @@ import (
 	"github.com/mosaic-media/contracts/ui"
 )
 
-// A client that declares nothing gets what every client got before the field
-// existed. This is the compatibility guarantee and it is checked by identity,
-// not by equality: an undeclared session must not even copy the tree.
+// TestUndeclaredVocabularyIsUntouched pins the compatibility guarantee: a client
+// that declares nothing gets everything. Checked by identity rather than
+// equality, because an undeclared session must not even copy the tree.
 func TestUndeclaredVocabularyIsUntouched(t *testing.T) {
 	node := ui.Screen(ui.Text(ui.Prop("text", "hello"))).Build()
 	out, d := Degrade(node, Client{})
@@ -30,7 +30,7 @@ func TestUndeclaredVocabularyIsUntouched(t *testing.T) {
 }
 
 // declaring lists everything the contract has except what is named, so a test
-// says what a client is *Missing* rather than restating the whole vocabulary.
+// says what a client is missing rather than restating the whole vocabulary.
 func declaring(missingPrimitives, missingActions []string) Client {
 	v := Client{
 		version:    sdui.VocabularyVersion,
@@ -136,10 +136,10 @@ func TestAnUnsupportedPrimitiveInASlotIsDropped(t *testing.T) {
 	}
 }
 
-// A component is never filtered: the client renders whatever definition it is
-// served, so a type outside the primitive tier is none of this pass's business.
-// Getting this wrong would blank every screen for any client that declared a
-// vocabulary, which is the failure worth a test of its own.
+// TestComponentsAndModuleTypesAreNeverDropped pins that only the primitive tier
+// is filtered: the client renders whatever definition it is served, so a type
+// outside that tier is none of this pass's business. Getting it wrong blanks
+// every screen for any client that declared a vocabulary.
 func TestComponentsAndModuleTypesAreNeverDropped(t *testing.T) {
 	node := ui.Screen(
 		ui.PosterCard("A film", "movie"),
@@ -177,8 +177,9 @@ func TestAnUninterpretableActionIsStrippedFromItsNode(t *testing.T) {
 	}
 }
 
-// A sequence is all-or-nothing. Half a sequence is a change nobody asked for,
-// which is worse than none of it.
+// TestASequenceIsStrippedWhenAnyStepIsUninterpretable pins that a sequence is
+// all-or-nothing: half a sequence is a change nobody asked for, which is worse
+// than none of it.
 func TestASequenceIsStrippedWhenAnyStepIsUninterpretable(t *testing.T) {
 	node := ui.Screen(ui.Pressable(ui.OnTap(ui.Sequence(ui.Back(), ui.Submit(ui.Invoke("createLocalUser", nil), ""))))).Build()
 	out, d := Degrade(node, declaring(nil, []string{sdui.KindSubmit}))
@@ -190,9 +191,10 @@ func TestASequenceIsStrippedWhenAnyStepIsUninterpretable(t *testing.T) {
 	}
 }
 
-// A props value that merely has a `kind` field is not an action. The check is
-// against the contract's kind set, so screen params carrying their own `kind`
-// survive — a false positive here would silently delete real data.
+// TestAPropThatIsNotAnActionIsLeftAlone pins that a props value which merely has
+// a kind field is not an action. The check is against the contract's kind set,
+// so screen params carrying their own kind survive; a false positive here
+// silently deletes real data.
 func TestAPropThatIsNotAnActionIsLeftAlone(t *testing.T) {
 	node := ui.Screen(ui.Component("Box", ui.Prop("filter", map[string]any{"kind": "series", "year": "1999"}))).Build()
 	out, d := Degrade(node, declaring(nil, []string{sdui.KindSetValue}))
@@ -205,9 +207,8 @@ func TestAPropThatIsNotAnActionIsLeftAlone(t *testing.T) {
 }
 
 func TestMissingReportsWhatTheClientLacks(t *testing.T) {
-	// Named against the live vocabulary rather than a memorised gap: `Form` used
-	// to stand here and stopped being a primitive when it turned out to be a
-	// composition, which made this assertion pass by naming nothing.
+	// Named against the live vocabulary rather than a memorised gap: a type that
+	// stops being a primitive makes this assertion pass by naming nothing.
 	p, a := declaring([]string{sdui.TypeSkeleton}, []string{sdui.KindQuery}).Missing()
 	if len(p) != 1 || p[0] != sdui.TypeSkeleton {
 		t.Errorf("Missing primitives = %v", p)
@@ -259,9 +260,10 @@ func TestDefinitionLibraryIsUntouchedForAnUndeclaredClient(t *testing.T) {
 	}
 }
 
-// A definition needing a primitive the client lacks, with no fallback, is served
-// unchanged rather than omitted: an omitted definition renders as an Unknown
-// placeholder everywhere it is used, which is worse than a template with a hole.
+// TestADefinitionWithNoFallbackIsStillServed pins that a definition needing a
+// primitive the client lacks is served unchanged rather than omitted: an omitted
+// definition renders as an Unknown placeholder everywhere it is used, which is
+// worse than a template with a hole.
 func TestADefinitionWithNoFallbackIsStillServed(t *testing.T) {
 	library := []byte(`[{"name":"Rich","template":{"type":"Box","children":[{"type":"ProgressBar"}]}}]`)
 	out := DefinitionsFor(context.Background(), declaring([]string{"ProgressBar"}, nil), library, "s1")
@@ -274,9 +276,10 @@ func TestADefinitionWithNoFallbackIsStillServed(t *testing.T) {
 	}
 }
 
-// The shipped library must survive filtering by a client that implements the
-// whole contract — the case every real client is in today. A filter that
-// mangled it would empty every screen.
+// TestTheShippedLibrarySurvivesAFullyCapableClient pins that filtering leaves
+// the shipped library untouched for a client implementing the whole contract —
+// the case every real client is in. A filter that mangled it would empty every
+// screen.
 func TestTheShippedLibrarySurvivesAFullyCapableClient(t *testing.T) {
 	out := DefinitionsFor(context.Background(), declaring(nil, nil), Library(), "s1")
 	var before, after []map[string]any
@@ -298,8 +301,8 @@ func TestTheShippedLibrarySurvivesAFullyCapableClient(t *testing.T) {
 	}
 }
 
-// The declaration reaches the session from the wire message, which is the part
-// a hand-rolled conversion gets wrong.
+// TestVocabularyFromTheWire pins the conversion from the wire message into the
+// declaration the emit side reads.
 func TestVocabularyFromTheWire(t *testing.T) {
 	v := From(&sessionv1.VocabularyProfile{
 		Version:    "1.0.0",

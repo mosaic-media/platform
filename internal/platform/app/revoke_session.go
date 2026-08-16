@@ -18,11 +18,10 @@ const ActionSessionRevoke policy.Action = "user.session.revoke"
 // RevokeSessionCommand revokes a session server-side: remote sign-out revokes
 // server-side session records rather than relying on clients deleting tokens.
 //
-// CallerSessionID carries the caller's **access token** since platform#58, not a
+// CallerSessionID carries the caller's access token since platform#58, not a
 // session id; TargetSessionID is a real session id, which is what a device list
-// names and is not itself a credential. The field names predate the pair and
-// are left alone rather than renamed across a hundred call sites — see the note
-// on Service.enterSession.
+// names and is not itself a credential. The field names predate the pair — see
+// the note on Service.enterSession.
 type RevokeSessionCommand struct {
 	CallerSessionID domain.SessionID
 	TargetSessionID domain.SessionID
@@ -52,7 +51,7 @@ func (s *Service) RevokeSession(ctx context.Context, cmd RevokeSessionCommand) (
 	}
 
 	// 2. authenticate the caller. Authorisation is deferred to inside the
-	// transaction, because it depends on *whose* session is being ended and that
+	// transaction, because it depends on whose session is being ended and that
 	// cannot be known before the target is read.
 	userID, err := s.authenticate(ctx, domain.SessionCredential(cmd.CallerSessionID))
 	if err != nil {
@@ -68,20 +67,16 @@ func (s *Service) RevokeSession(ctx context.Context, cmd RevokeSessionCommand) (
 			return err
 		}
 
-		// 3. authorize — **owning the target is what stands in for the grant.**
+		// 3. authorize: owning the target is what stands in for the grant.
 		//
-		// Ending your own session is signing out, and signing out cannot be a
-		// privilege: an account that could not do it would be an account nobody
-		// could hand a shared television back from. Ending *somebody else's* is
-		// an administrative act and needs `user.session.revoke`, which is the
-		// sentence the transport has claimed since the device list landed and
-		// which nothing enforced — the action was simply required of everybody,
-		// so ordinary accounts could not sign out and administrators could end
-		// anyone.
+		// Ending your own session is signing out, which cannot be a privilege —
+		// an account that could not do it is one nobody can hand a shared
+		// television back from. Ending somebody else's is an administrative act
+		// and needs user.session.revoke.
 		//
 		// The check is here rather than at the top because it needs the target's
-		// owner, and the target has to be read to know it. That is also why this
-		// is the one command whose steps 2 and 3 are separated.
+		// owner, and the target has to be read to know it. That is why this is
+		// the one command whose steps 2 and 3 are separated.
 		if target.UserID != az.userID {
 			subject := policy.Subject{UserID: az.userID}
 			if err := s.authorize(ctx, subject, ActionSessionRevoke,
@@ -91,11 +86,10 @@ func (s *Service) RevokeSession(ctx context.Context, cmd RevokeSessionCommand) (
 			}
 		}
 
-		// 6. apply domain rules: revoke the target session and every
-		// credential behind it. Signing out has a meaning it did not have
-		// before platform#58 — the refresh chain ends, rather than a client merely
-		// dropping the value it was holding — and it takes effect at once
-		// rather than when an access token happens to expire.
+		// 6. apply domain rules: revoke the target session and every credential
+		// behind it. The refresh chain ends here rather than when an access
+		// token happens to expire (platform#58), so signing out takes effect at
+		// once.
 		if err := s.sessionManager.Revoke(ctx, tx.Sessions(), tx.Tokens(), cmd.TargetSessionID); err != nil {
 			return err
 		}

@@ -12,8 +12,8 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
-// The trace id is Mosaic's correlation id (platform#32), so the conversion has to
-// preserve *the same* id rather than produce one — a distinction any test
+// The trace id is Mosaic's correlation id (platform#32), so the conversion has
+// to preserve the same id rather than produce one — a distinction any test
 // asserting "an id exists" would miss entirely.
 func TestTraceContextRoundTripsThroughOpenTelemetry(t *testing.T) {
 	original := telemetry.NewTraceContext()
@@ -40,7 +40,7 @@ func TestTraceContextRoundTripsThroughOpenTelemetry(t *testing.T) {
 	}
 }
 
-// **A root trace's span id is deliberately zero** — NewRootTrace means "nothing
+// A root trace's span id is deliberately zero: NewRootTrace means "nothing
 // precedes this", and Start turns that into an empty ParentID rather than a run
 // of zeros that looks like a real id. It has to survive the conversion, or a
 // root span comes back claiming a parent that never existed.

@@ -32,12 +32,11 @@ type ResolvePlaybackQuery struct {
 	// CapabilityClass is the stable digest of that same profile, and the key the
 	// resolution cache is read and written under (platform#28).
 	//
-	// It is passed in rather than derived here because deriving it is the
-	// transport's job — the transport is what receives the declaration — and two
-	// independent derivations of one digest is exactly how a cache quietly stops
-	// hitting. An empty class disables the cache for this call rather than
-	// keying everything under one shared bucket, which would serve a phone an
-	// answer chosen for a television.
+	// It is passed in rather than derived here because the transport is what
+	// receives the declaration, and two independent derivations of one digest is
+	// how a cache quietly stops hitting. An empty class disables the cache for
+	// this call rather than keying everything under one shared bucket, which
+	// would serve a phone an answer chosen for a television.
 	CapabilityClass string
 }
 
@@ -49,11 +48,11 @@ type PlaybackPreference struct {
 	Containers  map[string]bool
 	VideoCodecs map[string]bool
 	AudioCodecs map[string]bool
-	// HDR reports whether the client can *render* high dynamic range, which is a
-	// different question from whether it decodes the codec carrying it. A client
-	// that cannot is not merely missing an enhancement: an HDR stream rendered as
-	// SDR comes out wrong, and fixing it means tone-mapping, which means a full
-	// video re-encode — the most expensive thing selection can cause.
+	// HDR reports whether the client can render high dynamic range, which is a
+	// different question from whether it decodes the codec carrying it. An HDR
+	// stream rendered as SDR comes out wrong, and fixing it means tone-mapping,
+	// which means a full video re-encode — the most expensive thing selection can
+	// cause.
 	HDR bool
 	// MaxHeight caps resolution, 0 for uncapped. A phone asking for 2160p is
 	// spending bandwidth on pixels it cannot show.
@@ -62,9 +61,9 @@ type PlaybackPreference struct {
 
 // Empty reports whether the preference expresses nothing at all.
 //
-// HDR is absent from this test on purpose. It is a bool, so "cannot render HDR"
-// and "did not say" are the same value, and a client that declared only
-// `hdr: true` has said nothing selection can act on by itself.
+// HDR is absent from this test on purpose: it is a bool, so "cannot render HDR"
+// and "did not say" are the same value, and a client that declared only HDR has
+// said nothing selection can act on by itself.
 func (p PlaybackPreference) Empty() bool {
 	return len(p.Containers) == 0 && len(p.VideoCodecs) == 0 && len(p.AudioCodecs) == 0 && p.MaxHeight == 0
 }
@@ -72,10 +71,9 @@ func (p PlaybackPreference) Empty() bool {
 // ResolvePlaybackResult is the upstream location a playback provider resolved,
 // for the Platform's own origin to relay from (platform#25).
 //
-// It is deliberately *not* something to hand a client. URL and Headers may
-// carry a debrid credential, and keeping them server-side is half the reason
-// the origin exists — the transport seals them into a ticket rather than
-// emitting them.
+// Do not hand this to a client. URL and Headers may carry a debrid credential,
+// and keeping them server-side is half the reason the origin exists — the
+// transport seals them into a ticket rather than emitting them.
 type ResolvePlaybackResult struct {
 	// ModuleID is the playback module that resolved this, carried for
 	// diagnostics.
@@ -86,11 +84,9 @@ type ResolvePlaybackResult struct {
 	// fetched bare.
 	Headers map[string]string
 
-	// What was chosen, and out of how many. Selection is invisible when it works
-	// and indistinguishable from a bug when it does not — "nothing changed"
-	// looks identical whether ranking picked badly or the item only ever had one
-	// candidate to pick from. Reporting both makes that answerable without a
-	// database query.
+	// What was chosen, and out of how many. Both are reported because a bad
+	// choice and a single candidate look identical from outside, and telling
+	// them apart otherwise needs a database query.
 	PartID     v1.PartID
 	Release    string
 	VideoCodec string
@@ -99,16 +95,13 @@ type ResolvePlaybackResult struct {
 	Candidates int
 
 	// Cached reports that this answer came from the resolution cache rather than
-	// from the source. It is the one field that distinguishes a fast play from a
-	// slow one after the fact, and without it a cache that has silently stopped
-	// hitting looks exactly like a cache that was never warm.
+	// from the source. Without it a cache that has stopped hitting looks exactly
+	// like a cache that was never warm.
 	Cached bool
 
 	// Probe is the stored probe document for the chosen release (platform#29),
 	// empty when it has never been probed. It rides the result rather than being
-	// re-read because the transport must not touch a store, and re-reading the
-	// Part to fetch one attribute would be a second query for something this
-	// call already had in hand.
+	// re-read because the transport must not touch a store.
 	Probe []byte
 }
 
@@ -118,9 +111,8 @@ type ResolvePlaybackResult struct {
 //
 // It runs at play time, every time. The Part's stored location is what a source
 // offered when the item was materialised, and for a debrid link that is a
-// short-lived address which has very likely expired — so the Part is an
-// identity hint handed to the provider, not an answer read back out of the
-// graph.
+// short-lived address which has very likely expired — so the Part is an identity
+// hint handed to the provider, not an answer read back out of the graph.
 func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (ResolvePlaybackResult, error) {
 	if q.Caller.Session == "" {
 		return ResolvePlaybackResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
@@ -142,26 +134,24 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 	}
 
 	// Which release actually plays is chosen here, not at import (platform#27).
-	// The source offers dozens for one item and they differ in ways that decide
-	// whether a given client can play them at all; import stored the set
-	// precisely so this choice could be made with the caller in view. The Part
-	// named by the request is the item's entry point, not a verdict.
+	// Import stored the whole set so this choice could be made with the calling
+	// client in view; the Part named by the request is the item's entry point,
+	// not a verdict.
 	candidates, chosen, switched := s.selectPlayable(ctx, part, q.Prefer)
 	if switched {
 		part = chosen
 	}
 
-	// The cache is read after selection, not before it, and the order is the
-	// whole point (platform#28). Selection is a ranking over Parts already in the
-	// database — free, and it names *which* release this client should get. Only
-	// then is there a key to look up. Reading the cache first would mean caching
-	// the choice as well as the address, and the choice is cheap to remake and
-	// changes whenever the candidate set does.
+	// The cache must be read after selection, never before (platform#28).
+	// Selection is a free ranking over Parts already in the database and it
+	// names which release this client should get; only then is there a key to
+	// look up. Reading the cache first would cache the choice as well as the
+	// address, and the choice changes whenever the candidate set does.
 	if cached, ok := s.cachedResolution(ctx, part, q.CapabilityClass); ok {
-		// ModuleID is left empty, and that is the accurate report: no module was
-		// asked. A cached play therefore also works while a playback module is
-		// uninstalled or unreachable, which is a side effect rather than a
-		// designed guarantee — the entry still dies when its link does.
+		// ModuleID is left empty, accurately: no module was asked. A cached play
+		// therefore also works while a playback module is uninstalled or
+		// unreachable — a side effect rather than a guarantee, since the entry
+		// still dies when its link does.
 		return ResolvePlaybackResult{
 			URL: cached.URL, Headers: cached.Headers,
 			PartID: part.ID, Release: part.EditionLabel,
@@ -172,9 +162,9 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 
 	entry, ok := s.playbackProvider()
 	if !ok {
-		// This is platform#24's inert library, reported honestly rather than as a
-		// failure to play: nothing is installed that can consume what
-		// materialising created.
+		// platform#24's inert library: nothing is installed that can consume what
+		// materialising created. Reported as such rather than as a failure to
+		// play.
 		return ResolvePlaybackResult{}, contracts.NewError(contracts.NotFound, "no playback module is installed")
 	}
 
@@ -218,8 +208,7 @@ func (s *Service) ResolvePlayback(ctx context.Context, q ResolvePlaybackQuery) (
 //
 // A Part with no probe, or with attributes that will not decode, yields nothing
 // and the caller probes afresh. Nothing here is worth failing a play over: the
-// worst case is one ffprobe run, which is what happened on every play before
-// this was stored at all.
+// worst case is one ffprobe run.
 func probeAttribute(part v1.Part) []byte {
 	if len(part.Attributes) == 0 {
 		return nil
@@ -239,9 +228,9 @@ func probeAttribute(part v1.Part) []byte {
 // (platform#28).
 //
 // There is deliberately no liveness check. Pre-checking would spend a round trip
-// on every single play to catch a failure that is rare — which is the exact
-// latency this cache exists to remove — so a dead entry is discovered by using
-// it and corrected then.
+// on every play to catch a rare failure, which is the latency this cache exists
+// to remove; a dead entry is discovered by using it and corrected then. See
+// ReresolvePlayback.
 //
 // Every failure here degrades to a miss rather than an error. A cache that
 // cannot be read must cost a slow play, never a failed one.
@@ -259,12 +248,11 @@ func (s *Service) cachedResolution(ctx context.Context, part v1.Part, class stri
 // cacheResolution stores what the source just answered, for the next client of
 // the same class to reuse.
 //
-// It writes on the request's own goroutine rather than in the background, and
-// that is a smaller compromise than it looks: platform#28's requirement is that the
-// cache write must not block the *stream*, and nothing has started streaming
-// yet — the client has not even been handed a ticket. What it must not do is
-// fail the play, so a write error is logged and swallowed. Being unable to make
-// the next play fast is not a reason to refuse this one.
+// It writes on the request's own goroutine rather than in the background.
+// platform#28 requires only that the cache write not block the stream, and
+// nothing has started streaming yet — the client has not been handed a ticket.
+// A write error is logged and swallowed: being unable to make the next play fast
+// is not a reason to refuse this one.
 func (s *Service) cacheResolution(ctx context.Context, partID v1.PartID, class, url string, headers map[string]string) {
 	if s.resolutions == nil || class == "" || partID == "" || url == "" {
 		return
@@ -287,11 +275,10 @@ func (s *Service) cacheResolution(ctx context.Context, partID v1.PartID, class, 
 // playbackProvider picks the playback provider to resolve through, tolerating a
 // Service built without a registry.
 //
-// It takes the first in stable module-id order. That is a real choice and worth
-// naming: precedence *between* two installed playback modules is undecided, and
-// with one installed the question does not arise. It is the consumer-side twin
-// of sdk#2's open provider-precedence seam, and it should be settled with
-// that one rather than invented here.
+// It takes the first in stable module-id order. Precedence between two installed
+// playback modules is undecided — the consumer-side twin of sdk#2's open
+// provider-precedence seam — and should be settled with that one rather than
+// invented here.
 func (s *Service) playbackProvider() (PlaybackProviderEntry, bool) {
 	if s.capabilities == nil {
 		return PlaybackProviderEntry{}, false
@@ -305,17 +292,17 @@ func (s *Service) playbackProvider() (PlaybackProviderEntry, bool) {
 
 // selectPlayable picks the candidate to play from the item's Parts.
 //
-// The ordering is deliberate and is the whole of platform#27's argument. A
-// candidate the client can decode outright beats one needing work, because
-// re-encoding costs latency the viewer sees and forfeits byte-range seeking.
-// Among equals, the source's own ranking wins — it knows its ecosystem better
-// than a guess made here does.
+// A candidate the client can decode outright beats one needing work, because
+// re-encoding costs latency the viewer sees and forfeits byte-range seeking
+// (platform#27). Among equals the source's own ranking wins.
 //
 // It is best-effort by construction: the metadata it ranks on was parsed from
-// release text at the module boundary (module-stremio-addons#2) and can be wrong or absent.
-// That is acceptable *because* it only orders a list — what the chosen release
-// actually contains is settled by probing the bytes before they play (platform#29),
-// so a bad parse costs a suboptimal choice rather than a failed play.
+// release text at the module boundary (module-stremio-addons#2) and can be wrong
+// or absent. That is acceptable because it only orders a list — what the chosen
+// release actually contains is settled by probing the bytes before they play
+// (platform#29), so a bad parse costs a suboptimal choice rather than a failed
+// play.
+//
 // It returns how many candidates it had to choose from, which is the difference
 // between "ranking picked this" and "there was nothing else".
 func (s *Service) selectPlayable(ctx context.Context, entry v1.Part, prefer PlaybackPreference) (int, v1.Part, bool) {
@@ -355,7 +342,7 @@ func codecScore(codec string, accepted map[string]bool) int {
 //
 // The weights encode an order rather than a measurement: compatibility dominates
 // resolution, because an unplayable 4K release is worth less than a playable
-// 720p one, and a needed re-encode is a real cost rather than a footnote.
+// 720p one.
 func playbackScore(p v1.Part, prefer PlaybackPreference) int {
 	score := 0
 
@@ -366,26 +353,23 @@ func playbackScore(p v1.Part, prefer PlaybackPreference) int {
 	}
 
 	// Codec compatibility first, and audio counts as much as video: an
-	// undecodable audio track is the difference between a film and a silent
-	// film, which is not a lesser failure.
+	// undecodable audio track is the difference between a film and a silent one.
 	//
-	// Three states, not two, and the distinction is load-bearing. A codec the
-	// client is known to decode is rewarded; one it is known *not* to decode is
-	// penalised; and one the module could not parse is left neutral. Collapsing
-	// the last two would rank an unparsed candidate as though it were known-bad
-	// — and the module's parse is best-effort, so plenty of perfectly playable
-	// releases arrive unparsed. Unknown is not the same as wrong.
+	// Three states, not two. A codec the client is known to decode is rewarded;
+	// one it is known not to decode is penalised; one the module could not parse
+	// is left neutral. Do not collapse the last two: the module's parse is
+	// best-effort, so plenty of playable releases arrive unparsed, and ranking
+	// them as known-bad would bury them.
 	score += codecScore(p.VideoCodec, prefer.VideoCodecs)
 	score += codecScore(p.AudioCodec, prefer.AudioCodecs)
 	if len(prefer.Containers) > 0 && p.Container != "" && prefer.Containers[p.Container] {
 		score += 200
 	}
 
-	// HDR the client cannot render is a video re-encode, and a video re-encode is
-	// the most expensive outcome selection can produce — so it is penalised harder
-	// than an audio mismatch, which costs almost nothing to fix. It sits below
-	// outright undecodability because a tone-mapped HDR release does eventually
-	// play, where an undecodable one never does.
+	// HDR the client cannot render means a video re-encode, the most expensive
+	// outcome selection can produce, so it is penalised harder than an audio
+	// mismatch. It sits below outright undecodability because a tone-mapped HDR
+	// release does eventually play, where an undecodable one never does.
 	if !prefer.HDR && p.HDRFormat != "" {
 		score -= 400
 	}
@@ -408,22 +392,19 @@ func playbackScore(p v1.Part, prefer PlaybackPreference) int {
 // ReresolvePlayback asks the source again where a release's bytes are, and
 // overwrites the cached answer (platform#28's invalidate-on-read).
 //
-// **It is the cache's correction, and it deliberately does not read the cache.**
-// The origin calls this precisely because the cached address did not work, so
-// consulting it would return the dead link that prompted the call. The write at
-// the end overwrites rather than deletes, which is the store's own rule: the
-// *candidate* was never wrong, only its address changed, and deleting would
-// throw away a key about to be written again.
+// It must not read the cache. The origin calls this precisely because the cached
+// address did not work, so consulting it would return the dead link that
+// prompted the call. The write at the end overwrites rather than deletes: the
+// candidate was never wrong, only its address changed.
 //
-// It runs as the session that minted the ticket, so it authorises on exactly the
-// same terms as the play that produced it. That is why the origin can call it at
-// all: a transport calls services, and this one re-runs the boundary rather than
-// trusting the ticket as proof of anything but its own provenance.
+// It runs as the session that minted the ticket, so it authorises on the same
+// terms as the play that produced it. That is why the origin can call it at all:
+// it re-runs the boundary rather than trusting the ticket as proof of anything
+// but its own provenance.
 //
-// It resolves the Part it is given and does not re-run selection. Selection
-// already chose this release for this client; re-choosing mid-playback could
-// hand back a different release, and a viewer who is thirty minutes in would
-// have the film change under them.
+// It resolves the Part it is given and must not re-run selection. Selection
+// already chose this release for this client; re-choosing mid-playback would
+// change the film under a viewer thirty minutes in.
 func (s *Service) ReresolvePlayback(ctx context.Context, caller v1.Caller, partID v1.PartID, class string) (ResolvePlaybackResult, error) {
 	if caller.Session == "" {
 		return ResolvePlaybackResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")

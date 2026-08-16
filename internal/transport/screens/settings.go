@@ -70,8 +70,8 @@ type settingsNavGroup struct {
 //
 // Expert mode is a control on the nav rather than a section in it — Kodi's
 // settings level, which decides how much of the nav exists rather than being
-// somewhere you go. It used to be a section whose entire content was a button
-// that changed what the nav showed, which is a section about the nav.
+// somewhere you go. A section whose entire content is a button that changes what
+// the nav shows would be a section about the nav.
 type settingsNavModel struct {
 	groups []settingsNavGroup
 	// showExpertMode is whether the control is drawn at all — a caller who
@@ -89,9 +89,8 @@ type settingsNavModel struct {
 //
 // The nav is the Platform's on every render, including a module's section — a
 // module fills the panel and cannot draw the nav, because a module does not know
-// it is being hosted. That is also what replaced the old "← Settings" button:
-// the way back out used to be a control the host appended above the module's
-// tree, and it is now the nav that never left the screen.
+// it is being hosted. The way back out is the nav itself, which never leaves the
+// screen, rather than a control the host appends above the module's tree.
 //
 // Which sections exist is decided per caller, so a settings screen is never a
 // list of things the person reading it cannot open.
@@ -109,8 +108,8 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 	// a panel is being rendered: opening settings with no params still resolves a
 	// default section, because a desktop wants one rather than an empty pane. A
 	// phone renders the nav as a list and drills into a section, so it needs the
-	// difference — without it, settings on a phone would open inside whichever
-	// module sorted first, offering a way back to a list nobody had seen.
+	// difference — without it, settings on a phone opens inside whichever module
+	// sorted first, offering a way back to a list that was never shown.
 	nav.selected = moduleID != "" || section != ""
 
 	if strings.HasPrefix(active, moduleSectionKey) {
@@ -138,10 +137,9 @@ func (s *Service) settingsScreen(ctx context.Context, caller v1.Caller, params m
 // settingsNav builds the nav for this caller: the install-level sections they
 // can use, then a row per module that contributes a settings screen.
 //
-// The modules group is the one sdk#4 exists for. It used to be a list on an
-// index screen, which meant a module's settings were two navigations deep and
-// the way back was a button the host drew; as nav rows they are one tap from
-// each other and from everything else here.
+// The modules group is the one sdk#4 exists for. As nav rows the modules are one
+// tap from each other and from everything else here; as a list on an index
+// screen they would be two navigations deep with a host-drawn way back.
 func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNavModel, error) {
 	nav := settingsNavModel{}
 	var groups []settingsNavGroup
@@ -251,11 +249,11 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 	}
 	// A caller who may not read modules gets no module rows, not an error.
 	//
-	// This failed the **whole settings screen** for every ordinary account: the
-	// query authorises `module.read`, which is administrator authority, so a
-	// viewer opening settings got "no role grants module.read" where their own
-	// Account panel should have been. The nav is a list of what this caller can
-	// open, and the honest answer to "may I list modules" is a shorter list.
+	// The query authorises module.read, which is administrator authority, so
+	// calling it unconditionally fails the whole settings screen for an ordinary
+	// account: they get "no role grants module.read" where their own Account
+	// panel should be. The nav is a list of what this caller can open, and the
+	// honest answer to "may I list modules" is a shorter list.
 	var res app.ListSettingsModulesResult
 	if s.content.CallerCan(ctx, caller, app.ActionModuleRead, "module") {
 		var err error
@@ -296,9 +294,9 @@ func (s *Service) settingsNav(ctx context.Context, caller v1.Caller) (settingsNa
 	// Each row inside the group is gated on its own permission, because they
 	// are different disclosures: the queue is what the install did to itself,
 	// telemetry is what its users did (platform#13). A caller granted one and not
-	// the other sees exactly the rows they can open. Expert mode stays the
-	// *level* control over the group and never the gate — each screen
-	// authorises for itself.
+	// the other sees exactly the rows they can open. Expert mode stays the level
+	// control over the group and never the gate — each screen authorises for
+	// itself.
 	if nav.showExpertMode && nav.expertModeOn {
 		var diagnostics []settingsNavEntry
 		if canReadTelemetry {
@@ -371,8 +369,8 @@ func (s *Service) moduleSettingsPanel(ctx context.Context, caller v1.Caller, nav
 // the Platform's own sections on the same frame.
 //
 // So the Screen's own container is dropped and its title becomes the panel
-// heading. **What the module contributed is untouched** — every child renders in
-// the order it was returned, and any other root is hosted verbatim. The Platform
+// heading. What the module contributed is untouched — every child renders in the
+// order it was returned, and any other root is hosted verbatim. The Platform
 // is replacing its own outer container, which is the half of the tree sdk#4
 // already says belongs to the host.
 func modulePanel(node sdui.Node) (string, []sdui.Node) {
@@ -523,11 +521,11 @@ func (s *Service) extensionsScreen(ctx context.Context, caller v1.Caller) (sdui.
 // is, what it would be able to do once it runs, where its bytes come from — and
 // the control that actually installs it (platform#51).
 //
-// It is an **overlay over the catalogue**, not a screen. Installing is running
+// It is an overlay over the catalogue, not a screen. Installing is running
 // somebody else's signed binary on this machine, and the decision belongs to the
 // list you are looking at: a screen would take the catalogue away, need a route
 // and a way back, and turn "tell me about this one" into navigation. The
-// authority is unchanged and lives in the command; what this adds is *informed*
+// authority is unchanged and lives in the command; what this adds is informed
 // consent, which a row with an Install button on it cannot give.
 //
 // It carries the only installExtension action in the surface — the card opens
@@ -585,17 +583,17 @@ func provenanceSection(e app.ExtensionCatalogueEntry) *ui.Element {
 // capability describes one provider role in the terms a person deciding about a
 // module would use.
 //
-// The words are the **Platform's**, not the module's, and that is deliberate: a
+// The words are the Platform's, not the module's, and that is deliberate: a
 // role means one thing here regardless of who fills it, so what a module can do
 // is read off its signed manifest rather than off prose its author wrote about
 // itself. A module cannot overstate what it will be able to do, because it is
 // not the one saying it.
 //
-// What this is NOT is a description of what a particular extension is *for* —
+// What this is not is a description of what a particular extension is for —
 // "AIOStreams aggregates many sources behind one instance" is the module's own
 // sentence and nothing in the chain carries it: the SDK manifest has no
 // description field, so neither does the extension manifest, the signed index,
-// or the catalogue entry. Adding one is an additive SDK bump, a `host`
+// or the catalogue entry. Adding one is an additive SDK bump, a host
 // pass-through, a line in each module and a re-release of each — recorded as a
 // gap rather than faked here with a hand-maintained table of other people's
 // modules.
@@ -727,7 +725,7 @@ func installedExtensionsSection(installed []app.InstalledExtension, provides map
 // already installed. One already installed is not repeated here — it is in the
 // section above with its Uninstall control.
 //
-// The control **opens a confirmation rather than installing**: running somebody
+// The control opens a confirmation rather than installing: running somebody
 // else's binary is a decision, so it gets an overlay that says what the module
 // would be able to do and where the bytes come from, and the install happens on
 // the far side of it. A one-tap Install on a list is how you end up with a

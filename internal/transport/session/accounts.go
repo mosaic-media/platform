@@ -17,10 +17,8 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// Account administration, as a client can reach it (platform#44, roadmap M1.3).
-//
-// Three dispatch cases over six application commands. Everything they call was
-// complete before this file existed and none of it had a caller outside a test.
+// Account administration, as a client can reach it (platform#44, roadmap M1.3):
+// three dispatch cases over six application commands.
 
 // createAccountEnvelope is what the new-account form submits. The four fields
 // come from the form's scope; the preset comes from the action, because it is
@@ -37,16 +35,15 @@ type createAccountEnvelope struct {
 // createAccount provisions a household member: the account, the role carrying
 // what the grantor chose to confer, and the grant binding them.
 //
-// **Three commands, three transactions, and that is stated rather than hidden.**
-// CreateLocalUser, CreateRole and GrantRole each own their boundary — each
-// validates, authenticates, authorises and commits with its own outbox event —
-// and composing them here means a failure between the first and the third
-// leaves an account holding no role. That account cannot sign in (authenticating
-// is itself policy-gated, so somebody holding nothing is refused a session), it
-// is visible in the list, and the person panel names the state and offers the
-// step that was missed. The alternative was a fourth command doing all three
-// inside one UnitOfWork, which would have left the three real ones exactly as
-// unreachable as they were.
+// Three commands, three transactions, and it is not atomic. CreateLocalUser,
+// CreateRole and GrantRole each own their boundary — each validates,
+// authenticates, authorises and commits with its own outbox event — so a failure
+// between the first and the third leaves an account holding no role. That
+// account cannot sign in (authenticating is itself policy-gated, so somebody
+// holding nothing is refused a session), it is visible in the list, and the
+// person panel names the state and offers the step that was missed. Do not
+// collapse the three into a fourth command sharing one UnitOfWork; that leaves
+// the three with no caller again.
 func (h *Handler) createAccount(ctx context.Context, caller v1.Caller, input []byte) error {
 	var env createAccountEnvelope
 	if err := json.Unmarshal(nonEmpty(input), &env); err != nil {
@@ -90,7 +87,7 @@ func (h *Handler) createAccount(ctx context.Context, caller v1.Caller, input []b
 	}
 
 	// The install's role for this preset, made the first time somebody asks for
-	// it and carrying a **snapshot** of the preset narrowed to what that first
+	// it and carrying a snapshot of the preset narrowed to what that first
 	// grantor held. Snapshotted deliberately: a role created today does not gain
 	// an action the Platform adds tomorrow, which is correct for every role
 	// except the install owner's — whose the boot-time reconciliation keeps
@@ -113,17 +110,15 @@ func (h *Handler) createAccount(ctx context.Context, caller v1.Caller, input []b
 
 // presetRole finds the install's role for a preset, creating it the first time.
 //
-// **A role name is unique across the install**, which makes "create the User
-// role" something that can happen exactly once. Creating one per account was
-// the first attempt and it produced three accounts out of four holding no
-// authority at all — each one a Conflict on the second insert, each one an
-// account that could not sign in. The browser found it; nothing else could,
-// because the fakes had no unique index.
+// A role name is unique across the install, so "create the User role" can happen
+// exactly once: creating one role per account makes every account after the
+// first fail with a Conflict, leaving it holding no authority and unable to sign
+// in.
 //
 // So a preset role is an install-wide named role that several people hold. That
-// does not weaken the snapshot the roadmap asks for: the snapshot belongs to the
-// role, taken when the role was created, and nothing widens it afterwards — an
-// account provisioned today still never gains an action added tomorrow.
+// does not weaken the snapshot: the snapshot belongs to the role, taken when the
+// role was created, and nothing widens it afterwards — an account provisioned
+// today still never gains an action added tomorrow.
 //
 // The set is only used when the role is being created. An existing one is
 // granted as it stands, bounded by what the grantor holds (platform#44), so a
@@ -159,9 +154,9 @@ func (h *Handler) presetRole(ctx context.Context, caller v1.Caller, preset strin
 
 // partialAccount reports an account left without authority.
 //
-// It records what happened and returns a message a person can act on rather
-// than the raw failure, because the account *does* exist and the recovery is a
-// button on its own panel. An error saying only "conflict" would leave somebody
+// It records what happened and returns a message a person can act on rather than
+// the raw failure, because the account does exist and the recovery is a button
+// on its own panel. An error saying only "conflict" would leave somebody
 // wondering whether to try creating them again.
 func (h *Handler) partialAccount(ctx context.Context, user domain.User, what string, err error) error {
 	telemetry.From(ctx).For("auth").Error("an account was created without authority",
@@ -209,11 +204,11 @@ func validateNewAccount(env createAccountEnvelope) error {
 
 // accountEmail supplies the address CreateLocalUser requires.
 //
-// The command has always required one and Mosaic sends no mail, so a household
-// creating an account for a child who has no address had no way through. Rather
-// than relax the command — the field is a real one and other deployments may
-// come to depend on it — the transport fills a local, non-routable address that
-// is obviously synthetic to anybody who reads it.
+// CreateLocalUser requires an address and Mosaic sends no mail, so an account
+// for somebody who has none would otherwise have no way through. The command is
+// left as it is — the field is real and other deployments may depend on it — and
+// the transport fills a local, non-routable address that reads as obviously
+// synthetic.
 func accountEmail(env createAccountEnvelope) string {
 	if e := strings.TrimSpace(env.Email); e != "" {
 		return e
@@ -221,12 +216,13 @@ func accountEmail(env createAccountEnvelope) string {
 	return strings.TrimSpace(env.Username) + "@mosaic.invalid"
 }
 
-// setUserStatus suspends or reactivates an account.
+// statusEnvelope is the setUserStatus action input.
 type statusEnvelope struct {
 	UserID string `json:"userId"`
 	Status string `json:"status"`
 }
 
+// setUserStatus suspends or reactivates an account.
 func (h *Handler) setUserStatus(ctx context.Context, caller v1.Caller, input []byte) error {
 	var env statusEnvelope
 	if err := json.Unmarshal(nonEmpty(input), &env); err != nil {

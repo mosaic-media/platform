@@ -33,12 +33,11 @@ type CredentialStore interface {
 	// ConsumeTOTPStep records that a counter step has been spent, and reports
 	// whether it was still available.
 	//
-	// **The check and the write are one statement, and that is the whole
-	// reason this is a store method rather than a read followed by a save.**
-	// Two sign-ins racing with the same stolen code would both read the old
-	// step and both write the new one, and the replay this exists to prevent
-	// would succeed. A conditional update decides it in the database, where
-	// only one can win.
+	// The check and the write must be one statement, which is why this is a
+	// store method rather than a read followed by a save: two sign-ins racing
+	// with the same stolen code would both read the old step and both write
+	// the new one, and the replay this exists to prevent would succeed. A
+	// conditional update decides it in the database, where only one can win.
 	ConsumeTOTPStep(ctx context.Context, userID domain.UserID, step int64) (bool, error)
 
 	SaveRecoveryFactor(ctx context.Context, factor domain.RecoveryFactor) error

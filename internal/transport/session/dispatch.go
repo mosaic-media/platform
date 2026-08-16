@@ -19,20 +19,17 @@ import (
 )
 
 // dispatch routes an Invoke action to the application command service that backs
-// it. contracts#5 moved the client's mutations off the GraphQL schema platform#22's
-// socket ran them through and onto the application services directly; platform#37
-// then removed that schema, so this switch is now the *only* way a client
-// mutation reaches the Platform. The action's caller is the session's opaque ref
-// (platform#13), so every write re-authorises as the invoking user.
-//
-// That makes the switch a real boundary rather than a convenience: an action a
-// client can name and this function cannot map does not exist. Adding one is a
-// deliberate act here, which is the point — the surface a client can reach is
-// enumerated in one readable place instead of inferred from a schema.
+// it (contracts#5, platform#37). This switch is the only way a client mutation
+// reaches the Platform, so it is the complete enumeration of what a client can
+// invoke: an action a client can name and this function cannot map does not
+// exist. Adding one is a deliberate act here. The action's caller is the
+// session's opaque ref (platform#13), so every write re-authorises as the
+// invoking user.
 //
 // input is the SDUI runtime's action envelope in JSON (platform#19), so an action
 // ABI is a property of the action, not of the transport carrying it.
-// An action pushes a *sequence* of updates, not one: the two-lane transport
+//
+// An action pushes a sequence of updates, not one: the two-lane transport
 // (contracts#5) exists so the server drives the client's regions unprompted, and a
 // single action can legitimately push more than one region update — a player and
 // the "Next episode" control beside it. Most actions push nothing (a nil slice)
@@ -94,16 +91,15 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		h.mgr.End(string(target))
 		return nil, nil
 	case "signOut":
-		// Ending *this* session (platform#58). It names no target and cannot: the
+		// Ending this session (platform#58). It names no target and cannot: the
 		// session it arrives on is the one it revokes, which is what makes it
 		// safe to put on the account cluster of every screen — an affordance
 		// that could be pointed at another device would need to say which.
 		//
 		// The client discovers the outcome the way it discovers any revocation:
 		// its next call fails Unauthenticated, it drops the stored pair, and the
-		// doorway comes back. That is the same path a refused session already
-		// took, which is why signing out and being signed out are one code path
-		// in the client rather than two.
+		// doorway comes back. Signing out and being signed out are therefore one
+		// code path in the client rather than two.
 		if _, err := h.svc.RevokeSession(ctx, app.RevokeSessionCommand{
 			CallerSessionID: domain.SessionID(caller.Session),
 			TargetSessionID: domain.SessionID(s.ref),
@@ -141,15 +137,15 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 		// every few seconds would be noise over the film it is reporting on.
 		return nil, h.reportProgress(ctx, s, input)
 	case "recordImpression":
-		// What a screen reported having been *seen* (web#6). It is silent for
-		// the same reason reportProgress is — a toast per card scrolled past is
+		// What a screen reported having been seen (web#6). It is silent for the
+		// same reason reportProgress is — a toast per card scrolled past is
 		// noise over the screen it is about — and it is the only consumer of the
 		// lifecycle triggers today.
 		//
-		// The Platform records it and stores nothing. Telemetry is where an
-		// impression belongs until there is a question worth keeping one to
-		// answer; a table filled first and queried never is a retention
-		// liability rather than an analytics capability.
+		// It goes to telemetry and is stored nowhere. Do not add a table for it
+		// until there is a question worth keeping impressions to answer: one
+		// filled first and queried never is a retention liability rather than an
+		// analytics capability.
 		return nil, h.recordImpression(ctx, s, input)
 	case "createLibraryRule":
 		// What the library should contain (platform#60). The four library-rule
@@ -186,7 +182,7 @@ func (h *Handler) dispatch(ctx context.Context, s *liveSession, action string, i
 }
 
 // playEnvelope is the playPart action input: the Part to play. The SDUI Play
-// action emits `partId` (platform#19's action ABI), so that is the key read here.
+// action emits partId (platform#19's action ABI), so that is the key read here.
 type playEnvelope struct {
 	PartID string `json:"partId"`
 	// NodeID is the item being played, and the key playback state is stored
@@ -196,9 +192,9 @@ type playEnvelope struct {
 	Title  string `json:"title"`
 	Poster string `json:"poster"`
 	// Restart asks for the beginning rather than the stored position — the
-	// "Start over" affordance beside Resume. It is a property of *this* play
-	// rather than a change to the state, so choosing it does not throw away
-	// where the viewer had got to until they watch past it.
+	// "Start over" affordance beside Resume. It is a property of one play rather
+	// than a change to the state, so choosing it does not throw away where the
+	// viewer had got to until they watch past it.
 	Restart bool `json:"restart"`
 	// AudioIndex and SubtitleIndex override the tracks the preference would have
 	// chosen, for this sitting only (platform#71). Both are source stream indexes,
@@ -206,7 +202,7 @@ type playEnvelope struct {
 	// and a zero is "stream 0", and collapsing them would make the first track
 	// unselectable.
 	//
-	// **A preference decides the default; an override decides one playback.**
+	// A preference decides the default; an override decides one playback.
 	// Nothing here is written back, deliberately — somebody sampling the Japanese
 	// audio on one episode has not changed what they want on the next.
 	AudioIndex    *int `json:"audioIndex,omitempty"`
@@ -214,8 +210,8 @@ type playEnvelope struct {
 
 	// Ref materialises the item before playing it, for something not in the
 	// library yet (platform#73). It is the same envelope importContent takes,
-	// deliberately: pressing Play on something unowned *is* an import, and
-	// giving it a second shape would hide that.
+	// deliberately: pressing Play on something unowned is an import, and giving
+	// it a second shape would hide that.
 	Ref *importRef `json:"ref,omitempty"`
 }
 
@@ -223,7 +219,7 @@ type playEnvelope struct {
 // returns the Player surface to push (platform#25, web#4).
 //
 // It is the one dispatch case that produces a surface rather than a toast,
-// because playback *is* a surface: the client has to be handed somewhere to
+// because playback is a surface: the client has to be handed somewhere to
 // render, and the screen underneath must survive it.
 //
 // The ticket is minted here, in the transport, and never leaves the server in
@@ -276,26 +272,25 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 		return nil, err
 	}
 
+	// What this viewer wants to hear (platform#83). Read per caller rather than
+	// from a package-level default, because language belongs to a person and
+	// several people share one library.
+	langs := playback.ParseLanguagePreference(h.svc.LanguagePreferenceFor(ctx, caller))
+
 	// Probe the winner, then decide per stream (platform#29). This is where a 4K
 	// HEVC release with four E-AC3 audio tracks becomes "copy the video, encode
 	// the English audio" rather than either a whole-file transcode or a silent
 	// film. The plan travels sealed inside the ticket, so the origin does not
 	// re-probe on every range request a seeking player makes.
-	// What this viewer wants to hear (platform#83). Read here rather than baked
-	// into the Platform, because language belongs to a person: four people
-	// sharing one library previously got one person's answer from a package
-	// variable, and the parameter that would have carried theirs was passed nil.
-	langs := playback.ParseLanguagePreference(h.svc.LanguagePreferenceFor(ctx, caller))
-
 	info, probed := h.mediaInfo(ctx, caller, res)
 	plan := playback.Plan{DirectPlay: true}
 	if probed {
 		plan = playback.Decide(info, profile.codecs(), langs.Audio)
 		// A track chosen for this sitting overrides the one the preference
-		// picked (platform#71). Applied after Decide rather than inside it, because
-		// the plan's *other* decisions — whether the video is copied, whether
-		// the audio needs an encode — still have to be made for the track that
-		// was actually chosen.
+		// picked (platform#71). Applied after Decide rather than inside it,
+		// because the plan's other decisions — whether the video is copied,
+		// whether the audio needs an encode — still have to be made for the
+		// track that was actually chosen.
 		plan = playback.WithAudioOverride(plan, info, profile.codecs(), env.AudioIndex)
 	}
 	// What they should read, after the release has had its say. A preference
@@ -423,18 +418,16 @@ func (h *Handler) playPart(ctx context.Context, s *liveSession, input []byte) ([
 // mediaInfo answers what the chosen release actually is, from storage when it is
 // already known and from ffprobe when it is not (platform#29).
 //
-// Reusing a stored probe is the whole reason this is worth having. A probe
-// describes bytes and bytes do not change, so the second play of a release was
-// paying for an answer nobody could have got wrong — and once platform#28's cache
-// removed the aggregator call, that payment was the largest thing left between a
-// click and a first frame.
+// Reusing a stored probe is safe because a probe describes bytes and bytes do
+// not change. It is also worth doing: with platform#28's cache removing the
+// aggregator call, re-probing is the largest cost left between a click and a
+// first frame.
 //
-// A probe failure is not a playback failure. Relaying unprobed is exactly what
-// happened before probing existed, so an absent ffprobe — or a source that will
-// not answer one — degrades to the previous behaviour rather than refusing to
-// play. The cost of that fallback is a silent film when the audio turns out to
-// be undecodable, which is the bug this exists to fix; it is still better than
-// no picture at all.
+// A probe failure is not a playback failure. An absent ffprobe — or a source
+// that will not answer one — relays unprobed rather than refusing to play. The
+// cost of that fallback is a silent film when the audio turns out to be
+// undecodable, which is the thing probing exists to prevent; it is still better
+// than no picture at all.
 func (h *Handler) mediaInfo(ctx context.Context, caller v1.Caller, res app.ResolvePlaybackResult) (playback.MediaInfo, bool) {
 	if info, ok := playback.Decode(res.Probe); ok {
 		return info, true
@@ -453,15 +446,13 @@ func (h *Handler) mediaInfo(ctx context.Context, caller v1.Caller, res app.Resol
 // recordProbe stores what the probe learned, so the next play of this release
 // skips it.
 //
-// **It records as the system principal, not as the viewer** (platform#13).
-// Recording writes to the content graph, so it asks for `content.bind`, and a
-// read-only viewer does not have it — so this used to be a correct refusal with
-// a wrong outcome: that viewer played, warmed the cache for nobody, and
-// re-probed on every play forever. What is being recorded is a fact about a
-// file. It would be identical whoever pressed play, it is not about the person,
-// and the install is the one that wants it kept. That makes it exactly the
-// no-user work the system principal exists for, and the viewer's own authority
-// to *play* is unchanged and was checked before this is reached.
+// It records as the system principal, not as the viewer (platform#13).
+// Recording writes to the content graph, so it asks for content.bind, which a
+// read-only viewer does not have — and refusing them would leave that viewer
+// re-probing on every play forever. What is recorded is a fact about a file: it
+// would be identical whoever pressed play, so it is the no-user work the system
+// principal exists for. The viewer's own authority to play is unchanged and was
+// checked before this is reached.
 //
 // Still best-effort: a storage failure must not fail a playback that has
 // already resolved.
@@ -520,8 +511,8 @@ func playbackSrc(ticket string, plan playback.Plan) string {
 	return "/playback/" + ticket
 }
 
-// styledTracks renders the authored subtitle scripts as the player node carries
-// them (platform#83): a URL under the same ticket, what it is, and which one the
+// subtitleTracksFor renders the subtitle tracks as the player node carries them
+// (platform#83): a URL under the same ticket, what it is, and which one the
 // preference chose.
 //
 // The URL is the origin's own, never the upstream's, for the same reason the
@@ -587,15 +578,15 @@ func (h *Handler) externalSubtitles(ctx context.Context, caller v1.Caller, nodeI
 }
 
 // importEnvelope is the importContent action input: a content ref to materialise
-// (platform#18), under the runtime's `ref` key — the same shape the detail screen's
+// (platform#18), under the runtime's ref key — the same shape the detail screen's
 // Add-to-library action emits.
 type importEnvelope struct {
 	Ref importRef `json:"ref"`
 }
 
-// importRef is the ref itself, named rather than anonymous because playPart now
-// carries the same one (platform#73): pressing Play on something unowned *is* an
-// import, and two shapes for one thing would have hidden that.
+// importRef is the ref itself, named rather than anonymous because playPart
+// carries the same one (platform#73): pressing Play on something unowned is an
+// import, and two shapes for one thing would hide that.
 type importRef struct {
 	Provider       string `json:"provider"`
 	NativeID       string `json:"nativeId"`
@@ -687,9 +678,9 @@ func extensionModuleIDFromInput(input []byte) (string, error) {
 }
 
 // browserPreference is what a desktop browser can play, in the shape selection
-// ranks on. It is now the *fallback* rather than the answer: a client that
-// declares a profile on Attach (web#4) is ranked against what it said, and
-// this stands in only for one that declares nothing.
+// ranks on. It is the fallback rather than the answer: a client that declares a
+// profile on Attach (web#4) is ranked against what it said, and this stands in
+// only for one that declares nothing.
 //
 // It mirrors playback.DefaultBrowserCodecs and exists for the same reason: HEVC
 // is included because a live test proved Chrome decodes it, and AC3/E-AC3/DTS/
@@ -738,7 +729,7 @@ func preferenceFromInput(input []byte) (string, []byte, error) {
 // the server's own — it wrote the action — so this is reading back what the
 // emit-side put there rather than trusting a client to describe itself.
 type impressionEnvelope struct {
-	// NodeID is the node's `id`, which the contract states is the analytics
+	// NodeID is the node's id, which the contract states is the analytics
 	// identity as well as the React key. An id that is a row index attributes
 	// nothing; one that names the thing attributes everything, and only the
 	// emit-side knows which it wrote.
@@ -795,11 +786,10 @@ func sessionIDFromInput(input []byte) (domain.SessionID, error) {
 // materialiseForPlay adds an item to the library and reports what to play
 // (platform#73).
 //
-// **It is an import, and it authorises as one.** The command it calls is the
-// same one the Add-to-library button invokes, so a viewer without
-// `content.import` is refused here exactly as they are refused there — pressing
-// Play cannot be a way around the authority that curates the library
-// (platform#44).
+// It is an import, and it authorises as one. The command it calls is the same
+// one the Add-to-library button invokes, so a viewer without content.import is
+// refused here exactly as they are refused there — pressing Play cannot be a way
+// around the authority that curates the library (platform#44).
 //
 // An empty part id with no error means the work was added and there is nothing
 // unambiguous to start: a series. Guessing an episode would be worse than

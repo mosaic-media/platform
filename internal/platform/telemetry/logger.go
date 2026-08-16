@@ -117,11 +117,11 @@ func (l *Logger) ForModule(component, module string) *Logger {
 // WithSink returns a Logger writing to sink instead of the receiver's.
 //
 // The composition root uses it to attach the queryable sink once storage is
-// up: everything logged before that point is the narration of *bringing
-// storage up*, which must not depend on storage existing (platform#36). Rebuilding
-// the logger rather than mutating it keeps Logger immutable, so a context
-// seeded earlier is unaffected — which is correct, since those records
-// genuinely predate the sink.
+// up: everything logged before that point is the narration of bringing storage
+// up, which must not depend on storage existing (platform#36). Rebuilding the
+// logger rather than mutating it keeps Logger immutable, so a context seeded
+// earlier is unaffected — which is correct, since those records genuinely
+// predate the sink.
 func (l *Logger) WithSink(sink Sink) *Logger {
 	if sink == nil {
 		return l
@@ -211,10 +211,10 @@ func (l *Logger) emit(level Level, message string, fields []Field) {
 		record.AddAttributes(logValueOf(f))
 	}
 
-	// **The trace travels in the context, which is how OpenTelemetry correlates
-	// a record with a span.** Carrying it as two more attributes would work and
-	// would put the ids somewhere no OTLP consumer looks — and the whole point
-	// of the trace id being the correlation id (platform#32) is that it is found
+	// The trace travels in the context, which is how OpenTelemetry correlates a
+	// record with a span. Carrying it as two more attributes would work and
+	// would put the ids somewhere no OTLP consumer looks; the point of the
+	// trace id being the correlation id (platform#32) is that it is found
 	// where a reader expects it.
 	l.otel.Emit(trace.ContextWithSpanContext(context.Background(), l.trace.SpanContext()), record)
 }

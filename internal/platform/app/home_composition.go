@@ -16,30 +16,27 @@ import (
 // Home composition, per user (platform#59).
 //
 // The library is one shared object graph and everything about how a person
-// experiences it is theirs alone. Playback position was the first content state
-// that differed between two users of one install; this is the first *browse*
-// state that does.
+// experiences it is theirs alone.
 //
-// It is a preference and not a scope, and the distinction is the one
-// platform#42 warns is a defect in opposite directions: a preference that gates is
-// unenforceable, and a gate that is a preference is a security hole. Hiding a
-// row is taste. The row stays reachable by search, by link and from every other
-// surface.
+// This is a preference and not a scope — platform#42 warns that each is a defect
+// in the other's direction: a preference that gates is unenforceable, and a gate
+// that is a preference is a security hole. Hiding a row is taste, and the row
+// stays reachable by search, by link and from every other surface.
 
 // HomeComposition is the decisions one viewer made about their home screen.
 //
-// **Decisions, never a snapshot.** Hidden lists only the rows they turned off;
-// Order lists only the rows they arranged. A row in neither is a row nobody has
-// decided about, and it appears — which is what makes a newly available row
-// show up for everybody rather than only for accounts created after it existed.
+// Decisions, never a snapshot. Hidden lists only the rows they turned off; Order
+// lists only the rows they arranged. A row in neither is a row nobody has
+// decided about, and it appears — which is what makes a newly available row show
+// up for everybody rather than only for accounts created after it existed.
 type HomeComposition struct {
 	// Hidden are the rows this viewer turned off.
 	Hidden []string
 	// Order is the arrangement this viewer made, as the leading run of rows.
 	//
-	// A prefix rather than a total order, because a total order *is* a snapshot:
-	// it would fix the position of rows the viewer never touched and leave a new
-	// one with nowhere to go. Rows named here lead the screen in this sequence;
+	// A prefix rather than a total order, because a total order is a snapshot: it
+	// would fix the position of rows the viewer never touched and leave a new one
+	// with nowhere to go. Rows named here lead the screen in this sequence;
 	// everything else follows in the server's own order.
 	Order []string
 }
@@ -62,14 +59,10 @@ func (c HomeComposition) Hides(row string) bool {
 // it back — filtering here would mean the panel and the screen disagreed about
 // where a row lives.
 func (c HomeComposition) Arrange(rows []string) []string {
-	// **Always a fresh slice, never the caller's.** Returning the input when
-	// there is nothing to arrange reads like an obvious short-circuit and is a
-	// trap: Swap arranges and then reorders in place, so the no-decision case
-	// reordered the caller's own slice under it. The settings panel builds every
-	// row's control from one key list, so drawing the first row's "Down" button
-	// silently reversed the list the second row was read from — and every row
-	// after the first drew the row above it. Compiled, passed, and was wrong on
-	// sight in a browser.
+	// Always a fresh slice, never the caller's. Swap arranges and then reorders
+	// in place, so returning the input here would let the no-decision case
+	// reorder the caller's own slice under it — and callers build every row's
+	// control from one shared key list.
 	if len(c.Order) == 0 {
 		return append([]string(nil), rows...)
 	}
@@ -99,11 +92,10 @@ func (c HomeComposition) Arrange(rows []string) []string {
 // Swap moves a row one place in the arrangement and returns the composition
 // that results — what the control offering that move carries as its argument.
 //
-// The stored Order becomes the leading run **up to and including** the pair that
+// The stored Order becomes the leading run up to and including the pair that
 // moved, so the screen keeps the shape the viewer was looking at when they
-// pressed it. Recording only the two rows involved would be a smaller decision
-// and a worse one: moving the bottom row up one place would send it and its
-// neighbour to the top, which is not what the control appears to do.
+// pressed it. Recording only the two rows involved would send the bottom row and
+// its neighbour to the top when moved up one place.
 func (c HomeComposition) Swap(rows []string, row string, up bool) HomeComposition {
 	arranged := c.Arrange(rows)
 	at := -1
@@ -169,15 +161,13 @@ func (c HomeComposition) Document() map[string]any {
 // HomeCompositionFor reads how this viewer arranged their home screen.
 //
 // It authenticates and does not authorise, the same split ExpertModeEnabled
-// takes and for the same reason (platform#36): a preference decides what a person
-// is *shown*, and gating a display setting behind a second permission check is
-// how a toggle becomes an accidental access control.
+// takes (platform#36): a preference decides what a person is shown, and gating a
+// display setting behind a second permission check is how a toggle becomes an
+// accidental access control.
 //
 // It cannot fail. An unauthenticated caller, an unreadable store and a document
-// this build cannot parse all yield the server's default composition, because a
-// preference must never be able to fail a render — it only ever decides what to
-// show, and a home screen that refused to draw because a taste setting could not
-// be read would be a much worse outcome than one drawn in the default order.
+// this build cannot parse all yield the server's default composition: a
+// preference must never be able to fail a render.
 func (s *Service) HomeCompositionFor(ctx context.Context, caller v1.Caller) HomeComposition {
 	if s.userPreferences == nil {
 		return HomeComposition{}

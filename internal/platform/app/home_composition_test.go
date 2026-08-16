@@ -18,14 +18,12 @@ import (
 
 // Home composition, per user (platform#59).
 //
-// The property every one of these is really testing is the same: what is stored
-// is the *decisions* a viewer made, so a row nobody has decided about appears.
-// The trap is role presets, where an account created before an action existed
-// never gained it — a home screen frozen at the shape it had when its owner
-// first touched it is the same mistake.
+// The property every one of these tests is the same: what is stored is the
+// decisions a viewer made, so a row nobody has decided about appears rather than
+// the home screen freezing at the shape it had when its owner first touched it.
 
-// TestAnUndecidedRowAppears is the trap, stated directly. A source that adds a
-// catalog must show up for the viewer who already arranged the others.
+// TestAnUndecidedRowAppears states that directly: a source that adds a catalog
+// must show up for the viewer who already arranged the others.
 func TestAnUndecidedRowAppears(t *testing.T) {
 	// This viewer hid one row and moved another; they have never seen "new".
 	c := app.HomeComposition{Hidden: []string{"b"}, Order: []string{"c", "a"}}
@@ -55,10 +53,9 @@ func TestArrangeKeepsAnArrangementAcrossADownSource(t *testing.T) {
 	}
 }
 
-// TestSwapPinsThePrefixItMoved is the ordering rule, and the reason it is a
-// prefix rather than a pair. Recording only the two rows involved would send a
-// row moved up from the bottom straight to the top, taking its neighbour with
-// it — which is not what a control labelled "Up" appears to do.
+// TestSwapPinsThePrefixItMoved is the ordering rule, and why it is a prefix
+// rather than a pair: recording only the two rows involved sends a row moved up
+// from the bottom straight to the top, taking its neighbour with it.
 func TestSwapPinsThePrefixItMoved(t *testing.T) {
 	rows := []string{"a", "b", "c", "d"}
 	c := app.HomeComposition{}.Swap(rows, "d", true)
@@ -75,14 +72,10 @@ func TestSwapPinsThePrefixItMoved(t *testing.T) {
 	}
 }
 
-// TestArrangeDoesNotReorderItsCaller is a regression, and it is the reason the
-// browser is not optional.
-//
-// Arrange used to return its argument unchanged when there was nothing to
-// arrange, and Swap arranges and then reorders in place — so building one row's
-// control silently reversed the list every other row was read from. The settings
-// panel draws every row from one key list, so every row after the first drew the
-// row above it. Every test passed; it was wrong on sight on screen.
+// TestArrangeDoesNotReorderItsCaller pins that Arrange returns a fresh slice
+// even when there is nothing to arrange. Swap arranges and then reorders in
+// place, and a settings panel draws every row's control from one shared key
+// list, so returning the input reorders that list under the remaining rows.
 func TestArrangeDoesNotReorderItsCaller(t *testing.T) {
 	keys := []string{"continue", "a", "b"}
 	var none app.HomeComposition
@@ -175,7 +168,7 @@ func TestHomeCompositionRoundTripsThroughThePreference(t *testing.T) {
 }
 
 // TestHomeCompositionCannotFailARender is the fail-soft rule. A preference only
-// ever decides what to *show*, so an unreadable one must yield the default
+// ever decides what to show, so an unreadable one must yield the default
 // rather than an error — a home screen that refused to draw because a taste
 // setting could not be parsed is a much worse outcome than one drawn in the
 // server's order.

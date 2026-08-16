@@ -36,12 +36,12 @@ const animeMetadataJSON = `{
   "adaptation": {"provider": "anilist", "id": "30002", "title": "Fullmetal Alchemist", "media_type": "manga_series"}
 }`
 
-// TestReferenceCapabilityAgainstPostgres is the thesis test end to end: the
-// reference capability, which imports only contracts/platform/v1, sources
+// TestReferenceCapabilityAgainstPostgres runs the published surface end to end:
+// the reference capability, which imports only contracts/platform/v1, sources
 // metadata over HTTP, searches to avoid duplicating, and creates a work, a
-// season, episodes, parts, a source binding and an adaptation edge — all
-// through the published ContentService, against a real database, acting as
-// its invoking user (platform#8, 0016, 0017).
+// season, episodes, parts, a source binding and an adaptation edge — all through
+// the published ContentService, against a real database, acting as its invoking
+// user (platform#8, 0016, 0017).
 func TestReferenceCapabilityAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
 

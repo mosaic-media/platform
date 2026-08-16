@@ -18,10 +18,10 @@
 //
 // # What it sees, and what it does not
 //
-// It is a CONNECT-style tunnel: for HTTPS it sees the *host* a module contacts
-// and never the content, because it does not terminate TLS — terminating a
-// third party's TLS to inspect a module's traffic would be disproportionate,
-// and host-level attribution is what is actually needed. For plain HTTP there
+// It is a CONNECT-style tunnel: for HTTPS it sees the host a module contacts and
+// never the content, because it does not terminate TLS — terminating a third
+// party's TLS to inspect a module's traffic would be disproportionate, and
+// host-level attribution is what is actually needed. For plain HTTP there
 // is no TLS to leave alone, so a forwarding proxy necessarily sees the request;
 // that is a property of unencrypted transport, not a choice, and it is one
 // reason a module should prefer HTTPS.
@@ -29,20 +29,19 @@
 // # Convention now, enforcement later
 //
 // The proxy listens on loopback and the Platform points the module's
-// HTTP_PROXY/HTTPS_PROXY at it, so a module using an ordinary HTTP client
-// routes through it without any change to the module. That makes it the *easy*
-// path but not yet the *only* path: a module that ignored the proxy and dialled
-// a target directly would not be stopped, because it still has a network. What
+// HTTP_PROXY/HTTPS_PROXY at it, so a module using an ordinary HTTP client routes
+// through it without any change to the module. That makes it the easy path but
+// not yet the only path: a module that ignored the proxy and dialled a target
+// directly would not be stopped, because it still has a network. What
 // makes the proxy the only path is denying the module process a network of its
 // own (platform#39's layer 3), which is deployment-dependent and lands separately.
 //
-// The distinction matters for what this closes today. It closes the
-// accidental and user-URL SSRF path for a *cooperating* module — which every
-// first-party module is: `module-stremio-addons` fetches the addon URLs a user
-// typed through the client it is given, so a URL resolving into a private range
-// is refused here exactly as it was in process. It does not yet contain a
-// module written to be hostile; that is what layer 3 adds, and this record does
-// not claim otherwise.
+// The distinction matters for what this closes today. It closes the accidental
+// and user-URL SSRF path for a cooperating module — which every first-party
+// module is: module-stremio-addons fetches the addon URLs a user typed through
+// the client it is given, so a URL resolving into a private range is refused
+// here exactly as it was in process. It does not yet contain a module written to
+// be hostile; that is what layer 3 adds.
 package moduleproxy
 
 import (

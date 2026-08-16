@@ -47,8 +47,6 @@ func yearLabel(year int) string {
 	return strconv.Itoa(year)
 }
 
-// stringParam reads a string screen param, tolerating an absent or non-string
-// value.
 // intParam reads a whole-number screen param.
 //
 // A param arrives as JSON, where every number is a float64, and a page that
@@ -79,12 +77,11 @@ func stringParam(params map[string]any, key string) string {
 
 // notFoundScreen is what a deep link that names no screen resolves to.
 //
-// It is a *screen*, not an error. Render used to return NotFound for an unknown
-// name, and the session transport turned that into a raw error node — so a stale
-// bookmark or a mistyped URL put "no screen named colletions" in the content
-// region, which is a stack trace wearing a sentence. A wrong route is an
-// ordinary thing for a user to do and it deserves a way out rather than a
-// diagnosis.
+// It is a screen, not an error. Returning NotFound for an unknown name leaves
+// the session transport rendering a raw error node, so a stale bookmark or a
+// mistyped URL puts "no screen named …" in the content region — a stack trace
+// wearing a sentence. A wrong route is an ordinary thing for a user to do and
+// deserves a way out rather than a diagnosis.
 //
 // The unauthenticated half of the same question is not answered here: a deep
 // link opened without a session never reaches this function, because there is no

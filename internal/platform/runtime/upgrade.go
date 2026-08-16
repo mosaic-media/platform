@@ -14,20 +14,20 @@ import (
 
 // The upgrade request, as the Supervisor reads it (platform#77).
 //
-// **The Platform records what somebody asked for and cannot carry it out.** It
+// The Platform records what somebody asked for and cannot carry it out: it
 // cannot stop and restart itself onto a different Generation, so the request
 // crosses the private handoff listener to the process that can. This is the
-// Platform's half: report what is pending, and settle it by observing that the
-// install is now running the version that was asked for.
+// Platform's half — report what is pending, and settle it by observing that
+// the install is now running the version that was asked for.
 
 // generationIDEnv names the Generation this process belongs to. The Supervisor
 // sets it on every child it starts.
 //
-// **Settlement is a comparison rather than an acknowledgement**, and that is
-// why this variable is load-bearing. An upgrade replaces the process that would
-// have reported success, and an activation that reverts would leave a report
-// that was true for a minute — so what settles a request is the Platform being
-// able to say "I am the version you asked for", which is a fact about now.
+// Settlement is a comparison rather than an acknowledgement, which is why this
+// variable is load-bearing. An upgrade replaces the process that would have
+// reported success, and an activation that reverts would leave a report that
+// was true for a minute; what settles a request is the Platform being able to
+// say "I am the version you asked for", which is a fact about now.
 const generationIDEnv = "MOSAIC_GENERATION_ID"
 
 // UpgradeStatus is what the handoff answers.
@@ -59,10 +59,10 @@ func CheckUpgrade(ctx context.Context, store contracts.UpgradeStore) UpgradeStat
 		return UpgradeStatus{}
 	}
 
-	// **An empty Generation id settles nothing.** A deployment that runs the
-	// Platform itself sets none, and treating "unknown" as "not it" would leave
-	// a request pending forever there — which is the honest outcome, since
-	// nothing in that deployment was going to carry it out either.
+	// An empty Generation id settles nothing. A deployment that runs the
+	// Platform itself sets none, so a request stays pending forever there —
+	// which is the honest outcome, since nothing in that deployment was going
+	// to carry it out either.
 	if running := os.Getenv(generationIDEnv); running != "" && running == request.Version {
 		// Best-effort: failing to settle costs a repeated report, not an
 		// upgrade, and there is nowhere useful to return this error to.

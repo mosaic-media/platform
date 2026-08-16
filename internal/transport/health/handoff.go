@@ -2,16 +2,17 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-// Package health is the Supervisor handoff HTTP transport:
-// readiness, liveness, Generation metadata, migration status and config
-// activation status. Every handler's entire body calls into
-// internal/platform/runtime — the same "transport calls Platform-tier
-// logic only, never a database or Module directly" rule
-// internal/transport/auth already enforces, generalized to every
-// transport. boundary_test.go statically enforces it.
-// The shutdown hook itself is not an HTTP endpoint — it is a hook, and a
-// process-level signal handler (the composition root) is what actually
-// invokes runtime.Shutdown; see cmd/mosaic-platform/main.go.
+// Package health is the Supervisor handoff HTTP transport: readiness, liveness,
+// Generation metadata, migration status and config activation status.
+//
+// Every handler's entire body calls into internal/platform/runtime — the same
+// "a transport calls Platform-tier logic only, never a database or a module
+// directly" rule internal/transport/auth enforces. boundary_test.go enforces it
+// here by parsing imports.
+//
+// The shutdown hook is not an HTTP endpoint. A process-level signal handler in
+// the composition root is what invokes runtime.Shutdown; see
+// cmd/mosaic-platform/main.go.
 package health
 
 import (
@@ -23,11 +24,10 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/runtime"
 )
 
-// Handoff wires the Supervisor handoff surface to a real, executable
-// HTTP mux. It holds no PostgreSQL or Module-specific types —
-// only the adapter-agnostic pieces internal/platform/runtime already
-// defines — so this package stays a pure transport, testable without a
-// database.
+// Handoff wires the Supervisor handoff surface to an executable HTTP mux. It
+// holds no PostgreSQL or module-specific types — only the adapter-agnostic
+// pieces internal/platform/runtime defines — so this package stays a pure
+// transport, testable without a database.
 type Handoff struct {
 	Metadata    runtime.GenerationMetadata
 	Registry    *diagnostics.Registry

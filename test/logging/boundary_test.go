@@ -6,12 +6,9 @@
 // observes through internal/platform/telemetry, and unstructured printing does
 // not come back.
 //
-// The rule needs to be executable or it decays. The good structured logger
-// already existed and was called from three non-test places, while everything
-// that actually reported what the process was doing used fmt.Printf and
-// log.Printf — not from negligence, but because reaching the logger cost a
-// constructor parameter and printing cost nothing. Ambient telemetry removes
-// that asymmetry; this test is what keeps it removed.
+// The rule needs to be executable or it decays: a structured logger that costs
+// a constructor parameter loses to a print that costs nothing. Ambient
+// telemetry removes that asymmetry, and this test is what keeps it removed.
 package logging_test
 
 import (
@@ -40,11 +37,11 @@ var forbiddenPrinters = map[string]bool{
 
 // allowedFiles may still print.
 //
-// cmd/mosaic-platform/main.go is deliberately NOT here. It is where fifteen
-// prints accumulated, so exempting it would exempt most of what this gate is
-// for. Its one legitimate last-resort write — the fatal path, which may run
-// when building telemetry is itself what failed — goes through
-// os.Stderr.WriteString rather than fmt, so the file stays covered.
+// cmd/mosaic-platform/main.go is deliberately not here: exempting the
+// composition root would exempt most of what this gate is for. Its one
+// legitimate last-resort write — the fatal path, which may run when building
+// telemetry is itself what failed — goes through os.Stderr.WriteString rather
+// than fmt, so the file stays covered.
 //
 // That does leave a hole: a direct os.Stderr.WriteString anywhere would pass.
 // Closing it fully would mean banning a raw io.Writer call, which is too broad
@@ -55,10 +52,9 @@ var allowedFiles = map[string]bool{
 	// The licence-header tool is a developer command line, not part of the
 	// running Platform; its output is its user interface.
 	filepath.Join("tools", "licenseheader", "main.go"): true,
-	// The console sink formats a record into a strings.Builder. It is the one
-	// place in the Platform whose job *is* rendering output, and it is what
-	// every other call site defers to — so the rule cannot apply to it without
-	// applying to the thing the rule points at.
+	// The console sink formats a record into a strings.Builder. Rendering
+	// output is its job, and it is what every other call site defers to, so the
+	// rule cannot apply to it without applying to the thing the rule points at.
 	filepath.Join("internal", "platform", "telemetry", "sink.go"): true,
 }
 
@@ -102,8 +98,8 @@ func TestPlatformCodeDoesNotPrintOrUseStandardLog(t *testing.T) {
 		}
 	}
 
-	// A gate that silently scanned nothing would pass forever. This has caught
-	// a renamed directory before it caught a print.
+	// A gate that silently scanned nothing would pass forever, so a walk root
+	// that has been renamed away fails here rather than reporting clean.
 	if checked < 100 {
 		t.Fatalf("only %d files scanned; the walk roots are probably wrong", checked)
 	}

@@ -80,10 +80,8 @@ type fakeDB struct {
 	totp          map[domain.UserID]domain.TOTPCredential
 	configs       map[domain.ConfigVersionID]domain.ConfigVersion
 	outbox        []domain.OutboxEvent
-	// roles is never written by any Service command in this slice — it is
-	// a fixture the tests seed directly, standing in for the admin-
-	// controlled permission assignment this slice does not build a command
-	// for.
+	// roles is never written by a Service command: it is a fixture the tests
+	// seed directly, standing in for admin-controlled permission assignment.
 	roles map[domain.UserID][]domain.Role
 	// rolesByID is the role catalogue CreateRole writes and GrantRole reads.
 	rolesByID map[domain.RoleID]domain.Role
@@ -96,12 +94,11 @@ type fakeDB struct {
 	bindings        map[v1.SourceBindingID]v1.SourceBinding
 	moduleSettings  map[string]domain.ModuleSettings
 	userPreferences map[string]domain.UserPreference
-	// playbackStates is the first per-user content state (platform#26), so it is
-	// the first fake here keyed by a pair rather than by an id.
+	// playbackStates is per-user content state (platform#26), keyed by a pair
+	// rather than by an id.
 	playbackStates map[playbackKey]v1.PlaybackState
-	// libraryRules is what the library should contain (platform#60) — the first
-	// fake here that is neither content nor identity, but a durable statement
-	// about content.
+	// libraryRules is the durable statement of what the library should contain
+	// (platform#60).
 	libraryRules map[domain.LibraryRuleID]domain.LibraryRule
 	// nodeMetadata is what a provider said about a materialised title
 	// (platform#62).
@@ -150,15 +147,14 @@ func newFakeDB() *fakeDB {
 	}
 }
 
-// seedSession seeds a live session **and an access token whose plaintext is the
-// session id**.
+// seedSession seeds a live session and an access token whose plaintext is the
+// session id.
 //
-// Since platform#58 a caller presents an access token rather than a session id, so
-// a fixture that seeded only the session would make every test in this package
-// Unauthenticated. Minting a credential equal to the id keeps the hundred
-// existing call sites — which pass a seeded id as the caller — saying exactly
-// what they always said, while the code under test goes through the real
-// token lookup rather than a special case for tests.
+// Since platform#58 a caller presents an access token rather than a session id,
+// so a fixture that seeded only the session would make every test in this
+// package Unauthenticated. Minting a credential equal to the id lets a call site
+// pass a seeded id as the caller while the code under test still goes through
+// the real token lookup rather than a special case for tests.
 func (db *fakeDB) seedSession(id domain.SessionID, userID domain.UserID, now time.Time) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -191,9 +187,8 @@ func (db *fakeDB) seedRole(userID domain.UserID, role domain.Role) {
 	defer db.mu.Unlock()
 	db.roles[userID] = append(db.roles[userID], role)
 	// Registered by id as well. In the real schema a role is one row that
-	// grants reference; seeding only the per-user view made a seeded role
-	// invisible to FindRole and to GrantRole, which is a property of the fake
-	// rather than of the Platform.
+	// grants reference, so seeding only the per-user view would leave a seeded
+	// role invisible to FindRole and GrantRole.
 	db.rolesByID[role.ID] = role
 }
 
@@ -214,12 +209,11 @@ func (db *fakeDB) seedActiveConfig(t *testing.T, fields map[string]any) {
 	}
 }
 
-// replaceRoles makes role the user's *only* role.
+// replaceRoles makes role the user's only role.
 //
-// seedRole appends, and importFixture already seeds an administrator — so
-// seeding a deliberately narrow role on top of that leaves the caller holding
-// both, and a test meaning to prove "this grantor is limited" proves nothing.
-// This is for exactly that case.
+// seedRole appends, and importFixture already seeds an administrator, so seeding
+// a narrow role on top of that leaves the caller holding both and a test meaning
+// to prove "this grantor is limited" proves nothing.
 func (db *fakeDB) replaceRoles(userID domain.UserID, role domain.Role) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -229,11 +223,10 @@ func (db *fakeDB) replaceRoles(userID domain.UserID, role domain.Role) {
 
 // grantPermission adds one permission to a user, as its own role.
 //
-// Separate from adminRole on purpose: the actions that are deliberately *not*
-// part of an administrator's default grants — telemetry.read, and audit.read
-// when it exists — must be grantable in a test without widening the role that
-// stands for "an ordinary admin", or the tests proving they are withheld would
-// quietly stop proving it.
+// Separate from adminRole on purpose: the actions deliberately outside an
+// administrator's default grants — telemetry.read, and audit.read when it
+// exists — must be grantable in a test without widening the role that stands for
+// "an ordinary admin", or the tests proving they are withheld stop proving it.
 func (db *fakeDB) grantPermission(userID domain.UserID, perm domain.Permission) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -274,9 +267,8 @@ func (fakeTelemetryQueryStore) RecentTraces(context.Context, domain.TelemetryTra
 //
 // Derived from app.AdministratorActions rather than listed by hand, so the
 // fixture cannot drift from the real tier. That matters most for the actions it
-// deliberately lacks: a hand-written list that quietly gained telemetry.read
-// would turn every test asserting the tier boundary into one that asserts
-// nothing.
+// deliberately lacks: a hand-written list that gained telemetry.read would turn
+// every test asserting the tier boundary into one that asserts nothing.
 func adminRole() domain.Role {
 	return roleFrom("role-admin", app.PresetNameAdministrator, app.AdministratorActions())
 }
@@ -344,9 +336,9 @@ func (db *fakeDB) snapshot() fakeDBSnapshot {
 	for k, v := range db.moduleSettings {
 		moduleSettings[k] = v
 	}
-	// userPreferences was missing from this snapshot, which quietly meant a
-	// rollback did not discard a preference write — a fake that cannot fail the
-	// test it exists for. playbackStates joins it here rather than repeating it.
+	// Every mutable fakeDB field has to be copied here, or a rollback silently
+	// leaves that store's write in place and the atomicity tests pass without
+	// testing anything.
 	userPreferences := make(map[string]domain.UserPreference, len(db.userPreferences))
 	for k, v := range db.userPreferences {
 		userPreferences[k] = v
@@ -412,9 +404,9 @@ func (db *fakeDB) restore(snap fakeDBSnapshot) {
 	db.watchAvail = snap.watchAvail
 }
 
-// fakeUserStore implements contracts.UserStore. It deliberately does not
-// enforce username uniqueness itself — that is the application service's
-// domain rule to enforce, not the store's.
+// fakeUserStore implements contracts.UserStore. It deliberately does not enforce
+// username uniqueness: that is the application service's domain rule, not the
+// store's.
 type fakeUserStore struct {
 	db    *fakeDB
 	trace *trace
@@ -784,10 +776,8 @@ func (s fakePermissionStore) CreateRole(_ context.Context, role domain.Role) (do
 	if _, exists := s.db.rolesByID[role.ID]; exists {
 		return domain.Role{}, contracts.NewError(contracts.Conflict, "role already exists")
 	}
-	// The name is unique too, and the fake now says so. It did not, and the
-	// difference cost three accounts their authority on a real install while
-	// every test here passed: a fake with a weaker constraint than the schema is
-	// a fake that certifies code the database will refuse.
+	// The name is unique in the real schema, so it is unique here: a fake with
+	// a weaker constraint than the schema certifies code the database refuses.
 	for _, existing := range s.db.rolesByID {
 		if existing.Name == role.Name {
 			return domain.Role{}, contracts.NewError(contracts.Conflict, "a role with that name already exists")
@@ -1037,9 +1027,9 @@ func (tx *fakeTx) NodeMetadata() contracts.NodeMetadataStore {
 	return &fakeNodeMetadataStore{db: tx.db, trace: tx.trace}
 }
 
-// Issues is the resolution register (platform#74). Nil rather than a fake: nothing
-// reached through a transaction raises or reads a finding — the detectors hold
-// the direct handle, because they run on boot paths rather than inside
+// Issues is the resolution register (platform#74). Nil rather than a fake:
+// nothing reached through a transaction raises or reads a finding, because the
+// detectors hold the direct handle and run on boot paths rather than inside
 // somebody's command.
 func (tx *fakeTx) Issues() contracts.IssueStore { return nil }
 
@@ -1155,8 +1145,7 @@ func (s *fakeWatchAvailabilityStore) ListStale(_ context.Context, limit int) ([]
 // fakeLibraryRuleStore implements contracts.LibraryRuleStore over fakeDB
 // (platform#60). It enforces the one thing the real schema enforces and the
 // application service does not — the case-insensitive uniqueness of a rule's
-// name — because "two rules called Trending" is a Conflict a test must be able
-// to see.
+// name — so a test can see the Conflict two rules of one name produce.
 type fakeLibraryRuleStore struct {
 	db    *fakeDB
 	trace *trace
@@ -1374,10 +1363,9 @@ func (g *fakeIDGenerator) NewID() domain.ID {
 	return domain.ID(fmt.Sprintf("id-%d", g.next))
 }
 
-// fakePasswordVerifier implements domain.PasswordVerifier with a
-// reversible, deliberately insecure stand-in. Real hashing (Argon2id)
-// belongs to a future crypto adapter; this exists purely
-// to exercise the interface boundary in tests.
+// fakePasswordVerifier implements domain.PasswordVerifier with a reversible,
+// deliberately insecure stand-in, to exercise the interface boundary in tests.
+// Real hashing is Argon2id, in internal/adapters/crypto.
 type fakePasswordVerifier struct{}
 
 func (fakePasswordVerifier) Hash(plaintext string) (string, error) {
@@ -1534,9 +1522,8 @@ func (s *fakeNodeStore) Count(_ context.Context, query contracts.NodeQuery) (int
 // rather than in the shared helper because it reads a second table — the real
 // adapter answers it with an EXISTS subquery for the same reason.
 //
-// **A work with no availability row does not match a service filter.** Nothing
-// is known about it; it is not known to be absent. A fake that matched it would
-// let a guess ship.
+// A work with no availability row does not match a service filter: nothing is
+// known about it, and it is not known to be absent.
 func (s *fakeNodeStore) matches(query contracts.NodeQuery) func(v1.Node) bool {
 	base := nodeQueryMatch(query)
 	if len(query.WatchProviders) == 0 {
@@ -1560,16 +1547,14 @@ func (s *fakeNodeStore) matches(query contracts.NodeQuery) func(v1.Node) bool {
 }
 
 // Facets counts the distinct genres of what the rest of the query matches,
-// ignoring the query's own genre narrowing exactly as the real adapter does —
-// otherwise selecting a chip would empty the row that offered it, and a fake
-// that behaved differently would let that ship.
+// ignoring the query's own genre narrowing exactly as the real adapter does.
+// Otherwise selecting a chip empties the row that offered it.
 func (s *fakeNodeStore) Facets(_ context.Context, query contracts.NodeQuery) (contracts.Facets, error) {
 	s.trace.record("nodes.facets")
 	out := contracts.Facets{}
 
 	// Each facet ignores its own narrowing and honours the other's, so the two
-	// rows compose — the adapter does the same and a fake that did not would let
-	// a self-emptying control ship.
+	// rows compose. The adapter does the same.
 	forGenres := query
 	forGenres.Genres = nil
 	genreCounts := map[string]int{}
@@ -1633,7 +1618,7 @@ func nodeQueryMatch(query contracts.NodeQuery) func(v1.Node) bool {
 		if query.Kind != "" && n.Kind != query.Kind {
 			return false
 		}
-		// Conjunctive: every genre asked for must be present, which is `@>`.
+		// Conjunctive: every genre asked for must be present, which is @>.
 		for _, want := range query.Genres {
 			if !slices.Contains(n.Genres, want) {
 				return false
@@ -1643,10 +1628,9 @@ func nodeQueryMatch(query contracts.NodeQuery) func(v1.Node) bool {
 	}
 }
 
-// attributesContain is jsonb `@>` at the depth the Platform actually queries:
+// attributesContain is jsonb @> at the depth the Platform actually queries:
 // top-level keys whose values compare equal once re-encoded. Nothing asks a
-// deeper containment question, and a fake that implemented the whole operator
-// would be asserting behaviour no caller depends on.
+// deeper containment question.
 func attributesContain(document []byte, want map[string]any) bool {
 	if len(want) == 0 {
 		return true
@@ -2000,10 +1984,10 @@ func (db *fakeDB) seedPart(part v1.Part) {
 	db.parts[part.ID] = part
 }
 
-// FindRoleByName mirrors the real store's unique index on the name column,
-// which is the constraint that turned "create the User role" into something
-// that can only happen once. The fake enforced nothing, which is why creating
-// four accounts produced three with no authority and every test stayed green.
+// FindRoleByName mirrors the real store's unique index on the name column, the
+// constraint that makes "create the User role" something that can only happen
+// once. A fake that did not enforce it would let provisioning create accounts
+// with no authority while every test stayed green.
 func (s fakePermissionStore) FindRoleByName(_ context.Context, name string) (domain.Role, error) {
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()

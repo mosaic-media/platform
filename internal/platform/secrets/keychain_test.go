@@ -12,14 +12,12 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/secrets"
 )
 
-// TestOSKeychainStoreDegradesGracefully proves the real OS keychain
+// TestOSKeychainStoreDegradesGracefully asserts that the real OS keychain
 // integration never panics or leaks a raw driver error, on hosts with a
-// working keychain and hosts without one alike (this suite's own CI
-// environment has no Secret Service, so it exercises the "unavailable"
-// path for real). Available() decides which path a Broker takes; this
-// test only asserts that whichever way it goes, Get/Set return proper
-// Platform contract errors rather than crashing or leaking go-keyring's
-// driver-specific error.
+// working keychain and hosts without one alike — CI has no Secret Service, so
+// there it exercises the unavailable path for real. Available reports which
+// path a Broker takes; this test only asserts that either way, Get and Set
+// return Platform contract errors rather than go-keyring's own.
 func TestOSKeychainStoreDegradesGracefully(t *testing.T) {
 	store := secrets.NewOSKeychainStore()
 	ctx := context.Background()

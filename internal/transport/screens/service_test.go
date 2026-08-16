@@ -548,7 +548,7 @@ func (f *fakeQueries) GetContentNode(_ context.Context, q v1.GetContentNodeQuery
 // partsByNode, when set for a node id, is what ListNodeParts reports for it —
 // how a test gives one episode of a season a release and leaves the rest bare.
 // Absent an entry it falls back to playablePart, so the many tests that only
-// care that *something* is playable need not enumerate nodes.
+// care that something is playable need not enumerate nodes.
 func (f *fakeQueries) ListNodeParts(_ context.Context, q app.ListNodePartsQuery) (app.ListNodePartsResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -683,7 +683,7 @@ func findAll(n sdui.Node, typ string, acc *[]sdui.Node) {
 // prop reads a node's prop from the protobuf Struct (contracts#6 — props is an open
 // Struct, decoded to a Go map for assertions).
 // findNavItem finds a settings nav row anywhere in the tree by its label. The
-// rows live in the frame's `nav` slot, which is why this walks slots too.
+// rows live in the frame's nav slot, which is why this walks slots too.
 func findNavItem(n sdui.Node, label string) (sdui.Node, bool) {
 	if n == nil {
 		return nil, false
@@ -831,7 +831,7 @@ func TestHomeScreenEmptyWithoutCatalogs(t *testing.T) {
 	if !ok {
 		t.Fatal("home with no catalogs must render an EmptyState")
 	}
-	// Nothing configured is *advice*: this install has no source and being
+	// Nothing configured is advice: this install has no source and being
 	// pointed at Settings is the one thing that fixes it.
 	if msg, _ := prop(empty, "title").(string); !strings.Contains(msg, "add an addon in Settings") {
 		t.Fatalf("message = %q, want the configure-an-addon prompt", msg)
@@ -904,7 +904,7 @@ func TestHomeScreenSaysWhenItIsShowingAStoredAnswer(t *testing.T) {
 // fan-out and a pushed region.
 func TestHomeScreenSchedulesRevalidationWhenStale(t *testing.T) {
 	// Built per case rather than copied: fakeQueries holds a mutex, and copying
-	// one is the shape `go vet` refuses.
+	// one is the shape go vet refuses.
 	newFake := func(answer app.BrowseAnswer) *fakeQueries {
 		return &fakeQueries{
 			catalogs: []app.ModuleCatalog{
@@ -1213,11 +1213,12 @@ func TestSearchScreenNoResultsShowsEmptyState(t *testing.T) {
 	}
 }
 
-// A route naming no screen renders the 404 rather than failing the render. It
-// used to return NotFound, which the session transport turned into a raw error
-// node — so a stale bookmark put "no screen named nope" in the content region.
-// A wrong route is an ordinary thing for a user to do, and it needs a way out
-// rather than a diagnosis.
+// TestUnknownScreenRendersTheNotFoundScreen pins that a route naming no screen
+// renders the 404 rather than failing the render. It used to return NotFound,
+// which the session transport turned into a raw error node — so a stale
+// bookmark put "no screen named nope" in the content region. A wrong route is
+// an ordinary thing for a user to do, and it needs a way out rather than a
+// diagnosis.
 func TestUnknownScreenRendersTheNotFoundScreen(t *testing.T) {
 	svc := &Service{content: &fakeQueries{}}
 	node, err := svc.Render(context.Background(), "nope", v1.CallerFromSession("s-1"), nil)
@@ -1362,8 +1363,8 @@ func TestVirtualDetailOffersPlayAndAdd(t *testing.T) {
 }
 
 func TestInLibraryDetailShowsInLibraryMarker(t *testing.T) {
-	// An in-library ref renders the same rich detail from live metadata (ADR
-	// 0034), differing only in the primary action — an In library marker, not
+	// An in-library ref renders the same rich detail from live metadata
+	// (sdk#3), differing only in the primary action — an In library marker, not
 	// Add to library — and does not fall back to a structural node read.
 	fake := &fakeQueries{
 		previewInLibrary: true, previewNodeID: "n-9",
@@ -1457,10 +1458,10 @@ func TestCatalogScreenRequiresParams(t *testing.T) {
 	}
 }
 
-// A node with no stored document renders what the graph holds — its own title,
-// artwork and contents (platform#62's floor). It is what a title materialised
-// before the store existed, or by a provider that has never answered since,
-// falls back to.
+// TestDetailScreenRendersTheGraphWhenNothingWasStored pins that a node with no
+// stored document renders what the graph holds — its own title, artwork and
+// contents (platform#62's floor). It is what a title materialised before the
+// store existed, or by a provider that has never answered since, falls back to.
 func TestDetailScreenRendersTheGraphWhenNothingWasStored(t *testing.T) {
 	fake := &fakeQueries{
 		node: v1.Node{
@@ -1495,8 +1496,9 @@ func TestDetailScreenRendersTheGraphWhenNothingWasStored(t *testing.T) {
 	}
 }
 
-// The whole point of platform#62: a library detail renders the rich tree from the
-// stored document and the materialised tree, with **no provider call**.
+// TestDetailScreenRendersStoredMetadataWithNoProviderCall pins platform#62: a
+// library detail renders the rich tree from the stored document and the
+// materialised tree, with no provider call.
 func TestDetailScreenRendersStoredMetadataWithNoProviderCall(t *testing.T) {
 	fake := &fakeQueries{
 		node: v1.Node{
@@ -1550,8 +1552,8 @@ func TestDetailScreenRendersStoredMetadataWithNoProviderCall(t *testing.T) {
 func nodeRef(id v1.NodeID) *v1.NodeID { return &id }
 
 func TestSettingsScreenHostsModuleUI(t *testing.T) {
-	// The Platform hosts the module's contributed settings UINode verbatim (ADR
-	// 0038): the settings screen renders whatever the module returned, in the
+	// The Platform hosts the module's contributed settings UINode verbatim
+	// (sdk#4): the settings screen renders whatever the module returned, in the
 	// panel of a frame of the Platform's own.
 	moduleUI := `{"type":"Screen","props":{"title":"AIOStreams"},"children":[{"type":"Section","props":{"title":"Instance"}}]}`
 	fake := &fakeQueries{
@@ -1709,8 +1711,8 @@ func TestSettingsNavIsGatedPerCaller(t *testing.T) {
 	}
 }
 
-// TestExtensionsScreenKeepsTheSettingsNav is the platform#51 screen inside the ADR
-// 0038 frame: it stays its own screen (the catalogue is a network read), and
+// TestExtensionsScreenKeepsTheSettingsNav is the platform#51 screen inside the
+// sdk#4 frame: it stays its own screen (the catalogue is a network read), and
 // opening it does not cost the nav that leads back to everything else.
 func TestExtensionsScreenKeepsTheSettingsNav(t *testing.T) {
 	fake := &fakeQueries{
@@ -1778,8 +1780,8 @@ func TestExtensionsScreenInstallAndUninstall(t *testing.T) {
 	if act["kind"] != sdui.KindOpenOverlay || act["surface"] != sdui.SurfaceModal {
 		t.Fatalf("Install control = %+v, want an overlay over the catalogue", act)
 	}
-	// No RENDERED control installs: the only install action in the surface is
-	// inside the confirmation the overlay carries. That is the whole point of it.
+	// No rendered control installs: the only install action in the surface is
+	// inside the confirmation the overlay carries.
 	if walkFindInvoke(node, "installExtension") {
 		t.Fatal("the catalogue list emits installExtension directly; it must confirm first")
 	}
@@ -2017,10 +2019,10 @@ func TestDetailPlayAffordanceIsGatedOnAPartExisting(t *testing.T) {
 	}
 }
 
-// TMDB fills Similar, Collection, Certification and Trailers on every detail
-// read, and the screen rendered none of them — so the cost of resolving them
-// was paid on every view and thrown away. These assert the screen spends what
-// it fetches.
+// TestRichDetailSurfacesTheMetadataItWasDiscarding pins TMDB fills Similar,
+// Collection, Certification and Trailers on every detail read, and the screen
+// rendered none of them — so the cost of resolving them was paid on every view
+// and thrown away. These assert the screen spends what it fetches.
 func TestRichDetailSurfacesTheMetadataItWasDiscarding(t *testing.T) {
 	ref := func(id string) v1.ContentRef {
 		return v1.ContentRef{Provider: "tmdb", NativeID: id, NativeType: "movie", MediaType: v1.MediaMovie}
@@ -2102,8 +2104,9 @@ func TestRichDetailSurfacesTheMetadataItWasDiscarding(t *testing.T) {
 	}
 }
 
-// With a release behind the play button the panel describes that release —
-// the mockups' "This playback". The probe data (platform#29) was already being
+// TestDetailPanelDescribesTheReleaseBehindThePlayButton pins that with a
+// release behind the play button the panel describes that release — the
+// mockups' "This playback". The probe data (platform#29) was already being
 // resolved for the play action and discarded.
 func TestDetailPanelDescribesTheReleaseBehindThePlayButton(t *testing.T) {
 	ref := v1.ContentRef{Provider: "tmdb", NativeID: "tt1", NativeType: "movie", MediaType: v1.MediaMovie}
@@ -2134,7 +2137,7 @@ func TestDetailPanelDescribesTheReleaseBehindThePlayButton(t *testing.T) {
 			got[l] = v
 		}
 	}
-	// The panel answers what a viewer is about to *get*, in the design's terms:
+	// The panel answers what a viewer is about to get, in the design's terms:
 	// the quality as it is written on a box and the audio as it is spoken about.
 	// The codec, the container and the byte count moved to the facts grid, which
 	// is where a question about the file rather than the viewing belongs.
@@ -2152,8 +2155,9 @@ func TestDetailPanelDescribesTheReleaseBehindThePlayButton(t *testing.T) {
 	}
 }
 
-// An unprobed release reports no dimensions and no size (platform#29 relays
-// unprobed rather than failing). Those rows must be absent, not "0p" and "0 B".
+// TestDetailPanelOmitsUnprobedFacts pins that an unprobed release reports no
+// dimensions and no size (platform#29 relays unprobed rather than failing).
+// Those rows must be absent, not "0p" and "0 B".
 func TestDetailPanelOmitsUnprobedFacts(t *testing.T) {
 	ref := v1.ContentRef{Provider: "tmdb", NativeID: "tt2", NativeType: "movie", MediaType: v1.MediaMovie}
 	fake := &fakeQueries{

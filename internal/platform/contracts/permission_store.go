@@ -25,18 +25,15 @@ type PermissionStore interface {
 	CreateRole(ctx context.Context, role domain.Role) (domain.Role, error)
 	// FindRoleByName returns the role with the given name, or NotFound.
 	//
-	// **A role's name is unique across the install**, which is a fact the schema
-	// has always carried and no caller had ever had to know: the only role
-	// anything created was the bootstrap's Superuser, and it was created once.
-	// The moment a second account is provisioned from a preset, "create a role
-	// called User" stops being idempotent and starts being a Conflict — which is
-	// how three of four accounts came to exist with no authority at all.
+	// A role's name is unique across the install, so provisioning a second
+	// account from a preset must find the existing role rather than create it
+	// again: "create a role called User" is a Conflict the second time, and an
+	// account provisioned through that path ends up with no authority at all.
 	//
-	// So a preset role is an install-wide named role that several people hold,
-	// not a per-account snapshot. The snapshot property the roadmap asks for is
-	// unchanged and belongs to the *role*: a role created today keeps the set it
-	// was created with, and nothing widens it afterwards except the owner
-	// reconciliation below.
+	// A preset role is therefore an install-wide named role that several people
+	// hold, not a per-account snapshot. The snapshot property belongs to the
+	// role: a role created today keeps the set it was created with, and nothing
+	// widens it afterwards except the owner reconciliation below.
 	FindRoleByName(ctx context.Context, name string) (domain.Role, error)
 	// FindRole returns the role with the given id, or NotFound.
 	//
@@ -50,13 +47,12 @@ type PermissionStore interface {
 	GrantRole(ctx context.Context, grant domain.Grant) error
 	// SetRolePermissions replaces what a role carries.
 	//
-	// It exists for one narrow job, and it is worth stating so it does not
-	// become a general role editor by accident: a preset is *snapshotted* into a
-	// role row when that role is created, so adding an action to the Platform
-	// never reaches an account that already exists. The install owner's own
-	// account is the one place that must not be able to drift, because it is the
-	// root of every other grant — an authority it does not hold can never be
-	// given to anyone. The bootstrap reconciles it on every boot; nothing else
-	// calls this.
+	// It is not a general role editor. A preset is snapshotted into a role row
+	// when that role is created, so adding an action to the Platform never
+	// reaches an account that already exists. The install owner's account is
+	// the one place that must not be able to drift, because it is the root of
+	// every other grant: an authority it does not hold can never be given to
+	// anyone. The bootstrap reconciles it on every boot; nothing else calls
+	// this.
 	SetRolePermissions(ctx context.Context, roleID domain.RoleID, perms []domain.Permission) error
 }

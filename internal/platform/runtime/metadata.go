@@ -9,10 +9,9 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
-// PlatformVersion is a first-cut Platform build identifier. A real build
-// pipeline would stamp this from a release tag or commit; until that exists,
-// it is a fixed literal recorded here so Generation metadata has a real, if
-// provisional, value rather than one invented ad hoc at each call site.
+// PlatformVersion is the Platform build identifier. Nothing stamps it from a
+// release tag or commit yet, so it is a fixed literal recorded in one place
+// rather than a value invented ad hoc at each call site.
 const PlatformVersion = "v0.0.0-foundation"
 
 // ModuleMetadata is one built-in Module's identity, mirrored from

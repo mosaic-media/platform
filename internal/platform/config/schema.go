@@ -78,9 +78,8 @@ func (s *Schema) RequiredReloadClass(changedFields []string) (class ReloadClass,
 	return class, allRegistered
 }
 
-// PlatformSchema is the first-cut registry of Platform configuration
-// fields and their reload classes. It illustrates all four classes against
-// concepts already defined elsewhere in the architecture:
+// PlatformSchema is the registry of Platform configuration fields and their
+// reload classes. All four classes are represented:
 //
 //   - runtime.log_level: the canonical hot-reload example.
 //   - runtime.environment: matches the existing bootstrap Config.Environment

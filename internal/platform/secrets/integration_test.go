@@ -12,13 +12,12 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/secrets"
 )
 
-// TestSecretReferenceResolvesEndToEndThroughRealVault proves the full
-// exit criterion path with real components, not fakes: parse
-// a secret:// reference the way a config value would carry it, resolve it
-// through a Broker backed by a real encrypted LocalVault (the keychain is
-// forced unavailable here, since this environment has no OS keychain
-// service — see TestOSKeychainStoreDegradesGracefully), and confirm the
-// value round-trips.
+// TestSecretReferenceResolvesEndToEndThroughRealVault exercises the whole path
+// with real components rather than fakes: parse a secret:// reference the way
+// a config value would carry it, resolve it through a Broker backed by a real
+// encrypted LocalVault, and confirm the value round-trips. The keychain is
+// forced unavailable so the vault path is the one under test — see
+// TestOSKeychainStoreDegradesGracefully for the real backend.
 func TestSecretReferenceResolvesEndToEndThroughRealVault(t *testing.T) {
 	vaultPath := filepath.Join(t.TempDir(), "vault.enc")
 	vault := secrets.NewLocalVault(vaultPath, []byte("integration-test-recovery-key"))
@@ -46,11 +45,9 @@ func TestSecretReferenceResolvesEndToEndThroughRealVault(t *testing.T) {
 	}
 }
 
-// unavailableKeychain always reports Available = false, standing in for a
-// host with no OS keychain service so this test deterministically exercises
-// the vault fallback path, matching this sandbox's real environment
-// (confirmed for real by TestOSKeychainStoreDegradesGracefully) rather than
-// depending on it.
+// unavailableKeychain always reports Available = false, standing in for a host
+// with no OS keychain service so the test exercises the vault fallback path
+// deterministically rather than depending on what the host happens to have.
 type unavailableKeychain struct{}
 
 func (unavailableKeychain) Available(context.Context) bool { return false }

@@ -30,9 +30,8 @@ func NewHealthProbe(pool *pgxpool.Pool) contracts.HealthProbe {
 	return &healthProbe{pool: pool, component: "postgres"}
 }
 
-// Check reports the storage component's readiness as a point-in-time status:
-// healthy when reachable and fully migrated, degraded when behind on
-// migrations, unavailable when unreachable or schema-incompatible.
+// Check is a point-in-time status. Its error return is always nil: every failure
+// mode is encoded in the returned HealthStatus instead.
 func (h *healthProbe) Check(ctx context.Context) (domain.HealthStatus, error) {
 	now := time.Now().UTC()
 
@@ -93,10 +92,8 @@ func NewComponentHealthReporter(pool *pgxpool.Pool) contracts.ComponentHealthRep
 	return &componentHealthReporter{probe: &healthProbe{pool: pool, component: "postgres"}, component: "postgres"}
 }
 
-// ReportHealth never fails: Check's own error return is always nil today
-// (every failure mode is already encoded as a HealthUnavailable
-// domain.HealthStatus), so there is nothing for this method to report
-// beyond translating that status into the richer shape.
+// ReportHealth never fails: Check encodes every failure mode in the status it
+// returns, so this method only translates that status into the richer shape.
 func (r *componentHealthReporter) ReportHealth(ctx context.Context) domain.ComponentHealth {
 	status, _ := r.probe.Check(ctx)
 

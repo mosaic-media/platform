@@ -14,21 +14,13 @@ import (
 
 // Browsing what the install owns (roadmap M2.1).
 //
-// Nothing in Mosaic did this. Home renders provider catalogs, `collections` and
-// `catalog` browse a *module's* collections, and search unions the library with
-// the providers — so every existing browse surface is a window onto somebody
-// else's shelf. `SearchContent`, the library-only read on the published surface,
-// had no client path at all.
-//
-// This is deliberately **not** SearchContent, and the reason is worth stating
-// because the two look alike. SearchContent answers "do I already have this?"
-// for a capability about to source something: one question, one answer, a limit
-// so it cannot be turned into a scan. Browsing is the other shape — a page at a
-// time, in a stable order, over a total the reader is told. Paging and a count
-// are what a browse surface needs and what nothing sourcing content has ever
-// asked for, so they belong to a Platform query rather than growing the surface
-// every installed extension holds. It is the same reasoning that kept watch
-// history off `ContentService` (platform#59).
+// This is not SearchContent, although the two look alike. SearchContent answers
+// "do I already have this?" for a capability about to source something: one
+// question, one answer, a limit so it cannot be turned into a scan. Browsing is
+// a page at a time, in a stable order, over a total the reader is told. Paging
+// and a count belong to a Platform query rather than growing the surface every
+// installed extension holds — the reasoning that kept watch history off
+// ContentService (platform#59).
 
 // defaultLibraryPageSize is one page of the library browse.
 //
@@ -41,11 +33,11 @@ const defaultLibraryPageSize = 60
 // browse is a user-facing read and an unbounded one is a denial of service
 // against a large library.
 //
-// It is a *window* rather than a page, because the Library screen scrolls
-// lazily: each further page re-renders the screen holding everything loaded so
-// far (a `query` action replaces the content region, it does not append), so
-// the read grows with the scroll. This is where that growth stops, and the
-// screen says so when it does rather than silently ending the scroll.
+// It is a window rather than a page, because the Library screen scrolls lazily:
+// each further page re-renders the screen holding everything loaded so far (a
+// query action replaces the content region, it does not append), so the read
+// grows with the scroll. This is where that growth stops, and the screen says so
+// rather than silently ending the scroll.
 const maxLibraryPageSize = 600
 
 // ListLibraryQuery is one page of the materialised library.
@@ -64,20 +56,19 @@ type ListLibraryQuery struct {
 	// WatchProviders narrows to works available on every service listed. Empty
 	// is everything.
 	//
-	// It reads the Platform's own projection of what a metadata provider said,
-	// kept current by the availability refresh, and **not** the module-owned
-	// attributes document `module-tmdb` writes at import. Both hold the same
-	// kind of fact; only one of them is refreshed, and only one of them is the
-	// Platform's to interpret.
+	// It must read the Platform's own projection of what a metadata provider
+	// said, kept current by the availability refresh, and not the module-owned
+	// attributes document module-tmdb writes at import. Both hold the same kind
+	// of fact; only one is refreshed, and only one is the Platform's to
+	// interpret.
 	//
-	// **No screen passes this.** The Library screen deliberately does not offer a
+	// No screen passes this. The Library screen deliberately offers no
 	// streaming-service facet: availability answers "what could I watch on this
 	// service", which spans what the library holds and what it does not, and
 	// answering it over the shelf alone hands a user the small half while looking
-	// like the whole. That surface is a source's catalogue browsed with library
-	// items marked. This filter is what a *union* of the two would read the
-	// library half from without a provider round trip per title, and until
-	// something does, it is a capability with no client path — see the
+	// like the whole. This filter is what a union of the two would read the
+	// library half from without a provider round trip per title; until something
+	// does, it is a capability with no client path — see the
 	// unreachable-capability register.
 	WatchProviders []string
 	// Limit and Offset page the result. Zero Limit takes the default.
@@ -92,16 +83,13 @@ type ListLibraryResult struct {
 	// Total is how many works match the query in full — not how many are on
 	// this page.
 	//
-	// **A real number, which is the point.** The catalog screen renders "128+"
-	// because a provider pages its own catalog and will not say how large it
-	// is; these are the install's own rows, and a browse over them that said
-	// "60+" would be understating something it can count. That difference is
-	// the whole reason this result carries a total at all.
+	// A real number, not a lower bound. The catalog screen renders "128+"
+	// because a provider pages its own catalog and will not say how large it is;
+	// these are the install's own rows and can be counted.
 	Total int
-	// Offset and Limit are echoed back so a caller rendering paging controls
-	// does not have to re-derive the page it asked for — and so that a clamped
-	// or defaulted value is visible to the caller rather than being applied
-	// silently.
+	// Offset and Limit are echoed back so a caller rendering paging controls does
+	// not have to re-derive the page it asked for, and so a clamped or defaulted
+	// value is visible rather than applied silently.
 	Offset int
 	Limit  int
 	// Facets are the narrowings this browse can offer, over what the rest of
@@ -117,9 +105,9 @@ func (r ListLibraryResult) HasMore() bool { return r.Offset+len(r.Works) < r.Tot
 // ListLibrary reads one page of the materialised library, with the total the
 // page is drawn from.
 //
-// It authorises `content.read`, the same action every other library read takes:
+// It authorises content.read, the same action every other library read takes:
 // there is one shared library and everybody who may see the library may see all
-// of it (platform#59). What differs per person is what they *did* with it, which is
+// of it (platform#59). What differs per person is what they did with it, which is
 // a different query.
 func (s *Service) ListLibrary(ctx context.Context, q ListLibraryQuery) (ListLibraryResult, error) {
 	// 1. validate query shape.
@@ -146,10 +134,9 @@ func (s *Service) ListLibrary(ctx context.Context, q ListLibraryQuery) (ListLibr
 		offset = 0
 	}
 
-	// 4. load state through a read contract. Works only: the library browse
-	// shows what a household owns, and a household owns *Fullmetal Alchemist*
-	// rather than sixty-four episodes of it. The tree below a work is what the
-	// detail screen is for.
+	// 4. load state through a read contract. Works only: a household owns a
+	// series rather than sixty-four episodes of it, and the tree below a work is
+	// what the detail screen is for.
 	query := contracts.NodeQuery{
 		Title:          q.Title,
 		MediaType:      q.MediaType,
@@ -160,11 +147,9 @@ func (s *Service) ListLibrary(ctx context.Context, q ListLibraryQuery) (ListLibr
 		Offset:         offset,
 	}
 
-	// The count first, so that a page beyond the end can still be reported
-	// against a real total rather than as an empty library. Two reads rather
-	// than one window function, because the count is the same predicate without
-	// the paging and keeping them as two statements is what lets the store index
-	// each the way it wants to.
+	// The count first, so a page beyond the end is reported against a real total
+	// rather than as an empty library. Two reads rather than one window function,
+	// so the store can index each the way it wants to.
 	total, err := s.nodes.Count(ctx, query)
 	if err != nil {
 		return ListLibraryResult{}, err

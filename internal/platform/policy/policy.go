@@ -17,8 +17,8 @@ type Subject struct {
 	UserID       domain.UserID
 	AuthStrength domain.AuthStrength
 	// System marks the Platform's own principal — background work with no user
-	// behind it (platform#13). It is set by the enforcement point from *how the
-	// caller authenticated*, never from the user id, so it cannot be forged by
+	// behind it (platform#13). It is set by the enforcement point from how the
+	// caller authenticated, never from the user id, so it cannot be forged by
 	// naming an identifier.
 	//
 	// It is a field on the subject rather than a branch in the enforcement
@@ -40,8 +40,8 @@ type Resource struct {
 }
 
 // PolicyContext carries request-scoped ABAC attributes weighed under
-// "context" — network origin, admin mode, recovery mode, and similar. It
-// is intentionally sparse for this slice's simple rules.
+// "context" — network origin, admin mode, recovery mode, and similar. It is
+// intentionally sparse: today's rules need little of it.
 type PolicyContext struct {
 	AdminMode    bool
 	RecoveryMode bool

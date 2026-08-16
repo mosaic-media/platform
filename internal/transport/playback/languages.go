@@ -10,15 +10,14 @@ import (
 
 // What a viewer wants to hear and read (platform#83).
 //
-// The audio half of this is only a list, and the Platform already ranked tracks
-// against one — it was a package variable, so every viewer on an install got one
-// person's answer. The interesting half is the coupling: **a subtitle setting
-// expressed on its own is wrong half the time**, because the person who wants
-// forced subtitles beside an English dub wants the whole dialogue when no dub
-// exists, and that is one preference rather than two.
+// The audio half is a list of languages, per viewer rather than per install. The
+// coupling is the interesting half: a subtitle setting expressed on its own is
+// wrong half the time, because the person who wants forced subtitles beside an
+// English dub wants the whole dialogue when no dub exists, and that is one
+// preference rather than two.
 //
-// So `SubtitleMode` says what they want *when the audio preference was met*, and
-// the escalation below is the Platform noticing it was not.
+// So SubtitleMode says what they want when the audio preference was met, and the
+// escalation below is the Platform noticing it was not.
 
 // SubtitleMode is how much text a viewer wants when they got the audio language
 // they asked for.
@@ -49,9 +48,9 @@ type LanguagePreference struct {
 	// positioned signs, colours, fonts (platform#83).
 	Styling SubtitleStyling `json:"styling,omitempty"`
 
-	// Typeset is the field Styling replaced, read for documents written before
-	// it existed (platform#83). It meant "burn it in", which is what a `true` here
-	// still resolves to.
+	// Typeset is the field Styling replaced, read for documents written before it
+	// existed (platform#83). It meant "burn it in", which is what a true here still
+	// resolves to.
 	//
 	// Kept rather than migrated because a preference document is written by
 	// whichever client last touched it and read by every Platform after: a
@@ -70,10 +69,10 @@ const (
 	StylingPlain SubtitleStyling = "plain"
 	// StylingClient sends the track as authored and lets the client draw it.
 	//
-	// **This is the default and it is the one that dominates the other two**: it
-	// preserves everything, it costs no encode, and a client that cannot draw it
-	// falls back to the flattened rendition that is offered beside it. What it
-	// costs is a read of the container to extract the script.
+	// This is the default and it dominates the other two: it preserves
+	// everything, it costs no encode, and a client that cannot draw it falls back
+	// to the flattened rendition offered beside it. What it costs is a read of
+	// the container to extract the script.
 	StylingClient SubtitleStyling = "client"
 	// StylingBurn draws the track into the picture. It works on every client
 	// there is, including ones that can render nothing themselves, and it forces
@@ -83,11 +82,9 @@ const (
 
 // DefaultLanguagePreference is what a viewer who has set nothing gets.
 //
-// English audio with forced subtitles, which is the same answer the install-wide
-// `PreferredLanguages` gave before this existed — deliberately, so adding the
-// preference changes nobody's playback until they change their own. A default
-// that silently altered what everyone already watched would be a worse
-// introduction than no default at all.
+// English audio with forced subtitles, the same answer the install-wide
+// PreferredLanguages gives, so the preference changes nobody's playback until
+// they change their own.
 func DefaultLanguagePreference() LanguagePreference {
 	return LanguagePreference{
 		Audio:        []string{"eng", "en"},
@@ -103,10 +100,10 @@ func DefaultLanguagePreference() LanguagePreference {
 
 // ParseLanguagePreference reads a stored preference document.
 //
-// **Anything unreadable is the default rather than an error**, and that is the
-// right failure for a preference: a malformed document should cost a viewer
-// their setting for one playback, never the playback itself. The same reasoning
-// the home-row composition uses for its own document.
+// Anything unreadable is the default rather than an error, which is the right
+// failure for a preference: a malformed document costs a viewer their setting
+// for one playback, never the playback itself. The home-row composition reads
+// its own document on the same terms.
 func ParseLanguagePreference(raw []byte) LanguagePreference {
 	if len(raw) == 0 {
 		return DefaultLanguagePreference()
@@ -148,7 +145,7 @@ func (p LanguagePreference) normalised() LanguagePreference {
 	switch out.Styling {
 	case StylingPlain, StylingClient, StylingBurn:
 	default:
-		// A document written before Styling existed said `typeset: true` to mean
+		// A document written before Styling existed said typeset: true to mean
 		// "burn it in", so that is what it still means. Anything else — an
 		// unknown value, or nothing at all — takes the default.
 		if p.Typeset {
@@ -189,16 +186,16 @@ type SubtitleIntent struct {
 // SubtitlesFor decides what a viewer should read, given the audio they actually
 // got (platform#83).
 //
-// **The escalation is the feature.** A viewer's mode describes a satisfied
-// preference; when the release had no track in a language they asked for, the
-// Platform knows it failed them and full subtitles are what that failure costs.
-// Adam watching an anime with an English dub gets English audio and forced
-// subtitles; the same Adam, same preference, on a release with no dub, gets
-// Japanese audio and the whole dialogue in English.
+// The escalation is the point. A viewer's mode describes a satisfied preference;
+// when the release had no track in a language they asked for, the Platform knows
+// it failed them and full subtitles are what that failure costs. One viewer
+// watching an anime with an English dub gets English audio and forced subtitles;
+// the same viewer, same preference, on a release with no dub, gets Japanese
+// audio and the whole dialogue in English.
 //
-// Two bounds on it. Escalation only ever *increases* what is shown — there is no
+// Two bounds on it. Escalation only ever increases what is shown — there is no
 // case where knowing less about the audio shows less text. And it never passes
-// `off`: someone who said they want no subtitles is shown the release they can
+// off: someone who said they want no subtitles is shown the release they can
 // have, not text they declined.
 //
 // chosenAudioLanguage is empty when the release has no audio at all, which is

@@ -17,18 +17,14 @@ import (
 
 // The client capability profile, and the class it reduces to (web#4, 0049).
 //
-// A client declares what it can decode on Attach. Before that existed the
-// Platform hard-coded a desktop browser's abilities at the playPart call site,
-// which was honest for one client and would have been a lie for the four the
-// transport was built to serve.
+// A client declares what it can decode on Attach.
 //
-// The *class* is the second half. Stream resolution is expensive — it costs the
+// The class is the second half. Stream resolution is expensive — it costs the
 // aggregator round trip that dominates the whole latency budget — so its result
 // is cached, and the cache has to be keyed by something. Not by user: two people
 // with the same television want the same answer, and keying by user would store
 // it twice. Not by device either: five identical phones are one answer. What
-// actually determines the result is *what the client can decode*, so that is
-// what the key is.
+// determines the result is what the client can decode, so that is the key.
 
 // clientProfile is a declared profile plus the class it hashes to. Both are
 // derived once, on Attach, rather than per playback: the declaration cannot
@@ -62,11 +58,11 @@ func profileFrom(p *sessionv1.ClientProfile) clientProfile {
 
 // defaultEncodeHeight caps re-encoded video when the client named no cap.
 //
-// An uncapped *display* is not an argument for an uncapped *encode*. The two
-// numbers answer different questions: what the panel can show, and what a home
-// server's software encoder can produce in real time while a viewer waits. The
-// second is the smaller of the two on any machine Mosaic is likely to run on, so
-// a client that declares no ceiling still gets one here.
+// An uncapped display is not an argument for an uncapped encode. The two numbers
+// answer different questions: what the panel can show, and what a home server's
+// software encoder can produce in real time while a viewer waits. The second is
+// the smaller on any machine Mosaic is likely to run on, so a client that
+// declares no ceiling still gets one here.
 const defaultEncodeHeight = 1080
 
 // codecs is the same profile in the shape the per-stream decision takes
@@ -77,18 +73,16 @@ func (c clientProfile) codecs() playback.ClientCodecs {
 	if !c.declared {
 		return playback.DefaultBrowserCodecs
 	}
-	// The encode ceiling binds whatever the client declared, and that is the same
-	// argument defaultEncodeHeight already makes for a client that declared
-	// nothing — it was simply not being applied to the ones that did.
+	// The encode ceiling binds whatever the client declared, for the same reason
+	// defaultEncodeHeight binds a client that declared nothing.
 	//
 	// A declared height is a statement about the panel, in device pixels: a
-	// Retina laptop reports 1200 CSS pixels at 2× and correctly declares 2400. As
-	// a *selection* cap that is right and stays untouched, so a 4K release is
-	// still chosen and still direct-played at 4K when nothing needs doing. As an
-	// *encode* cap it asked this Platform to tone-map and encode 2160p h264 in
-	// real time, which it cannot do: playing a 4K HDR release pinned currentTime
-	// at 0 while ffmpeg held two cores. The panel's capability is not the
-	// encoder's.
+	// Retina laptop reports 1200 CSS pixels at 2× and correctly declares 2400.
+	// That is right as a selection cap and stays untouched, so a 4K release is
+	// still chosen and still direct-played at 4K when nothing needs doing. Used
+	// as an encode cap it asks this Platform to tone-map and encode 2160p h264 in
+	// real time, which it cannot do: a 4K HDR release pins currentTime at 0 while
+	// ffmpeg holds two cores. The panel's capability is not the encoder's.
 	height := c.prefer.MaxHeight
 	if height == 0 || height > defaultEncodeHeight {
 		height = defaultEncodeHeight

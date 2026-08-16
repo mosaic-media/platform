@@ -59,8 +59,9 @@ func (h *hostRecorder) saw(host string) bool {
 	return false
 }
 
-// With the operator override on, a module reaches a permitted target and the
-// proxy attributes the host — the seam-9 property, over a real CONNECT tunnel.
+// TestProxyTunnelsAndAttributesAnAllowedHost pins that with the operator
+// override on, a module reaches a permitted target and the proxy attributes the
+// host — the seam-9 property, over a real CONNECT tunnel.
 func TestProxyTunnelsAndAttributesAnAllowedHost(t *testing.T) {
 	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok")
@@ -94,9 +95,10 @@ func TestProxyTunnelsAndAttributesAnAllowedHost(t *testing.T) {
 	}
 }
 
-// With the override off — the default — a loopback target is refused. This is
-// the deny list: a module fetching a user-supplied URL that resolves into a
-// private range cannot reach it.
+// TestProxyRefusesAPrivateTargetByDefault pins that with the override off — the
+// default — a loopback target is refused. This is the deny list: a module
+// fetching a user-supplied URL that resolves into a private range cannot reach
+// it.
 func TestProxyRefusesAPrivateTargetByDefault(t *testing.T) {
 	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "should not be reachable")
@@ -119,8 +121,9 @@ func TestProxyRefusesAPrivateTargetByDefault(t *testing.T) {
 	}
 }
 
-// Plain HTTP is forwarded too, and the deny list applies there as well — a
-// module using http:// rather than https:// is not a way around it.
+// TestProxyForwardsPlainHTTPAndAppliesTheDenyList pins that plain HTTP is
+// forwarded too, and the deny list applies there as well — a module using
+// http:// rather than https:// is not a way around it.
 func TestProxyForwardsPlainHTTPAndAppliesTheDenyList(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "plain ok")

@@ -6,26 +6,21 @@ package domain
 
 import "time"
 
-// The session credential (platform#58).
+// The session credential is a pair (platform#58): a minutes-long access token
+// presented on every call, and a long-lived refresh token exchanged for a new
+// pair. The session row outlives both — it is what a device list names and
+// what revocation ends — so a session and a credential are separate things.
 //
-// A session used to be a fixed 24-hour lifetime with no renewal, and the id was
-// the credential. It is now a **pair**: a minutes-long access token presented
-// on every call, and a long-lived refresh token exchanged for a new pair. The
-// session row survives both — it is what a device list names and what
-// revocation ends — so the two are separate things and neither is the other.
-//
-// Both tokens are opaque, not JWTs, and the reason is not fashion: a
-// claims-carrying token makes a tightened limit or a revoked grant take effect
-// only when the token expires. Validation is a store read, and that cost is
-// accepted deliberately.
+// Both tokens are opaque rather than JWTs, so that a tightened limit or a
+// revoked grant takes effect immediately instead of at token expiry.
+// Validation is a store read, and that cost is accepted deliberately.
 
-// SessionCredential is the opaque value a caller presents — an access token
+// SessionCredential is the opaque value a caller presents: an access token
 // since platform#58.
 //
-// It is its own type rather than a SessionID because it is no longer one. A
-// credential resolves *to* a session, is minutes-lived where the session is
-// months-lived, and rotates where the session does not; the two were one string
-// for as long as they were one thing.
+// It is its own type rather than a SessionID because it resolves to a session
+// rather than being one, is minutes-lived where the session is months-lived,
+// and rotates where the session does not.
 type SessionCredential string
 
 // AccessToken is a short-lived credential, stored as a hash.

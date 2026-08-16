@@ -8,18 +8,15 @@ import "time"
 
 // Operational findings (platform#74): what is wrong with this install, now.
 //
-// **An Issue is a fact about the present, and that is what separates it from
-// everything else Mosaic already records.** Telemetry answers "what happened at
-// 04:12" and is genuinely good at it; an event is a fact about a moment; health
-// answers "should traffic come here". None of them can answer "what is wrong
-// with my server" — a log has no current state, no closure and no addressee, so
-// a failure a user cannot act on is a failure they report to somebody else,
-// three days after the evidence rotated away.
+// An Issue is a fact about the present, which is what separates it from
+// everything else the Platform records. Telemetry answers "what happened at
+// 04:12", an event is a fact about a moment, and health answers "should
+// traffic come here"; none of them has current state, closure or an addressee.
 //
-// **The failure and the remedy are one record.** An Issue that offers no
-// Suggestion and demands no decision is a log line with a table behind it, and
-// belongs in telemetry instead. That is the standing rule against filing noise
-// here, and it is the one this register is most likely to break.
+// The failure and the remedy are one record. An Issue that offers no
+// Suggestion and demands no decision is a log line with a table behind it and
+// belongs in telemetry instead — that is the standing rule against filing
+// noise here.
 
 // IssueType is what is wrong, as a closed vocabulary.
 //
@@ -41,9 +38,8 @@ const (
 	// that the situation is now stated rather than repeated.
 	IssueChildUnrecoverable IssueType = "child_unrecoverable"
 	// IssueGenerationRolledBack is an upgrade that was applied, failed its
-	// health check and was reverted. **This is the case platform#74 was written
-	// for**: the install is working, it is working on the version it had
-	// before, and without a record the user's report is "it didn't update".
+	// health check and was reverted. The install is working, on the version it
+	// had before, so without a record the user's report is "it didn't update".
 	IssueGenerationRolledBack IssueType = "generation_rolled_back"
 	// IssueProvisionFailed is a first boot that could not fetch or verify a
 	// Generation. Nothing is running, so nothing else can report it.
@@ -51,12 +47,11 @@ const (
 	// IssueUpgradeAvailable is a newer release the signed catalogue offers and
 	// this install has not taken (platform#77).
 	//
-	// **It is the one entry here that is not a fault**, and it is a finding
-	// anyway because the register is already the surface for "something needs
-	// your attention" and already folds repeats into one row with a count. The
-	// alternative was a notification channel built for one feature. It is also
-	// the first type whose Suggestion actually does something rather than
-	// acknowledging — see SuggestionApplyUpgrade.
+	// It is the one entry here that is not a fault. It is a finding anyway
+	// because the register is already the surface for "something needs your
+	// attention" and already folds repeats into one row with a count; the
+	// alternative was a notification channel built for one feature. Its
+	// Suggestion acts rather than acknowledging — see SuggestionApplyUpgrade.
 	IssueUpgradeAvailable IssueType = "upgrade_available"
 	// IssueUpgradeFailed is a requested upgrade that did not install. Distinct
 	// from IssueGenerationRolledBack, which is one that installed, came up
@@ -65,11 +60,9 @@ const (
 	IssueUpgradeFailed IssueType = "upgrade_failed"
 )
 
-// KnownIssueTypes is the closed set, in the order a screen lists them.
-//
-// Enumerated rather than derived, because the set being *closed* is the
-// property worth having and a validator that accepted whatever was written
-// would enforce nothing.
+// KnownIssueTypes is the closed set, in the order a screen lists them. It is
+// enumerated rather than derived: a validator that accepted whatever was
+// written would enforce nothing.
 var KnownIssueTypes = []IssueType{
 	IssueProvisionFailed,
 	IssueUpgradeFailed,
@@ -91,10 +84,9 @@ func (t IssueType) Valid() bool {
 
 // SuggestionType is a named action that might resolve an Issue.
 //
-// **It carries no prose.** The client renders a type into whatever words and
-// affordance suit it, which is what keeps this out of the SDUI's way and lets a
-// future client translate it. A suggestion whose meaning lives in a string the
-// server wrote is a suggestion only one client can present.
+// It carries no prose: the client renders a type into whatever words and
+// affordance suit it, so it can be translated. A suggestion whose meaning
+// lives in a string the server wrote is one only that client can present.
 type SuggestionType string
 
 const (
@@ -107,11 +99,10 @@ const (
 	// SuggestionApplyUpgrade asks the Supervisor to install the version this
 	// Issue is about (platform#77).
 	//
-	// **The Platform cannot perform it**, which is why the whole channel
-	// exists: pressing this records a request naming the version, the handoff
-	// reports it, and the Supervisor — the only process that can stop and
-	// restart the Platform — carries it out. The request settles when the
-	// Platform is running the version it asked for.
+	// The Platform cannot perform it. Pressing this records a request naming
+	// the version, the handoff reports it, and the Supervisor — the only
+	// process that can stop and restart the Platform — carries it out. The
+	// request settles when the Platform is running the version it asked for.
 	SuggestionApplyUpgrade SuggestionType = "apply_upgrade"
 	// SuggestionDismiss closes an Issue without changing anything. It is a real
 	// answer: "I know, and I am choosing to live with it" is a decision, and an
@@ -165,7 +156,7 @@ type Issue struct {
 	// Source is the process that detected it.
 	Source IssueSource
 	// Detail is one sentence of what actually happened — the error, the
-	// version, the path. **It is context for a person, never the meaning**:
+	// version, the path. It is context for a person, never the meaning:
 	// nothing branches on it, and a client that cannot render it still knows
 	// what the Issue is from its type.
 	Detail string
@@ -185,43 +176,40 @@ type Issue struct {
 	Occurrences int
 }
 
-// SuggestionsFor returns what this build can offer for an issue type.
+// SuggestionsFor returns what this build can offer for an issue type. It is
+// derived rather than stored so that a row written by an older build cannot
+// pin an offer this one no longer honours: a withdrawn suggestion disappears
+// from an existing Issue instead of failing when pressed.
 //
-// **Derived, not stored.** A row written by an older build must not pin an
-// offer this one no longer honours, and a suggestion that has been withdrawn
-// should disappear from an existing Issue rather than sit there failing when
-// pressed.
-//
-// Dismiss is on every type, deliberately: "I know, and I am choosing to live
-// with it" is a decision, and an Issue nobody can close becomes furniture.
+// Dismiss is on every type, deliberately: an Issue nobody can close becomes
+// furniture.
 func SuggestionsFor(t IssueType) []SuggestionType {
 	switch t {
 	case IssueExtensionUnavailable:
 		return []SuggestionType{SuggestionReinstallExtension, SuggestionUninstallExtension, SuggestionDismiss}
 	case IssueUpgradeAvailable:
-		// The first suggestion on this register that *acts*. Dismiss stands
-		// beside it because declining a version is a real answer, and the offer
-		// returns on the next check — which is correct, since the version is
-		// still there and still not installed.
+		// Dismiss stands beside it because declining a version is a real
+		// answer. The offer returns on the next check, which is correct: the
+		// version is still there and still not installed.
 		return []SuggestionType{SuggestionApplyUpgrade, SuggestionDismiss}
 	case IssueChildUnrecoverable, IssueGenerationRolledBack, IssueProvisionFailed, IssueUpgradeFailed:
-		// Nothing this build can *do* about these from a screen — restarting a
+		// Nothing this build can do about these from a screen: restarting a
 		// child and re-running an upgrade are the Supervisor's, and it has no
-		// action lane (supervisor#7 gave it a read surface and no more). Offering a
-		// control that did nothing would be worse than offering none, so the
-		// honest offer is to acknowledge it.
+		// action lane (supervisor#7 gave it a read surface and no more). A
+		// control that did nothing would be worse than none.
 		return []SuggestionType{SuggestionDismiss}
 	default:
 		return []SuggestionType{SuggestionDismiss}
 	}
 }
 
-// UpgradeRequest is somebody asking for a version to be installed (platform#77).
+// UpgradeRequest is somebody asking for a version to be installed
+// (platform#77).
 //
-// **It names a version and never "latest".** The Platform does not hold the
-// release catalogue, so it asks for the version it was offered — and the
-// Supervisor resolves that name against the *signed* catalogue rather than
-// trusting the request, which is what stops a request pointing an install at
+// It names a version and never "latest". The Platform does not hold the
+// release catalogue, so it asks for the version it was offered, and the
+// Supervisor resolves that name against the signed catalogue rather than
+// trusting the request — which is what stops a request pointing an install at
 // bytes nobody signed for.
 type UpgradeRequest struct {
 	ID      string

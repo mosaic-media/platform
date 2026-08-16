@@ -37,11 +37,11 @@ const (
 // BufferedSink is the queryable sink's front half: it accepts records without
 // blocking and a background goroutine drains them to a BatchWriter.
 //
-// The rule it exists to enforce is that **telemetry never blocks a request**
-// (platform#36). A user's playback must not wait on a log insert, and a telemetry
-// subsystem able to stall the Platform is a liability rather than an asset. So
-// Write never blocks and never returns an error; when the buffer is full it
-// discards the *oldest* record and counts the loss.
+// The rule it exists to enforce is that telemetry never blocks a request
+// (platform#36). A user's playback must not wait on a log insert, and a
+// telemetry subsystem able to stall the Platform is a liability rather than an
+// asset. So Write never blocks and never returns an error; when the buffer is
+// full it discards the oldest record and counts the loss.
 //
 // Dropping oldest rather than newest is deliberate. Under sustained pressure
 // the interesting records are the recent ones — whatever is happening now —
@@ -118,16 +118,16 @@ func (b *BufferedSink[T]) Dropped() uint64 { return b.dropped.Load() }
 // them, which is the point of there being two.
 func (b *BufferedSink[T]) Failed() uint64 { return b.failed.Load() }
 
-// Start runs the drain loop. It stops on Close, and deliberately **not** when
-// ctx is cancelled.
+// Start runs the drain loop. It stops on Close, and deliberately not when ctx
+// is cancelled.
 //
-// ctx is the parent for write contexts only. Making cancellation stop the loop
-// is the obvious design and it is wrong: the composition root starts this with
-// the serve context, which is cancelled by the shutdown *signal*, and the
-// records emitted after that signal — "shutdown signal received", the final
-// outbox drain, the shutdown health snapshot, "exiting cleanly" — are the ones
-// most worth keeping. A loop that exited on cancellation would leave Close
-// with nothing to flush and drop precisely the account of the shutdown.
+// ctx is the parent for write contexts only. Stopping the loop on cancellation
+// would be wrong: the composition root starts this with the serve context,
+// which is cancelled by the shutdown signal, and the records emitted after
+// that signal — "shutdown signal received", the final outbox drain, the
+// shutdown health snapshot, "exiting cleanly" — are the ones most worth
+// keeping. A loop that exited on cancellation would leave Close with nothing
+// to flush and drop precisely the account of the shutdown.
 //
 // The consequence is that a caller must Close, or the goroutine outlives the
 // sink. Every caller here does, on the shutdown path.

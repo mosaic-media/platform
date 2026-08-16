@@ -13,21 +13,21 @@ import (
 
 // JobStore is the queue of background work (platform#13's no-user case).
 //
-// It is deliberately **not on Tx**, and the reason is the opposite of the
+// It is deliberately not on Tx, and the reason is the opposite of the
 // telemetry store's. Telemetry is off the transaction because it must never
-// fail a request; this is off it because a claim *is* a transaction — the
-// `SELECT … FOR UPDATE SKIP LOCKED` that hands one runner a job and lets
-// another walk past it holds row locks for exactly as long as the claim, and
-// enclosing it in a caller's unit of work would hold those locks for the length
-// of somebody else's command.
+// fail a request; this is off it because a claim is itself a transaction — the
+// SELECT … FOR UPDATE SKIP LOCKED that hands one runner a job and lets another
+// walk past it holds row locks for exactly as long as the claim, and enclosing
+// it in a caller's unit of work would hold those locks for the length of
+// somebody else's command.
 //
-// The consequence is stated rather than hidden: a job enqueued from inside a
-// command does not commit with it. Nothing enqueues from a command today —
-// every producer is a schedule — and when one does, the honest answer is an
-// Enqueue reachable through Tx beside this one, not an Enqueue that pretends.
+// The consequence: a job enqueued from inside a command does not commit with
+// it. Nothing enqueues from a command today — every producer is a schedule —
+// and when one does, the answer is an Enqueue reachable through Tx beside this
+// one, not an Enqueue that pretends.
 type JobStore interface {
 	// Enqueue inserts a job, reporting whether the row was created. A job
-	// carrying a ScheduleKey that is already queued is *not* an error: the
+	// carrying a ScheduleKey that is already queued is not an error: the
 	// second caller gets created=false and the existing row, which is what
 	// makes "enqueue this hour's sweep" safe to call on every tick, from every
 	// process, and at every boot.

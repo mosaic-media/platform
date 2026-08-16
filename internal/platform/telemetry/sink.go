@@ -168,9 +168,9 @@ func (s *ConsoleSink) Write(r Record) {
 	_, _ = io.WriteString(s.out, b.String())
 }
 
-// MultiSink fans one record out to several sinks. This is what makes platform#36's
-// dual-sink rule expressible: a record goes to the durable file *and* to
-// whatever else is configured, with neither optional.
+// MultiSink fans one record out to several sinks. This is what makes
+// platform#36's dual-sink rule expressible: a record goes to the durable file
+// and to whatever else is configured, with neither optional.
 type MultiSink []Sink
 
 // Write passes r to every sink in order.

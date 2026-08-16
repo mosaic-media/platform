@@ -16,22 +16,22 @@ import (
 
 // rfcSecret is RFC 6238's own SHA-1 test key, encoded rather than transcribed.
 //
-// The RFC states the key as the ASCII string; writing its base32 form by hand
-// would make this a test of my transcription. Deriving it means a wrong
+// The RFC states the key as an ASCII string; writing its base32 form by hand
+// would make this a test of that transcription. Deriving it means a wrong
 // encoding fails against the vectors below rather than passing quietly.
 func rfcSecret() string {
 	return base32.StdEncoding.WithPadding(base32.NoPadding).
 		EncodeToString([]byte("12345678901234567890"))
 }
 
-// **The most valuable test in this file: RFC 6238's published vectors.**
+// TestCodesMatchRFC6238Vectors pins the codes against RFC 6238's published
+// vectors.
 //
 // An authenticator app and this code have to agree on a number neither ever
 // sends to the other, so the only thing that can hold them together is the
-// specification. A test that asserted "the code this code produced" would pass
-// against any arithmetic at all, including arithmetic no phone agrees with —
-// and the failure would surface as a user's correct code being rejected, which
-// is undiagnosable from either end.
+// specification. A test asserting "the code this code produced" would pass
+// against any arithmetic at all, including arithmetic no phone agrees with, and
+// the failure would surface as a user's correct code being rejected.
 //
 // The published vectors are eight digits; Mosaic issues six. The six-digit code
 // is the last six of the eight, because both are the same truncated value taken
@@ -85,10 +85,10 @@ func TestVerifyAcceptsTheCurrentCode(t *testing.T) {
 	}
 }
 
-// **Skew is what makes this usable by people whose phone clock is a little
-// off**, and its bounds are a real decision: one period either side, not two.
-// Too narrow rejects correct codes for a population that cannot tell drift from
-// a wrong secret; too wide multiplies the guessing surface for no gain.
+// Skew is what makes this usable by people whose phone clock is a little off,
+// and its bounds are one period either side, not two. Too narrow rejects correct
+// codes for a population that cannot tell drift from a wrong secret; too wide
+// multiplies the guessing surface for no gain.
 func TestVerifyAcceptsOnePeriodOfDriftAndNoMore(t *testing.T) {
 	auth := crypto.NewTOTPAuthenticator()
 	secret := rfcSecret()
@@ -114,11 +114,11 @@ func TestVerifyAcceptsOnePeriodOfDriftAndNoMore(t *testing.T) {
 	}
 }
 
-// **The returned step is what makes replay preventable.** A code stays valid
-// for its whole period, so without recording which step was spent the same six
-// digits work again for up to a minute — long enough for a code read over a
-// shoulder, or relayed by a proxy, to be used twice. This adapter stores
-// nothing, so it hands the caller the number to compare against.
+// The returned step is what makes replay preventable. A code stays valid for its
+// whole period, so without recording which step was spent the same six digits
+// work again for up to a minute — long enough for a code read over a shoulder,
+// or relayed by a proxy, to be used twice. This adapter stores nothing, so it
+// hands the caller the number to compare against.
 func TestVerifyReturnsTheStepSoAReplayCanBeRefused(t *testing.T) {
 	auth := crypto.NewTOTPAuthenticator()
 	secret := rfcSecret()
@@ -191,7 +191,7 @@ func TestAMalformedSecretIsAnErrorNotANonMatch(t *testing.T) {
 }
 
 // A code of the wrong length is a user mistake, so it is a plain non-match with
-// no error — the opposite of the case above, and worth pinning beside it.
+// no error — the opposite of the case above.
 func TestAWrongLengthCodeIsAPlainNonMatch(t *testing.T) {
 	auth := crypto.NewTOTPAuthenticator()
 	secret := rfcSecret()
@@ -269,8 +269,7 @@ func TestProvisioningURIStatesEveryParameter(t *testing.T) {
 }
 
 // Recovery codes are used exactly when the user has lost the device holding
-// everything else, so they are read off paper and retyped. The shape is the
-// feature.
+// everything else, so they are read off paper and retyped.
 func TestRecoveryCodesAreDistinctAndRetypeable(t *testing.T) {
 	codes, err := crypto.GenerateRecoveryCodes(10)
 	if err != nil {
@@ -291,7 +290,7 @@ func TestRecoveryCodesAreDistinctAndRetypeable(t *testing.T) {
 			t.Errorf("code %q is not the xxxxx-xxxxx shape", code)
 		}
 		// The alphabet excludes what is misread in handwriting. A code
-		// containing `0`, `o`, `1` or `l` is one somebody will retype wrongly
+		// containing 0, o, 1 or l is one somebody will retype wrongly
 		// on the worst day they have with this software.
 		for _, bad := range []string{"0", "o", "1", "l", "i"} {
 			if strings.Contains(code, bad) {

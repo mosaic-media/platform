@@ -32,8 +32,8 @@ type SearchAvailableContentResult struct {
 }
 
 // SearchAvailableContent fans the query out to every registered SearchProvider,
-// unions the virtual candidates, and marks each one in-library or not (ADR
-// 0028's union). A provider that errors is skipped rather than failing the whole
+// unions the virtual candidates, and marks each one in-library or not
+// (platform#18's union). A provider that errors is skipped rather than failing the whole
 // search — a source being down empties its plane, it does not blank the others.
 // Nothing here writes: the results are virtual until a caller materialises one.
 func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableContentQuery) (SearchAvailableContentResult, error) {
@@ -59,7 +59,7 @@ func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableC
 	// skipped (nil, nil) so its plane empties without blanking the others.
 	//
 	// The fallback tier answers only when nothing else found the title. The
-	// Platform still does no cross-provider dedup (module-cinemeta#1 records this), so
+	// Platform does no cross-provider dedup (module-cinemeta#1 records this), so
 	// two general metadata sources answering one query is the same title twice —
 	// and unlike a catalog row, a duplicate search hit sends the two planes to
 	// different providers for the same film.
@@ -70,24 +70,19 @@ func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableC
 			if err != nil {
 				return nil, err
 			}
-			// A span per provider, inside the fan-out. This is where a
-			// waterfall earns its keep: several addons are queried at once and
-			// the slow one is invisible in any aggregate.
-			//
-			// It matters more than usual here because the error below is
-			// deliberately swallowed — one unreachable addon must not fail the
-			// whole search — so until now a provider that failed every time
-			// looked exactly like one that returned nothing. The span is the
-			// only place that difference is recorded.
+			// A span per provider, inside the fan-out: several addons are
+			// queried at once and the slow one is invisible in any aggregate.
+			// The error below is deliberately swallowed — one unreachable addon
+			// must not fail the whole search — so the span is the only place a
+			// provider that failed is distinguished from one that returned
+			// nothing.
 			//
 			// The module's context is bound to a separate variable rather than
 			// shadowing ctx. moduleSpan rebinds the logger and installs the
-			// module's telemetry surface (sdk#5), so anything the Platform
-			// does afterwards under that context is recorded as the module's
-			// work — and, once the span has ended, recorded beneath a parent
-			// that has already closed. The dedup below is Platform work, and
-			// "was it us or the addon?" is exactly the question these spans
-			// exist to answer.
+			// module's telemetry surface (sdk#5), so anything the Platform does
+			// afterwards under that context would be recorded as the module's
+			// work, and beneath a span that has already ended. The dedup below
+			// is Platform work.
 			mctx, span := moduleSpan(ctx, e.ModuleID, "search")
 			resp, err := e.Provider.Search(mctx, v1.SearchRequest{
 				Caller: q.Caller, Settings: settings, Text: q.Text, MediaType: q.MediaType, Limit: q.Limit,
@@ -117,14 +112,12 @@ func (s *Service) SearchAvailableContent(ctx context.Context, q SearchAvailableC
 // a ref without one is never in the library. A lookup error is treated as "not
 // found" so a transient read does not falsely hide an item from search.
 //
-// az is not read here, and that is the point: it is a proof obligation rather
-// than data. Requiring it is what makes this an inside-the-boundary read that
-// can go straight to the store, instead of the entry point it used to call.
-// It ran once per search result, and FindContentByExternalID is a public
-// entry point, so a ten-result search re-authenticated and re-authorised ten
-// times over — for the same caller, the same action and the same resource the
-// handler above had already cleared. Roughly thirty of the search's thirty-nine
-// queries were that, and none of them could have reached a different verdict.
+// az is not read here: it is a proof obligation rather than data. Requiring it
+// is what makes this an inside-the-boundary read that goes straight to the
+// store. It runs once per search result, so calling the public entry point
+// FindContentByExternalID instead would re-authenticate and re-authorise once
+// per result, for the same caller, action and resource the handler above has
+// already cleared.
 func (s *Service) resolveInLibrary(ctx context.Context, az authorized, ref v1.ContentRef) (bool, v1.NodeID) {
 	if ref.ExternalScheme == "" || ref.ExternalID == "" {
 		return false, ""

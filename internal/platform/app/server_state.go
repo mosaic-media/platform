@@ -23,10 +23,9 @@ type ServerState struct {
 	// down.
 	//
 	// Disclosing it to an unauthenticated caller is deliberate and bounded: a
-	// server name is what tells a person they are looking at the right door,
-	// and it is a name a household chose to see on their own screens. It is the
+	// server name tells a person they are looking at the right door. It is the
 	// only thing about the install that is disclosed — no account count, no
-	// usernames, no version.
+	// usernames, no version — and it must stay that way.
 	Name string
 	// Degraded reports that the claimed answer below is a fallback rather than a
 	// reading. It exists so the doorway can say "I cannot reach my database"
@@ -41,24 +40,19 @@ func (s ServerState) Claimable() bool { return !s.Claimed && !s.Degraded }
 
 // ServerState answers which doorway to serve.
 //
-// **It takes no caller, and that is the whole point.** Every other method on
-// this Service begins by resolving a principal; this one is reached before a
-// principal can exist, so it has none to resolve — which is why it is here as
-// its own method rather than as a flag on a query that authenticates. A reader
-// looking for the boundary should find its absence stated rather than have to
-// infer it from a missing line.
+// It takes no caller. Every other method on this Service begins by resolving a
+// principal; this one is reached before a principal can exist, which is why it
+// is its own method rather than a flag on a query that authenticates.
 //
 // What it discloses is bounded to one bit, deliberately. "Does this server have
 // an owner" is a fact an unauthenticated caller learns from the doorway it is
-// shown regardless — a setup screen and a sign-in screen are visibly different
-// — so returning it is not a new disclosure. Anything more (how many accounts,
-// what they are called, when the server was claimed) would be, and none of it is
-// here.
+// shown regardless, since a setup screen and a sign-in screen are visibly
+// different. Anything more — how many accounts, what they are called, when the
+// server was claimed — would be a new disclosure and must not be added.
 //
-// It never fails. A store error means the doorway would otherwise be nothing at
-// all, and between "claimed" and "unclaimed" the safe wrong answer is claimed:
-// showing a setup screen on a server that has an owner invites somebody to try
-// to claim it, while showing sign-in on an unclaimed one is merely a dead end.
+// It never fails. Between "claimed" and "unclaimed" the safe wrong answer is
+// claimed: showing a setup screen on a server that has an owner invites somebody
+// to try to claim it, while showing sign-in on an unclaimed one is a dead end.
 func (s *Service) ServerState(ctx context.Context) ServerState {
 	state := ServerState{Name: s.serverName(ctx)}
 	if s.users == nil {
@@ -79,11 +73,10 @@ func (s *Service) ServerState(ctx context.Context) ServerState {
 // serverName reads the durable identity file, empty when there is none or it
 // cannot be read.
 //
-// It never fails for the same reason the state above never fails: this is the
-// one call made before a client can do anything, and an unnamed door is a door.
-// A Platform built without an identity store — a test service, a deployment
-// with no writable path — is the ordinary case of "there is no name", not an
-// error.
+// It never fails, like the state above: this is the one call made before a
+// client can do anything, and an unnamed door is a door. A Platform built
+// without an identity store — a test service, a deployment with no writable path
+// — is the ordinary case of "there is no name", not an error.
 func (s *Service) serverName(ctx context.Context) string {
 	if s.instance == nil {
 		return ""

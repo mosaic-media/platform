@@ -12,31 +12,28 @@ import (
 // The durable form of a probe (platform#29).
 //
 // A probe describes the bytes. The bytes do not change, so probing the same
-// release twice is pure waste — and it was the expensive kind: with the
-// resolution cache in place, ffprobe against the remote URL became the largest
-// single cost between a click and a first frame.
+// release twice is waste — and with the resolution cache in place, ffprobe
+// against the remote URL is the largest single cost between a click and a first
+// frame.
 //
-// platform#29 says probe results live on the Part, and points at the technical
-// columns that were sitting empty waiting for them. **Those columns are not
-// enough**, and the record's own worked example is why: a release with four
-// audio tracks whose first is Hindi. `Part.AudioCodec` is one string; it cannot
-// say which track, in which language, with how many channels. Persisting only
-// the summary would let the second play skip the probe and then choose a
-// different audio track from the first — a regression the columns could not even
-// express. So the whole track list is persisted as a document, and the columns
-// carry the summary they were always meant to carry.
+// platform#29 says probe results live on the Part, on its technical columns. Those
+// columns are not enough: Part.AudioCodec is one string, and it cannot say which
+// track, in which language, with how many channels. Persisting only the summary
+// lets the second play skip the probe and then choose a different audio track
+// from the first — a regression the columns cannot express. So the whole track
+// list is persisted as a document, and the columns carry the summary.
 
 // probeDocVersion is the schema version of the stored document.
 //
-// It exists so a future change to what a probe records is a re-probe rather than
-// a misread. An unrecognised version decodes as "not probed", which costs one
+// It exists so a change to what a probe records is a re-probe rather than a
+// misread. An unrecognised version decodes as "not probed", which costs one
 // ffprobe run and cannot produce a wrong plan — the opposite trade from
 // attempting a best-effort read of a shape this build does not know.
-// Bumped to 2 when Duration was added. A version 1 document decodes as "not
-// probed" and costs one ffprobe run; read back as version 2 it would decode
-// with a zero duration, which is indistinguishable from a source that has none
-// and would leave every already-probed release permanently unseekable. That is
-// exactly the misread this version exists to prevent.
+//
+// Bump it whenever a field is added. Duration is the worked example: a version 1
+// document read back as version 2 would decode with a zero duration, which is
+// indistinguishable from a source that has none and would leave every
+// already-probed release permanently unseekable.
 const probeDocVersion = 2
 
 // probeDoc is MediaInfo as it is stored. It is a separate type from MediaInfo on
@@ -151,26 +148,25 @@ func Decode(raw []byte) (MediaInfo, bool) {
 // SummaryAudioCodec names the audio codec to record on the Part alongside the
 // document.
 //
-// It is the codec of the track the *plan* would choose, not the first track in
-// the file, and the difference matters because that column feeds candidate
-// ranking (platform#27). Ranking asks "will this release need an audio encode for
-// this client", and the only honest answer is about the track that would
-// actually be played — on the Hindi-first release, the first track's codec would
-// answer a question nobody asked.
+// It is the codec of the track the plan would choose, not the first track in the
+// file, and the difference matters because that column feeds candidate ranking
+// (platform#27). Ranking asks "will this release need an audio encode for this
+// client", and the only honest answer is about the track that would actually be
+// played — on a release whose first track is a language nobody asked for, the
+// first track's codec answers a question nobody asked.
 func SummaryAudioCodec(info MediaInfo) string {
-	// PreferredLanguages explicitly, and it stays install-wide on purpose now
-	// that language is a person's preference (platform#83). This column feeds
-	// *candidate ranking*, which asks "will this release need an audio encode at
-	// all" — a coarse question one answer serves. Keying it per viewer is not
-	// possible anyway: it is one column on a Part that four people share, so it
-	// would be wrong for three of them silently. Per-user selection reads the
-	// full track list from the stored probe document instead, which is where the
-	// question "which track does *this* viewer get" is actually answered.
+	// PreferredLanguages explicitly, and it stays install-wide even though
+	// language is a person's preference (platform#83). This column feeds candidate
+	// ranking, which asks "will this release need an audio encode at all" — a
+	// coarse question one answer serves. Keying it per viewer is not possible
+	// anyway: it is one column on a Part that several people share, so it would
+	// be wrong for most of them silently. Per-user selection reads the full track
+	// list from the stored probe document instead.
 	//
-	// chooseAudio does not apply the default the way Decide does, and an empty
-	// preference list ranks an untagged track above a tagged one — which would
-	// summarise the wrong track on exactly the multi-language release this
-	// exists for.
+	// Pass the list rather than nil: chooseAudio does not apply the default the
+	// way Decide does, and an empty preference list ranks an untagged track above
+	// a tagged one, which summarises the wrong track on exactly the
+	// multi-language release this exists for.
 	track, ok := chooseAudio(info.Audio, PreferredLanguages)
 	if !ok {
 		return ""

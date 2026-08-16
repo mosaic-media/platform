@@ -26,12 +26,7 @@ import (
 // Settings › Configuration — the client path to the activation state machine
 // (platform#7, roadmap M4.4).
 //
-// The five services behind it — draft, validate, activate, read the active
-// version, read the pending one — were complete, tested and undrivable: the
-// reload-class model classified a change correctly and nobody could ask for
-// one. That is the register entry this panel discharges.
-//
-// **The three write services are one control.** Draft, validate and activate
+// The three write services are one control. Draft, validate and activate
 // are the machinery of the model, not a workflow a person performs: somebody
 // changing how often the library pass runs is not drafting a version. Exposing
 // them as three controls would make an operator drive an implementation in
@@ -58,20 +53,20 @@ type configurableField struct {
 	unit string
 }
 
-// The fields this panel offers, and the test that decided the list:
-// **something in the Platform must actually read the field.**
+// The fields this panel offers, and the test that decides the list: something in
+// the Platform must actually read the field.
 //
-// That test excludes two the schema declares. `runtime.log_level` is the
-// schema's own comment's "canonical hot-reload example" and nothing reads it;
-// `runtime.environment` is the same. Offering either would be a control that
+// That test excludes two the schema declares. runtime.log_level is the schema's
+// own comment's "canonical hot-reload example" and nothing reads it;
+// runtime.environment is the same. Offering either would be a control that
 // saves a value, reports that it applied, and changes nothing — an affordance
 // with nothing behind it, which is the exact failure platform#24 exists to
 // prevent and the one hardest to notice, because the write really did succeed.
 //
 // It also excludes two the Platform reads and this panel must not offer.
-// `composition.modules` is Generation-class and the Generation activation it
+// composition.modules is Generation-class and the Generation activation it
 // needs is not built, so a value saved here would wait for an escalation that
-// cannot happen. `storage.postgres.dsn` and its password are Recovery-class,
+// cannot happen. storage.postgres.dsn and its password are Recovery-class,
 // secret, and the two values that lock an operator out of their own install if
 // a screen gets them wrong.
 //
@@ -187,7 +182,7 @@ func configurationForm(effective map[string]string) *ui.Element {
 //
 // It reads the Active version first purely as the authorisation gate — the
 // value it returns is discarded. That call is the one that authorises
-// `config.read`; the readers below take no caller, because they exist to serve
+// config.read; the readers below take no caller, because they exist to serve
 // the Platform's own background passes.
 func (s *Service) effectiveConfiguration(ctx context.Context, caller v1.Caller) (map[string]string, error) {
 	if _, err := s.content.GetActiveConfigVersion(ctx, app.GetActiveConfigVersionQuery{
@@ -224,7 +219,7 @@ func inHours(d time.Duration) string { return strconv.Itoa(int(d.Hours())) }
 //
 // Naming the fields matters more here than anywhere else on the panel. A
 // pending version is invisible from every other angle: the rows above show
-// what applies *now*, so a change that is waiting looks exactly like a change
+// what applies now, so a change that is waiting looks exactly like a change
 // that was never made.
 func pendingSentence(pending app.GetPendingConfigVersionResult, now time.Time) string {
 	var what string
@@ -289,12 +284,12 @@ func payloadValues(payload []byte) map[string]string {
 // changedSummary names the fields a pending version would actually change, for
 // the sentence that says what is waiting.
 //
-// **It takes the changed set rather than deriving one from the payload**, and
-// that is the whole correctness of the sentence. A pending version is a
-// complete configuration, not a patch — the activation model diffs two payloads
-// — so its payload carries every field including the untouched ones. Listing
-// the payload's keys reported "it sets keep logs for → 21" to somebody who had
-// changed the maintenance interval and nothing else, with logs already at 21.
+// It takes the changed set rather than deriving one from the payload, and that
+// is the whole correctness of the sentence. A pending version is a complete
+// configuration, not a patch — the activation model diffs two payloads — so its
+// payload carries every field including the untouched ones. Listing the
+// payload's keys reports "it sets keep logs for → 21" to somebody who changed
+// the maintenance interval and nothing else, with logs already at 21.
 //
 // A field outside the curated set is named by its schema key rather than
 // dropped. It cannot have been changed from this screen, so it came from

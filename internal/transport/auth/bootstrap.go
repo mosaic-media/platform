@@ -22,24 +22,23 @@ import (
 // Bootstrap is the pre-session call (platform#57): the skin, the definitions the
 // doorway needs, and the doorway, in one response.
 //
-// It exists because a client without a session has no vocabulary *at all* —
+// It exists because a client without a session has no vocabulary at all —
 // definitions and the token set are pushed on connect, and the client
-// deliberately bundles none (contracts#7). The sign-in screen that was built and
-// withdrawn on the same day is what that costs: the Platform served exactly the
-// right tree and the browser drew "SignInPanel — not registered in this Shell",
-// unstyled, because neither half had arrived.
+// deliberately bundles none (contracts#7). Without this call the Platform serves
+// the right tree and the browser draws "SignInPanel — not registered in this
+// Shell", unstyled, because neither half has arrived.
 //
-// Three properties are load-bearing and each is easy to lose later:
+// Three properties must not be lost:
 //
-//   - **The definitions are a subset, transitively closed over the tree.** This
-//     is the one payload an unauthenticated party can enumerate, so it describes
-//     a doorway and nothing else. The subset is the security property, not an
+//   - The definitions are a subset, transitively closed over the tree. This is
+//     the one payload an unauthenticated party can enumerate, so it describes a
+//     doorway and nothing else. The subset is a security property, not an
 //     optimisation.
-//   - **Negotiation applies unchanged** (platform#52). The request carries the same
+//   - Negotiation applies unchanged (platform#52). The request carries the same
 //     VocabularyProfile Attach carries, so the doorway is degraded and its
 //     definitions fallback-selected exactly as every screen after it is.
-//   - **It does not vary on identity.** Nothing here reads a username, so
-//     nothing here can be used to learn which usernames exist.
+//   - It does not vary on identity. Nothing here reads a username, so nothing
+//     here can be used to learn which usernames exist.
 func (h *Handler) Bootstrap(ctx context.Context, req *connect.Request[authv1.BootstrapRequest]) (*connect.Response[authv1.BootstrapResponse], error) {
 	// Rate-limited because it is the one surface reachable before
 	// authentication (platform#57). It is cheap — one store read and some embedded
@@ -94,10 +93,10 @@ func (h *Handler) doorwayModel(ctx context.Context) screens.DoorwayModel {
 
 // doorway builds, degrades and subsets one pre-session tree.
 //
-// It is shared by Bootstrap and by the pre-session Invoke, which is the point:
+// It is shared by Bootstrap and by the pre-session Invoke, and must stay shared:
 // a second doorway assembled by a second code path is a second doorway that can
-// be served with the wrong definition subset. The subset *is* the security
-// property here, so there is one function that produces it.
+// be served with the wrong definition subset, and the subset is the security
+// property here.
 func (h *Handler) doorway(ctx context.Context, model screens.DoorwayModel, client vocabulary.Client) (*sduiv1.UINode, []byte, error) {
 	tree := screens.Doorway(model)
 	degraded, dropped := vocabulary.Degrade(tree, client)
@@ -139,11 +138,8 @@ func (h *Handler) doorwayOutcome(ctx context.Context, client vocabulary.Client) 
 // fieldErrorsOutcome answers an Invoke with a rejection that belongs on the
 // fields it came from (contracts#13), and reports whether the error was one.
 //
-// This is the pre-session half of the same envelope the session lane pushes.
-// contracts.RejectFields has been routed and uncalled since validation landed;
-// the doorway's two forms are the first screens to produce one, which is why
-// both halves — the command that rejects and the lane that carries it — arrive
-// together.
+// This is the pre-session half of the same envelope the session lane pushes, so
+// a rejection renders identically whichever lane carried it.
 func fieldErrorsOutcome(err error) (*connect.Response[authv1.InvokeResponse], bool) {
 	var perr *contracts.Error
 	if !errors.As(err, &perr) || len(perr.Fields) == 0 {

@@ -13,19 +13,16 @@ import (
 
 // SessionForCaller resolves a credential to the session behind it.
 //
-// It exists because the session transport keys its live state — the outbound
-// mailbox, the replay cursor, the current route — by *session*, and since
-// platform#58 the value a client presents is not one. An access token rotates
-// every few minutes; a live session keyed by it would be orphaned on every
-// refresh, taking its cursor and its route with it, and the client would see a
-// reconnect it did not ask for each time its credential turned over.
+// The session transport keys its live state — the outbound mailbox, the replay
+// cursor, the current route — by session, and since platform#58 the value a
+// client presents is not one. An access token rotates every few minutes, so a
+// live session keyed by it would be orphaned on every refresh, taking its cursor
+// and its route with it.
 //
-// **It authenticates and deliberately does not authorize.** There is no action
-// to gate: it answers "which session is this", which is a fact about the
-// credential already presented rather than a new thing to be permitted. It
-// reveals nothing either — a caller that can present a credential can already
-// use it, and a caller that cannot gets Unauthenticated, which is the answer
-// every other entry point gives them too.
+// It authenticates and deliberately does not authorize. There is no action to
+// gate: it answers "which session is this", a fact about the credential already
+// presented. It reveals nothing either — a caller that can present a credential
+// can already use it, and one that cannot gets Unauthenticated.
 func (s *Service) SessionForCaller(ctx context.Context, caller v1.Caller) (domain.Session, error) {
 	return s.sessionManager.Validate(ctx, s.sessionStore, s.tokens,
 		domain.SessionCredential(caller.Session))

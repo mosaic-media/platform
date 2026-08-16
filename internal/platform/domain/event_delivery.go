@@ -6,16 +6,15 @@ package domain
 
 import "time"
 
-// DeliveryPolicy is the Platform's outbox retry and dead-letter rule. It is
-// pure value logic — given the number of attempts made so far and the current
-// time, it decides when the next attempt is due and whether the event has
-// exhausted its retries and must be dead-lettered. It lives here, apart from
-// the outbox worker that performs deliveries, so the failure bookkeeping is
-// pure value logic and independently testable.
+// DeliveryPolicy is the Platform's outbox retry and dead-letter rule: given
+// the number of attempts made so far and the current time, it decides when the
+// next attempt is due and whether the event has exhausted its retries. It is
+// pure value logic, kept apart from the outbox worker that performs
+// deliveries so the failure bookkeeping is testable on its own.
 //
-// Critical Platform events may warrant stricter rules than low-priority
-// diagnostic events. This applies one uniform policy; per-event-class
-// policies can be layered on later.
+// One policy applies to every event class. Critical Platform events may
+// warrant stricter rules than low-priority diagnostic ones; per-class policies
+// do not exist yet.
 type DeliveryPolicy struct {
 	// MaxAttempts is the number of failed attempts after which an event is
 	// dead-lettered rather than retried again.
@@ -26,8 +25,8 @@ type DeliveryPolicy struct {
 	MaxDelay time.Duration
 }
 
-// DefaultDeliveryPolicy is the first-cut policy: up to eight attempts with
-// exponential backoff from one minute, capped at one hour.
+// DefaultDeliveryPolicy allows up to eight attempts with exponential backoff
+// from one minute, capped at one hour.
 func DefaultDeliveryPolicy() DeliveryPolicy {
 	return DeliveryPolicy{
 		MaxAttempts: 8,

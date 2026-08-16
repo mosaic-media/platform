@@ -15,7 +15,7 @@ import (
 
 // Setting a node's artwork (platform#47).
 //
-// This is the first content command that *updates* a node rather than creating
+// This is the first content command that updates a node rather than creating
 // one, and the absence of it is something platform#45 wrote down as owed: "there is
 // no command that updates a stored work's fields, so a re-import does not
 // refresh its artwork today."

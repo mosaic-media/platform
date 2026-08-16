@@ -161,7 +161,7 @@ func TestActivateConfigVersionRejectsGenerationClassChangeFromHotApplying(t *tes
 	}
 
 	// Pending, not Active and not merely Validated. The Supervisor handoff
-	// this was left for now exists, and what it needs is the *request*: a
+	// this was left for now exists, and what it needs is the request: a
 	// version left Validated is indistinguishable from one that passed
 	// validation and nobody asked for, so an escalation would have to apply
 	// all of them or none.

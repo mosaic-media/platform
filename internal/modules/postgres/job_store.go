@@ -89,11 +89,11 @@ func (s *jobStore) findByScheduleKey(ctx context.Context, key string) (domain.Jo
 
 // Claim is the whole coordination mechanism, and it is one statement.
 //
-// `FOR UPDATE SKIP LOCKED` is what lets two runners poll the same queue without
-// a lock table, a heartbeat protocol or a leader: each takes rows the other has
+// FOR UPDATE SKIP LOCKED is what lets two runners poll the same queue without a
+// lock table, a heartbeat protocol or a leader: each takes rows the other has
 // not, and neither waits. Skipping rather than blocking is the load-bearing
-// half — `FOR UPDATE` alone would make the second runner queue behind the
-// first and turn a pool of workers into one worker with spectators.
+// half — FOR UPDATE alone would make the second runner queue behind the first
+// and turn a pool of workers into one worker with spectators.
 //
 // The UPDATE is in the same statement as the SELECT, so a claim is atomic
 // without an explicit transaction: there is no window in which a row is locked

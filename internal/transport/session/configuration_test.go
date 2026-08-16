@@ -13,13 +13,14 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
-// **The load-bearing test in this file.** Every reader on the far side takes a
-// JSON *number* — `durationField` and `countField` both type-assert float64 —
-// and validation checks only that a field is registered, never what type it
-// holds. So a retention submitted as the string "30" validates, activates,
-// reports "Applied." and is then silently ignored by the reader it was meant to
-// change. A form's values arrive as strings, so this conversion is the only
-// thing standing between the two.
+// TestNumbersArriveAsTextAndAreStoredAsNumbers pins the string-to-number
+// conversion, which nothing downstream would report the loss of. Every reader on
+// the far side takes a JSON number — durationField and countField both
+// type-assert float64 — and validation checks only that a field is registered,
+// never what type it holds. So a retention submitted as the string "30"
+// validates, activates, reports "Applied." and is then silently ignored by the
+// reader it was meant to change. A form's values arrive as strings, so this
+// conversion is the only thing standing between the two.
 func TestNumbersArriveAsTextAndAreStoredAsNumbers(t *testing.T) {
 	fields, err := configFieldsFromInput([]byte(`{"telemetry.retention.logs_days":"30"}`))
 	if err != nil {
@@ -37,9 +38,9 @@ func TestNumbersArriveAsTextAndAreStoredAsNumbers(t *testing.T) {
 	}
 }
 
-// A value that is not a number is a rejection on the box that carries it, not a
-// generic refusal — a form with eight inputs on it must say which one is wrong
-// (contracts#13).
+// TestANonNumberIsRejectedOnItsOwnField pins that a value that is not a number
+// is rejected on the box that carries it rather than by a generic refusal — a
+// form with eight inputs on it must say which one is wrong (contracts#13).
 func TestANonNumberIsRejectedOnItsOwnField(t *testing.T) {
 	_, err := configFieldsFromInput([]byte(`{"telemetry.retention.logs_days":"a fortnight"}`))
 	if err == nil {
@@ -54,9 +55,10 @@ func TestANonNumberIsRejectedOnItsOwnField(t *testing.T) {
 	}
 }
 
-// An empty box means "leave this alone". A form carries every field in its
-// scope on every submit, so writing the empty ones would have somebody changing
-// one number silently re-state — or erase — the other seven.
+// TestAnEmptyBoxLeavesTheSettingAlone pins that an empty box means "leave this
+// alone". A form carries every field in its scope on every submit, so writing
+// the empty ones would have somebody changing one number silently re-state — or
+// erase — the other seven.
 func TestAnEmptyBoxLeavesTheSettingAlone(t *testing.T) {
 	fields, err := configFieldsFromInput([]byte(
 		`{"telemetry.retention.logs_days":"30","library.maintenance.items_per_run":"  "}`))
@@ -71,10 +73,10 @@ func TestAnEmptyBoxLeavesTheSettingAlone(t *testing.T) {
 	}
 }
 
-// A submit carries the form's own error binding alongside the fields, so an
-// unknown key is a rendering detail rather than a mistake. Refusing the call
-// for it would turn "the form has an error variable" into an error nobody can
-// act on.
+// TestAKeyTheSchemaDoesNotKnowIsDroppedRatherThanRefused pins that an unknown
+// key is a rendering detail rather than a mistake: a submit carries the form's
+// own error binding alongside the fields, and refusing the call for it would
+// turn "the form has an error variable" into an error nobody can act on.
 func TestAKeyTheSchemaDoesNotKnowIsDroppedRatherThanRefused(t *testing.T) {
 	fields, err := configFieldsFromInput([]byte(
 		`{"formError":"","telemetry.retention.logs_days":"30"}`))
@@ -89,9 +91,10 @@ func TestAKeyTheSchemaDoesNotKnowIsDroppedRatherThanRefused(t *testing.T) {
 	}
 }
 
-// What the operator is told, per class. The Hot case is the only one where the
-// change has actually happened; every other answer has to name what will apply
-// it, because "Saved." on its own reads as "done".
+// TestTheSentenceSaysWhetherAnythingActuallyHappened pins what the operator is
+// told, per class. The Hot case is the only one where the change has actually
+// happened; every other answer has to name what will apply it, because "Saved."
+// on its own reads as "done".
 func TestTheSentenceSaysWhetherAnythingActuallyHappened(t *testing.T) {
 	if got := appliedSentence(app.ActivateConfigVersionResult{Activated: true}); got != "Applied." {
 		t.Errorf("a hot change said %q", got)

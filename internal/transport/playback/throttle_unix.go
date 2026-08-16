@@ -13,15 +13,15 @@ import (
 
 // Holding a transcode back (platform#82).
 //
-// **Stopping the process is the only throttle available**, because the pressure
-// has to reach ffmpeg rather than the origin. ffmpeg writes its segments to a
+// Stopping the process is the only throttle available, because the pressure has
+// to reach ffmpeg rather than the origin. ffmpeg writes its segments to a
 // directory on its own schedule; nothing reads them through a pipe the origin
 // could simply stop draining, so there is no backpressure to apply and the only
 // lever is the scheduler's.
 //
 // SIGSTOP and SIGCONT rather than a kill and a restart: a restart costs a fresh
 // upstream connection and a re-seek, and the encoder is going to be wanted again
-// in a few seconds. This is what `remux` does for the same reason.
+// in a few seconds. remux does the same, for the same reason.
 const (
 	pauseSignal  = syscall.SIGSTOP
 	resumeSignal = syscall.SIGCONT

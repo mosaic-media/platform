@@ -13,13 +13,11 @@ import (
 	"io"
 )
 
-// DeriveKey derives a 32-byte AES-256 key from arbitrary-length key
-// material via SHA-256. This is a first-cut KDF: it has no configurable
-// work factor, so it is appropriate for a recovery key that is itself
-// high-entropy random material (the vault's recovery key), not for
-// deriving a key from a low-entropy human password. A stronger, tunable
-// KDF (Argon2id/scrypt) can replace this later without changing the
-// Encrypt/Decrypt contract.
+// DeriveKey derives a 32-byte AES-256 key from arbitrary-length key material via
+// SHA-256. It has no configurable work factor, so it suits key material that is
+// itself high-entropy random data (the vault's recovery key) and not a
+// low-entropy human password; a tunable KDF (Argon2id, scrypt) can replace it
+// without changing the Encrypt/Decrypt contract.
 func DeriveKey(material []byte) [32]byte {
 	return sha256.Sum256(material)
 }

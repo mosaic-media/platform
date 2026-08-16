@@ -18,13 +18,11 @@ type ReadinessResult struct {
 	Components []domain.ComponentHealth
 }
 
-// CheckReadiness reports Ready=false if ANY registered component is
-// Unavailable, computed from real, live component health
-// (internal/platform/diagnostics) — never hardcoded true. A component that
-// is merely Degraded does not block activation: component health should be
-// granular enough without reducing the whole system to a single failed
-// state — a degraded event bus should not stop the Supervisor from
-// activating a Platform whose storage is fine.
+// CheckReadiness reports Ready=false if any registered component is
+// Unavailable, computed from live component health
+// (internal/platform/diagnostics) rather than hardcoded. A component that is
+// merely Degraded does not block activation: a degraded event bus should not
+// stop the Supervisor from activating a Platform whose storage is fine.
 func CheckReadiness(ctx context.Context, registry *diagnostics.Registry) ReadinessResult {
 	snapshot := registry.Snapshot(ctx)
 	ready := true

@@ -27,9 +27,10 @@ func TestPageLoopStopsWhenTheProviderSaysThereIsNoMore(t *testing.T) {
 	}
 }
 
-// A provider insisting there is more while returning nothing is the case worth
-// guarding: believed literally it is an unbounded loop against an upstream, and
-// the Platform is the party that pays for it.
+// TestAnEmptyPageStopsTheLoopWhateverTheProviderClaims pins that a provider
+// insisting there is more while returning nothing is the case worth guarding:
+// believed literally it is an unbounded loop against an upstream, and the
+// Platform is the party that pays for it.
 func TestAnEmptyPageStopsTheLoopWhateverTheProviderClaims(t *testing.T) {
 	calls := 0
 	items, hasMore := accumulate(50, func(int) ([]int, bool, error) {

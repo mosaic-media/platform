@@ -17,13 +17,12 @@ import (
 
 // Cache-first browse reads (platform#30).
 //
-// The behaviour under test is the one the empty home screen came from: a source
-// that does not answer must not be able to make a full library look unconfigured.
-// Each case below is one way that used to happen.
+// The property under test: a source that does not answer must not be able to
+// make a full library look unconfigured.
 
-// downableCapability is a catalog provider with a switch. Flipping `down` makes
-// every call fail the way an unreachable addon does, which is what these tests
-// need and what the fixture's provider cannot do.
+// downableCapability is a catalog provider with a switch. Flipping down makes
+// every call fail the way an unreachable addon does, which the fixture's own
+// provider cannot do.
 type downableCapability struct {
 	id       string
 	catalogs []v1.Catalog
@@ -267,7 +266,7 @@ func TestBrowseRederivesInLibrary(t *testing.T) {
 		t.Fatalf("warm read: %v", err)
 	}
 
-	// Added to the library *after* the snapshot was taken.
+	// Added to the library after the snapshot was taken.
 	db.seedNode(v1.Node{
 		ID: "n-2", WorkID: "n-2", Kind: v1.NodeWork, MediaType: v1.MediaMovie,
 		Title: "Blade Runner 2049", Status: v1.NodeActive, ExternalIDs: []byte(`{"imdb":"tt1254207"}`),
@@ -286,7 +285,7 @@ func TestBrowseRederivesInLibrary(t *testing.T) {
 }
 
 // TestBrowseCatalogsSurvivesAColdManifest covers the other half of the empty
-// home screen: an addon's *catalog list* comes out of a manifest fetched over
+// home screen: an addon's catalog list comes out of a manifest fetched over
 // the network, so a cold source has no catalogs at all — and a home screen with
 // no catalogs renders "add an addon in Settings" to an install that has one.
 func TestBrowseCatalogsSurvivesAColdManifest(t *testing.T) {

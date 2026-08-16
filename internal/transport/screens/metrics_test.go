@@ -11,10 +11,10 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
-// **This screen is what makes the metric surface built rather than owed.** A
-// capability with no client path is on the register, and a metric nobody can
-// look at is precisely the discarding counter sdk#5 refused to publish, so
-// the screen is part of the feature and not a follow-up.
+// TestMetricsScreenListsEachSeries pins the client path that makes the metric
+// surface built rather than owed. A capability with no client path is on the
+// register, and a metric nobody can look at is precisely the discarding counter
+// sdk#5 refused to publish.
 func TestMetricsScreenListsEachSeries(t *testing.T) {
 	fake := &fakeQueries{
 		settingsUI:       minimalSettingsUI(),
@@ -46,8 +46,9 @@ func TestMetricsScreenListsEachSeries(t *testing.T) {
 	}
 }
 
-// A histogram must not be reduced to one number. Its value slot carries the
-// observation *count* and the spread goes in the summary, because an average
+// TestMetricsScreenShowsAHistogramsShapeRatherThanAnAverage pins that a
+// histogram must not be reduced to one number. Its value slot carries the
+// observation count and the spread goes in the summary, because an average
 // presented as the value is the summarisation a histogram exists to avoid.
 func TestMetricsScreenShowsAHistogramsShapeRatherThanAnAverage(t *testing.T) {
 	fake := &fakeQueries{
@@ -68,9 +69,10 @@ func TestMetricsScreenShowsAHistogramsShapeRatherThanAnAverage(t *testing.T) {
 	}
 }
 
-// An empty list has two causes that look identical — nothing has been recorded,
-// and the process restarted — so the screen says which is possible rather than
-// letting a reader conclude the first.
+// TestMetricsScreenSaysTheValuesAreProcessLifetime pins that an empty list has
+// two causes that look identical — nothing has been recorded, and the process
+// restarted — so the screen says which is possible rather than letting a reader
+// conclude the first.
 func TestMetricsScreenSaysTheValuesAreProcessLifetime(t *testing.T) {
 	fake := &fakeQueries{settingsUI: minimalSettingsUI(), canReadTelemetry: true, expertModeOn: true}
 	svc := &Service{content: fake}
@@ -82,9 +84,10 @@ func TestMetricsScreenSaysTheValuesAreProcessLifetime(t *testing.T) {
 	}
 }
 
-// The nav row appears with the other diagnostics rows, on the same permission
-// and behind the same expert-mode preference — a control nobody may use should
-// not be drawn (platform#36).
+// TestMetricsNavRowFollowsTheDiagnosticsGate pins that the nav row appears with
+// the other diagnostics rows, on the same permission and behind the same
+// expert-mode preference — a control nobody may use should not be drawn
+// (platform#36).
 func TestMetricsNavRowFollowsTheDiagnosticsGate(t *testing.T) {
 	withTelemetry := &fakeQueries{settingsUI: minimalSettingsUI(), canReadTelemetry: true, expertModeOn: true}
 	if _, ok := findNavItem(render(t, &Service{content: withTelemetry}, screenSettings, nil), "Metrics"); !ok {

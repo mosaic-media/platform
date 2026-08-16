@@ -232,10 +232,10 @@ func TestModuleMetricUnitsCrossTheAdapter(t *testing.T) {
 	}
 }
 
-// **The record quota must not bound metrics.** A record accumulates in a store
-// and a metric does not — a counter written a million times is one series
-// holding one number — so applying the per-invocation record cap here would stop
-// a busy module counting anything after its 512th call, silently.
+// The record quota must not bound metrics. A record accumulates in a store and a
+// metric does not — a counter written a million times is one series holding one
+// number — so applying the per-invocation record cap here would silently stop a
+// busy module counting anything after its 512th call.
 func TestTheRecordQuotaDoesNotBoundMetrics(t *testing.T) {
 	var buf bytes.Buffer
 	collector := telemetry.NewMetricCollector()

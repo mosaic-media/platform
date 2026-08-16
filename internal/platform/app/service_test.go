@@ -178,7 +178,7 @@ func TestCreateLocalUserRejectsRevokedSession(t *testing.T) {
 		RevokedAt: &revokedAt,
 	}
 	// A live access token pointing at it, so this exercises the refusal it is
-	// named for — a revoked *session* — rather than an unknown credential,
+	// named for — a revoked session — rather than an unknown credential,
 	// which a different test already covers.
 	db.accessTokens[sessions.HashToken("session-revoked")] = domain.AccessToken{
 		Hash:      sessions.HashToken("session-revoked"),
@@ -475,7 +475,7 @@ func TestRevokeSessionDeniedByPolicyDoesNotMutateState(t *testing.T) {
 		t.Fatal("expected the target session to remain unrevoked when policy denies")
 	}
 
-	// The target is read before the policy is asked, because *whose* session it
+	// The target is read before the policy is asked, because whose session it
 	// is decides whether a grant is needed at all: ending your own is signing
 	// out, and signing out is not a privilege. So the transaction opens, reads,
 	// refuses and rolls back — and the rollback is the part that matters, which
@@ -492,10 +492,10 @@ func TestRevokeSessionDeniedByPolicyDoesNotMutateState(t *testing.T) {
 }
 
 // Ending your own session needs no grant. It is the half of platform#58's
-// revocation that a household member has to be able to do — an account that
-// could not sign out is an account nobody can hand a shared television back
-// from — and it was refused for every ordinary account, because the action was
-// required of everybody and only the administrator preset carried it.
+// revocation a household member has to be able to do: an account that cannot
+// sign out is one nobody can hand a shared television back from. Requiring
+// user.session.revoke of everybody refuses it for every ordinary account,
+// because only the administrator preset carries that action.
 func TestAViewerCanEndTheirOwnSessionWithoutTheGrant(t *testing.T) {
 	db := newFakeDB()
 	tr := &trace{}

@@ -63,10 +63,10 @@ func TestAPendingRequestIsReported(t *testing.T) {
 	}
 }
 
-// **Settlement is a comparison, not an acknowledgement** (platform#77). The
-// process that would have reported success has been replaced by the upgrade, so
-// what closes the request is the Platform being able to say it *is* the version
-// that was asked for.
+// Settlement is a comparison, not an acknowledgement (platform#77). The process
+// that would have reported success has been replaced by the upgrade, so what
+// closes the request is the Platform being able to say it is the version that
+// was asked for.
 func TestARequestSettlesWhenTheInstallIsRunningThatVersion(t *testing.T) {
 	t.Setenv("MOSAIC_GENERATION_ID", "v0.4.0")
 	store := &fakeUpgrades{pending: &domain.UpgradeRequest{Version: "v0.4.0"}}

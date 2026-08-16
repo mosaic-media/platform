@@ -345,12 +345,9 @@ func TestConcurrentRouteAccessIsRaceFree(t *testing.T) {
 	wg.Wait()
 }
 
-// TestIdleStreamSendsKeepalives is the fix for a reconnect nobody caused.
-//
-// A Subscribe stream only carries traffic when the server has something to say,
-// so a user reading a page sends nothing for minutes — and an idle HTTP
-// connection is what proxies, load balancers and container port forwarders reap.
-// The client then reports "Reconnecting" for a stream that was working fine.
+// TestIdleStreamSendsKeepalives proves a stream with nothing to say still sends
+// something, so proxies, load balancers and container port forwarders do not reap
+// it as an idle connection and leave the client reporting "Reconnecting".
 //
 // The keepalive is an empty ServerMessage: no body, so a client ignores it
 // through the same branch that ignores a message type it does not recognise.
@@ -405,9 +402,7 @@ func TestKeepaliveYieldsToRealMessages(t *testing.T) {
 	// Enqueue only once the stream is actually open. A fresh connect (cursor 0)
 	// starts from the session's current seq and deliberately does not replay
 	// what came before it — onConnect rebuilds instead — so a message enqueued
-	// in the window before the stream opens is correctly skipped. An earlier
-	// version of this test enqueued there and failed, which was the test being
-	// wrong rather than the loop.
+	// in the window before the stream opens is correctly skipped.
 	ready := make(chan struct{})
 	done := make(chan struct{})
 	go func() { _ = s.serve(ctx, 0, func() { close(ready) }, send); close(done) }()

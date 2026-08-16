@@ -39,11 +39,9 @@ type Error struct {
 	Message  string
 	Err      error
 	// Fields names which submitted fields were rejected and why (contracts#13).
-	//
-	// It is on the error rather than beside it because a rejection *is* the
-	// error — a command that answers "that username is taken" in a separate
-	// channel leaves every caller to remember to look, and the one that forgets
-	// turns a per-field rejection into a generic failure with no clue in it.
+	// It is carried on the error rather than in a separate channel so that a
+	// caller cannot forget to look and turn a per-field rejection into a
+	// generic failure.
 	//
 	// Empty for every error that is not about a submission, which is nearly all
 	// of them. A transport that finds it non-empty pushes it to the fields; one

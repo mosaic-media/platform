@@ -116,11 +116,11 @@ const (
 // JobLog is one line a job recorded about itself, stored beside the job rather
 // than only in telemetry.
 //
-// Both, deliberately. Telemetry is where the trace lives and it is subject to
-// retention (platform#36), so a job that failed a fortnight ago would have lost
-// the record of why by the time anyone asked. These rows outlive that window
-// and are read from the job itself, which is where somebody looking at a
-// dead-letter starts.
+// It is stored in both places deliberately. Telemetry is where the trace lives
+// and it is subject to retention (platform#36), so a job that failed a
+// fortnight ago would have lost the record of why by the time anyone asked.
+// These rows outlive that window and are read from the job itself, which is
+// where somebody looking at a dead-letter starts.
 type JobLog struct {
 	ID       JobLogID
 	JobID    JobID

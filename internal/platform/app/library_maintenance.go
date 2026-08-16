@@ -21,39 +21,33 @@ import (
 //
 // It evaluates each enabled rule and reconciles: materialise what is missing,
 // and for what is already there, re-merge artwork and top up Parts through the
-// enrichment pass platform#46 already made idempotent. **It adds and never
-// removes.** A title that has left a catalog stays in the library, because a
-// source's churn is not a household's decision and silently deleting something
-// somebody watched half of is the worst thing this feature could do.
+// enrichment pass platform#46 made idempotent.
 //
-// Three properties are load-bearing and each is here for a stated reason.
+// It adds and never removes. A title that has left a catalog stays in the
+// library; do not add a deletion path here.
 //
-// **It acts as the system principal** (platform#13), whoever triggered it. A
-// maintenance write must not fail because the administrator who wrote the rule
-// was suspended, and a node nobody chose item by item should attribute to the
-// install rather than to somebody who pressed nothing. A manual run is
-// authorised against the person who pressed the button and then acts as the
-// install, which is the same separation a probe recording already uses.
+// It acts as the system principal (platform#13) whoever triggered it, so a
+// maintenance write does not fail because the administrator who wrote the rule
+// was suspended. A manual run is authorised against the person who pressed the
+// button and then acts as the install.
 //
-// **It is bounded.** Rules turn a household's upstream load from bursty and
-// human-triggered into continuous, which is a new way to exhaust a rate limit —
-// and a refresh is not free: the module re-reads the title's detail before it
-// discovers it already has it. The budget is per run and is configuration.
+// It is bounded. Rules turn upstream load from bursty and human-triggered into
+// continuous, and a refresh is not free: the module re-reads the title's detail
+// before it discovers it already has it. The budget is per run and is
+// configuration.
 //
-// **It is best-effort per item.** One failure logs and continues, because a run
-// that produced ninety-nine correct nodes has succeeded, and a run that stops at
-// the first unreachable source is a run that never finishes on a bad day.
+// It is best-effort per item: one failure logs and continues, so an unreachable
+// source cannot stop the run.
 //
-// One thing it does **not** do, named here rather than discovered later: it does
-// not extend a tree that already exists. Every module dedups before writing and
-// returns `AlreadyKnown` on a title it has already materialised, so a series
-// that gains a season is refreshed — artwork, Parts — and does not grow the new
-// season. Closing that needs a refresh path through the module, which is an SDK
-// change and not this slice's.
+// What it does not do: extend a tree that already exists. Every module dedups
+// before writing and returns AlreadyKnown on a title it has already
+// materialised, so a series that gains a season is refreshed — artwork, Parts —
+// and does not grow the new season. Closing that needs a refresh path through
+// the module, which is an SDK change.
 
-// Config fields governing the pass, matching config.PlatformSchema. Named here
-// rather than spelled at the read site for the same reason retention's are: a
-// misspelling would be a configured value that silently never takes effect.
+// Config fields governing the pass, matching config.PlatformSchema. Named as
+// constants rather than spelled at the read site because a misspelling would be
+// a configured value that silently never takes effect.
 const (
 	fieldLibraryMaintenanceInterval = "library.maintenance.interval_hours"
 	fieldLibraryMaintenanceBudget   = "library.maintenance.items_per_run"
@@ -73,10 +67,9 @@ type LibraryMaintenanceSettings struct {
 // nothing, which is the normal state: there is no admin surface for drafting
 // configuration yet.
 //
-// Six-hourly rather than hourly. A catalog is curated by people and changes on
-// the order of days, so asking four times a day is already generous — and the
-// cost of asking is paid to somebody else's API on a credential a whole
-// household may share (architecture#4).
+// Six-hourly rather than hourly: a catalog is curated by people and changes on
+// the order of days, and the cost of asking is paid to somebody else's API on a
+// credential a whole household may share (architecture#4).
 var DefaultLibraryMaintenance = LibraryMaintenanceSettings{
 	Interval: 6 * time.Hour,
 	Budget:   200,
@@ -85,9 +78,9 @@ var DefaultLibraryMaintenance = LibraryMaintenanceSettings{
 // LibraryMaintenance reads the pass's settings from the Active configuration,
 // falling back to the defaults for anything unset or unusable.
 //
-// It never fails, for the reason retention's reader never fails: this governs a
-// background sweep, and turning a typo in configuration into a Platform that
-// will not maintain its library is worse than running with the default.
+// It never fails, like retention's reader: this governs a background sweep, and
+// a typo in configuration must not become a Platform that will not maintain its
+// library.
 func (s *Service) LibraryMaintenance(ctx context.Context) LibraryMaintenanceSettings {
 	out := DefaultLibraryMaintenance
 	if s.configStore == nil {
@@ -110,12 +103,11 @@ func (s *Service) LibraryMaintenance(ctx context.Context) LibraryMaintenanceSett
 	return out
 }
 
-// countField reads a positive whole-number config field.
-//
-// Beside durationField rather than reusing it with a unit of one nanosecond:
-// that works and reads as a trick, and a budget is a count of items rather than
-// a length of time. Zero and negatives are rejected, because a budget of zero
-// is a sweep that does nothing while reporting that it ran.
+// countField reads a positive whole-number config field. It sits beside
+// durationField rather than reusing it with a unit of one nanosecond, because a
+// budget is a count of items rather than a length of time. Zero and negatives
+// are rejected: a budget of zero is a sweep that does nothing while reporting
+// that it ran.
 func countField(payload map[string]any, key string) (int, bool) {
 	raw, ok := payload[key]
 	if !ok {
@@ -140,14 +132,12 @@ func countField(payload map[string]any, key string) (int, bool) {
 
 // RunLibraryMaintenanceCommand evaluates every enabled rule and reconciles.
 type RunLibraryMaintenanceCommand struct {
-	// Caller is who *triggered* the pass — the system principal on a schedule,
-	// an administrator on a manual run. It is not who the pass acts as.
+	// Caller is who triggered the pass — the system principal on a schedule, an
+	// administrator on a manual run. It is not who the pass acts as.
 	Caller v1.Caller
 	// JobID is the queued job this run belongs to, when there is one. The pass
-	// writes a line per rule beside it, so the background-work screen carries
-	// the account of what happened as well as the rules themselves. Empty for a
-	// run with no job behind it, which writes no job lines and is otherwise
-	// identical.
+	// writes a line per rule beside it. Empty for a run with no job behind it,
+	// which writes no job lines and is otherwise identical.
 	JobID domain.JobID
 }
 
@@ -164,9 +154,8 @@ type RunLibraryMaintenanceResult struct {
 	Failed    int
 	// Budget is how many items the run was allowed to attempt, and Exhausted
 	// says it ran out. A run that stopped on its budget has left work for the
-	// next one, which is a normal outcome and not a failure — but it must be
-	// visible, or a rule that never finishes filling looks like a rule that
-	// does not work.
+	// next one — a normal outcome, but it must stay visible, or a rule that
+	// never finishes filling looks like a rule that does not work.
 	Budget    int
 	Exhausted bool
 }
@@ -174,10 +163,10 @@ type RunLibraryMaintenanceResult struct {
 // RunLibraryMaintenance evaluates the enabled rules and reconciles the library
 // against them.
 //
-// The command boundary authorises the *trigger* — `content.import`, the
-// authority to cause materialisation at all — and everything beneath it acts as
-// the system principal. That split is deliberate: a person may press the button
-// and the nodes still belong to the install.
+// The command boundary authorises the trigger — content.import, the authority
+// to cause materialisation at all — and everything beneath it acts as the
+// system principal, so a person may press the button and the nodes still belong
+// to the install.
 func (s *Service) RunLibraryMaintenance(ctx context.Context, cmd RunLibraryMaintenanceCommand) (RunLibraryMaintenanceResult, error) {
 	// 1. validate command shape.
 	if cmd.Caller.Session == "" {
@@ -201,8 +190,8 @@ func (s *Service) RunLibraryMaintenance(ctx context.Context, cmd RunLibraryMaint
 	}
 
 	// The principal every write beneath this runs as. Resolved once so the whole
-	// pass is one principal, and so a manual run and a scheduled one are
-	// indistinguishable in the graph they produce.
+	// pass is one principal, and so a manual run and a scheduled one produce
+	// indistinguishable graphs.
 	system := s.SystemCaller()
 	az, err := s.enter(ctx, system, ActionContentImport, policy.Resource{Type: "content"})
 	if err != nil {
@@ -220,9 +209,8 @@ func (s *Service) RunLibraryMaintenance(ctx context.Context, cmd RunLibraryMaint
 		result.Skipped += run.Skipped
 		result.Failed += run.Failed
 
-		// Recorded per rule as the pass goes, not at the end. A run that dies
-		// halfway should leave an account of the rules it did finish rather
-		// than an install that cannot say anything happened.
+		// Recorded per rule as the pass goes, not at the end, so a run that
+		// dies halfway still leaves an account of the rules it did finish.
 		if err := s.libraryRules.RecordRun(ctx, rule.ID, run); err != nil {
 			telemetry.From(ctx).For("library").Warn("could not record the rule's run",
 				telemetry.String("rule", rule.Name), telemetry.Err(err))
@@ -232,9 +220,8 @@ func (s *Service) RunLibraryMaintenance(ctx context.Context, cmd RunLibraryMaint
 
 		if remaining <= 0 {
 			result.Exhausted = true
-			// Every rule after this one is untouched rather than half-done.
-			// Saying so beats silently leaving their last-run accounts stale:
-			// a rule that did not run this time is a fact, and the next run
+			// Every rule after this one is untouched rather than half-done;
+			// their last-run accounts stay as they were, and the next run
 			// starts from the top with a fresh budget.
 			break
 		}
@@ -260,8 +247,8 @@ func (s *Service) RunLibraryMaintenance(ctx context.Context, cmd RunLibraryMaint
 //
 // It returns an account rather than an error: a rule that could not be
 // evaluated at all records why in LibraryRuleRun.Error and the pass moves to the
-// next one. One rule's source being down must not stop the others, for the same
-// reason one item's failure must not stop its rule.
+// next one. One rule's source being down must not stop the others, just as one
+// item's failure must not stop its rule.
 func (s *Service) reconcileLibraryRule(ctx context.Context, az authorized, system v1.Caller, rule domain.LibraryRule, remaining *int) domain.LibraryRuleRun {
 	run := domain.LibraryRuleRun{At: s.clock.Now()}
 
@@ -275,10 +262,9 @@ func (s *Service) reconcileLibraryRule(ctx context.Context, az authorized, syste
 
 	for _, match := range matches {
 		if *remaining <= 0 {
-			// Out of budget: everything left is skipped, explicitly, so the
-			// count adds up. A rule reporting forty matched and twelve done
-			// with nothing accounting for the other twenty-eight is a run log
-			// that raises a question instead of answering one.
+			// Out of budget: everything left is counted as skipped rather than
+			// dropped, so matched, created, refreshed, skipped and failed still
+			// add up to Matched in the run log.
 			run.Skipped++
 			continue
 		}
@@ -294,7 +280,7 @@ func (s *Service) reconcileLibraryRule(ctx context.Context, az authorized, syste
 		// tree if it is missing and reports AlreadyKnown if it is not, and the
 		// Platform's enrichment then re-merges artwork and fills Parts for items
 		// that have none (platform#46). Both paths are wanted, which is why a
-		// title already in the library is still imported rather than skipped.
+		// title already in the library is imported rather than skipped.
 		res, err := s.ImportContent(ctx, ImportContentCommand{Caller: system, Ref: match.Ref})
 		switch {
 		case err != nil:
@@ -314,8 +300,8 @@ func (s *Service) reconcileLibraryRule(ctx context.Context, az authorized, syste
 	return run
 }
 
-// libraryRunLine is the sentence a run writes beside the job, and it is the one
-// an administrator reads when asking why something is in the library.
+// libraryRunLine is the sentence a run writes beside the job — what an
+// administrator reads when asking why something is in the library.
 func libraryRunLine(rule domain.LibraryRule, run domain.LibraryRuleRun) string {
 	if run.Error != "" {
 		return fmt.Sprintf("%s (%s) could not be evaluated: %s",
@@ -343,9 +329,9 @@ func jobLogLevelFor(run domain.LibraryRuleRun) string {
 // appendJobLog writes one line beside the job this pass belongs to.
 //
 // Best-effort and quiet: a run that did its work is not undone because the note
-// about it could not be stored, which is the same rule the runner's own logging
-// follows. A pass with no job behind it — a test, or a manual run — writes
-// nothing here and records everything else exactly as it would.
+// about it could not be stored, the same rule the runner's own logging follows.
+// A pass with no job behind it — a test, or a manual run — writes nothing here
+// and records everything else exactly as it would.
 func (s *Service) appendJobLog(ctx context.Context, jobID domain.JobID, level, message string) {
 	if jobID == "" || s.jobs == nil {
 		return

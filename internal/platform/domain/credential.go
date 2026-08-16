@@ -51,18 +51,16 @@ type PasswordVerifier interface {
 // TOTPCredential is one user's time-based one-time-password factor
 // (platform#79).
 //
-// **It is a factor, not a credential, whatever this type is called for
-// symmetry with the two above it.** A password verifies identity and a passkey
-// verifies identity; this verifies possession of a device and nothing more,
-// because the server holds the same secret the authenticator does. It never
-// resolves to a Principal on its own — it makes the password path two-step.
+// Despite the name it is a factor, not a credential: it verifies possession of
+// a device and nothing more, because the server holds the same secret the
+// authenticator does. It never resolves to a Principal on its own — it makes
+// the password path two-step.
 //
-// **Secret is the one piece of credential material the Platform cannot hash.**
-// A code is computed from it, so it must be recoverable, which makes it unlike
-// PasswordCredential.Hash in the way that matters most: anyone who reads it can
-// mint valid codes forever. It is classified Secret wherever it travels
-// (platform#34) — never logged, never rendered after enrolment, never returned by
-// a read that a client can reach.
+// Secret is the one piece of credential material the Platform cannot hash. A
+// code is computed from it, so it must be recoverable, and anyone who reads it
+// can mint valid codes forever. It is classified Secret wherever it travels
+// (platform#34): never logged, never rendered after enrolment, never returned
+// by a read a client can reach.
 type TOTPCredential struct {
 	UserID UserID
 	// Secret is opaque to the Domain, exactly as PasswordCredential.Hash is.
@@ -70,20 +68,13 @@ type TOTPCredential struct {
 	// envelope — is the storage layer's business and not this type's.
 	Secret string
 	// Confirmed is false between generating a secret and the user proving they
-	// scanned it.
-	//
-	// **An unconfirmed factor must never gate a sign-in.** Storing one as
-	// active on generation locks out anyone whose scan silently failed, which
-	// is the standard way this feature becomes a support burden on a server
-	// with no support desk.
+	// scanned it. An unconfirmed factor must never gate a sign-in: storing one
+	// as active on generation locks out anyone whose scan silently failed.
 	Confirmed bool
 	// LastUsedStep is the RFC 6238 counter of the most recently accepted code,
-	// and it is what makes a replay refusable.
-	//
-	// A code stays valid for its whole period, so without this the same six
-	// digits work again for up to a minute — long enough for a code read over a
-	// shoulder, or relayed by a proxy, to be spent twice. Verification requires
-	// the presented step to be strictly greater.
+	// and it is what makes a replay refusable. A code stays valid for its whole
+	// period, so without this the same six digits work again for up to a
+	// minute. Verification requires the presented step to be strictly greater.
 	LastUsedStep int64
 	CreatedAt    time.Time
 	ConfirmedAt  *time.Time

@@ -20,7 +20,7 @@ import (
 const TraceparentHeader = "traceparent"
 
 // TraceContext identifies one distributed operation and this process's place
-// in it. The trace id *is* Mosaic's correlation id — there is no second
+// in it. The trace id is Mosaic's correlation id — there is no second
 // identifier, because two would mean two things to propagate, two to store and
 // exactly one that gets forgotten at some new edge (platform#32).
 type TraceContext struct {
@@ -31,7 +31,7 @@ type TraceContext struct {
 	// SpanID identifies this process's unit of work within the trace.
 	SpanID [8]byte
 	// Sampled carries the upstream sampling decision. It governs whether spans
-	// are *recorded*; it never governs whether the ids exist. A log line and an
+	// are recorded; it never governs whether the ids exist. A log line and an
 	// event row carry the trace id even in an unsampled trace, so a support
 	// report is always joinable to the logs.
 	Sampled bool
@@ -49,7 +49,7 @@ func NewTraceContext() TraceContext {
 	return tc
 }
 
-// NewRootTrace mints a fresh trace whose span id is deliberately **zero**.
+// NewRootTrace mints a fresh trace whose span id is deliberately zero.
 //
 // A TraceContext in a context means "the trace, and the span anything started
 // here should hang off". At the start of a brand-new trace there is no such
@@ -165,10 +165,10 @@ type traceKey struct{}
 
 // TraceInto returns a context carrying tc.
 func TraceInto(ctx context.Context, tc TraceContext) context.Context {
-	// **Both representations, always.** TraceFrom reads Mosaic's and the OTel
-	// tracer reads OpenTelemetry's, so seeding only one would give a span a
-	// parent by one account and none by the other — a tree that looks right in
-	// the record and is rootless in an exported trace (sdk#8).
+	// Both representations are seeded, always. TraceFrom reads Mosaic's and the
+	// OTel tracer reads OpenTelemetry's, so seeding only one would give a span
+	// a parent by one account and none by the other — a tree that looks right
+	// in the record and is rootless in an exported trace (sdk#8).
 	ctx = trace.ContextWithSpanContext(ctx, tc.SpanContext())
 	return context.WithValue(ctx, traceKey{}, tc)
 }
@@ -197,15 +197,13 @@ func StartRequest(ctx context.Context, traceparent string) context.Context {
 	if !ok {
 		tc = NewRootTrace()
 	}
-	// The inbound context is carried **as parsed**, with the caller's span id
-	// intact — it is not Child()ed here.
-	//
-	// It used to be, and the effect was only visible in a real trace: Child()
-	// here plus the Child() inside Start meant the first span's parent was an
-	// id no span ever had. The request appeared to descend from something
-	// missing, and nothing linked it back to the caller's span across the wire.
-	// The first Start is what creates this process's span; this call's job is
-	// only to say which trace it belongs to and what it hangs off.
+	// The inbound context is carried as parsed, with the caller's span id
+	// intact: it must not be Child()ed here. Start already calls Child, so
+	// doing it here too would give the first span a parent id no span ever
+	// had — the request would appear to descend from something missing, and
+	// nothing would link it back to the caller's span across the wire. Start
+	// creates this process's span; this call only says which trace it belongs
+	// to and what it hangs off.
 	ctx = TraceInto(ctx, tc)
 	return Into(ctx, From(ctx).WithTrace(tc))
 }

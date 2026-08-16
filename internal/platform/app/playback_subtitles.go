@@ -14,19 +14,15 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The consumer for the `subtitles` capability role (platform#83).
+// The consumer for the subtitles capability role (platform#83,
+// module-stremio-addons#1).
 //
-// **The role has been fillable since module-stremio-addons#1 and nothing ever asked it.** Two
-// modules implement it, the registry could resolve one *by name*, and no code
-// path anywhere knew a name to ask for — so the enumerator that would have made
-// it reachable did not exist either. That is the shape of the gap: not a missing
-// feature but a missing call.
-//
-// It is asked at play time rather than at import, and that is the substantive
+// It is asked at play time rather than at import, which is the substantive
 // difference from stream enrichment. A subtitle file is small, external and
-// perishable in the same way a debrid link is; resolving twenty of them into the
-// graph at import buys entries that have been decaying since before anyone
-// wanted them, which is the mistake [platform#28](0028-resolution-cache-and-capability-classes.md) already names for streams.
+// perishable in the same way a debrid link is, so resolving twenty into the
+// graph at import buys entries that decay before anyone wants them — the mistake
+// platform#28 names for
+// streams.
 
 // PlaybackSubtitlesQuery asks the installed subtitle sources what they have for
 // one item.
@@ -40,10 +36,10 @@ type PlaybackSubtitlesQuery struct {
 
 // ExternalSubtitle is one track a module resolved: a file somewhere else.
 type ExternalSubtitle struct {
-	// Language is the code or display name the source labelled it with. It is
-	// **not** normalised here: a source's own label is what a viewer recognises
-	// in a menu, and mapping "Brazilian Portuguese" onto "por" loses the only
-	// distinction that made two entries tellable apart.
+	// Language is the code or display name the source labelled it with. Do not
+	// normalise it: a source's own label is what a viewer recognises in a menu,
+	// and mapping "Brazilian Portuguese" onto "por" loses the only distinction
+	// that made two entries tellable apart.
 	Language string
 	// URL is where the file is. It never reaches a client — the origin fetches
 	// it (platform#25: a module resolves, the Platform serves).
@@ -61,11 +57,10 @@ type PlaybackSubtitlesResult struct {
 // PlaybackSubtitles asks every installed subtitles provider for this item
 // (platform#83).
 //
-// **Best-effort by construction, exactly like stream enrichment.** Every failure
-// here logs and continues: a subtitle source that is down, unconfigured or
-// simply does not know the title must not fail a play. The worst outcome is a
-// playback with the subtitles the release already carried, which is what
-// happened before this existed at all.
+// Best-effort by construction, like stream enrichment: every failure here logs
+// and continues, because a subtitle source that is down, unconfigured or that
+// does not know the title must not fail a play. The worst outcome is a playback
+// with only the subtitles the release already carried.
 func (s *Service) PlaybackSubtitles(ctx context.Context, q PlaybackSubtitlesQuery) (PlaybackSubtitlesResult, error) {
 	if q.Caller.Session == "" {
 		return PlaybackSubtitlesResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
@@ -163,7 +158,7 @@ func (s *Service) PlaybackSubtitles(ctx context.Context, q PlaybackSubtitlesQuer
 // workContaining finds the work an item belongs to, and the sibling index the
 // episode coordinates are derived from.
 //
-// An item that *is* a work — a film — is its own work, which is why this is not
+// An item that is a work — a film — is its own work, which is why this is not
 // simply a parent lookup.
 func (s *Service) workContaining(ctx context.Context, item v1.Node) (v1.Node, map[v1.NodeID]v1.Node, error) {
 	workID := item.WorkID

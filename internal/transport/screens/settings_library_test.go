@@ -19,7 +19,7 @@ import (
 // Settings › Library (platform#60, roadmap M2.2).
 //
 // The two properties worth guarding on this panel are the ones that would fail
-// quietly: a rule whose module has gone must *say* it is degraded rather than
+// quietly: a rule whose module has gone must say it is degraded rather than
 // looking like a rule that finds nothing, and the confirmation must state what
 // the first run will do before offering the control that starts it.
 
@@ -67,8 +67,9 @@ func TestTheLibrarySectionListsTheRulesAndWhatEachLastDid(t *testing.T) {
 	}
 }
 
-// A rule that has never run must say so. Four zeroes would read as a rule that
-// ran and found nothing, which is the opposite fact and the one somebody acts on.
+// TestARuleThatHasNeverRunSaysSo pins that a rule that has never run must say
+// so. Four zeroes would read as a rule that ran and found nothing, which is the
+// opposite fact and the one somebody acts on.
 func TestARuleThatHasNeverRunSaysSo(t *testing.T) {
 	fake := rulesService(collectionRule("Top films", true, domain.LibraryRuleRun{}))
 	node := render(t, &Service{content: fake}, "settings", map[string]any{"section": "library"})
@@ -82,8 +83,9 @@ func TestARuleThatHasNeverRunSaysSo(t *testing.T) {
 	}
 }
 
-// A rule survives its module being uninstalled: degraded and *visibly* so
-// (platform#60). Without this it looks exactly like a rule whose catalog is empty.
+// TestARuleWhoseModuleIsGoneReadsAsDegraded pins that a rule survives its
+// module being uninstalled: degraded and visibly so (platform#60). Without this
+// it looks exactly like a rule whose catalog is empty.
 func TestARuleWhoseModuleIsGoneReadsAsDegraded(t *testing.T) {
 	fake := rulesService(collectionRule("Top films", false, domain.LibraryRuleRun{}))
 	node := render(t, &Service{content: fake}, "settings", map[string]any{"section": "library"})
@@ -98,9 +100,10 @@ func TestARuleWhoseModuleIsGoneReadsAsDegraded(t *testing.T) {
 	}
 }
 
-// Every affordance on this panel is administrator authority. Somebody who may
-// read the rules and not change them is shown the rules and no controls, rather
-// than controls that will be refused (platform#24).
+// TestAViewerIsOfferedNoRuleControls pins that every affordance on this panel
+// is administrator authority. Somebody who may read the rules and not change
+// them is shown the rules and no controls, rather than controls that will be
+// refused (platform#24).
 func TestAViewerIsOfferedNoRuleControls(t *testing.T) {
 	fake := rulesService(collectionRule("Top films", true, domain.LibraryRuleRun{}))
 	fake.allow[string(app.ActionLibraryRuleManage)] = false
@@ -117,7 +120,8 @@ func TestAViewerIsOfferedNoRuleControls(t *testing.T) {
 	}
 }
 
-// The nav row is what makes the section reachable, and it is gated on its own
+// TestTheSettingsNavOffersLibraryOnlyToSomebodyWhoMayReadRules pins that the
+// nav row is what makes the section reachable, and it is gated on its own
 // permission rather than on the People one beside it.
 func TestTheSettingsNavOffersLibraryOnlyToSomebodyWhoMayReadRules(t *testing.T) {
 	fake := rulesService()
@@ -133,7 +137,8 @@ func TestTheSettingsNavOffersLibraryOnlyToSomebodyWhoMayReadRules(t *testing.T) 
 	}
 }
 
-// The trap platform#60 names: the first run of a new rule is the one most likely to
+// TestFollowingACollectionSaysWhatTheFirstRunWillDo pins that the trap
+// platform#60 names: the first run of a new rule is the one most likely to
 // surprise its author. The confirmation must have evaluated it.
 func TestFollowingACollectionSaysWhatTheFirstRunWillDo(t *testing.T) {
 	fake := rulesService()
@@ -173,7 +178,7 @@ func TestFollowingACollectionSaysWhatTheFirstRunWillDo(t *testing.T) {
 		t.Fatal("the confirmation has no form to create the rule from")
 	}
 	// A Submit wraps the Invoke it will send (contracts#19), and an Invoke carries
-	// its arguments as `input` rather than as `params` — the same distinction
+	// its arguments as input rather than as params — the same distinction
 	// that makes a navigate and a mutation different things on the wire.
 	submit, _ := prop(form, "submitAction").(map[string]any)
 	nested, _ := submit["actions"].([]any)
@@ -190,8 +195,9 @@ func TestFollowingACollectionSaysWhatTheFirstRunWillDo(t *testing.T) {
 	}
 }
 
-// A source that will not answer cannot be previewed, so the control that would
-// create the rule blind is withheld and the reason is stated.
+// TestFollowingAnUnreachableCollectionOffersNothing pins that a source that
+// will not answer cannot be previewed, so the control that would create the
+// rule blind is withheld and the reason is stated.
 func TestFollowingAnUnreachableCollectionOffersNothing(t *testing.T) {
 	fake := rulesService()
 	fake.previewErr = errors.New("the addon did not answer")
@@ -208,7 +214,8 @@ func TestFollowingAnUnreachableCollectionOffersNothing(t *testing.T) {
 	}
 }
 
-// The way in has to exist: a rule is made from a catalog you are looking at.
+// TestTheLibrarySectionOffersTheCollectionsToFollow pins that the way in has to
+// exist: a rule is made from a catalog you are looking at.
 func TestTheLibrarySectionOffersTheCollectionsToFollow(t *testing.T) {
 	fake := rulesService()
 	fake.catalogs = []app.ModuleCatalog{

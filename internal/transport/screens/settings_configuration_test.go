@@ -36,11 +36,12 @@ func configService(fake *fakeQueries) *Service {
 	}}
 }
 
-// **The load-bearing test on the read side.** A fresh install has activated no
-// configuration version at all, and the honest thing to show is what the
-// Platform is running with — which is each reader's own documented default, not
-// "not set" and not zero. A panel that showed the stored payload would render
-// nothing here while the Platform kept logs for a fortnight.
+// TestTheConfigurationPanelShowsWhatIsInForceNotWhatIsStored is the read side's
+// load-bearing case. A fresh install has activated no configuration version at
+// all, and the honest thing to show is what the Platform is running with — each
+// reader's own documented default, not "not set" and not zero. A panel showing
+// the stored payload renders nothing here while the Platform keeps logs for a
+// fortnight.
 func TestTheConfigurationPanelShowsWhatIsInForceNotWhatIsStored(t *testing.T) {
 	fake := &fakeQueries{
 		activeConfigErr: contracts.NewError(contracts.NotFound, "no active configuration version"),
@@ -63,10 +64,11 @@ func TestTheConfigurationPanelShowsWhatIsInForceNotWhatIsStored(t *testing.T) {
 	}
 }
 
-// The audit floor (platform#35) is applied by the reader and not by configuration,
-// so a panel formatting the stored payload would show whatever an operator
-// asked for while the Platform kept 30 days. Reading through the service is
-// what makes the floor visible.
+// TestTheAuditFloorIsWhatThePanelReports pins that the audit floor
+// (platform#35) is applied by the reader and not by configuration, so a panel
+// formatting the stored payload would show whatever an operator asked for while
+// the Platform kept 30 days. Reading through the service is what makes the
+// floor visible.
 func TestTheAuditFloorIsWhatThePanelReports(t *testing.T) {
 	// What the reader answers once the floor has been applied — one day was
 	// requested, thirty is in force.
@@ -81,10 +83,11 @@ func TestTheAuditFloorIsWhatThePanelReports(t *testing.T) {
 	}
 }
 
-// **The load-bearing test on the escalation.** A Restart-class change is
-// accepted, stored and does nothing until the process restarts. The rows above
-// it show what applies *now*, so without this banner the panel is a screen that
-// silently discards what somebody just typed.
+// TestAChangeWaitingForARestartSaysSoAndSaysWhatItChanges is the escalation's
+// load-bearing case. A Restart-class change is accepted, stored and does nothing
+// until the process restarts. The rows above it show what applies now, so
+// without this banner the panel is a screen that silently discards what somebody
+// just typed.
 func TestAChangeWaitingForARestartSaysSoAndSaysWhatItChanges(t *testing.T) {
 	requested := time.Date(2026, 8, 8, 11, 0, 0, 0, time.UTC)
 	payload, err := json.Marshal(map[string]any{"library.maintenance.interval_hours": 12})
@@ -114,12 +117,12 @@ func TestAChangeWaitingForARestartSaysSoAndSaysWhatItChanges(t *testing.T) {
 	}
 }
 
-// **The banner names what changed, not what the version contains.** A pending
-// version is a whole configuration rather than a patch, so its payload carries
-// every field including the ones nobody touched. Listing the payload's keys —
-// which the first version of this panel did — told an operator who had changed
-// the maintenance interval that a change was also waiting to set their log
-// retention to the value it already had.
+// TestTheBannerNamesOnlyWhatActuallyChanged pins that the banner names what
+// changed, not what the version contains. A pending version is a whole
+// configuration rather than a patch, so its payload carries every field
+// including the ones nobody touched: listing the payload's keys tells an
+// operator who changed the maintenance interval that a change is also waiting to
+// set their log retention to the value it already had.
 func TestTheBannerNamesOnlyWhatActuallyChanged(t *testing.T) {
 	payload, err := json.Marshal(map[string]any{
 		// The whole configuration, as a draft carries it.
@@ -153,10 +156,11 @@ func TestTheBannerNamesOnlyWhatActuallyChanged(t *testing.T) {
 	}
 }
 
-// A field outside the curated set is named by its schema key rather than
-// dropped. It cannot have been changed from this screen, so it came from
-// somewhere else — and a banner that omitted it would say a change is waiting
-// while declining to say what.
+// TestAChangedFieldThisScreenDoesNotOfferIsStillNamed pins that a field outside
+// the curated set is named by its schema key rather than dropped. It cannot
+// have been changed from this screen, so it came from somewhere else — and a
+// banner that omitted it would say a change is waiting while declining to say
+// what.
 func TestAChangedFieldThisScreenDoesNotOfferIsStillNamed(t *testing.T) {
 	payload, err := json.Marshal(map[string]any{"composition.modules": "tmdb,cinemeta"})
 	if err != nil {
@@ -183,9 +187,9 @@ func TestAChangedFieldThisScreenDoesNotOfferIsStillNamed(t *testing.T) {
 	}
 }
 
-// Nothing waiting is the ordinary state, and it must produce no banner rather
-// than an empty one. A panel that always warned would train an operator to
-// ignore the one time it mattered.
+// TestNothingWaitingSaysNothing pins that nothing waiting is the ordinary
+// state, and it must produce no banner rather than an empty one. A panel that
+// always warned would train an operator to ignore the one time it mattered.
 func TestNothingWaitingSaysNothing(t *testing.T) {
 	svc := configService(&fakeQueries{})
 	text := treeStrings(render(t, svc, "settings", map[string]any{"section": sectionConfiguration}))
@@ -194,10 +198,11 @@ func TestNothingWaitingSaysNothing(t *testing.T) {
 	}
 }
 
-// Every field offered has a reader behind it. This is the test that keeps the
-// list honest: `runtime.log_level` is in the schema, reads as the obvious thing
-// to expose, and nothing in the Platform consults it — so a control for it
-// would save a value, report that it applied, and change nothing.
+// TestEveryOfferedFieldIsOneThePlatformActuallyReads pins that every field
+// offered has a reader behind it. This is the test that keeps the list honest:
+// runtime.log_level is in the schema, reads as the obvious thing to expose, and
+// nothing in the Platform consults it — so a control for it would save a value,
+// report that it applied, and change nothing.
 func TestEveryOfferedFieldIsOneThePlatformActuallyReads(t *testing.T) {
 	// The fields the Platform reads, gathered from the three readers' own
 	// constants. A field added to this panel without a reader fails here.
@@ -222,9 +227,10 @@ func TestEveryOfferedFieldIsOneThePlatformActuallyReads(t *testing.T) {
 	}
 }
 
-// A caller who may not read configuration gets no nav row, rather than a row
-// that opens on an error. The panel itself still authorises for itself — this
-// is about not drawing an affordance nobody can use (platform#36).
+// TestTheConfigurationRowIsDrawnOnlyForACallerWhoMayReadIt pins that a caller
+// who may not read configuration gets no nav row, rather than a row that opens
+// on an error. The panel itself still authorises for itself — this is about not
+// drawing an affordance nobody can use (platform#36).
 func TestTheConfigurationRowIsDrawnOnlyForACallerWhoMayReadIt(t *testing.T) {
 	fake := &fakeQueries{allow: map[string]bool{}}
 	svc := &Service{content: fake, clock: time.Now}
@@ -235,9 +241,10 @@ func TestTheConfigurationRowIsDrawnOnlyForACallerWhoMayReadIt(t *testing.T) {
 	}
 }
 
-// The form is drawn only for a caller who can activate. Reading what the
-// install is set to and changing it are separate grants, and a read-only
-// administrator should see the numbers without a control that would be refused.
+// TestTheFormIsDrawnOnlyForACallerWhoMayActivate pins that the form is drawn
+// only for a caller who can activate. Reading what the install is set to and
+// changing it are separate grants, and a read-only administrator should see the
+// numbers without a control that would be refused.
 func TestTheFormIsDrawnOnlyForACallerWhoMayActivate(t *testing.T) {
 	fake := &fakeQueries{allow: map[string]bool{
 		string(app.ActionConfigRead): true,

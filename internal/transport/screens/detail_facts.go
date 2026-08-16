@@ -18,12 +18,9 @@ import (
 // button: what it is, how it will be delivered, and where its description came
 // from.
 //
-// Every answer here already existed and was thrown away. The probe (platform#29) is
-// stored on the Part and read only by the per-stream encode decision; the
-// delivery plan is computed at play time, used to mint one ticket and dropped;
-// the provider that answered is in the ref. The screen that would tell a viewer
-// why something will or will not play well was the one surface never given any
-// of it.
+// The three answers come from three places: the probe (platform#29) stored on the
+// Part, the delivery plan computed for the asking client, and the provider named
+// in the ref.
 
 // releaseFacts decodes what is known about a release, from the Part's scalars
 // and the probe document stored on it. A Part with no probe still yields the
@@ -163,8 +160,8 @@ func (f releaseFacts) subtitlesLabel() string {
 // videoCard states what the video stream is.
 //
 // The mockups put a frame rate on its third line. There is none here: the probe
-// document carries no frame rate — `playback.VideoTrack` has no such field and
-// the ffprobe parse never reads `r_frame_rate` — so the line is omitted rather
+// document carries no frame rate — playback.VideoTrack has no such field and
+// the ffprobe parse never reads r_frame_rate — so the line is omitted rather
 // than filled with a plausible 24.000.
 func (f releaseFacts) videoCard() ui.El {
 	lines := make([]string, 0, 3)
@@ -210,7 +207,7 @@ func (f releaseFacts) hdrName() string {
 // audioCard states what the audio streams are, and how many of them there are.
 //
 // The mockups put a per-track bitrate on its second line. There is none here:
-// `playback.AudioTrack` carries no bitrate, so the line names the language
+// playback.AudioTrack carries no bitrate, so the line names the language
 // instead and the number is omitted rather than invented.
 func (f releaseFacts) audioCard() ui.El {
 	lines := make([]string, 0, 3)
@@ -241,7 +238,7 @@ func (f releaseFacts) audioCard() ui.El {
 // (platform#29) — the answer that decides whether playback will be instant or will
 // cost a re-encode, and the one a viewer can act on by choosing another release.
 //
-// It is stated against what *this* client declared it can decode, not against a
+// It is stated against what this client declared it can decode, not against a
 // house assumption: the same file direct-plays in Safari and is remuxed for
 // Chrome, and a card that said otherwise would be wrong for one of them.
 func (f releaseFacts) deliveryCard(codecs playback.ClientCodecs) ui.El {
@@ -282,11 +279,11 @@ func bitrateLabel(bps int64) string {
 //
 // The mockups put "Refreshed 4h ago" on its third line. There is none here:
 // PreviewContent asks the provider on every render and neither
-// `v1.ContentMetadata` nor its result carries a retrieval time, so there is no
+// v1.ContentMetadata nor its result carries a retrieval time, so there is no
 // age to state.
 //
 // Artwork is attributed to the same provider rather than to an artwork module,
-// because on this path it *is* the same provider — PreviewContent reads one
+// because on this path it is the same provider — PreviewContent reads one
 // metadata source and never consults RoleArtwork.
 func metadataCard(ref v1.ContentRef, providerName string) ui.El {
 	name := providerName

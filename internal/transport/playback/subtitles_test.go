@@ -344,14 +344,12 @@ func TestTheOriginServesTheWholeRenditionChain(t *testing.T) {
 	}
 }
 
-// TestTheSubtitleWindowIsBoundedAbsolutelyNotByDuration pins a measured bug
-// rather than a style preference.
+// TestTheSubtitleWindowIsBoundedAbsolutelyNotByDuration pins the -to bound.
 //
-// `-t` bounds the output's duration, and `-copyts` has already rebased the
-// output onto the source's clock — so `-ss 60 ... -t 60` stops the instant it
-// starts. Measured against a file with a cue every ten seconds: window 0 yielded
-// six cues and window 1 yielded none, which as a bug would be every subtitle in
-// a film disappearing one minute in.
+// -t bounds the output's duration, and -copyts has already rebased the output
+// onto the source's clock — so "-ss 60 ... -t 60" stops the instant it starts.
+// Against a file with a cue every ten seconds, window 0 yields six cues and
+// window 1 yields none: every subtitle in a film disappearing one minute in.
 func TestTheSubtitleWindowIsBoundedAbsolutelyNotByDuration(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "args")
 	s := newTestSealer(t)
@@ -413,12 +411,12 @@ func TestAnUnknownSubtitleResourceIsNotFound(t *testing.T) {
 // The three forms a subtitle track comes in, and the three different right
 // answers (platform#83).
 
-// TestAGraphicTrackIsNeverOfferedAsARendition pins a bug that shipped. PGS and
-// VobSub are pictures, and ffmpeg refuses to make text of them — "subtitle
-// encoding currently only possible from text to text or bitmap to bitmap". The
-// rendition was listed anyway, the extraction failed, and the origin answered
-// 200 with an empty document: a subtitle track in the player's menu that drew
-// nothing for the length of the film.
+// TestAGraphicTrackIsNeverOfferedAsARendition pins the exclusion. PGS and VobSub
+// are pictures and ffmpeg refuses to make text of them — "subtitle encoding
+// currently only possible from text to text or bitmap to bitmap" — so listing
+// one as a rendition fails the extraction and answers 200 with an empty
+// document: a subtitle track in the player's menu that draws nothing for the
+// length of the film.
 func TestAGraphicTrackIsNeverOfferedAsARendition(t *testing.T) {
 	tracks := []SubtitleTrack{
 		{Index: 3, Codec: "hdmv_pgs_subtitle", Language: "eng"},
@@ -454,11 +452,10 @@ func TestAGraphicTrackIsBurnedWhenItIsTheOneWanted(t *testing.T) {
 	}
 }
 
-// TestTypesetIsFlattenedByDefaultAndBurnedOnRequest is the choice the setting
-// exists for. Measured: an ASS cue authored with a position, a colour and a size
-// arrives through a rendition as ordinary bold text at the bottom of the screen.
-// That is the right default because it is free; the alternative costs a video
-// encode.
+// TestTypesetIsFlattenedByDefaultAndBurnedOnRequest pins the choice the setting
+// exists for. An ASS cue authored with a position, a colour and a size arrives
+// through a rendition as ordinary bold text at the bottom of the screen. That is
+// the right default because it is free; the alternative costs a video encode.
 func TestTypesetIsFlattenedByDefaultAndBurnedOnRequest(t *testing.T) {
 	tracks := []SubtitleTrack{{Index: 3, Codec: "ass", Language: "eng"}}
 	intent := SubtitleIntent{Mode: SubtitlesFull, Languages: []string{"eng"}}
@@ -522,7 +519,7 @@ func TestSubtitlesOffNeverBurns(t *testing.T) {
 }
 
 // TestTheOrdinalIsNotTheStreamIndex guards the one number the libass path needs
-// and the overlay path does not. `si` counts subtitle streams; `-map` counts
+// and the overlay path does not. si counts subtitle streams; -map counts
 // container streams. A release whose subtitles start at stream 3 would otherwise
 // burn the wrong track, or none.
 func TestTheOrdinalIsNotTheStreamIndex(t *testing.T) {
@@ -580,11 +577,12 @@ func TestBurningForcesAVideoEncode(t *testing.T) {
 	}
 }
 
-// TestAFilterValueIsEscapedTwice pins a measured silent failure. A filtergraph
-// is unescaped once to split filters from options and again per option value, so
-// a colon needs two backslashes to survive. Single-escaped, ffmpeg read "//host"
-// as an unrelated option, reported "unable to parse option value as image size",
-// then encoded the video with no subtitles on it and exited successfully.
+// TestAFilterValueIsEscapedTwice pins the double escaping, which fails silently
+// when it is wrong. A filtergraph is unescaped once to split filters from
+// options and again per option value, so a colon needs two backslashes to
+// survive. Single-escaped, ffmpeg reads "//host" as an unrelated option, reports
+// "unable to parse option value as image size", then encodes the video with no
+// subtitles on it and exits successfully.
 func TestAFilterValueIsEscapedTwice(t *testing.T) {
 	got := escapeFilterValue("https://cdn.example/a.mkv?t=a:b")
 	if got != `https\\://cdn.example/a.mkv?t=a\\:b` {

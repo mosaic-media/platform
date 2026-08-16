@@ -15,7 +15,7 @@ import (
 // to. A bug report that arrives carrying this value is a lookup rather than an
 // investigation (platform#32), which is most of why it is worth a header.
 //
-// It is deliberately a Mosaic-specific name rather than the W3C `traceresponse`
+// It is deliberately a Mosaic-specific name rather than the W3C traceresponse
 // draft: that draft is not settled, and this is for a human and a first-party
 // client, not for interoperation.
 const TraceIDHeader = "Mosaic-Trace-Id"
@@ -25,10 +25,10 @@ const TraceIDHeader = "Mosaic-Trace-Id"
 // (platform#33, seams 2 and 3). It continues an inbound trace or starts one,
 // binds a logger to it, and echoes the trace id back on the response.
 //
-// It lives here rather than in a transport package because all four surfaces
-// need the identical thing, and a second copy of the seam is a second copy to
-// get subtly wrong. It brings only net/http with it, which costs the package
-// nothing it did not already have from the standard library.
+// It lives here rather than in a transport package because every one of those
+// surfaces needs the identical thing, and a second copy of the seam is a second
+// copy to get subtly wrong. It brings only net/http with it, which costs the
+// package nothing it did not already have from the standard library.
 func HTTPMiddleware(component string, next http.Handler) http.Handler {
 	return instrument(component, next, nil)
 }

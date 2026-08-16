@@ -8,8 +8,8 @@
 // Behind the Supervisor's front door every request arrives from the Supervisor
 // (platform#75), so the connection's peer identifies the proxy rather than the
 // caller — and over a Unix socket there is no peer address at all. Anything
-// that distinguishes callers, such as the pre-session rate limit
-// (platform#57), needs the address the *front door* saw.
+// that distinguishes callers, such as the pre-session rate limit (platform#57),
+// needs the address the front door saw.
 package clientaddr
 
 import (
@@ -70,14 +70,13 @@ func resolve(r *http.Request, trustForwarded bool) string {
 
 // rightmostForwarded returns the last entry of X-Forwarded-For.
 //
-// **The rightmost, not the leftmost, and the difference is the whole point.**
-// The header is a list, and each proxy appends what *it* observed. Everything
-// to the left of the last entry was supplied by the caller and is therefore
-// forgeable: a client that sends `X-Forwarded-For: 1.2.3.4` has the front door
-// append its real address after it, so the leftmost value is whatever the
-// client felt like claiming. With exactly one trusted proxy in front — which
-// is what platform#75 guarantees — the last entry is the only one the front door
-// wrote, and the only one worth believing.
+// The rightmost, not the leftmost. The header is a list and each proxy appends
+// what it observed, so everything to the left of the last entry was supplied by
+// the caller and is forgeable: a client that sends "X-Forwarded-For: 1.2.3.4"
+// has the front door append its real address after it, leaving the leftmost
+// value as whatever the client felt like claiming. With exactly one trusted
+// proxy in front — what platform#75 guarantees — the last entry is the only one
+// the front door wrote, and the only one worth believing.
 func rightmostForwarded(values []string) string {
 	// Multiple header lines are equivalent to one comma-joined line, so flatten
 	// before taking the last: a client can send its own X-Forwarded-For line
@@ -100,12 +99,12 @@ func rightmostForwarded(values []string) string {
 // actually an IP address, so one caller's many connections share one bucket
 // rather than one per ephemeral port.
 //
-// **Requiring a real IP is what makes a Unix connection resolve to Unknown.**
-// Go reports `RemoteAddr` for a socket as the client's socket name, which for
-// an unnamed one is `"@"` — a single constant string, identical for every
-// caller. Returning it would produce one shared bucket wearing the shape of an
-// address: the same failure as an empty key, but harder to notice in a log
-// because it looks like something was resolved.
+// Requiring a real IP is what makes a Unix connection resolve to Unknown. Go
+// reports RemoteAddr for a socket as the client's socket name, which for an
+// unnamed one is "@" — a single constant string, identical for every caller.
+// Returning it would produce one shared bucket wearing the shape of an address:
+// the same failure as an empty key, but harder to notice in a log because it
+// looks like something was resolved.
 func hostOf(addr string) string {
 	addr = strings.TrimSpace(addr)
 	if addr == "" {

@@ -12,15 +12,16 @@ import (
 
 // The per-stream playback decision (platform#29).
 //
-// The framing this replaces was "remux or transcode", treating a file as wholly
-// playable or wholly not. A real release disproved it: 4K HEVC video Chrome
-// decoded happily, alongside four E-AC3 audio tracks it cannot decode at all.
-// Whole-file transcoding would have re-encoded 32 GB of video that needed
-// nothing, to fix audio that needs almost nothing.
+// A file is not wholly playable or wholly not, so "remux or transcode" is the
+// wrong question. A real release carries 4K HEVC video Chrome decodes happily
+// alongside four E-AC3 audio tracks it cannot decode at all; transcoding the
+// whole file re-encodes 32 GB of video that needed nothing to fix audio that
+// needs almost nothing.
 //
-// So each stream is decided on its own — and *which* stream comes first, because
-// that release's first audio track is Hindi. A perfect encode of the wrong
-// language is still the wrong film.
+// So each stream is decided on its own — and which stream is decided first,
+// because a multi-language release routinely leads with a language the viewer
+// does not speak. A perfect encode of the wrong language is still the wrong
+// film.
 
 // StreamAction is what happens to one stream on the way to the client.
 type StreamAction string
@@ -127,14 +128,13 @@ type Plan struct {
 type ClientCodecs struct {
 	Video map[string]bool
 	Audio map[string]bool
-	// HDR reports whether the client can *render* high dynamic range, which is a
+	// HDR reports whether the client can render high dynamic range, which is a
 	// separate question from whether it can decode the codec carrying it.
 	//
-	// Getting this wrong is visible rather than subtle. A Dolby Vision profile 5
-	// stream has no HDR10 base layer, so a decoder that ignores the DV metadata
-	// renders its ICtCp data as ordinary BT.2020 and the picture comes out
-	// purple and green. Treating "the client decodes HEVC" as sufficient is what
-	// produced exactly that.
+	// Do not treat "the client decodes HEVC" as sufficient. A Dolby Vision
+	// profile 5 stream has no HDR10 base layer, so a decoder that ignores the DV
+	// metadata renders its ICtCp data as ordinary BT.2020 and the picture comes
+	// out purple and green.
 	HDR bool
 	// MaxHeight caps the encoded output, 0 for uncapped. Only applied when the
 	// video is being re-encoded anyway — downscaling a copy is not possible, and
@@ -163,13 +163,12 @@ var DefaultBrowserCodecs = ClientCodecs{
 
 // mp4Audio is the audio the origin's output container can actually carry.
 //
-// **It is a second constraint, and forgetting it is a real bug rather than a
-// theoretical one.** The client profile answers "can this be decoded"; this
-// answers "can it be muxed into what we are sending", and the two disagree in
-// at least one common case. Chrome decodes FLAC, so a FLAC track was chosen and
-// copied — into fragmented MP4, whose muxer refuses FLAC as experimental. ffmpeg
-// exited immediately with "Could not write header for output file", and a real
-// 4K release was unplayable with no error anyone could see.
+// It is a second constraint on top of the client profile, and the two disagree
+// in at least one common case. The profile answers "can this be decoded"; this
+// answers "can it be muxed into what we are sending". Chrome decodes FLAC, so a
+// FLAC track is chosen and copied — into fragmented MP4, whose muxer refuses
+// FLAC as experimental. ffmpeg exits immediately with "Could not write header
+// for output file" and the release is unplayable with no error a viewer sees.
 //
 // Anything absent here is re-encoded rather than refused: the audio encode is
 // cheap and already the path for a codec the client cannot decode, so an
@@ -235,8 +234,8 @@ func Decide(info MediaInfo, codecs ClientCodecs, preferred []string) Plan {
 			}
 		}
 
-		// The output container's constraint, and it applies **only once ffmpeg is
-		// already involved**. While the stream is relayed untouched the container
+		// The output container's constraint, and it applies only once ffmpeg is
+		// already involved. While the stream is relayed untouched the container
 		// is the source's own, and Matroska carries FLAC perfectly well — forcing
 		// an encode there would take a release that direct-plays today and push
 		// it through a transcode for nothing.
@@ -244,9 +243,9 @@ func Decide(info MediaInfo, codecs ClientCodecs, preferred []string) Plan {
 		// The moment anything else forces a remux, the output is fragmented MP4
 		// and the question changes from "can the client decode it" to "can this
 		// container carry it". FLAC answers yes to the first and no to the
-		// second, which is how a 4K release with an 8-channel FLAC track met a
-		// tone-map it needed, went to ffmpeg, and died on "flac in MP4 support is
-		// experimental" before writing a single byte.
+		// second: a 4K release with an 8-channel FLAC track that needs a tone-map
+		// goes to ffmpeg and dies on "flac in MP4 support is experimental" before
+		// writing a single byte.
 		if plan.Audio == ActionCopy && plan.Video == ActionEncode && !mp4Audio[codec] {
 			plan.Audio = ActionEncode
 			plan.Reason += "; audio codec " + track.Codec + " cannot be carried by the MP4 output"
@@ -279,9 +278,9 @@ func chooseAudio(tracks []AudioTrack, preferred []string) (AudioTrack, bool) {
 				return i
 			}
 		}
-		// An untagged track is treated as *possible* rather than wrong: a
-		// single-audio release often carries no language tag at all, and
-		// ranking it below a tagged foreign track would pick the wrong one.
+		// An untagged track is treated as possible rather than wrong: a
+		// single-audio release often carries no language tag at all, and ranking
+		// it below a tagged foreign track would pick the wrong one.
 		if t.Language == "" || t.Language == "und" {
 			return len(preferred)
 		}
@@ -308,13 +307,13 @@ func chooseAudio(tracks []AudioTrack, preferred []string) (AudioTrack, bool) {
 // WithAudioOverride replaces the audio track a preference chose with one the
 // viewer named for this playback (platform#71).
 //
-// **It re-decides rather than re-labels**, which is the whole reason it is a
-// function and not a field assignment. Whether audio is copied or encoded is a
-// property of the *chosen track's* codec, and whether the video is copied is
-// then a property of that: a viewer switching from the AAC track to the DTS one
-// on a browser has turned a direct play into a transcode, and a plan that
-// carried the new index beside the old verdict would copy a stream the client
-// cannot decode and present it as silence.
+// It re-decides rather than re-labels, which is why it is a function and not a
+// field assignment. Whether audio is copied or encoded is a property of the
+// chosen track's codec, and whether the video is copied follows from that: a
+// viewer switching from the AAC track to the DTS one on a browser has turned a
+// direct play into a transcode, and a plan carrying the new index beside the old
+// verdict would copy a stream the client cannot decode and present it as
+// silence.
 //
 // An index naming no track in the release leaves the plan untouched. A stale
 // menu is a worse reason to lose the audio than no menu at all.

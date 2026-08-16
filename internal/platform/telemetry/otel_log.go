@@ -16,21 +16,19 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// Log records become OpenTelemetry's (sdk#8), and the Sink stays.
+// Log records are OpenTelemetry records (sdk#8), and the Sink stays.
 //
-// The same containment as the span half: a record is *produced* as an
-// OpenTelemetry record, and a finished one is handed to the same `Sink` the
-// JSON file, the console and the PostgreSQL store already read. Nothing about
-// the wire shape, the schema or the expert-mode viewer moves in this change —
-// what moves is what a record *is* on the way there, so an OTLP exporter can sit
-// beside the sink later without touching a single one of the Platform's 324
-// classified call sites.
+// The same containment as the span half: a record is produced as an
+// OpenTelemetry record, and a finished one is handed to the same Sink the JSON
+// file, the console and the PostgreSQL store already read. The wire shape, the
+// schema and the expert-mode viewer are unaffected, so an OTLP exporter can sit
+// beside the sink later without touching a classified call site.
 //
-// **The trace and span ids travel in the emit context**, which is how
-// OpenTelemetry correlates a record with a span, rather than as two more
-// attributes. That is what keeps a journey coherent across the conversion: the
-// ids on a log record and the ids on the span it happened inside are the same
-// values arriving by the same route (platform#32).
+// The trace and span ids travel in the emit context rather than as two more
+// attributes, which is how OpenTelemetry correlates a record with a span. That
+// is what keeps a journey coherent across the conversion: the ids on a log
+// record and the ids on the span it happened inside are the same values
+// arriving by the same route (platform#32).
 
 // logRecordExporter rebuilds Mosaic's Record from an OpenTelemetry one and
 // writes it to the sink.
@@ -94,15 +92,14 @@ func recordOf(record *logsdk.Record) Record {
 	return out
 }
 
-// fieldOf restores a Field from an OpenTelemetry attribute, **keeping its
-// type**.
+// fieldOf restores a Field from an OpenTelemetry attribute, keeping its type.
 //
-// The type matters and is easy to lose. A count rendered back as text turns
-// `"results":7` into `"results":"7"` in the JSON sink and in the telemetry
-// store, which is a silent change to what every reader of those records parses
-// — and one no test asserting "the field is present" would catch.
+// The type is easy to lose and matters: a count rendered back as text turns
+// "results":7 into "results":"7" in the JSON sink and in the telemetry store,
+// silently changing what every reader of those records parses, and no test
+// asserting "the field is present" would catch it.
 //
-// The class is RedactionNone because classification was applied on the way *in*
+// The class is RedactionNone because classification was applied on the way in
 // (platform#34): the value here is already what a sink is allowed to see, so
 // marking it none makes EmitValue a no-op rather than redacting a second time.
 func fieldOf(kv attribute.KeyValue) Field {

@@ -10,12 +10,12 @@
 // origin with permissive CORS, so a client always gets a same-origin (or
 // CORS-enabled) URL.
 //
-// This is the *virtual-plane* half (platform#18): nothing is stored durably, so
+// This is the virtual-plane half (platform#18): nothing is stored durably, so
 // uncurated artwork never accumulates. Durable caching of a materialised item's
 // chosen artwork is a separate slice.
 //
-// Two safeguards make an open `?url=` proxy safe: every URL the Platform emits
-// is HMAC-signed, so the proxy fetches only URLs it produced; and the dialer
+// Two safeguards make an open ?url= proxy safe: every URL the Platform emits is
+// HMAC-signed, so the proxy fetches only URLs it produced; and the dialer
 // refuses to connect to loopback, private or link-local addresses (checked at
 // connect time, after DNS, so a rebinding trick cannot slip past), closing the
 // SSRF hole a naive proxy would open.
@@ -65,7 +65,7 @@ func (s *Signer) verify(raw, sig string) bool {
 }
 
 // Rewrite turns a remote http(s) artwork URL into a Platform-relative proxy URL
-// (`/artwork?u=…&s=…`). A non-http(s) or empty URL is returned unchanged, so an
+// (/artwork?u=…&s=…). A non-http(s) or empty URL is returned unchanged, so an
 // already-local or absent poster passes through. Relative output means the
 // client fetches it same-origin, which is what makes the artlight canvas
 // readable without any CORS at all.

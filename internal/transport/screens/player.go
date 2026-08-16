@@ -110,22 +110,19 @@ func NextEpisodeNode(label, partID, nodeID, title string) sdui.Node {
 }
 
 // subtitleTrackProps renders the authored subtitle scripts as the props bag the
-// `subtitleTracks` prop carries (platform#83).
+// subtitleTracks prop carries (platform#83).
 //
-// **Set with ui.Prop rather than a generated builder, and that is deliberate
-// rather than the shortcut the rule warns about.** The prop is specced in
-// `contracts` in the same change that added this, as a `Player` prop with
-// `SubtitleTracks` sugar over it. What is missing is only the *tag*: the
-// Platform requires `contracts` at a published version with no replace, and tag
-// pushes to the organisation have been refused since before this work began. So
-// the builder exists in the spec and not yet in the version this compiles
-// against.
+// Set with ui.Prop rather than a generated builder. The prop is specced in
+// contracts as a Player prop with SubtitleTracks sugar over it; what is missing
+// is only the tag, because the Platform requires contracts at a published
+// version with no replace. So the builder exists in the spec and not yet in the
+// version this compiles against.
 //
-// That is the narrow case the rule allows — "a type the spec does not cover yet,
-// and then add it to the spec" — and it is safe here for the reason the rule
-// exists: this prop is not a string nobody renders. `@mosaic-media/sdui-react`
-// draws it. **Swap this for `ui.SubtitleTracks` on the contracts bump**; the
-// roadmap carries that as an open thread rather than leaving it to be noticed.
+// That is the narrow case the "author with the generated builders" rule allows —
+// a type the spec does not cover yet, and then add it to the spec — and it is
+// safe here for the reason the rule exists: this prop is not a string nobody
+// renders, since @mosaic-media/sdui-react draws it. Swap it for
+// ui.SubtitleTracks on the contracts bump.
 func subtitleTrackProps(tracks []SubtitleTrack) []any {
 	out := make([]any, 0, len(tracks))
 	for _, t := range tracks {

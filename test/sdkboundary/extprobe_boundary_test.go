@@ -17,19 +17,18 @@ import (
 // third-party extension module can actually import: the SDK contract and the
 // harness, and nothing else (platform#12, platform#39).
 //
-// **This is a weaker guarantee than the one next door, and deliberately so.**
-// test/sdkprobe is its own Go module, so Go itself refuses an internal/ import
-// and the compiler is the check. test/extprobe is inside the Platform module,
-// which means nothing structural stops it reaching internal/ — so a parse of its
-// imports is what stands in.
+// This is a weaker guarantee than the one next door, deliberately. test/sdkprobe
+// is its own Go module, so Go itself refuses an internal/ import and the
+// compiler is the check. test/extprobe is inside the Platform module, so
+// nothing structural stops it reaching internal/ and a parse of its imports is
+// what stands in.
 //
-// The trade is worth naming rather than leaving to be discovered. Making
-// extprobe a separate module would need `replace` directives to two nested
+// Making extprobe a separate module would need replace directives to two nested
 // working trees and would buy a property the Platform's own build already
 // demonstrates, since the Platform depends on the published sdk/host. What
 // matters here is that the probe stays an honest example of what a module
-// author writes, and an import that crept in would make it a dishonest one —
-// the probe would still pass its tests while no longer demonstrating anything.
+// author writes: an import that crept in would leave it passing its tests while
+// no longer demonstrating anything.
 func TestExtensionProbeImportsOnlyThePublishedSurface(t *testing.T) {
 	dir, err := filepath.Abs(filepath.Join("..", "extprobe"))
 	if err != nil {

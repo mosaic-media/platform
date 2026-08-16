@@ -21,15 +21,14 @@ import (
 // made while the Platform is not there to be written to: a Platform that will
 // not start, a Generation that was rolled back.
 //
-// **The dependency does not invert.** Nothing here is needed for the Platform to
+// The dependency does not invert. Nothing here is needed for the Platform to
 // function; a missing file, an unreadable one and an empty one are all the same
 // ordinary answer, which is "nothing to adopt".
 //
-// **It is untrusted input.** The file is written by one binary and read by
-// another that may have been upgraded — or downgraded — independently, so a line
-// that cannot be parsed is skipped rather than fatal. A boot that refused to
-// proceed because the *diagnostics* were malformed would be the machinery
-// defeating what it is for.
+// The file is untrusted input: it is written by one binary and read by another
+// that may have been upgraded — or downgraded — independently, so a line that
+// cannot be parsed is skipped rather than fatal. A boot that refused to proceed
+// because the diagnostics were malformed would defeat what they are for.
 
 // SpooledFinding is one line of the Supervisor's file, in its own shape.
 //
@@ -47,12 +46,12 @@ type SpooledFinding struct {
 // ReadSpool takes over the Supervisor's findings: it reads them and removes the
 // file, so a finding is adopted once rather than re-raised on every boot.
 //
-// **The file is renamed before it is read**, which is what makes the handover
-// safe while the Supervisor is still running: the Supervisor appends to the
-// original path and would otherwise be writing into a file this is about to
-// delete, losing whatever it wrote in between. A rename on one filesystem is
-// atomic, so the Supervisor's next append creates a fresh file and nothing
-// falls between the two.
+// The file is renamed before it is read, which is what makes the handover safe
+// while the Supervisor is still running: the Supervisor appends to the original
+// path and would otherwise be writing into a file this is about to delete,
+// losing whatever it wrote in between. A rename on one filesystem is atomic, so
+// the Supervisor's next append creates a fresh file and nothing falls between
+// the two.
 //
 // A missing file is not an error. It is the ordinary state of an install that
 // has had nothing go wrong, and of every install with no Supervisor at all.

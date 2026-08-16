@@ -30,7 +30,7 @@ import (
 //
 // It is read-only, and that is a statement about the Platform rather than a
 // design choice: there is no command to change a display name, a username or an
-// email. `CreateLocalUser` makes one and `SetUserStatus` enables or disables it;
+// email. CreateLocalUser makes one and SetUserStatus enables or disables it;
 // nothing updates a profile. So the design's four inputs and its Save button are
 // four facts here — drawing editable fields over a mutation that does not exist
 // would be worse than saying plainly what Mosaic knows.
@@ -100,7 +100,7 @@ func (s *Service) devicesSection(ctx context.Context, caller v1.Caller) *ui.Elem
 		// The current device gets no Sign out control. Ending the session you
 		// are asking through works — it is the same command — but it would put
 		// a control that signs you out where a viewer is looking for the one
-		// that signs out the *other* thing, and signing out belongs on its own
+		// that signs out the other thing, and signing out belongs on its own
 		// affordance rather than in a list of devices.
 		controls := []ui.El{}
 		if !current {

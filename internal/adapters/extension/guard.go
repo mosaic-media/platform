@@ -12,21 +12,21 @@ import (
 
 // The two halves of the handle mechanism (platform#39).
 //
-// guardedCapability wraps the module proxy on the way *out*: every method mints
-// a handle for the real Caller, hands the module the handle instead, and revokes
+// guardedCapability wraps the module proxy on the way out: every method mints a
+// handle for the real Caller, hands the module the handle instead, and revokes
 // it when the call returns.
 //
-// resolvingContent wraps the Platform's ContentService on the way *back*: every
+// resolvingContent wraps the Platform's ContentService on the way back: every
 // method exchanges the handle the module presented for the Caller it was minted
 // for, and refuses anything not currently live.
 //
 // Both are written out method by method rather than generated or reflected.
-// That is a lot of near-identical code, and it is the right trade here: these
-// are the two places where a module's authority is decided, and a reader should
-// be able to see that *every* path mints and *every* path resolves without
-// trusting a helper to have covered them all. A missing method in a reflective
-// version would be an invisible authority leak; a missing method here does not
-// compile.
+// That is a lot of near-identical code, and it is the trade taken here: these are
+// the two places where a module's authority is decided, and a reader can see that
+// every path mints and every path resolves without trusting a helper to have
+// covered them all. A missing method in a reflective version would be an
+// invisible authority leak; a missing method here does not compile, because the
+// interface assertions below name every provider interface.
 
 // ─── Outbound: mint a handle per invocation ─────────────────────────────────
 

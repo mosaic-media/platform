@@ -24,10 +24,10 @@ import (
 // different firehose.
 //
 // The difference from input is what happens at the end. A dropped keystroke is
-// harmless because another follows; a dropped *final* position is the one that
-// matters most, because it is where the viewer actually stopped. So the last
-// report is always flushed rather than discarded, and the client sends one at
-// the boundaries that matter — pause, seek settled, exit.
+// harmless because another follows; the final position is the one that matters
+// most, because it is where the viewer actually stopped. So the last report is
+// always flushed rather than discarded, and the client sends one at the
+// boundaries that matter — pause, seek settled, exit.
 
 // progressDebounce is the coalescing window for position reports.
 //

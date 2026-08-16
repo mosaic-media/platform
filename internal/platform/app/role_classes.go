@@ -12,18 +12,17 @@ import (
 
 // The role-class table (platform#38).
 //
-// A core module fills a *role class*, and the class — not the module — declares
+// A core module fills a role class, and the class — not the module — declares
 // how many implementations may be selected and what changing the selection
-// costs. platform#38 is emphatic that this table lives in Platform code and **not**
-// in module manifests: arity is a property of the class, not of any module that
-// fills it, and a module has no business asserting "I am the only one of me" —
-// a manifest that could would be a manifest that could lie. A module declares
-// only which roles it fills; the Platform validates a selection against this.
+// costs. This table lives in Platform code and never in module manifests
+// (platform#38): arity is a property of the class, and a manifest that could
+// assert "I am the only one of me" would be a manifest that could lie. A module
+// declares only which roles it fills; the Platform validates a selection against
+// this.
 //
-// This is the single in-code copy of that table. It is data rather than
-// scattered checks so there is one place to read what every class costs, and so
-// the required-roles gate below is derived from it rather than from a hand-kept
-// list of role constants — which is what the composition root used to carry.
+// It is the single in-code copy of that table, and it is data rather than
+// scattered checks so the required-roles gate below is derived from it rather
+// than from a hand-kept list of role constants.
 
 // Arity is how many selected modules may fill a class.
 type Arity int
@@ -84,10 +83,9 @@ type RoleClass struct {
 // cannot wire two.
 func (c RoleClass) registryBacked() bool { return len(c.Roles) > 0 }
 
-// RoleClasses is the table. It intentionally lists storage even though this
-// package does not validate it, so the one authoritative copy of platform#38's
-// table is complete rather than a subset that silently drops the row a reader
-// most expects to find.
+// RoleClasses is the table. It lists storage even though this package does not
+// validate it, so the one authoritative copy of platform#38's table is complete
+// rather than a subset missing the row a reader most expects to find.
 var RoleClasses = []RoleClass{
 	{
 		Name:       "storage",
@@ -118,12 +116,11 @@ var RoleClasses = []RoleClass{
 // serve loop; a guarantee-clause core module means it passes on a fresh install
 // with no configuration.
 //
-// It supersedes the composition root's hand-kept RequireRoles(RoleMetadata,
-// RoleSearch): the required roles are now read from the table, so adding a
-// required class is a table edit rather than a second place to remember. It
-// delegates to RequireRoles for the actual scan so there is one implementation
-// of "is this role filled", and wraps the result with the class name so a boot
-// failure says which class is short rather than only which role.
+// The required roles are read from the table, so adding a required class is a
+// table edit rather than a second place to remember. It delegates to
+// RequireRoles for the scan so there is one implementation of "is this role
+// filled", and wraps the result with the class name so a boot failure says which
+// class is short rather than only which role.
 func (r *CapabilityRegistry) RequireComposedRoleClasses() error {
 	for _, class := range RoleClasses {
 		if !class.Required || !class.registryBacked() {

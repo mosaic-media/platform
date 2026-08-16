@@ -49,8 +49,8 @@ const (
 	// stored events, and this is the current value of a running counter.
 	screenMetrics = "metrics"
 	// The background-work screens (platform#13). Same expert-mode group as the
-	// telemetry ones and a different permission: `job.read` is what the
-	// install did to itself, `telemetry.read` is what its users did.
+	// telemetry ones and a different permission: job.read is what the install
+	// did to itself, telemetry.read is what its users did.
 	screenJobs        = "jobs"
 	screenJob         = "job"
 	screenCollections = "collections"
@@ -59,8 +59,8 @@ const (
 	screenSettings    = "settings"
 	// screenLibrary is what the install owns (roadmap M2.1) — the first screen
 	// over the object graph rather than over a provider. It sits beside
-	// `collections` in the nav and is deliberately not the same screen: one is
-	// this household's shelf, the other is a source's catalogue.
+	// collections in the nav and is deliberately not the same screen: one is this
+	// household's shelf, the other is a source's catalogue.
 	screenLibrary = "library"
 	// screenHistory is what this viewer has watched (platform#59). It is its own
 	// screen rather than a settings panel because it is content — a grid of
@@ -112,15 +112,15 @@ const (
 	paramSeason     = "season"
 	paramText       = "text"
 	// paramMediaType focuses a search on one kind of thing. Distinct from
-	// paramNativeType, which is a *provider's* own word for a type; this is the
+	// paramNativeType, which is a provider's own word for a type; this is the
 	// Platform's canonical one (platform#11).
 	paramMediaType = "mediaType"
 	paramPage      = "page"
 	// paramGenre carries the library facet's selection. One value rather than a
-	// list: the store filter is conjunctive and would take several, and a row of
-	// chips that can be combined needs a way to say which are lit *and* a way to
-	// take one back — which is a control, not a param. One genre at a time is the
-	// honest shape of what a chip row can express today.
+	// list: the store filter is conjunctive and would take several, but a row of
+	// chips that can be combined needs a way to say which are lit as well as a way
+	// to take one back — which is a control, not a param. One genre at a time is
+	// the honest shape of what a chip row can express today.
 	paramGenre     = "genre"
 	paramLevel     = "level"
 	paramComponent = "component"
@@ -141,12 +141,11 @@ const (
 
 // Empty-state illustration keys the client maps to an icon.
 //
-// **These must be names in the client's glyph set**, and "collections" was not
-// one — so every "no collections yet" state Mosaic has ever drawn rendered a
-// blank circle where its illustration should be. Nothing reported it: the Icon
-// primitive resolves an unknown name to nothing rather than failing, which is
-// the right behaviour for an open vocabulary and the reason a typo here is
-// invisible. The set is `IconName` in sdui-react's shared.tsx.
+// These must be names in the client's glyph set, which is IconName in
+// sdui-react's shared.tsx. A typo is invisible: the Icon primitive resolves an
+// unknown name to nothing rather than failing — correct for an open vocabulary —
+// so the empty state draws a blank circle where its illustration should be and
+// nothing reports it.
 const (
 	emptyIconCollections = "grid"
 	emptyIconSearch      = "search"
@@ -170,15 +169,14 @@ const playPartAction = "playPart"
 const paramPartID = "partId"
 
 // setWatchedAction marks an item watched or unwatched by explicit request
-// (platform#26). The dispatch case has existed since playback state landed; until
-// the detail screen's tick emitted it, the only way to finish something was to
-// watch it to the end.
+// (platform#26). Without the affordance that emits it, the only way to finish
+// something is to watch it to the end.
 const setWatchedAction = "setWatched"
 
 // contentQueries is the slice of the application query surface the screen
 // builders read. Narrowing to an interface keeps the emit-side a projection of
-// the services (like any transport handler) and makes the builders testable without
-// standing up a full Service. *app.Service satisfies it.
+// the services (like any transport handler) and makes the builders testable
+// without standing up a full Service. *app.Service satisfies it.
 type contentQueries interface {
 	SearchAvailableContent(context.Context, app.SearchAvailableContentQuery) (app.SearchAvailableContentResult, error)
 	// ListLibrary is one page of what the install owns, with the real total
@@ -227,10 +225,9 @@ type contentQueries interface {
 	// read takes the id of the user to read, which is useless to a screen that
 	// holds a session and wants to say "you".
 	GetCurrentUser(context.Context, app.GetCurrentUserQuery) (app.GetCurrentUserResult, error)
-	// The People panels (platform#44, roadmap M1.3). Every one of these was a
-	// complete application service whose only callers were tests; naming them
-	// here is the first half of the door, and the dispatch cases beside them are
-	// the second.
+	// The People panels (platform#44, roadmap M1.3). Naming these here is the read
+	// half of the door; the session transport's dispatch cases are the write
+	// half.
 	ListUsers(context.Context, app.ListUsersQuery) (app.ListUsersResult, error)
 	GetUserByID(context.Context, app.GetUserByIDQuery) (app.GetUserByIDResult, error)
 	GetRolesForUser(context.Context, app.GetRolesForUserQuery) (app.GetRolesForUserResult, error)
@@ -239,10 +236,10 @@ type contentQueries interface {
 	// hold (platform#44). It is the offer side of the delegation rule and the
 	// reason a create-account form can be honest about what it will grant.
 	GrantablePermissions(context.Context, app.GrantablePermissionsQuery) (app.GrantablePermissionsResult, error)
-	// ListNodeParts reads one item's releases. FirstPlayablePart answers the
-	// same question about a *work* and deliberately will not walk into a
-	// series' seasons to pick an episode; once the screen has picked one itself
-	// this is how it asks what that episode actually holds.
+	// ListNodeParts reads one item's releases. FirstPlayablePart answers the same
+	// question about a work and deliberately will not walk into a series' seasons
+	// to pick an episode; once the screen has picked one itself, this is how it
+	// asks what that episode actually holds.
 	ListNodeParts(context.Context, app.ListNodePartsQuery) (app.ListNodePartsResult, error)
 	// GetPlaybackState backs Resume (platform#26): a detail screen has to know
 	// whether this viewer already started this item before it can decide
@@ -277,9 +274,9 @@ type contentQueries interface {
 	// so a person can end a device they no longer have (platform#58).
 	ListSessions(context.Context, app.ListSessionsQuery) (app.ListSessionsResult, error)
 	// The configuration reads (platform#7, roadmap M4.4). Both authorise
-	// `config.read` for themselves. Pending is a separate query rather than a
-	// field on the active result because "nothing is waiting" is the ordinary
-	// answer and has to be sayable without an error.
+	// config.read for themselves. Pending is a separate query rather than a field
+	// on the active result because "nothing is waiting" is the ordinary answer and
+	// has to be sayable without an error.
 	GetActiveConfigVersion(context.Context, app.GetActiveConfigVersionQuery) (app.GetActiveConfigVersionResult, error)
 	GetPendingConfigVersion(context.Context, app.GetPendingConfigVersionQuery) (app.GetPendingConfigVersionResult, error)
 	// The resolution register (platform#74): what is wrong with this install, now.
@@ -290,8 +287,8 @@ type contentQueries interface {
 	// payload is deliberate: each applies its own default for an unset field,
 	// falls back again for an unusable one, and the audit floor (platform#35) is
 	// applied after both. They are the definition of "what is in force", so a
-	// panel formatting the payload instead would show numbers the Platform is
-	// not using. The panel that calls them authorises `config.read` first.
+	// panel formatting the payload instead would show numbers the Platform is not
+	// using. The panel that calls them authorises config.read first.
 	TelemetryRetention(context.Context) app.TelemetryRetention
 	LibraryMaintenance(context.Context) app.LibraryMaintenanceSettings
 	Availability(context.Context) app.AvailabilitySettings
@@ -398,9 +395,9 @@ func (s *Service) Render(ctx context.Context, name string, caller v1.Caller, par
 		return s.jobScreen(ctx, caller, params)
 	default:
 		// A route that names no screen is a 404, not a transport error. Returning
-		// NotFound here put the raw string "no screen named colletions" into the
-		// content region, which is a diagnosis where a user needs a way out — and
-		// a stale bookmark or a mistyped URL is an ordinary thing to do.
+		// NotFound here puts a raw "no screen named …" string into the content
+		// region, which is a diagnosis where a user needs a way out — and a stale
+		// bookmark or a mistyped URL is an ordinary thing to do.
 		return notFoundScreen(), nil
 	}
 }

@@ -79,21 +79,15 @@ func (s *Service) SetUserStatus(ctx context.Context, cmd SetUserStatusCommand) (
 			return err
 		}
 		// Suspending ends the account's live sessions, in the same transaction.
+		// This is what makes suspension take effect: without it the status
+		// column is written and nothing reads it, so a suspended account can
+		// sign in and one already signed in stays signed in for ninety days.
 		//
-		// **Without this, suspension did nothing at all.** The status column was
-		// written and nothing read it: a suspended account could sign in, and one
-		// already signed in stayed signed in for ninety days. The domain type
-		// said "the account may authenticate" of the active status and no code
-		// anywhere enforced it, which is the shape of defect the unreachable
-		// register exists for — a complete, tested command with no effect.
-		//
-		// Here rather than at every call: checking the status on each request
-		// would add a user read to a path that already does two, and the window
-		// it closes is the same one revoking the sessions closes now. Reactivating
-		// deliberately does not restore them — a device that was signed out
-		// signs in again, and resurrecting credentials somebody was told had
-		// ended is not something an administrator should be able to do by
-		// accident.
+		// Here rather than checked on every request: a per-request status check
+		// would add a user read to a path that already does two, and closes the
+		// same window. Reactivating deliberately does not restore the sessions
+		// — a device that was signed out signs in again, and resurrecting
+		// credentials somebody was told had ended should not be accidental.
 		if cmd.Status == domain.UserSuspended {
 			live, err := tx.Sessions().ListForUser(ctx, cmd.TargetUserID, s.clock.Now())
 			if err != nil {

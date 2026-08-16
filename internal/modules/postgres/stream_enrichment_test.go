@@ -25,21 +25,20 @@ import (
 // metadata module (TMDB, core), a real database, and a stream source standing in
 // for an extension one.
 //
-// It is the case the two-tier module story has been pointing at: **a title
-// described by TMDB and played from a stream source.** Before this, importing a
-// TMDB ref produced a Work and a season/episode tree with no Parts — permanently
-// unplayable, while a stream source sat registered alongside able to resolve
-// that exact title and never asked, because `ImportContent` routed solely to
-// `ref.Provider`.
+// The case it covers is a title described by TMDB and played from a stream
+// source. An ImportContent that routed solely to ref.Provider would produce a
+// Work and a season/episode tree with no Parts — permanently unplayable — while
+// a stream source able to resolve that exact title sat registered alongside and
+// was never asked.
 //
 // The stream source is a fake, not the real Stremio module: the platform module
-// must not import an extension module (platform#49/0081), and the Platform bridge is
-// what is under test, not Stremio's addon parsing. The double answers *only* for
+// must not import an extension module (platform#49/0081), and the Platform bridge
+// is what is under test, not Stremio's addon parsing. The double answers only for
 // the IMDB identity the Platform must have carried across from the TMDB tree, so
 // the assertion stays real — Parts appear on those episodes only if the Platform
 // bridged TMDB's metadata to the stream source's resolution. TMDB fills no stream
 // role and attaches no Parts; the stream source never sees the import, because
-// the ref names `tmdb`.
+// the ref names tmdb.
 func TestCrossProviderStreamEnrichmentAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
 
@@ -124,7 +123,7 @@ func TestCrossProviderStreamEnrichmentAgainstPostgres(t *testing.T) {
 		t.Fatalf("ConfigureModule(tmdb): %v", err)
 	}
 
-	// Import a *TMDB* ref. Stremio is not named anywhere in this command.
+	// Import a TMDB ref. Stremio is not named anywhere in this command.
 	result, err := svc.ImportContent(c, app.ImportContentCommand{
 		Caller: caller,
 		Ref: v1.ContentRef{
@@ -141,8 +140,8 @@ func TestCrossProviderStreamEnrichmentAgainstPostgres(t *testing.T) {
 			result.Containers, result.Items)
 	}
 
-	// The assertion the whole record exists for. TMDB declares no stream role
-	// and attaches nothing; these Parts came from Stremio, asked by the Platform.
+	// TMDB declares no stream role and attaches nothing, so these Parts came
+	// from the stream source, asked by the Platform.
 	if result.Parts == 0 {
 		t.Fatal("no parts attached: a TMDB-sourced series is still unplayable, so enrichment did not run")
 	}

@@ -252,10 +252,10 @@ func TestPreviewContentUnknownProviderIsNotFound(t *testing.T) {
 // catalogs of its own the fallback's must not appear beside them, and when it
 // has none the fallback's must.
 //
-// The empty case is the one that matters and the one an error-keyed fallback
-// would have missed. TMDB with no API key does not fail — it answers emptily —
-// so "nothing to show" rather than "the call errored" is what has to trigger
-// the floor, and it is the state every unconfigured install is in.
+// The empty case is the one that matters, and the one an error-keyed fallback
+// misses: a provider with no API key does not fail, it answers emptily, so
+// "nothing to show" rather than "the call errored" has to trigger the floor.
+// That is the state every unconfigured install is in.
 func TestFallbackProviderAnswersOnlyWhenThePreferredOneDidNot(t *testing.T) {
 	ctx := context.Background()
 

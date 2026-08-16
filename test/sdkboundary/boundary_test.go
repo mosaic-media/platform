@@ -21,9 +21,6 @@ import (
 // signature in v1 referenced an internal type — a leak of Platform plumbing
 // into the SDK — v1 would import internal/ and this build would fail with
 // "use of internal package". A green build is the proof the surface is clean.
-//
-// This replaces the manual probe that first found the internal/ barrier with
-// a check the suite runs on every change.
 func TestPublishedSurfaceCompilesFromAnExternalModule(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("go toolchain not on PATH")
@@ -38,12 +35,12 @@ func TestPublishedSurfaceCompilesFromAnExternalModule(t *testing.T) {
 	cmd.Dir = dir
 
 	// The probe is a separate module on purpose, and it resolves the SDK through
-	// its own `replace` — standing in for the proxy a third party resolves from.
+	// its own replace — standing in for the proxy a third party resolves from.
 	// An ambient go.work supersedes that, so the probe would be built against
 	// whatever the workspace happened to hold instead of against the SDK it
-	// names. Worse, the probe is not one of a workspace's modules, so `./...`
-	// matches nothing and the build fails with a pattern error — reported here as
-	// a leak of an internal type, which is the one diagnosis it is not.
+	// names. Worse, the probe is not one of a workspace's modules, so ./...
+	// matches nothing and the build fails with a pattern error — which is not a
+	// leak of an internal type.
 	//
 	// Two things above this tree already write a go.work: the dev overlay
 	// (docker-compose.local.yml) and the cross-repository graph workflow. The
@@ -55,12 +52,10 @@ func TestPublishedSurfaceCompilesFromAnExternalModule(t *testing.T) {
 		return
 	}
 
-	// **Say which failure this is.** The message used to report every build
-	// failure as an internal-type leak, which is the one diagnosis most of them
-	// are not: a missing go.sum entry reported as "an internal type has leaked
-	// into the published surface" sends the reader to look for a leak that was
-	// never there. The comment above already names the same trap for an ambient
-	// go.work; this makes the distinction the test's own rather than a comment's.
+	// Say which failure this is. Reporting every build failure as an
+	// internal-type leak is the one diagnosis most of them are not: a missing
+	// go.sum entry reported as "an internal type has leaked into the published
+	// surface" sends the reader to look for a leak that was never there.
 	if bytes.Contains(out, []byte("use of internal package")) {
 		t.Fatalf("an internal type has leaked into the published surface (platform#12) "+
 			"— an external module cannot import it:\n%s", out)

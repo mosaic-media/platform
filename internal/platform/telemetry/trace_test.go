@@ -85,8 +85,8 @@ func TestStartRequestContinuesAnInboundTrace(t *testing.T) {
 	}
 	// The caller's span id is carried through deliberately: it is the parent
 	// the first Start will attach to. This process's own span is created by
-	// Start, not here — creating one here too is what produced a parent naming
-	// no span (see TestEntrySpanParentsToTheCallersOwnSpan).
+	// Start, not here — creating one here too would produce a parent naming no
+	// span (see TestEntrySpanParentsToTheCallersOwnSpan).
 	if got.SpanID != upstream.SpanID {
 		t.Fatalf("StartRequest must carry the caller's span as the parent-to-be, got %s want %s",
 			got.SpanIDString(), upstream.SpanIDString())
@@ -188,14 +188,12 @@ func TestHTTPMiddlewareStartsATraceWithoutAHeader(t *testing.T) {
 	}
 }
 
-// TestEntrySpanParentsToTheCallersOwnSpan is a regression test for a defect
-// only a real trace showed: the tree was unrootable.
+// TestEntrySpanParentsToTheCallersOwnSpan pins that the entry span's parent is
+// the caller's own span, so a cross-repository trace can be joined.
 //
-// StartRequest used to Child() the inbound context, and Start Child()s again —
-// so the first span's parent was an id no span ever had. Every trace looked
-// like it descended from something missing, and nothing linked the request
-// back to the caller's span across the wire. Both halves of a
-// cross-repository trace were present and could not be joined.
+// Start already calls Child, so StartRequest must not: doing both would make
+// the first span's parent an id no span ever had, and every trace would look
+// like it descended from something missing.
 func TestEntrySpanParentsToTheCallersOwnSpan(t *testing.T) {
 	caller := telemetry.NewTraceContext()
 

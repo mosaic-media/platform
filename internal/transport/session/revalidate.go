@@ -17,10 +17,8 @@ import (
 // Cache-first rendering's push half (platform#30).
 //
 // A source-backed screen is served from a durable snapshot and revalidated
-// behind it; the live result arrives here, as a `RegionUpdate` on the push lane.
-// That op-set has existed since contracts#5 and, until this, nothing had ever sent
-// one that a client had not just asked for — every region update in the Platform
-// was the answer to a navigate. This is the first genuinely unsolicited one.
+// behind it; the live result arrives here, as a RegionUpdate on the push lane
+// (contracts#5) that the client did not ask for.
 
 // revalidateTimeout bounds a background revalidation. It fires after the intent
 // that scheduled it has returned, so it cannot use that call's context and
@@ -39,10 +37,10 @@ const sourceNoticePrefix = "source:"
 // is told: a standing notice per failing source, retracted when it recovers, and
 // a background revalidation when the tree was built from a stale snapshot.
 //
-// The notice state is per **session** rather than per process, and it has to be:
-// a source's health is global, but "has this viewer been told" is not, and
-// diffing against a global counter would show the notice to whichever session
-// happened to render first and to nobody else.
+// The notice state is per session rather than per process, and it has to be: a
+// source's health is global, but "has this viewer been told" is not, and diffing
+// against a global counter would show the notice to whichever session happened
+// to render first and to nobody else.
 func (h *Handler) applyReport(ctx context.Context, s *liveSession, rep *screens.Report, r route) {
 	failing := rep.Failed()
 	for _, source := range failing {
@@ -71,9 +69,10 @@ func (h *Handler) applyReport(ctx context.Context, s *liveSession, rep *screens.
 // revalidate re-renders the current route with every source-backed read forced
 // live, and pushes the result into the content region.
 //
-// It runs **in the requesting session's context** (platform#30): there is a real
+// It runs in the requesting session's context (platform#30): there is a real
 // caller behind it, so it needs no system principal and every read still
-// authorises as the user who caused it. platform#13's reserved gap stays reserved.
+// authorises as the user who caused it. platform#13's reserved gap stays
+// reserved.
 func (h *Handler) revalidate(ctx context.Context, s *liveSession, r route) {
 	if !s.beginRevalidation() {
 		// One at a time per session. Without this, a viewer tapping between two
@@ -106,10 +105,10 @@ func (h *Handler) revalidate(ctx context.Context, s *liveSession, r route) {
 			return
 		}
 
-		// The route is re-read *after* the render because a fan-out takes
-		// seconds and a viewer can navigate during it. Replacing the content
-		// region with a home screen somebody has already left is worse than not
-		// refreshing at all.
+		// The route is re-read after the render because a fan-out takes seconds
+		// and a viewer can navigate during it. Replacing the content region with
+		// a home screen somebody has already left is worse than not refreshing
+		// at all.
 		if now := s.currentRoute(); !sameRoute(now, r) {
 			lg.Info("revalidation discarded; the session moved on",
 				telemetry.String("now", now.screen),
@@ -131,13 +130,11 @@ func (h *Handler) revalidate(ctx context.Context, s *liveSession, r route) {
 
 // sameRoute reports whether two routes show the same thing.
 //
-// An absent param map and an empty one are the same route, which is the whole
-// reason this is not `reflect.DeepEqual` on the struct. A client that sends
-// `{}` for a screen with no params and one that sends nothing produce
-// `map[string]any{}` and `nil` respectively — and a connect does both, so a
-// revalidation of the home screen was being discarded against the home screen
-// it had just rendered. Found in the logs of a working push, saying it had
-// moved on to the screen it was already on.
+// An absent param map and an empty one are the same route, which is why this is
+// not reflect.DeepEqual on the struct: a client that sends {} for a screen with
+// no params and one that sends nothing produce map[string]any{} and nil
+// respectively, and a connect does both. Comparing the structs discards a
+// revalidation against the very screen it just rendered.
 func sameRoute(a, b route) bool {
 	if a.screen != b.screen || len(a.params) != len(b.params) {
 		return false

@@ -17,7 +17,7 @@ import (
 // Playback state (platform#26) — the first per-user surface on the content
 // service.
 //
-// Everything else here operates on an install-global graph. These five methods
+// Everything else here operates on an install-global graph. These methods
 // operate on one person's relationship to it, which is why they authorise
 // against the caller's own identity and can never be asked about somebody
 // else's: there is no user parameter to pass.
@@ -25,15 +25,13 @@ import (
 // ActionPlaybackWrite is the policy action for recording a viewer's own
 // position.
 //
-// Separate from `content.create` deliberately. Writing progress is not editing
-// the library — a household member who may watch everything and change nothing
-// is an ordinary arrangement, and collapsing the two would make resume a
-// librarian's privilege.
+// Separate from content.create deliberately: writing progress is not editing the
+// library, and collapsing the two would make resume a librarian's privilege.
 const ActionPlaybackWrite policy.Action = "playback.write"
 
-// ActionPlaybackRead is the policy action for reading it back. It is separate
-// from `content.read` for the same reason inverted: seeing the library is not
-// the same as seeing what someone watched.
+// ActionPlaybackRead is the policy action for reading it back. Separate from
+// content.read for the mirror-image reason: seeing the library is not the same
+// as seeing what someone watched.
 const ActionPlaybackRead policy.Action = "playback.read"
 
 // finishedFraction is how far through an item counts as finished.
@@ -56,9 +54,9 @@ const minFinishedDuration = 30 * time.Second
 // RecordPlaybackProgress records where a viewer has got to (platform#26).
 //
 // It is called repeatedly during playback, so it is an upsert and it is cheap.
-// The transport coalesces bursts before they arrive here; this end assumes it
-// may still be called often and does nothing per call that it would not want
-// done a hundred times.
+// The transport coalesces bursts before they arrive here; this end must still
+// assume it is called often and do nothing per call it would not want done a
+// hundred times.
 func (s *Service) RecordPlaybackProgress(ctx context.Context, cmd v1.RecordPlaybackProgressCommand) (v1.RecordPlaybackProgressResult, error) {
 	// 1. validate command shape.
 	if cmd.Caller.Session == "" {
@@ -104,8 +102,8 @@ func (s *Service) RecordPlaybackProgress(ctx context.Context, cmd v1.RecordPlayb
 			state.Duration = previous.Duration
 		}
 		// Finished is derived, unless a person has already decided. Their answer
-		// is never re-derived away in either direction — which is the whole
-		// reason the explicit flag exists.
+		// is never re-derived away in either direction, which is what the
+		// explicit flag is for.
 		if previous.FinishedExplicit {
 			state.Finished = previous.Finished
 		} else {
@@ -117,9 +115,9 @@ func (s *Service) RecordPlaybackProgress(ctx context.Context, cmd v1.RecordPlayb
 		if err != nil {
 			return err
 		}
-		// The event announces the *item*, not the position. A position moves
-		// every few seconds and nothing downstream wants that firehose; what a
-		// consumer wants to know is that this user watched this thing.
+		// The event announces the item, not the position. A position moves every
+		// few seconds and nothing downstream wants that firehose; what a consumer
+		// wants to know is that this user watched this thing.
 		if err := tx.Outbox().Append(ctx, domain.OutboxEvent{
 			Event: s.newEvent(ctx, "content.playback.progressed", []byte(string(saved.NodeID)), string(az.userID)),
 		}); err != nil {
@@ -140,9 +138,9 @@ func (s *Service) RecordPlaybackProgress(ctx context.Context, cmd v1.RecordPlayb
 // SetPlaybackFinished marks an item watched or unwatched by explicit request.
 //
 // It is a distinct command from progress because it is a distinct act: progress
-// is something a player observed, and this is something a person decided. If
-// they were one command, every position report would be able to silently
-// un-mark something a viewer had marked.
+// is something a player observed, and this is something a person decided. Merged
+// into one command, every position report could silently un-mark something a
+// viewer had marked.
 func (s *Service) SetPlaybackFinished(ctx context.Context, cmd v1.SetPlaybackFinishedCommand) (v1.SetPlaybackFinishedResult, error) {
 	if cmd.Caller.Session == "" {
 		return v1.SetPlaybackFinishedResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
@@ -171,7 +169,7 @@ func (s *Service) SetPlaybackFinished(ctx context.Context, cmd v1.SetPlaybackFin
 		state.UpdatedAt = s.clock.Now()
 		// Marking something unwatched puts it back at the beginning. Leaving the
 		// position would produce an item that claims to be unwatched and resumes
-		// at the credits, which is the only reading of "unwatched" nobody means.
+		// at the credits.
 		if !cmd.Finished {
 			state.Position = 0
 		}
@@ -216,8 +214,8 @@ func (s *Service) GetPlaybackState(ctx context.Context, q v1.GetPlaybackStateQue
 	state, err := s.playbackStates.Get(ctx, az.userID, q.NodeID)
 	if err != nil {
 		if contracts.CategoryOf(err) == contracts.NotFound {
-			// Never started is an answer, not a failure. Reporting it as one
-			// would make a detail screen for an unwatched film an error state.
+			// Never started is an answer, not a failure: reporting it as one
+			// makes a detail screen for an unwatched film an error state.
 			return v1.GetPlaybackStateResult{}, nil
 		}
 		return v1.GetPlaybackStateResult{}, err
@@ -254,8 +252,8 @@ func (s *Service) ListPlaybackStates(ctx context.Context, q v1.ListPlaybackState
 // first — the continue-watching list.
 //
 // It resolves each state's node here rather than leaving a caller to do it,
-// because every caller would, and doing it once in a batch is the difference
-// between one query and one per rail item.
+// because every caller would and doing it once is the difference between one
+// query and one per rail item.
 func (s *Service) ListInProgress(ctx context.Context, q v1.ListInProgressQuery) (v1.ListInProgressResult, error) {
 	if q.Caller.Session == "" {
 		return v1.ListInProgressResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")
@@ -293,12 +291,9 @@ func (s *Service) ListInProgress(ctx context.Context, q v1.ListInProgressQuery) 
 
 // errNoPlaybackStore reports a Service wired without the playback store.
 //
-// It is Unavailable rather than an empty answer, and the distinction is not
-// pedantry: an empty answer means "you have not watched this", which is a
-// perfectly ordinary thing for a screen to render — so a forgotten wiring would
-// present as a resume feature that silently never works, on a build where every
-// test passed. It is exactly the failure the unreachable-capability register
-// exists to catch, and this is the version a compiler cannot.
+// It is Unavailable rather than an empty answer: an empty answer means "you have
+// not watched this", so a forgotten wiring would present as a resume feature
+// that silently never works while every test passed.
 var errNoPlaybackStore = contracts.NewError(contracts.Unavailable, "no playback state store configured")
 
 // crossedFinishThreshold decides whether a position counts as having finished

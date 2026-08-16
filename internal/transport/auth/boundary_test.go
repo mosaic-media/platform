@@ -18,10 +18,8 @@ import (
 // Postgres module and any raw SQL driver. Reaching app/contracts/domain is fine
 // and expected — those are how a transport is SUPPOSED to reach state.
 //
-// This check used to live in internal/transport/graphql, which was the
-// Platform's original transport and so the place the rule was first written
-// down. platform#37 retired that package; the rule is unchanged and it is stated
-// here now, alongside the sibling copy in internal/transport/health.
+// There is a sibling copy of this check in internal/transport/health; the two
+// state the same rule and should stay in step.
 var forbiddenImportPrefixes = []string{
 	"github.com/mosaic-media/platform/internal/modules/postgres",
 	"github.com/jackc/pgx",
@@ -32,6 +30,10 @@ var forbiddenImportPrefixes = []string{
 // import declarations (go/parser with ImportsOnly), so it cannot be fooled by a
 // comment or a substring match and cannot miss an import written differently
 // than expected.
+//
+// It reads this directory only and skips entries that are directories, so adding
+// a subdirectory to this package's tree means making the walk recurse or the new
+// files go unchecked.
 func TestAuthTransportDoesNotImportPostgresOrRawSQL(t *testing.T) {
 	dir := packageDir(t)
 
@@ -67,7 +69,7 @@ func TestAuthTransportDoesNotImportPostgresOrRawSQL(t *testing.T) {
 }
 
 // packageDir locates this test file's own directory via runtime.Caller, so the
-// check works regardless of the working directory `go test` was invoked from.
+// check works regardless of the working directory go test was invoked from.
 func packageDir(t *testing.T) string {
 	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)

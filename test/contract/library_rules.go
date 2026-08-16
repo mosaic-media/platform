@@ -128,9 +128,9 @@ func RunLibraryRuleStoreContract(t *testing.T, newDeps Factory) {
 		}
 	})
 
-	// The property this exists for: an edit says what the rule *is*, and must
-	// not throw away what it last *did* — which is the only account of why
-	// something is in the library.
+	// The property this exists for: an edit says what the rule is, and must not
+	// throw away what it last did — the only account of why something is in the
+	// library.
 	t.Run("an edit leaves the last run alone", func(t *testing.T) {
 		d := newDeps(t)
 		if d.LibraryRules == nil {
@@ -230,9 +230,9 @@ func RunLibraryBrowseContract(t *testing.T, newDeps Factory) {
 				t.Fatalf("Create %s: %v", title, err)
 			}
 		}
-		// One episode below one of them, to prove the browse counts *works* and
-		// not every node in the graph — a household owns a series, not
-		// sixty-four episodes of it.
+		// One episode below one of them, to prove the browse counts works and not
+		// every node in the graph — a household owns a series, not sixty-four
+		// episodes of it.
 		series := newWork(nodeID(50), v1.MediaTVSeries, "Severance", now)
 		if _, err := d.Nodes.Create(c, series); err != nil {
 			t.Fatalf("Create series: %v", err)
@@ -378,7 +378,7 @@ func RunNodeMetadataStoreContract(t *testing.T, newDeps Factory) {
 			t.Fatal("the fetched-at did not survive, so nothing can say how stale this is")
 		}
 
-		// **The document round-trips semantically, not byte for byte.** A store
+		// The document round-trips semantically, not byte for byte. A store
 		// is free to normalise it — PostgreSQL's jsonb reorders keys and drops
 		// insignificant whitespace — and a caller that compared bytes would be
 		// asserting an implementation detail of one adapter. What the contract

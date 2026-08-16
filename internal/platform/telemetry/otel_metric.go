@@ -15,35 +15,31 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-// Metrics (sdk#9), and the one thing about them that is not like a log
-// record or a span.
+// Metrics (sdk#9), and the one thing about them that is not like a log record
+// or a span.
 //
-// **A metric is state, not an event.** A record and a span are produced, written
+// A metric is state, not an event. A record and a span are produced, written
 // once and aged out under retention (platform#36); a counter is a running total
 // that has no moment of production and nothing to age. That difference decides
 // the shape of everything here: there is no sink, because there is nothing to
-// write when a module calls Count — there is a *reader*, asked for the current
+// write when a module calls Count — there is a reader, asked for the current
 // values at the moment somebody looks.
 //
-// So the destination is a `ManualReader`: no background goroutine, no export
+// So the destination is a ManualReader: no background goroutine, no export
 // interval, no queue that can drop, and a snapshot that is by construction the
 // values as of the question rather than as of the last flush.
 //
-// **The limit, stated rather than discovered:** these live in this process and
-// reset when it restarts. Nothing is retained across a Generation, and a
-// counter's history is not recoverable — what a reader gets is the total since
-// boot. That is a genuine gap against a stored time series, and it is a
-// deliberate first step rather than a design: sdk#5 declined to publish a
-// metric surface the Platform could not back at all, and "backed, in memory,
-// readable now" is what closes that. A retained series is a schema, a retention
-// policy and a rollup, and it is a decision to take on its own evidence.
+// The limit: these live in this process and reset when it restarts. Nothing is
+// retained across a Generation and a counter's history is not recoverable —
+// what a reader gets is the total since boot. A retained series would be a
+// schema, a retention policy and a rollup, and is a decision in its own right.
 
 // MetricCollector owns the meter provider and answers for its current values.
 //
 // The composition root builds one and installs it; nothing else constructs one,
 // which is the same ownership the sinks have (platform#31). A module reaches a
-// `metric.Meter` and never this — a Meter records, and this is what decides
-// where the recording goes.
+// metric.Meter and never this — a Meter records, and this is what decides where
+// the recording goes.
 type MetricCollector struct {
 	reader   *sdkmetric.ManualReader
 	provider *sdkmetric.MeterProvider
@@ -69,8 +65,8 @@ func NewMetricCollector() *MetricCollector {
 
 // MetricSeriesPerScope bounds how many distinct series one scope may create.
 //
-// **This is the metric-shaped version of sdk#5's record quota, and it needs a
-// different lifetime.** A record quota is per invocation, because a chatty
+// This is the metric-shaped version of sdk#5's record quota, and it needs a
+// different lifetime. A record quota is per invocation, because a chatty
 // module should degrade its own call and nothing else. A series is not consumed
 // by an invocation — it is created once and lives as long as the process — so a
 // per-invocation cap would reset and admit the same unbounded growth on the next
@@ -84,16 +80,15 @@ const MetricSeriesPerScope = 256
 
 // overflowDimension is what a refused series is folded into.
 //
-// **Folded rather than dropped, and that distinction is the whole design.**
-// Dropping the observation would make a counter under-report, so the number a
-// person reads would be quietly wrong — the worst available outcome for a
-// measurement. Folding keeps every total exact and loses only the breakdown,
-// and the dimension says on its face that a breakdown was lost.
+// Folded rather than dropped: dropping the observation would make a counter
+// under-report, so the number a person reads would be quietly wrong. Folding
+// keeps every total exact and loses only the breakdown, and the dimension says
+// on its face that a breakdown was lost.
 const overflowDimension = "mosaic.metric.overflow"
 
 // Admit reports whether a scope may create one more series.
 //
-// The second return says whether this is the *first* refusal for the scope, so
+// The second return says whether this is the first refusal for the scope, so
 // the caller records it once rather than once per call — a module in a loop
 // would otherwise turn the diagnostic into the flood the cap exists to prevent,
 // which is the same reasoning the record quota's overflow warning follows.
@@ -137,17 +132,17 @@ func (c *MetricCollector) Meter(scope string) metric.Meter {
 
 // Count adds delta to a counter in one scope.
 //
-// **The whole operation lives here rather than in the caller**, for the reason
-// the rest of this package exists: `app` calls `telemetry.Start` rather than
-// reaching for a tracer, and it calls this rather than reaching for a meter. The
-// cap, the fold and the OpenTelemetry types stay on one side of a line, and the
+// The whole operation lives here rather than in the caller, for the reason the
+// rest of this package exists: app calls telemetry.Start rather than reaching
+// for a tracer, and it calls this rather than reaching for a meter. The cap,
+// the fold and the OpenTelemetry types stay on one side of a line, and the
 // module adapter above stays a translation of the SDK's vocabulary into this
 // one.
 //
-// It returns whether this call is the *first* to be folded into the overflow
-// dimension, so the caller records that once rather than per call, and any error
-// creating the instrument — which happens only when a name is one OpenTelemetry
-// refuses.
+// It returns whether this call is the first to be folded into the overflow
+// dimension, so the caller records that once rather than per call, and any
+// error creating the instrument — which happens only when a name is one
+// OpenTelemetry refuses.
 func (c *MetricCollector) Count(scope, name string, delta int64, fields []Field) (firstOverflow bool, err error) {
 	if c == nil {
 		return false, nil
@@ -178,7 +173,7 @@ func (c *MetricCollector) Measure(scope, name string, value float64, unit string
 // metricContext is what an instrument is written with.
 //
 // It is deliberately not a request context. OpenTelemetry takes one here to
-// attach an *exemplar* — a link from a bucket back to the trace that landed in
+// attach an exemplar — a link from a bucket back to the trace that landed in
 // it — and the ManualReader this collector is built on exports no exemplars, so
 // passing a live context would buy nothing and would tie a process-lifetime
 // series to a cancellable scope. If exemplars are ever wanted, this is the line
@@ -264,7 +259,7 @@ type MetricSeries struct {
 	Unit string
 	// Kind is "counter" or "histogram".
 	Kind string
-	// Dimensions renders the attribute set, sorted, as `k=v, k=v`. Rendered
+	// Dimensions renders the attribute set, sorted, as "k=v, k=v". Rendered
 	// rather than structured because the only consumer is a reader: the values
 	// are already redacted (platform#34), and a map would be reassembled into
 	// exactly this string by whatever displayed it.
@@ -336,7 +331,7 @@ func seriesOf(scope string, m metricdata.Metrics) []MetricSeries {
 	return out
 }
 
-// renderDimensions writes an attribute set as sorted `k=v` pairs.
+// renderDimensions writes an attribute set as sorted "k=v" pairs.
 func renderDimensions(set attribute.Set) string {
 	if set.Len() == 0 {
 		return ""
@@ -367,11 +362,11 @@ func WithMetrics(ctx context.Context, collector *MetricCollector) context.Contex
 
 // MetricsFrom returns the configured collector, or nil.
 //
-// Nil is a usable answer here, unlike the logger's no-op: `MetricCollector`'s
-// own methods tolerate a nil receiver, and `Meter` returns a nil `metric.Meter`
-// which the SDK's TelemetryOptions already treats as "discard". A caller
-// therefore needs no check, and an unconfigured process records nothing rather
-// than failing.
+// Nil is a usable answer here, unlike the logger's no-op: MetricCollector's own
+// methods tolerate a nil receiver, and Meter returns a nil metric.Meter which
+// the SDK's TelemetryOptions already treats as "discard". A caller therefore
+// needs no check, and an unconfigured process records nothing rather than
+// failing.
 func MetricsFrom(ctx context.Context) *MetricCollector {
 	if ctx == nil {
 		return nil

@@ -59,12 +59,12 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		return ui.Screen(s.sourcesEmptyState(cats.Answer)).Build(), nil
 	}
 
-	// How this viewer arranged their home (platform#59). **One read, here**, in the
-	// same pass that builds the screen — the alternative is asking per row, which
-	// is a round trip per row on the surface every session lands on.
+	// How this viewer arranged their home (platform#59). One read, here, in the
+	// same pass that builds the screen — asking per row would be a round trip per
+	// row on the surface every session lands on.
 	//
-	// It is applied *before* the items are fetched, which is the point of doing
-	// it here rather than while assembling: a row this viewer hid must not cost a
+	// It is applied before the items are fetched, which is the point of doing it
+	// here rather than while assembling: a row this viewer hid must not cost a
 	// provider round trip to draw nothing with.
 	composition := s.content.HomeCompositionFor(ctx, caller)
 	catalogs := arrangeCatalogs(cats.Catalogs, composition)
@@ -155,9 +155,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 		}
 		// Each row leads to its whole catalog. A rail is a window onto a
 		// collection, and without this the twentieth item is where the collection
-		// ends as far as anyone browsing can tell — the row's own screen already
-		// exists and pages properly (platform#18), it simply had nothing pointing at
-		// it from the surface every session lands on.
+		// ends as far as anyone browsing can tell (platform#18).
 		rows = append(rows, ui.Section(c.Catalog.Name,
 			ui.Gap(4),
 			ui.ActionLabel("See all"),
@@ -178,7 +176,7 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	// Enrich the featured picks concurrently — each is a further metadata
 	// round-trip for the backdrop, logo and synopsis a catalog card lacks. This
 	// happens in one pass, before any slide is built, because a slide needs its
-	// *neighbour's* artwork as well as its own: the up-next dock is a landscape
+	// neighbour's artwork as well as its own: the up-next dock is a landscape
 	// tile, and a catalog item carries only a poster. Enriching first means that
 	// backdrop is one already being fetched for the neighbour's own slide, rather
 	// than a second round-trip for the same title.
@@ -218,19 +216,16 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 
 	// The home is a cinematic backdrop the content rides over. A Rotator auto-
 	// advances the full-viewport hero slides; the library then rides UP over the
-	// hero's floor, pulled into it by `overlap` so the first rail breaks the
+	// hero's floor, pulled into it by overlap so the first rail breaks the
 	// bottom edge of the artwork rather than starting cleanly below it. Both live
-	// in the Screen's edge-to-edge `bleed` slot (the rails own their gutter), so
+	// in the Screen's edge-to-edge bleed slot (the rails own their gutter), so
 	// the padded body collapses ($childCount 0). When enrichment failed for every
 	// pick there is no hero and the rails stand alone.
 	//
-	// **The overlap only applies when there is a hero to overlap.** It is a
-	// negative offset into the artwork above, so with no hero it pulls the first
-	// rail up under the brand bar and crops its cards — which nobody had seen,
-	// because the no-hero branch used to be unreachable in practice: every
-	// catalog failing short-circuited to the empty state before it. Cache-first
-	// rendering makes that branch the ordinary degraded screen, and it was
-	// broken. Found by looking at it.
+	// The overlap only applies when there is a hero to overlap. It is a negative
+	// offset into the artwork above, so with no hero it would pull the first rail
+	// up under the brand bar and crop its cards. The no-hero branch is the
+	// ordinary degraded screen under cache-first rendering, not a rare one.
 	heroed := len(heroSlides) > 0
 	sheetStyle := map[string]any{
 		"direction": "column", "gap": 7,
@@ -257,8 +252,8 @@ func (s *Service) homeScreen(ctx context.Context, caller v1.Caller) (sdui.Node, 
 	// browse rows below it. It is gated by having something in progress — an
 	// install with no playback consumer has nothing here and shows nothing
 	// (platform#24) — and then by whether this viewer wants it, which is the order
-	// platform#59 requires: **capability omission composes ahead of preference**, so
-	// a viewer cannot un-hide something they were never able to use, and a hidden
+	// platform#59 requires: capability omission composes ahead of preference, so a
+	// viewer cannot un-hide something they were never able to use, and a hidden
 	// row is not evidence of a permission.
 	if !composition.Hides(homeRowContinue) {
 		if cw := s.continueWatchingSection(ctx, caller); cw != nil {
@@ -290,8 +285,8 @@ const homeRowContinue = "continue"
 //
 // The module, the native type and the catalog id together, because a catalog id
 // is only unique within a type within a module — and because a stable key is
-// what makes this a *decision* rather than a position: a viewer who hid
-// "Trending Films" has hidden that catalog, not the third row.
+// what makes this a decision rather than a position: a viewer who hid "Trending
+// Films" has hidden that catalog, not the third row.
 func homeRowKey(c app.ModuleCatalog) string {
 	return "catalog:" + c.ModuleID + ":" + c.Catalog.NativeType + ":" + c.Catalog.ID
 }
@@ -327,12 +322,12 @@ func arrangeCatalogs(catalogs []app.ModuleCatalog, composition app.HomeCompositi
 // sourcesEmptyState is what home draws when it has no rows: two different
 // states that must never render the same (platform#30).
 //
-// **"Nothing configured" is advice** — an install with no source installed is
-// being told the one thing that will fix it. **"The sources are unreachable" is
-// a report** — an install with a source that is not answering is being told what
-// is wrong, and pointing it at Settings would send somebody to reconfigure a
-// working addon. The bug this replaces rendered the first for the second, which
-// is why the distinction is drawn from the answers rather than from the count.
+// "Nothing configured" is advice — an install with no source installed is being
+// told the one thing that will fix it. "The sources are unreachable" is a report
+// — an install with a source that is not answering is being told what is wrong,
+// and pointing it at Settings would send somebody to reconfigure a working
+// addon. The distinction is drawn from the answers rather than from the count,
+// because a count cannot tell the two apart.
 func (s *Service) sourcesEmptyState(answer app.BrowseAnswer) ui.El {
 	if len(answer.Failed) == 0 {
 		return ui.EmptyState(emptyIconCollections,
@@ -390,7 +385,7 @@ func ageLabel(d time.Duration) string {
 	}
 }
 
-// counted renders a number with its unit, pluralised. Distinct from `plural`
+// counted renders a number with its unit, pluralised. Distinct from plural
 // beside it, which pluralises a word and does not carry the count.
 func counted(n int, unit string) string {
 	return strconv.Itoa(n) + " " + plural(n, unit)
@@ -447,8 +442,8 @@ func (s *Service) heroSlide(p heroPick, m v1.ContentMetadata, next *heroPick, ne
 		// there is no Part behind it until it has been materialised (platform#18).
 		// An affordance with nothing behind it is the dead end platform#24 exists to
 		// remove, so the primary says what it actually does — and the secondary
-		// is the one act the hero *can* perform on a virtual item, dropped once
-		// the item is already in the library.
+		// is the one act the hero can perform on a virtual item, dropped once the
+		// item is already in the library.
 		ui.Actions(
 			ui.Button("More info", "primary", ui.IconName("info"), ui.OnTap(detail)),
 			ui.When(!p.item.InLibrary, ui.Button("Add to library", "secondary", ui.IconName("plus"),

@@ -11,10 +11,9 @@ import (
 )
 
 // The layer-3 posture is decided from the platform and the deployment's
-// attestation (platform#39, platform#50). These pin the honest cases: enforcement is
-// only ever reported where the OS can deliver it AND the deployment says it did,
-// and a claim on a platform that has no mechanism is downgraded rather than
-// believed.
+// attestation (platform#39, platform#50). Enforcement is reported only where the
+// OS can deliver it and the deployment says it did; a claim on a platform that
+// has no mechanism is downgraded rather than believed.
 func TestDetermineEgressContainment(t *testing.T) {
 	cases := []struct {
 		name         string

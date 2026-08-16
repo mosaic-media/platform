@@ -79,9 +79,9 @@ func TestBufferedSinkWritesThrough(t *testing.T) {
 	}
 }
 
-// TestBufferedSinkNeverBlocksTheCaller is the rule the whole design exists to
-// enforce (platform#36): a user's playback must not wait on a log insert. The
-// writer here is wedged, so every buffer slot fills and the only correct
+// TestBufferedSinkNeverBlocksTheCaller pins the rule the whole design exists
+// to enforce (platform#36): a user's playback must not wait on a log insert.
+// The writer here is wedged, so every buffer slot fills and the only correct
 // behaviour is for Write to keep returning promptly and shed load.
 func TestBufferedSinkNeverBlocksTheCaller(t *testing.T) {
 	w := &recordingWriter{block: make(chan struct{})}
@@ -184,16 +184,15 @@ func TestBufferedSinkCountsWriteFailures(t *testing.T) {
 	}
 }
 
-// TestBufferedSinkKeepsDrainingAfterItsContextIsCancelled is a regression test
-// for a bug that only appeared when the real process shut down.
+// TestBufferedSinkKeepsDrainingAfterItsContextIsCancelled pins that
+// cancellation of the parent context does not stop the drain loop.
 //
 // The sink is started with the serve context, which is cancelled by the
-// shutdown *signal*. Everything the composition root logs after that point —
+// shutdown signal, and everything the composition root logs after that point —
 // the signal itself, the final outbox drain, the shutdown health snapshot,
-// "exiting cleanly" — is written afterwards. When cancellation stopped the
-// drain loop, Close found it already gone and flushed nothing, so the entire
-// account of the shutdown reached the file sink and never reached the
-// queryable one. Silently, and only in production.
+// "exiting cleanly" — is written afterwards. A loop that exited on
+// cancellation leaves Close with nothing to flush, so the whole account of the
+// shutdown reaches the file sink and never the queryable one.
 func TestBufferedSinkKeepsDrainingAfterItsContextIsCancelled(t *testing.T) {
 	w := &recordingWriter{}
 	sink := telemetry.NewBufferedSink[telemetry.Record](w, 64, 1000, time.Hour)
@@ -202,13 +201,12 @@ func TestBufferedSinkKeepsDrainingAfterItsContextIsCancelled(t *testing.T) {
 	sink.Start(ctx)
 	cancel()
 
-	// The wait is the whole test, and it is why an earlier version of this
-	// passed against the bug: a drain loop that watched ctx.Done() still
-	// flushed whatever was already buffered on its way out, so writing
-	// immediately after cancel() could not tell the two designs apart. The
-	// production failure needed the loop to be *gone* before the last records
-	// were written — which is what happens for real, since the shutdown
-	// sequence takes seconds between the signal and "exiting cleanly".
+	// The wait is load-bearing. A drain loop that watched ctx.Done() would
+	// still flush whatever was already buffered on its way out, so writing
+	// immediately after cancel() cannot tell the two designs apart: the loop
+	// has to be gone before the last records are written, which is what
+	// happens for real, since the shutdown sequence takes seconds between the
+	// signal and "exiting cleanly".
 	time.Sleep(250 * time.Millisecond)
 
 	// Exactly the shape of the real shutdown path: log, then Close.

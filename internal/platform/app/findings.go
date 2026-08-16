@@ -15,12 +15,11 @@ import (
 
 // The resolution register's application surface (platform#74).
 //
-// Three entry points and one internal one, and the split matters: **raising is
-// not a caller's act.** A finding is created by the code that detected it,
-// which is a boot path, a background job or the Supervisor's spool — none of
-// which has a user. So RaiseIssue takes no Caller and goes through no policy
-// gate, while reading the register and acting on a finding are ordinary
-// authorised operations like everything else.
+// Raising is not a caller's act. A finding is created by the code that detected
+// it — a boot path, a background job or the Supervisor's spool — none of which
+// has a user, so RaiseIssue takes no Caller and goes through no policy gate.
+// Reading the register and acting on a finding are ordinary authorised
+// operations.
 
 const (
 	// ActionFindingsRead is evaluated for reading the register.
@@ -55,8 +54,7 @@ func (s *Service) ListIssues(ctx context.Context, query ListIssuesQuery) (ListIs
 	}
 	if s.issues == nil {
 		// No store: the register is empty rather than broken. A build without
-		// one is a test service, and answering "nothing is wrong" is both true
-		// of it and the only answer it can give.
+		// one is a test service, and "nothing is wrong" is true of it.
 		return ListIssuesResult{}, nil
 	}
 	issues, err := s.issues.List(ctx)
@@ -83,14 +81,13 @@ type ApplySuggestionResult struct {
 
 // ApplySuggestion runs a named action against an Issue.
 //
-// **It is an ordinary authorised command** (platform#74): repair is not a
-// privileged back channel, and applying a suggestion goes through the same gate
-// as any other change to this install.
+// It is an ordinary authorised command (platform#74): repair is not a privileged
+// back channel.
 //
-// The suggestion is checked against what *this build* offers for that issue
-// type rather than against what the row was stored with. A client holding a
-// screen from before an upgrade would otherwise be able to ask for an action
-// that has since been withdrawn, and be told it worked.
+// The suggestion is checked against what this build offers for that issue type
+// rather than against what the row was stored with. A client holding a screen
+// from before an upgrade would otherwise be able to ask for an action that has
+// since been withdrawn, and be told it worked.
 func (s *Service) ApplySuggestion(ctx context.Context, cmd ApplySuggestionCommand) (ApplySuggestionResult, error) {
 	if cmd.CallerSessionID == "" {
 		return ApplySuggestionResult{}, contracts.NewError(contracts.InvalidArgument, "caller session id is required")
@@ -117,10 +114,8 @@ func (s *Service) ApplySuggestion(ctx context.Context, cmd ApplySuggestionComman
 
 	switch cmd.Suggestion {
 	case domain.SuggestionDismiss:
-		// Acknowledged. **A real answer rather than a cop-out**: "I know, and I
-		// am choosing to live with it" is a decision, and an Issue nobody can
-		// close becomes furniture nobody reads. It will be raised again if the
-		// situation is detected again, which is the correct behaviour — a
+		// Acknowledged: an Issue nobody can close becomes furniture nobody
+		// reads. It is raised again if the situation is detected again — a
 		// dismissal is about the finding, not a promise about the future.
 		if err := s.issues.Clear(ctx, issue.ID); err != nil {
 			return ApplySuggestionResult{}, err
@@ -128,12 +123,12 @@ func (s *Service) ApplySuggestion(ctx context.Context, cmd ApplySuggestionComman
 		return ApplySuggestionResult{Cleared: true}, nil
 
 	case domain.SuggestionApplyUpgrade:
-		// **Recorded, not performed.** The Platform cannot stop and restart
-		// itself onto a different Generation, so this writes down what was asked
-		// for and the Supervisor reads it over the handoff (platform#77). The
-		// version comes from the Issue rather than from the caller, so a client
-		// cannot ask for a version nobody was offered — and the Supervisor
-		// resolves even that name against the signed catalogue.
+		// Recorded, not performed. The Platform cannot stop and restart itself
+		// onto a different Generation, so this writes down what was asked for
+		// and the Supervisor reads it over the handoff (platform#77). The version
+		// must come from the Issue rather than from the caller, so a client
+		// cannot ask for a version nobody was offered; the Supervisor resolves
+		// even that name against the signed catalogue.
 		if s.upgrades == nil {
 			return ApplySuggestionResult{}, contracts.NewError(contracts.Unavailable,
 				"this build has no upgrade path")
@@ -150,11 +145,10 @@ func (s *Service) ApplySuggestion(ctx context.Context, cmd ApplySuggestionComman
 		}); err != nil {
 			return ApplySuggestionResult{}, err
 		}
-		// **The finding stays.** It is still true — the install is still not on
-		// that version — and it stops being true when the upgrade lands, at
-		// which point the situation is cleared by the code that observes it.
-		// Clearing it here would leave a person with no row and no evidence
-		// anything was happening.
+		// The finding stays: it is still true, since the install is still not
+		// on that version, and it is cleared by the code that observes the
+		// upgrade landing. Clearing it here would leave a person with no row
+		// and no evidence anything was happening.
 		return ApplySuggestionResult{}, nil
 
 	case domain.SuggestionUninstallExtension:
@@ -179,8 +173,8 @@ func (s *Service) ApplySuggestion(ctx context.Context, cmd ApplySuggestionComman
 				"chose would put the trust decision in the wrong place")
 
 	default:
-		// Unreachable while offers() gates on the same set, and worth keeping:
-		// the two lists drifting is exactly how a control comes to do nothing.
+		// Unreachable while offers() gates on the same set, and kept because
+		// the two lists drifting is how a control comes to do nothing.
 		return ApplySuggestionResult{}, contracts.NewError(contracts.InvalidArgument, "unknown suggestion")
 	}
 }
@@ -196,31 +190,26 @@ func offers(t domain.IssueType, suggestion domain.SuggestionType) bool {
 
 // RaiseIssue records a finding.
 //
-// **It takes no Caller and passes no policy gate, and that is deliberate.** A
-// finding is created at the point of detection by the code that detected it —
-// a boot path adopting extensions, a spool handed over by the Supervisor — and
-// none of those is somebody's request. Requiring a principal would mean either
-// inventing one or not recording the findings that matter most, which are
-// exactly the ones made when nobody is asking for anything.
+// It takes no Caller and passes no policy gate, deliberately. A finding is
+// created at the point of detection — a boot path adopting extensions, a spool
+// handed over by the Supervisor — and none of those is somebody's request.
+// Requiring a principal would mean inventing one or not recording the findings
+// made when nobody is asking for anything.
 //
-// It is unexported-by-convention rather than by name: it is on Service so the
-// composition root can hand detectors something to call, and there is no
-// transport that reaches it.
+// It is exported only so the composition root can hand detectors something to
+// call; no transport reaches it.
 func (s *Service) RaiseIssue(ctx context.Context, issue domain.Issue) error {
 	if s.issues == nil {
-		// **Reported, not swallowed.** This returned nil for a while, and the
-		// consequence was a boot that adopted two findings from the Supervisor,
-		// logged "adopted findings count=2", and wrote none of them — because
-		// the composition root had never passed the store in. Nothing was red
-		// anywhere; the register was simply always empty. A detector is free to
-		// ignore this error (they all do, on the boot path), but it must be
-		// possible to see.
+		// Reported, not swallowed. A detector is free to ignore this error, and
+		// they all do on the boot path, but returning nil here makes a build
+		// wired without the store log "adopted findings count=2" while writing
+		// none of them, with nothing red anywhere.
 		return contracts.NewError(contracts.Unavailable, "this build keeps no resolution register")
 	}
 	if !issue.Type.Valid() {
 		// Refused rather than stored. The type is a closed vocabulary because
-		// code branches on it, and a row carrying one nothing knows would be a
-		// finding no client can render and no suggestion can be offered for.
+		// code branches on it, and a row carrying one nothing knows is a finding
+		// no client can render and no suggestion can be offered for.
 		return contracts.NewError(contracts.InvalidArgument,
 			fmt.Sprintf("%q is not an issue type this build knows", issue.Type))
 	}
@@ -242,10 +231,10 @@ func (s *Service) RaiseIssue(ctx context.Context, issue domain.Issue) error {
 // no longer true. Same terms as RaiseIssue: it is the detector's counterpart,
 // so it takes no Caller either.
 //
-// **Unlike RaiseIssue, a missing register is success here**, and the asymmetry
-// is the point: raising into nothing loses information, and withdrawing from
-// nothing loses none. Erroring would mean every successful boot of a build with
-// no register logged a failure to withdraw a finding that was never made.
+// Unlike RaiseIssue, a missing register is success here: raising into nothing
+// loses information and withdrawing from nothing loses none. Erroring would mean
+// every successful boot of a build with no register logged a failure to withdraw
+// a finding that was never made.
 func (s *Service) ClearIssueSituation(ctx context.Context, t domain.IssueType, c domain.IssueContext, reference string) error {
 	if s.issues == nil {
 		return nil

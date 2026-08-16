@@ -96,32 +96,32 @@ func (s *Service) ImportContent(ctx context.Context, cmd ImportContentCommand) (
 	}
 
 	// 6b. fill in what plays (platform#46). The capability the ref named built the
-	// tree; a metadata module fills no stream role, so without this a title
-	// described by TMDB or Cinemeta would sit in the library permanently
-	// unplayable while a stream source registered alongside it was never asked.
+	// tree; a metadata module fills no stream role, so without this a title it
+	// described would sit in the library permanently unplayable while a stream
+	// source registered alongside was never asked.
 	//
 	// Deliberately after the module's own span has ended and outside any error
-	// path: it is best-effort, and an import that produced a tree has succeeded
-	// whether or not anything could be found to play.
+	// path: these are best-effort, and an import that produced a tree has
+	// succeeded whether or not anything could be found to play.
 	if result.WorkID != "" {
-		// 6b0. fill in what it *is*, and what shape it is (platform#62). It runs
-		// first of the three because both of the others read the tree: the
-		// stream pass fills items with no Parts, so an episode this adds is
-		// enriched in the same import rather than waiting a whole run, and the
-		// artwork pass walks the seasons this may have just created.
+		// 6b0. fill in what it is, and what shape it is (platform#62). It must run
+		// first of the three because both of the others read the tree: the stream
+		// pass fills items with no Parts, so an episode this adds is enriched in
+		// the same import, and the artwork pass walks the seasons this may have
+		// just created.
 		//
-		// It is also what makes a re-import worth anything. Every module dedups
+		// It is also what makes a re-import worth anything: every module dedups
 		// before writing and returns AlreadyKnown, so without this the second
-		// import of a title refreshed everything about it except its shape and
-		// its description — which is the failure platform#62 was written for.
+		// import of a title refreshes everything about it except its shape and
+		// its description.
 		s.enrichMetadata(ctx, cmd.Caller, cmd.Ref, result.WorkID)
 
 		s.enrichStreams(ctx, cmd.Caller, result.WorkID, &result)
 
-		// 6c. fill in what it looks like (sdk#6). Same shape and same reasons
-		// as the stream pass: a dedicated artwork source fills no metadata role
-		// and is never named by a ref, so without this it would sit registered
-		// and never be asked about the title it has the best art for.
+		// 6c. fill in what it looks like (sdk#6). Same shape as the stream pass:
+		// a dedicated artwork source fills no metadata role and is never named by
+		// a ref, so without this it would sit registered and never be asked about
+		// the title it has the best art for.
 		s.enrichArtwork(ctx, cmd.Caller, result.WorkID)
 	}
 

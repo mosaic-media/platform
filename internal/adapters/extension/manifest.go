@@ -17,7 +17,7 @@ import (
 )
 
 // Manifest is an extension module's non-executing declaration (platform#40): the
-// file the Platform reads to learn what a module is *without* running it.
+// file the Platform reads to learn what a module is without running it.
 //
 // Reading it rather than executing the binary is the whole point. The
 // alternative — running an unverified binary to ask it what it is — hands
@@ -51,7 +51,7 @@ type Manifest struct {
 	// before it runs.
 	Provides []v1.Role `json:"provides"`
 	// Description is the module's own sentence about what it is, carried from
-	// its SDK manifest through `--mosaic-manifest` into the release artefact and
+	// its SDK manifest through --mosaic-manifest into the release artefact and
 	// signed with the rest of it. The Platform shows it and never writes it: the
 	// roles above say what a module can do, and only its author can say what it
 	// is for.

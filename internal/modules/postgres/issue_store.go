@@ -27,12 +27,11 @@ func NewIssueStore(pool *pgxpool.Pool) contracts.IssueStore { return &issueStore
 
 const issueColumns = `id, type, context, reference, source, detail, first_seen, last_seen, occurrences`
 
-// Raise upserts on the *situation*, not on the row.
+// Raise upserts on the situation, not on the row.
 //
-// **first_seen is never moved, and that is the point of the whole statement.**
-// It is the number that answers "did this start when I upgraded last week",
-// which is the question a person actually has — and an upsert that touched it
-// would silently make every finding look new on every boot.
+// first_seen is never moved. It is the number that answers "did this start when
+// I upgraded last week", and an upsert that touched it would silently make every
+// finding look new on every boot.
 func (s *issueStore) Raise(ctx context.Context, issue domain.Issue) (domain.Issue, error) {
 	row := s.q.QueryRow(ctx,
 		`INSERT INTO operational_issues
@@ -121,10 +120,10 @@ type scanner interface{ Scan(dest ...any) error }
 
 // scanIssue reads a row and fills in the suggestions from the type.
 //
-// **Derived on read rather than stored**, so a row written by an older build
-// cannot pin an offer this one no longer honours — and a withdrawn suggestion
-// disappears from an existing Issue instead of sitting there failing when
-// pressed.
+// The suggestions are derived on read rather than stored, so a row written by an
+// older build cannot pin an offer this one no longer honours: a withdrawn
+// suggestion disappears from an existing Issue instead of sitting there failing
+// when pressed.
 func scanIssue(row scanner) (domain.Issue, error) {
 	var issue domain.Issue
 	var issueType, issueContext, source string

@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 the Mosaic authors
 // Linking exception: see LICENSE-EXCEPTION.
 
-// Command modulesign is the publisher side of extension-module signing (ADR
-// 0065): it generates a signing key, computes a binary's digest in the exact
+// Command modulesign is the publisher side of extension-module signing
+// (platform#40): it generates a signing key, computes a binary's digest in the exact
 // format the Platform verifies against, and signs a manifest. A module's release
 // workflow runs it; the Platform never does — the Platform only verifies.
 //

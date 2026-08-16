@@ -14,10 +14,8 @@ import (
 
 // moduleSpan brackets a call into a module (platform#33, seam 8).
 //
-// This is the seam that does the most work, because the module boundary is
-// also a *repository* boundary: a trace that stopped here left the hardest
-// question — "was it us or the addon?" — unanswerable, which is the specific
-// pain that started the telemetry thread.
+// The module boundary is also a repository boundary, so a trace that stopped
+// here would leave "was it us or the addon?" unanswerable.
 //
 // It attributes the span to the module, and that attribution is stamped by the
 // Platform rather than claimed by the module (sdk#5). A module that never
@@ -27,8 +25,8 @@ import (
 //
 // Modules are statically composed today (platform#4). If they ever move out of
 // process, this is replaced by an interceptor at the same seam rather than
-// duplicated beside it — which is why the call sites take a context back
-// rather than reaching for a package-level tracer.
+// duplicated beside it — which is why the call sites take a context back rather
+// than reaching for a package-level tracer.
 func moduleSpan(ctx context.Context, moduleID, operation string) (context.Context, *telemetry.Span) {
 	// The logger is re-bound to the module so log records emitted beneath this
 	// call are attributed to it too, not only the span.

@@ -15,8 +15,8 @@ import (
 )
 
 // fakeCredential is a deliberately secret-shaped string. Every redaction test
-// below asserts on this exact value: the standing exit criterion is that
-// something secret-shaped, logged through any path, does NOT appear in output.
+// below asserts on this exact value: something secret-shaped, logged through
+// any path, must not appear in the output.
 const fakeCredential = "hunter2-super-secret-password-AKIAFAKEEXAMPLE1234"
 
 // newTestLogger builds a Logger over a buffer with a fixed resource, so tests
@@ -56,10 +56,10 @@ func TestLoggerNeverWritesSecretOrSensitiveFieldValues(t *testing.T) {
 	}
 }
 
-// TestSensitiveDropsTheValueAtConstruction is the property platform#34 adds over
-// the previous redact-on-emit design: the sensitive string is gone before a
-// Field exists, so it is never buffered, queued or written anywhere — not just
-// masked on the way out.
+// TestSensitiveDropsTheValueAtConstruction pins the stronger half of
+// platform#34: the sensitive string is gone before a Field exists, so it is
+// never buffered, queued or written anywhere — not merely masked on the way
+// out.
 func TestSensitiveDropsTheValueAtConstruction(t *testing.T) {
 	f := telemetry.Sensitive("username", "alice@example.com")
 	if v, ok := f.Value.(string); !ok || strings.Contains(v, "alice") {
@@ -195,7 +195,7 @@ func TestLoggerLevelThresholdDiscardsBelowMinimum(t *testing.T) {
 	}
 }
 
-// TestWithDoesNotLeakFieldsBetweenSiblings guards the derive() copy: two
+// TestLoggerWithDoesNotLeakFieldsBetweenSiblings guards the derive() copy: two
 // loggers derived from one parent must not see each other's bound fields, or a
 // request's scope bleeds into an unrelated request's records.
 func TestLoggerWithDoesNotLeakFieldsBetweenSiblings(t *testing.T) {
@@ -260,12 +260,10 @@ func parseLogLine(t *testing.T, data []byte) map[string]interface{} {
 	return m
 }
 
-// A field's *type* has to survive the round trip through OpenTelemetry
-// (sdk#8), and losing it is the quiet way this conversion could have gone
-// wrong.
+// A field's type has to survive the round trip through OpenTelemetry (sdk#8).
 //
 // A record is emitted as an OTel record and rebuilt for the sink, so a count
-// rendered back as text would turn `"results":7` into `"results":"7"` — in the
+// rendered back as text would turn "results":7 into "results":"7" — in the
 // JSON file, in the telemetry store and in everything that parses either. No
 // test asserting "the field is present" would notice.
 func TestFieldTypesSurviveTheRoundTripThroughOpenTelemetry(t *testing.T) {
@@ -291,9 +289,8 @@ func TestFieldTypesSurviveTheRoundTripThroughOpenTelemetry(t *testing.T) {
 	}
 }
 
-// And redaction still happens on the way out, at the same point it always did.
-// The conversion moved where a record is assembled, not what a sink is allowed
-// to see (platform#34).
+// Redaction happens on the way out. Assembling a record through OpenTelemetry
+// changes where it is built, not what a sink is allowed to see (platform#34).
 func TestRedactionStillAppliesThroughOpenTelemetry(t *testing.T) {
 	var buf strings.Builder
 	logger := telemetry.New(telemetry.NewJSONSink(&buf), telemetry.Resource{}, telemetry.LevelDebug)

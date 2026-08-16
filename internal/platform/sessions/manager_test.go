@@ -229,15 +229,11 @@ func TestIssueCreatesASessionAndItsFirstPair(t *testing.T) {
 	if session.UserID != "user-1" || session.DeviceID != "device-1" {
 		t.Fatalf("session = %+v", session)
 	}
-	// The capability set is stamped on at issue time (platform#24). It was modelled
-	// on domain.Session from the beginning and populated by nothing, so a
-	// session that carries what it was given is the whole of what changed.
+	// The capability set is stamped on at issue time (platform#24).
 	if len(session.Capabilities) != 2 {
 		t.Errorf("session.Capabilities = %v, want the two it was issued with", session.Capabilities)
 	}
-	// The absolute lifetime, not the 24 hours a session used to have — which
-	// made "come back after a fortnight and still be signed in" impossible by
-	// construction.
+	// A new session expires at the absolute lifetime.
 	if want := testNow.Add(sessions.AbsoluteLifetime); !session.ExpiresAt.Equal(want) {
 		t.Fatalf("session.ExpiresAt = %v, want %v", session.ExpiresAt, want)
 	}
@@ -304,8 +300,7 @@ func TestAnExpiredAccessTokenIsRefusedWhileItsSessionLivesOn(t *testing.T) {
 	}
 }
 
-// The exit criterion, as a clock: past the 24 hours a session used to last, a
-// client that refreshes is still signed in.
+// A client that keeps refreshing stays signed in far beyond a single day.
 func TestASessionSurvivesFarPastTheOldTwentyFourHourLifetime(t *testing.T) {
 	h := newHarness()
 	_, pair := h.issue(t)
@@ -343,8 +338,8 @@ func TestRefreshRotatesAndSpendsTheOldToken(t *testing.T) {
 	}
 }
 
-// Reuse detection is what makes theft *detectable* rather than silent, and the
-// cost is stated rather than hidden: the whole chain goes.
+// Reuse detection is what makes theft detectable rather than silent, and the
+// cost is that the whole chain goes.
 func TestARefreshTokenPresentedTwiceRevokesTheWholeChain(t *testing.T) {
 	h := newHarness()
 	_, first := h.issue(t)
@@ -355,11 +350,10 @@ func TestARefreshTokenPresentedTwiceRevokesTheWholeChain(t *testing.T) {
 		t.Fatalf("first Refresh: %v", err)
 	}
 
-	// The replay. The manager *reports* the compromise rather than acting on
-	// it: the exchange runs inside a transaction, so a revocation written here
+	// The replay. The manager reports the compromise rather than acting on it:
+	// the exchange runs inside a transaction, so a revocation written here
 	// would be rolled back by the very error reporting it. Revoking is the
-	// caller's, outside that transaction — see app.RefreshSession, and the wire
-	// test that found this.
+	// caller's, outside that transaction — see app.RefreshSession.
 	h.clock.now = testNow.Add(2 * time.Minute)
 	_, _, err = h.manager.Refresh(context.Background(), h.sessions, h.tokens, first.RefreshToken, "device-1")
 	if err == nil {

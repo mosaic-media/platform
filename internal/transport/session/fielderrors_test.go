@@ -12,10 +12,10 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
-// A rejection that names fields goes to the fields. A toast saying "that
-// username is taken" is a sentence floating beside the form rather than a mark
-// on the box that is wrong — and on a form with four inputs it does not say
-// which.
+// TestARejectionNamingFieldsBecomesAFieldErrorsPush pins that a rejection naming
+// fields goes to the fields. A toast saying "that username is taken" is a
+// sentence floating beside the form rather than a mark on the box that is wrong
+// — and on a form with four inputs it does not say which.
 func TestARejectionNamingFieldsBecomesAFieldErrorsPush(t *testing.T) {
 	err := contracts.RejectFields("Could not create the account",
 		contracts.FieldRejection{Field: "username", Message: "Already taken"},
@@ -37,9 +37,10 @@ func TestARejectionNamingFieldsBecomesAFieldErrorsPush(t *testing.T) {
 	}
 }
 
-// It survives wrapping. A command's rejection travels up through the layers that
-// add context to it, and an envelope that only worked on an unwrapped error
-// would work in a test and nowhere else.
+// TestAWrappedRejectionIsStillFound pins that the match survives wrapping. A
+// command's rejection travels up through the layers that add context to it, and
+// an envelope that only worked on an unwrapped error would work in a test and
+// nowhere else.
 func TestAWrappedRejectionIsStillFound(t *testing.T) {
 	inner := contracts.RejectFields("bad", contracts.FieldRejection{Field: "key", Message: "Invalid"})
 	wrapped := fmt.Errorf("configure module: %w", inner)
@@ -48,9 +49,10 @@ func TestAWrappedRejectionIsStillFound(t *testing.T) {
 	}
 }
 
-// Everything else stays a toast. Nearly every error the Platform produces is not
-// about a submission, and routing them all through a form-shaped envelope would
-// put "the database is unreachable" underneath a text box.
+// TestAnOrdinaryErrorIsNotAFieldRejection pins that everything else stays a
+// toast. Nearly every error the Platform produces is not about a submission, and
+// routing them all through a form-shaped envelope would put "the database is
+// unreachable" underneath a text box.
 func TestAnOrdinaryErrorIsNotAFieldRejection(t *testing.T) {
 	for _, err := range []error{
 		errors.New("plain"),
@@ -64,7 +66,8 @@ func TestAnOrdinaryErrorIsNotAFieldRejection(t *testing.T) {
 	}
 }
 
-// The push is the same envelope the client's own validators fill.
+// TestTheEnvelopeIsTheContractsOwn pins that the push is the same envelope the
+// client's own validators fill, and nothing else.
 func TestTheEnvelopeIsTheContractsOwn(t *testing.T) {
 	msg, _ := fieldErrorsMsg(contracts.RejectFields("x", contracts.FieldRejection{Field: "f", Message: "m"}))
 	var _ *sessionv1.FieldErrors = msg.GetFieldErrors()

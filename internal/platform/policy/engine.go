@@ -11,14 +11,12 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
-// Engine is the first Platform Policy Decision Point. It
-// resolves the subject's roles through PermissionStore and allows the
-// request if any granted role includes the requested Action as a
-// permission. Resource and PolicyContext are accepted and threaded
-// through untouched: the ABAC-ready shape must be real now, even though
-// only role membership drives this slice's decisions. Relationship- and
-// attribute-based rules are expected to extend Authorize's logic later,
-// not change its signature.
+// Engine is the Platform's Policy Decision Point. It resolves the subject's
+// roles through PermissionStore and allows the request if any granted role
+// includes the requested Action as a permission. Resource and PolicyContext
+// are accepted and threaded through untouched: only role membership drives a
+// decision today, and relationship- and attribute-based rules are meant to
+// extend Authorize's logic without changing its signature.
 //
 // Unresolvable subjects and subjects with no matching grant are denied,
 // matching the default-deny rule.
@@ -39,11 +37,9 @@ func (e *Engine) Authorize(ctx context.Context, subject Subject, action Action, 
 	// it to have been given less by. It is checked first because it has no
 	// roles to resolve — there is no user row and there must not be one.
 	//
-	// This is the only unconditional allow in the engine, and it is the one
-	// platform#13 called "effectively unbounded authority (acceptable only
-	// because trust is established before the build)". The reason it is safe
-	// is not that the rule is narrow; it is that the *subject* is unforgeable,
-	// which is a property of how the flag is set rather than of this branch.
+	// This is the only unconditional allow in the engine. What makes it safe
+	// is that the subject is unforgeable, which is a property of how
+	// Subject.System is set rather than of this branch.
 	if subject.System {
 		return Decision{Allowed: true, Reason: "system principal"}, nil
 	}

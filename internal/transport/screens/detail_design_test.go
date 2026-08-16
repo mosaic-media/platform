@@ -28,9 +28,10 @@ func sectionOrder(n sdui.Node) []string {
 	return out
 }
 
-// A series' episodes come before its cast. Someone opening a show they are
-// part-way through wants the next episode, and a rail of headshots between them
-// and it makes the common case scroll past the rare one.
+// TestSeriesDetailPutsEpisodesBeforeCast pins that a series' episodes come
+// before its cast. Someone opening a show they are part-way through wants the
+// next episode, and a rail of headshots between them and it makes the common
+// case scroll past the rare one.
 func TestSeriesDetailPutsEpisodesBeforeCast(t *testing.T) {
 	ref := v1.ContentRef{Provider: "tmdb", NativeID: "1396", NativeType: "series", MediaType: v1.MediaTVSeries}
 	fake := &fakeQueries{
@@ -63,9 +64,10 @@ func TestSeriesDetailPutsEpisodesBeforeCast(t *testing.T) {
 	}
 }
 
-// The eyebrow says what the thing is and how much of it there is. The season
-// count lives there rather than among the meta pills, where it read as one more
-// attribute beside a rating and a certificate.
+// TestSeriesDetailKickerCarriesTheSeasonCount pins that the eyebrow says what
+// the thing is and how much of it there is. The season count lives there rather
+// than among the meta pills, where it read as one more attribute beside a
+// rating and a certificate.
 func TestSeriesDetailKickerCarriesTheSeasonCount(t *testing.T) {
 	ref := v1.ContentRef{Provider: "tmdb", NativeID: "1396", NativeType: "series", MediaType: v1.MediaTVSeries}
 	fake := &fakeQueries{
@@ -87,8 +89,9 @@ func TestSeriesDetailKickerCarriesTheSeasonCount(t *testing.T) {
 	}
 }
 
-// The crew line, from credits that were arriving and being discarded. Names are
-// grouped by job so a show with two creators reads as one phrase.
+// TestDetailHeroCarriesTheCrewLine pins that the crew line, from credits that
+// were arriving and being discarded. Names are grouped by job so a show with
+// two creators reads as one phrase.
 func TestDetailHeroCarriesTheCrewLine(t *testing.T) {
 	ref := v1.ContentRef{Provider: "tmdb", NativeID: "tt1", NativeType: "movie", MediaType: v1.MediaMovie}
 	fake := &fakeQueries{
@@ -112,10 +115,10 @@ func TestDetailHeroCarriesTheCrewLine(t *testing.T) {
 	}
 }
 
-// An episode row's facts column carries the runtime and the release quality —
-// the two the design puts there. Both were reachable and neither was read: the
-// runtime arrives on every episode of every season, and the quality is on the
-// episode's own Part.
+// TestEpisodeRowsCarryRuntimeQualityAndProgress pins that an episode row's
+// facts column carries the runtime and the release quality — the two the design
+// puts there. Both were reachable and neither was read: the runtime arrives on
+// every episode of every season, and the quality is on the episode's own Part.
 func TestEpisodeRowsCarryRuntimeQualityAndProgress(t *testing.T) {
 	ref := v1.ContentRef{Provider: "tmdb", NativeID: "1396", NativeType: "series", MediaType: v1.MediaTVSeries}
 	fake := &fakeQueries{
@@ -166,9 +169,10 @@ func TestEpisodeRowsCarryRuntimeQualityAndProgress(t *testing.T) {
 	}
 }
 
-// The facts grid states what the release is, and states nothing where Mosaic
-// has no answer. A virtual item has no bytes to describe, so only the metadata
-// card is drawn — four empty cards are worse than none.
+// TestFactsGridOmitsReleaseCardsForAVirtualItem pins that the facts grid states
+// what the release is, and states nothing where Mosaic has no answer. A virtual
+// item has no bytes to describe, so only the metadata card is drawn — four
+// empty cards are worse than none.
 func TestFactsGridOmitsReleaseCardsForAVirtualItem(t *testing.T) {
 	ref := v1.ContentRef{Provider: "tmdb", NativeID: "tt1", NativeType: "movie", MediaType: v1.MediaMovie}
 	fake := &fakeQueries{

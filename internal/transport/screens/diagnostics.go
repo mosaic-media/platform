@@ -27,11 +27,11 @@ import (
 //
 // Everything here reads data that was redacted at construction (platform#34), so
 // no screen masks anything of its own. What it must still do is treat the text
-// as *untrusted*: a message or a field can originate in a third-party module
+// as untrusted: a message or a field can originate in a third-party module
 // (sdk#5) or in an upstream provider's error, so it is rendered as text and
 // never as anything a renderer would interpret.
 //
-// Reaching any of this requires `telemetry.read`, enforced by the application
+// Reaching any of this requires telemetry.read, enforced by the application
 // services these call. The affordance that leads here is separately hidden
 // from anyone without that grant — a normal user never sees the toggle, let
 // alone the screens.
@@ -243,7 +243,7 @@ func (s *Service) tracesScreen(ctx context.Context, caller v1.Caller, params map
 
 // traceStats is the design's row of figures over the traces in hand.
 //
-// Percentiles over the *returned* set, which is what the screen can honestly
+// Percentiles over the returned set, which is what the screen can honestly
 // claim: the query is a filtered, limited window, and a percentile presented as
 // the install's is a claim about traces this screen never saw.
 func traceStats(traces []domain.TelemetryTraceSummary) *ui.Element {
@@ -357,7 +357,7 @@ func traceColor(t domain.TelemetryTraceSummary) string {
 // and the log records emitted inside it.
 //
 // The tree is drawn by depth from the parent chain rather than by indentation
-// the store computed, because the entry span's parent is the *client's* span
+// the store computed, because the entry span's parent is the client's span
 // and lives outside this process (platform#32). Anything whose parent is not in
 // the result set is a root here.
 func (s *Service) traceScreen(ctx context.Context, caller v1.Caller, params map[string]any) (sdui.Node, error) {
@@ -434,7 +434,7 @@ func traceRootName(spans []domain.TelemetrySpanRecord) string {
 	}
 	for _, sp := range spans {
 		// Anything whose parent is not in the set is a root here: the entry
-		// span's parent is the *client's* span and lives outside this process
+		// span's parent is the client's span and lives outside this process
 		// (platform#32).
 		if sp.Parent == "" || !byID[sp.Parent] {
 			return sp.Name
@@ -478,9 +478,9 @@ func spanRow(sp domain.TelemetrySpanRecord, depth int, total time.Duration) ui.E
 	if sp.Status == "error" {
 		tone = "danger"
 	}
-	// Depth as a space token rather than as leading whitespace in the name,
-	// which is what it used to be: indentation belongs to the layout, and a name
-	// padded with spaces cannot be selected or searched for.
+	// Depth as a space token rather than as leading whitespace in the name:
+	// indentation belongs to the layout, and a name padded with spaces cannot be
+	// selected or searched for.
 	indent := depth
 	if indent > 6 {
 		indent = 6
@@ -506,7 +506,7 @@ func orderSpans(spans []domain.TelemetrySpanRecord) []spanAtDepth {
 	}
 	var roots []domain.TelemetrySpanRecord
 	for _, sp := range spans {
-		// A parent outside this result set means the span is a root *here* —
+		// A parent outside this result set means the span is a root here —
 		// which is the normal case for the entry span, whose parent is the
 		// client's own span and was never stored by this process.
 		if _, ok := bySpan[sp.Parent]; sp.Parent == "" || !ok {

@@ -15,11 +15,10 @@ import (
 // ListNodePartsQuery reads the playable parts of an item node.
 //
 // This is the Platform-side half of a gap the published surface still has:
-// `ContentService` can attach a Part and has no read for one anywhere, so a
-// capability cannot see what it wrote. The emit-side needs the read now — a
-// detail screen cannot offer Play without knowing there is something to play —
-// and the SDK addition is a separate, deliberate change rather than something
-// to slip in behind an emit-side need.
+// ContentService can attach a Part and has no read for one, so a capability
+// cannot see what it wrote. The emit-side needs the read — a detail screen
+// cannot offer Play without knowing there is something to play — and the SDK
+// addition is a separate, deliberate change.
 type ListNodePartsQuery struct {
 	Caller v1.Caller
 	NodeID v1.NodeID
@@ -67,22 +66,20 @@ func (s *Service) ListNodeParts(ctx context.Context, q ListNodePartsQuery) (List
 // It is an entry point — the screens transport calls it directly (platform#24's
 // affordance gate) — so it clears the boundary itself, once, and then reads
 // stores directly rather than re-entering GetContentNode and ListNodeParts.
-// Re-entering was the platform#41 defect in its most expensive form: a work whose
-// playable item is its twentieth child cost twenty-one authenticate-plus-
-// authorize cycles to discover one Part id.
+// Re-entering costs one authenticate-plus-authorize cycle per child to discover
+// one Part id (platform#41).
 //
 // Collapsing them is decision-equivalent under today's policy engine, which
-// ignores Resource entirely. The per-child calls also authorised bare
-// "content" with no id, so the single check made here — against the work — is
-// the more specific of the two. If relationship- or attribute-based rules ever
-// make Resource load-bearing, authorising each child becomes a real decision to
-// take deliberately, rather than one this loop was silently making.
+// ignores Resource entirely, and the single check here is against the work where
+// the per-child calls authorised bare "content" with no id. If relationship- or
+// attribute-based rules ever make Resource load-bearing, authorising each child
+// becomes a decision to take deliberately.
 //
 // The two failure paths are deliberately different. A boundary failure is
-// returned: an expired session must not look like a work with nothing to play,
-// which is how the swallow here previously rendered it. A store read that fails
-// still degrades to "nothing playable", so a transient blip omits the Play
-// button rather than failing a detail screen whose metadata already arrived.
+// returned, so an expired session does not look like a work with nothing to
+// play. A failed store read degrades to "nothing playable", so a transient blip
+// omits the Play button rather than failing a detail screen whose metadata has
+// already arrived.
 func (s *Service) FirstPlayablePart(ctx context.Context, caller v1.Caller, workID v1.NodeID) (v1.Part, bool, error) {
 	if caller.Session == "" {
 		return v1.Part{}, false, contracts.NewError(contracts.InvalidArgument, "caller is required")
@@ -119,9 +116,8 @@ func (s *Service) FirstPlayablePart(ctx context.Context, caller v1.Caller, workI
 }
 
 // ListContentParts satisfies the published ContentService (SDK v0.10.0). It is a
-// thin alias over ListNodeParts: the Platform grew the read first, for the
-// emit-side's Play affordance, and the SDK grew it when a module needed to see
-// its own writes to refresh a candidate set.
+// thin alias over ListNodeParts, which a module uses to see its own writes when
+// refreshing a candidate set.
 func (s *Service) ListContentParts(ctx context.Context, q v1.ListContentPartsQuery) (v1.ListContentPartsResult, error) {
 	res, err := s.ListNodeParts(ctx, ListNodePartsQuery{Caller: q.Caller, NodeID: q.NodeID})
 	if err != nil {

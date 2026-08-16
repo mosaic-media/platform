@@ -33,13 +33,12 @@ import (
 // M2a's exit criterion, over the real wire and against real PostgreSQL
 // (platform#60, roadmap M2.1–2.3).
 //
-// It is the acceptance baseline's end-to-end shape applied to this milestone:
-// sign in over `AuthService`, spend the session on `SessionService`, and assert
-// the *pushed content region* — not a service return value. That distinction is
-// what makes it worth having. Every property here is already proved at the app
-// layer against fakes; what this adds is that the actions a client can name
-// reach those services, that their outcomes are rendered, and that the whole
-// chain survives a real database, a real password hash and a real transport.
+// It signs in over AuthService, spends the session on SessionService, and
+// asserts the pushed content region rather than a service return value. Every
+// property here is already proved at the app layer against fakes; what this adds
+// is that the actions a client can name reach those services, that their
+// outcomes are rendered, and that the whole chain survives a real database, a
+// real password hash and a real transport.
 //
 // The one thing it is not is a browser. It drives the transport the Shell
 // drives and asserts the tree the Shell would render, which is the closest a
@@ -204,7 +203,7 @@ func TestLibraryRulesFillTheLibraryOverTheWire(t *testing.T) {
 		t.Fatalf("a fresh install's library screen said:\n%s", content)
 	}
 
-	// **Two rules**, created the way the settings panel creates them: an Invoke
+	// Two rules, created the way the settings panel creates them: an Invoke
 	// carrying the catalog it is following, and the name from the form's scope.
 	invoke(t, "createLibraryRule", map[string]any{
 		"ruleName": "Alpha top", "addModule": "alpha", "addCatalog": "top", "nativeType": "movie",
@@ -225,7 +224,7 @@ func TestLibraryRulesFillTheLibraryOverTheWire(t *testing.T) {
 	// runner have their own tests, and this is about what the pass does.
 	invoke(t, "runLibraryMaintenance", nil)
 
-	// **New matches appear on the Library screen without anyone pressing Add.**
+	// New matches appear on the Library screen without anyone pressing Add.
 	content := renderScreen(t, c, sessionClient, token, "library", nil)
 	for _, title := range []string{"Arrival", "Dune", "Contact"} {
 		if !strings.Contains(content, title) {
@@ -238,14 +237,14 @@ func TestLibraryRulesFillTheLibraryOverTheWire(t *testing.T) {
 		t.Errorf("the library screen did not state a total of 3:\n%s", content)
 	}
 
-	// **A second run adds no duplicates.**
+	// A second run adds no duplicates.
 	invoke(t, "runLibraryMaintenance", nil)
 	content = renderScreen(t, c, sessionClient, token, "library", nil)
 	if !strings.Contains(content, "3 titles") {
 		t.Errorf("the second run changed the library's size:\n%s", content)
 	}
 
-	// **The run log says what happened**, on the rules themselves, where the
+	// The run log says what happened, on the rules themselves, where the
 	// administrator who wrote them reads it.
 	rules := renderScreen(t, c, sessionClient, token, "settings", map[string]any{"section": "library"})
 	if !strings.Contains(rules, "Alpha top") || !strings.Contains(rules, "Beta top") {
@@ -266,7 +265,7 @@ func TestLibraryRulesFillTheLibraryOverTheWire(t *testing.T) {
 // two-lane round trip a client makes on every navigation (contracts#5).
 //
 // Attach then Subscribe, per navigation, rather than one long-lived stream: a
-// test that held the stream open would be asserting on the *order* of pushes as
+// test that held the stream open would be asserting on the order of pushes as
 // much as on their content, and this is about what a screen says.
 func renderScreen(t *testing.T, c context.Context, client sessionv1connect.SessionServiceClient, token, screen string, params map[string]any) string {
 	t.Helper()

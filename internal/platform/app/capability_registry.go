@@ -17,14 +17,13 @@ import (
 // to one of them by id.
 //
 // Core modules are registered once, at composition. Extension modules are
-// registered and unregistered *while the Platform serves* — a user installs or
-// uninstalls one at runtime (platform#51) — so the map is guarded by a RWMutex: a
-// resolution during serving takes the read lock, an install or uninstall the
-// write lock. It was a bare map until extensions became runtime-managed, which
-// was correct only while every registration happened before the first request.
+// registered and unregistered while the Platform serves — a user installs or
+// uninstalls one at runtime (platform#51) — so the map is guarded by a RWMutex:
+// a resolution during serving takes the read lock, an install or uninstall the
+// write lock.
 //
-// It lives in the app package rather than under composition/ so the Service
-// can hold it without an import cycle: it depends only on the published SDK,
+// It lives in the app package rather than under composition/ so the Service can
+// hold it without an import cycle: it depends only on the published SDK,
 // exactly as a module does.
 type CapabilityRegistry struct {
 	mu sync.RWMutex
@@ -50,21 +49,15 @@ func (r *CapabilityRegistry) Register(c v1.Capability) {
 // RegisterFallback adds a capability that fills its read roles only when no
 // ordinary provider could — the guarantee-clause floor rather than a peer.
 //
-// It exists because "one or more providers per role class" (platform#38) was being
-// read as "union them all", and for the *browse* roles that is wrong in a way
-// nothing reported: module-cinemeta#1 registered Cinemeta and TMDB as complementary, the
-// catalog fan-out unioned both, and a home screen drew Cinemeta's Popular Films
-// beside TMDB's — the same titles twice, from two sources, ordered by module id
-// so the credential-free floor happened to win. Ranking them is not a
-// contradiction of module-cinemeta#1's arity: both are still registered, both still fill
-// the class, and the guarantee still holds, because a deployment with no TMDB
-// key gets exactly what it got before.
+// Ranking is needed because "one or more providers per role class"
+// (platform#38) unioned across the browse roles draws the same titles twice from
+// two sources. Ranking does not contradict module-cinemeta#1's arity: both
+// providers are still registered, both still fill the class, and a deployment
+// with only the floor gets exactly what it got before.
 //
-// A fallback is *not* a module the Platform trusts less. It is a statement about
-// which source should be visible when both can answer, and it stays a
-// composition decision (platform#4) rather than a property a module asserts about
-// itself — a module claiming primacy over its peers is a claim no module is in a
-// position to make.
+// A fallback is not a module the Platform trusts less; it is a statement about
+// which source should be visible when both can answer. It stays a composition
+// decision (platform#4) rather than a property a module asserts about itself.
 func (r *CapabilityRegistry) RegisterFallback(c v1.Capability) {
 	r.register(c, true)
 }
@@ -84,9 +77,9 @@ func (r *CapabilityRegistry) register(c v1.Capability, fallback bool) {
 }
 
 // Unregister removes the capability under id, if any. It is how a runtime
-// uninstall (platform#51) makes a module unresolvable: after it returns, no lookup
-// or role enumeration finds the module, so nothing routes to a process that is
-// being torn down. Removing an id that is not present is a no-op.
+// uninstall (platform#51) makes a module unresolvable: after it returns, no
+// lookup or role enumeration finds the module, so nothing routes to a process
+// that is being torn down. Removing an id that is not present is a no-op.
 func (r *CapabilityRegistry) Unregister(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -133,18 +126,16 @@ func (r *CapabilityRegistry) Verify() error {
 }
 
 // RequireRoles fails when no registered capability fills every role in required
-// (platform#23, re-expressed by platform#38 over the composed set — core and extension
-// together). Metadata and search are a required capability *class*: a Mosaic
-// that cannot identify or find content is not a degraded Mosaic, it is inert,
-// and the honest signal is refusing to serve rather than serving something that
-// can do nothing.
+// (platform#23, re-expressed by platform#38 over the composed set — core and
+// extension together). Metadata and search are a required capability class: a
+// Mosaic that cannot identify or find content is inert, so refusing to serve is
+// the honest signal.
 //
-// It is separate from Verify rather than folded into it because the two bind
-// different things. Verify is about a module's internal consistency — a role
-// declared but unbacked — and holds for any registry. This is about the
-// *composition* being serviceable, so the serving composition root calls it and
-// nothing else does; a test that builds a registry with one stream-only
-// capability is not thereby broken.
+// It is separate from Verify because the two bind different things. Verify is
+// about a module's internal consistency — a role declared but unbacked — and
+// holds for any registry. This is about the composition being serviceable, so
+// only the serving composition root calls it; a test that builds a registry
+// with one stream-only capability is not thereby broken.
 func (r *CapabilityRegistry) RequireRoles(required ...v1.Role) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -177,21 +168,16 @@ func declares(c v1.Capability, role v1.Role) bool {
 }
 
 // fills reports whether c both declares role and backs it with the matching
-// provider interface. **Every resolution below goes through this rather than
-// through a bare type assertion**, and that is load-bearing rather than tidy.
+// provider interface. Every resolution below must go through this rather than
+// through a bare type assertion.
 //
-// In process the two tests agree, because a compiled-in module that implements
-// an interface also declares the role — so a bare assertion was correct by
-// accident for as long as every capability was a local struct.
-//
-// It stops being correct the moment one is not. An out-of-process module is
-// reached through a proxy that implements *every* provider interface
-// unconditionally (platform#39: the registry must not be able to tell a proxy from
-// a local struct, and Go type assertions cannot be made conditional at runtime).
-// Against that proxy `c.(v1.StreamProvider)` always succeeds, so a
-// metadata-only extension module would be enumerated by StreamProviders and
-// asked for streams it cannot resolve — and, worse, RequireRoles would be
-// satisfied by a module that fills nothing at all.
+// An out-of-process module is reached through a proxy that implements every
+// provider interface unconditionally (platform#39: the registry must not be able
+// to tell a proxy from a local struct, and Go type assertions cannot be made
+// conditional at runtime). Against that proxy c.(v1.StreamProvider) always
+// succeeds, so a metadata-only extension module would be enumerated by
+// StreamProviders and asked for streams it cannot resolve — and RequireRoles
+// would be satisfied by a module that fills nothing at all.
 //
 // The manifest is the honest answer, and the handshake is what makes it
 // trustworthy: it refuses a module whose manifest declares a role it does not
@@ -264,11 +250,10 @@ func (r *CapabilityRegistry) SearchProviders() []SearchProviderEntry {
 // SearchProvider returns the search provider registered under id, if that
 // capability fills RoleSearch.
 //
-// The singular form exists for a saved provider search (platform#60): a query rule
-// is a durable statement addressed to *one* source, not a fan-out. Fanning a
-// saved rule across every installed search provider would silently change what
-// the rule means whenever somebody installed an extension, which is the one
-// thing a durable statement must not do.
+// The singular form exists for a saved provider search (platform#60): a query
+// rule is a durable statement addressed to one source, not a fan-out. Fanning a
+// saved rule across every installed search provider would change what the rule
+// means whenever somebody installed an extension.
 func (r *CapabilityRegistry) SearchProvider(id string) (v1.SearchProvider, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -293,10 +278,9 @@ type StreamProviderEntry struct {
 // StreamProviders returns every registered capability that fills RoleStream, in
 // stable module-id order.
 //
-// It is the enumeration platform#46 needs: materialising asks *every* stream
+// It is the enumeration platform#46 needs: materialising asks every stream
 // provider for playable locations, not only the module that sourced the
-// metadata, because the two are different jobs and a metadata module fills no
-// stream role at all.
+// metadata, because a metadata module fills no stream role at all.
 func (r *CapabilityRegistry) StreamProviders() []StreamProviderEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -322,12 +306,10 @@ type SubtitlesProviderEntry struct {
 // SubtitlesProviders returns every registered capability that fills
 // RoleSubtitles, in stable module-id order.
 //
-// The plural was missing while the singular was not, and that is the shape of
-// the gap platform#83 closes: `SubtitlesProvider(id)` could resolve one *by name*
-// and nothing ever knew a name to ask for. Subtitles fan out for the same reason
-// streams do (platform#46) — a provider is asked about content it did not source,
-// so every installed one is asked rather than only the module that supplied the
-// metadata.
+// Subtitles fan out for the same reason streams do (platform#46, platform#83): a
+// provider is asked about content it did not source, so every installed one is
+// asked rather than only the module that supplied the metadata. Resolving one by
+// id is not enough, because nothing knows an id to ask for.
 func (r *CapabilityRegistry) SubtitlesProviders() []SubtitlesProviderEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -352,12 +334,12 @@ type ArtworkProviderEntry struct {
 // ArtworkProviders returns every registered capability that fills RoleArtwork,
 // in stable module-id order.
 //
-// Like StreamProviders it is a fan-out enumeration (sdk#6): artwork is
-// resolved for content the provider did not source, so the module that supplied
-// the metadata has no special claim. Unlike stream enrichment, the caller keeps
+// Like StreamProviders it is a fan-out enumeration (sdk#6): artwork is resolved
+// for content the provider did not source, so the module that supplied the
+// metadata has no special claim. Unlike stream enrichment, the caller keeps
 // asking after the first provider answers — artwork candidates from several
 // sources union into one set rather than competing, so there is no first-wins
-// rule and no cross-provider dedup problem to leave open.
+// rule.
 func (r *CapabilityRegistry) ArtworkProviders() []ArtworkProviderEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -432,8 +414,7 @@ func (r *CapabilityRegistry) MetadataProvider(id string) (v1.MetadataProvider, b
 }
 
 // SubtitlesProvider returns the subtitles provider registered under id, if that
-// capability fills RoleSubtitles (module-stremio-addons#1). The consumer is a future player; the
-// resolver exists so that consumer has a seam to reach it, like the others.
+// capability fills RoleSubtitles (module-stremio-addons#1).
 func (r *CapabilityRegistry) SubtitlesProvider(id string) (v1.SubtitlesProvider, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -473,13 +454,12 @@ type PlaybackProviderEntry struct {
 }
 
 // PlaybackProviders returns every registered capability that fills RolePlayback
-// (platform#25), in stable module-id order. It is the first *consumer* enumeration
-// here — every other one above resolves a source.
+// (platform#25), in stable module-id order. It enumerates consumers, where every
+// other enumeration here resolves a source.
 //
 // It returns a list rather than the single provider today's install has because
-// the question it answers has two callers with different needs: playback
-// resolution wants one provider, and platform#24's affordance gate wants to know
-// whether *any* consumer is installed.
+// it serves two callers: playback resolution wants one provider, and
+// platform#24's affordance gate wants to know whether any consumer is installed.
 func (r *CapabilityRegistry) PlaybackProviders() []PlaybackProviderEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -513,9 +493,8 @@ func (r *CapabilityRegistry) PlaybackProvider(id string) (v1.PlaybackProvider, b
 
 // SettingsUIProviderEntry names a module that contributes a settings screen. It
 // carries the manifest's Name as well as its id because this is the one
-// enumeration whose result is *rendered*: an index listing "aiostreams" and
-// "stremio" makes a reader work out which is which, and the module already
-// declares a human label.
+// enumeration whose result is rendered, and a module id is not a label a reader
+// can use.
 type SettingsUIProviderEntry struct {
 	ModuleID string
 	Name     string
@@ -525,16 +504,13 @@ type SettingsUIProviderEntry struct {
 // RoleSettingsUI (sdk#4), in stable module-id order.
 //
 // It is what turns a module's settings screen from something the Platform can
-// render into something a user can reach. The settings host used to name one
-// module by constant, so every module that contributed a screen after the first
-// had one nobody could open — `module-tmdb` shipped a whole credential form in
-// that state, which is the "capability with no client path" case: it worked, and
-// it was owed.
+// render into something a user can reach. The settings host must enumerate
+// rather than name a module by constant, or a module that contributes a screen
+// has one nobody can open.
 //
-// It reads Manifest() per call rather than caching a label at registration. The
-// registry is populated once at composition and read at invocation, so the cost
-// is a map walk and a few struct copies on a settings render, and the
-// alternative is a second source of truth for a module's name.
+// It reads Manifest() per call rather than caching a label at registration: the
+// cost is a map walk and a few struct copies on a settings render, and caching
+// would be a second source of truth for a module's name.
 func (r *CapabilityRegistry) SettingsUIProviders() []SettingsUIProviderEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -560,7 +536,8 @@ func (r *CapabilityRegistry) SettingsUIProviders() []SettingsUIProviderEntry {
 }
 
 // sortedIDs returns the registered ids in lexical order, the stable order every
-// enumeration uses.
+// enumeration uses. It takes no lock of its own: callers must already hold
+// r.mu, at least for reading.
 func (r *CapabilityRegistry) sortedIDs() []string {
 	ids := make([]string, 0, len(r.byID))
 	for id := range r.byID {

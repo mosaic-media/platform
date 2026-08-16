@@ -23,7 +23,7 @@ import (
 
 // Watch history — the per-user pass over a shared library (platform#59).
 //
-// **A household never shares this screen.** The library beneath it is one
+// A household never shares this screen. The library beneath it is one
 // object graph and everybody sees the same titles; what each person did with it
 // is theirs, keyed by (user, node) since playback state landed. The query takes
 // no user parameter, so there is no version of this screen that shows somebody
@@ -114,12 +114,11 @@ func (s *Service) historyCard(ctx context.Context, caller v1.Caller, item app.Wa
 	if p := work.Node.Artwork.Poster; p != "" {
 		els = append(els, ui.Poster(s.art(p)))
 	}
-	// **Only props a PosterCard reads.** It binds title, subtitle, poster,
-	// badge, progress, mediaType, origin and action — and neither `meta` nor
-	// `progressLabel`, both of which this card set on its first attempt and
-	// neither of which drew anything. A props bag accepts whatever it is given,
-	// so the card looked right in a test that asserted the props and was missing
-	// half its information in a browser.
+	// Only props a PosterCard reads. It binds title, subtitle, poster, badge,
+	// progress, mediaType, origin and action — and neither meta nor
+	// progressLabel, which draw nothing. A props bag accepts whatever it is
+	// given, so a card setting one passes a test that asserts the props and is
+	// missing half its information in a browser.
 	if sub := historySubtitle(item, s.now()); sub != "" {
 		els = append(els, ui.Subtitle(sub))
 	}

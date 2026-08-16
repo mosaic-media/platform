@@ -29,19 +29,21 @@ func resolved(t *testing.T, trust bool, remoteAddr string, forwarded ...string) 
 	return got
 }
 
-// The whole reason this package exists: behind the front door the connection's
-// peer is the Supervisor, so the caller has to come from the header.
+// TestBehindTheFrontDoorTheForwardedAddressWins pins the reason this package
+// exists: behind the front door the connection's peer is the Supervisor, so the
+// caller has to come from the header.
 func TestBehindTheFrontDoorTheForwardedAddressWins(t *testing.T) {
 	if got := resolved(t, true, "@", "203.0.113.7"); got != "203.0.113.7" {
 		t.Errorf("attributed to %q, want the forwarded caller", got)
 	}
 }
 
-// **The load-bearing test.** Everything left of the last entry was supplied by
-// the caller: a client that sends its own X-Forwarded-For has the front door
-// append the address it observed *after* it. Taking the leftmost value would
-// let any caller choose its own rate-limit bucket, and choose a different one
-// per request — which is not a weaker limit but no limit at all.
+// TestAForgedForwardedPrefixIsIgnored pins which entry is believed. Everything
+// left of the last one was supplied by the caller: a client that sends its own
+// X-Forwarded-For has the front door append the address it observed after it.
+// Taking the leftmost value would let any caller choose its own rate-limit
+// bucket, and a different one per request — not a weaker limit but no limit at
+// all.
 func TestAForgedForwardedPrefixIsIgnored(t *testing.T) {
 	// The client claimed 1.2.3.4; the front door appended what it really saw.
 	got := resolved(t, true, "@", "1.2.3.4, 198.51.100.9")
@@ -53,25 +55,28 @@ func TestAForgedForwardedPrefixIsIgnored(t *testing.T) {
 	}
 }
 
-// A caller can also send X-Forwarded-For as its own header line rather than in
-// the proxy's, which arrives as two values rather than one comma-joined one.
-// Flattening before taking the last is what makes those the same case.
+// TestAForgedSeparateHeaderLineIsIgnored pins the flattening. A caller can send
+// X-Forwarded-For as its own header line rather than in the proxy's, which
+// arrives as two values rather than one comma-joined one; flattening before
+// taking the last is what makes those the same case.
 func TestAForgedSeparateHeaderLineIsIgnored(t *testing.T) {
 	if got := resolved(t, true, "@", "1.2.3.4", "198.51.100.9"); got != "198.51.100.9" {
 		t.Errorf("attributed to %q, want the last entry across all header lines", got)
 	}
 }
 
-// On a listener anybody can connect to, the header is a claim by whoever
-// connected and must be ignored entirely.
+// TestOnAnUntrustedListenerTheHeaderIsIgnored pins that on a listener anybody
+// can connect to, the header is a claim by whoever connected and is ignored
+// entirely.
 func TestOnAnUntrustedListenerTheHeaderIsIgnored(t *testing.T) {
 	if got := resolved(t, false, "198.51.100.9:5000", "1.2.3.4"); got != "198.51.100.9" {
 		t.Errorf("attributed to %q, want the observed peer", got)
 	}
 }
 
-// Ports are stripped so one caller's many connections share one bucket rather
-// than getting a fresh one per ephemeral port.
+// TestThePortIsStripped pins that ports are stripped, so one caller's many
+// connections share one bucket rather than getting a fresh one per ephemeral
+// port.
 func TestThePortIsStripped(t *testing.T) {
 	if got := resolved(t, false, "198.51.100.9:41234"); got != "198.51.100.9" {
 		t.Errorf("got %q", got)
@@ -84,9 +89,10 @@ func TestThePortIsStripped(t *testing.T) {
 	}
 }
 
-// A Unix socket has no peer address, so a trusted listener with no header must
-// not produce an empty key — an empty string per caller would be one bucket
-// shared by everyone, which is the outcome this replaced.
+// TestNoAddressAtAllIsOneSharedBucketNotAnEmptyKey pins that a trusted listener
+// with no header does not produce an empty key. A Unix socket has no peer
+// address, and an empty string per caller would be one bucket shared by
+// everyone.
 func TestNoAddressAtAllIsOneSharedBucketNotAnEmptyKey(t *testing.T) {
 	if got := resolved(t, true, "@"); got != clientaddr.Unknown {
 		t.Errorf("got %q, want %q", got, clientaddr.Unknown)
@@ -96,17 +102,19 @@ func TestNoAddressAtAllIsOneSharedBucketNotAnEmptyKey(t *testing.T) {
 	}
 }
 
-// A path that never passed through the middleware — an in-process call in a
-// test — must still get a usable key rather than an empty one.
+// TestAContextThatNeverPassedThroughResolvesToUnknown pins that a path which
+// never passed through the middleware — an in-process call in a test — still
+// gets a usable key rather than an empty one.
 func TestAContextThatNeverPassedThroughResolvesToUnknown(t *testing.T) {
 	if got := clientaddr.From(httptest.NewRequest(http.MethodGet, "/", nil).Context()); got != clientaddr.Unknown {
 		t.Errorf("got %q, want %q", got, clientaddr.Unknown)
 	}
 }
 
-// Anything that is not an IP is not an address. A Unix connection reports its
-// peer as "@", identical for every caller, so accepting it would be one shared
-// bucket disguised as a resolved address.
+// TestANonAddressIsNotTreatedAsOne pins that anything which is not an IP is not
+// an address. A Unix connection reports its peer as "@", identical for every
+// caller, so accepting it would be one shared bucket disguised as a resolved
+// address.
 func TestANonAddressIsNotTreatedAsOne(t *testing.T) {
 	for _, notAnAddress := range []string{"@", "/run/mosaic/platform.sock", "localhost", "not-an-ip"} {
 		if got := resolved(t, false, notAnAddress); got != clientaddr.Unknown {
@@ -119,8 +127,9 @@ func TestANonAddressIsNotTreatedAsOne(t *testing.T) {
 	}
 }
 
-// Whitespace and empty entries are what a hand-written header looks like, and
-// an empty last entry must not become the key.
+// TestEmptyAndPaddedEntriesAreSkipped pins that whitespace and empty entries —
+// what a hand-written header looks like — are skipped, so an empty last entry
+// does not become the key.
 func TestEmptyAndPaddedEntriesAreSkipped(t *testing.T) {
 	if got := resolved(t, true, "@", " 1.2.3.4 ,  198.51.100.9  , "); got != "198.51.100.9" {
 		t.Errorf("got %q", got)

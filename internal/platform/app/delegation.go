@@ -16,16 +16,13 @@ import (
 
 // Privilege cannot escalate through delegation (platform#44).
 //
-// **Nobody may grant authority they do not themselves hold.** It is the one
-// rule that makes granular permissions safe to delegate: without it,
-// `role.create` is equivalent to every permission, because the holder can mint
-// a role carrying anything and grant it to themselves. The action named
-// "create a role" would silently be the action "become anyone".
+// Nobody may grant authority they do not themselves hold. Without that rule
+// role.create is equivalent to every permission, because the holder can mint a
+// role carrying anything and grant it to themselves.
 //
-// This is enforced in the Platform, not in the interface that offers it. A UI
-// that only shows a grantor the boxes they can tick is good design and no
-// defence at all — the command surface is reachable directly, and an interface
-// is not where an authority boundary can live.
+// It must be enforced here, not in the interface that offers it: the command
+// surface is reachable directly, so a UI showing a grantor only the boxes they
+// can tick is no defence.
 
 // permissionSet is a caller's effective permissions, for subset comparison.
 type permissionSet map[domain.Permission]bool
@@ -33,9 +30,8 @@ type permissionSet map[domain.Permission]bool
 // effectivePermissions collects every permission a user holds across all their
 // roles.
 //
-// A read of current state rather than anything cached: authority changes, and a
-// delegation check against a stale set would let someone grant what they were
-// only briefly given.
+// A read of current state, never cached: a delegation check against a stale set
+// would let someone grant what they were only briefly given.
 func (s *Service) effectivePermissions(ctx context.Context, userID domain.UserID) (permissionSet, error) {
 	roles, err := s.permissions.RolesForUser(ctx, userID)
 	if err != nil {
@@ -68,11 +64,9 @@ func (p permissionSet) sorted() []domain.Permission {
 // sessionCapabilities resolves what to stamp on a session being issued
 // (platform#24).
 //
-// A failure costs the capability set and never the sign-in. The set is what
-// lets a client omit an affordance it could not use; without it a client draws
-// everything and the server refuses what it should, which is the behaviour
-// every session had before this existed. Refusing to sign somebody in because
-// their role list could not be read would be a far worse answer.
+// A failure costs the capability set and never the sign-in. The set is what lets
+// a client omit an affordance it could not use; without it a client draws
+// everything and the server refuses what it should.
 func (s *Service) sessionCapabilities(ctx context.Context, userID domain.UserID) []domain.Permission {
 	held, err := s.effectivePermissions(ctx, userID)
 	if err != nil {
@@ -120,18 +114,17 @@ func (s *Service) ensureCanDelegate(ctx context.Context, az authorized, wanted [
 // role's whole permission set must be within the caller's.
 //
 // Checked at grant time rather than trusted from creation, because the two are
-// separate acts. A role created by the superuser can be granted by an
-// administrator, and it is the *granting* that must be bounded by what the
-// grantor holds — otherwise "grant this existing role" becomes the escalation
-// path that creating one was closed against.
+// separate acts: a role created by the superuser can be granted by an
+// administrator, so the granting is what must be bounded by what the grantor
+// holds. Otherwise "grant this existing role" is the escalation path that
+// creating one was closed against.
 func (s *Service) ensureCanDelegateRole(ctx context.Context, az authorized, roleID domain.RoleID) error {
 	role, err := s.findRole(ctx, roleID)
 	if err != nil {
 		// A role that does not exist delegates nothing, so there is nothing to
-		// bound. Returning here would also change the error a caller sees for
-		// a bad role id — the store reports that as Conflict from its foreign
-		// key, and a check added for delegation has no business rewriting an
-		// unrelated contract.
+		// bound. Returning the error here would also change what a caller sees
+		// for a bad role id: the store reports that as Conflict from its
+		// foreign key, and this check must not rewrite that contract.
 		if contracts.CategoryOf(err) == contracts.NotFound {
 			return nil
 		}
@@ -140,8 +133,8 @@ func (s *Service) ensureCanDelegateRole(ctx context.Context, az authorized, role
 	return s.ensureCanDelegate(ctx, az, role.Permissions)
 }
 
-// findRole resolves a role by id. PermissionStore gained FindRole for this:
-// a grant that cannot see what it is granting cannot bound it.
+// findRole resolves a role by id: a grant that cannot see what it is granting
+// cannot bound it.
 func (s *Service) findRole(ctx context.Context, roleID domain.RoleID) (domain.Role, error) {
 	return s.permissions.FindRole(ctx, roleID)
 }

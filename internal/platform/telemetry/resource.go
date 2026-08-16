@@ -12,8 +12,8 @@ import (
 
 // Resource is the process identity stamped on every record. Mosaic is a
 // single-host system with more than one process — the Platform, the Supervisor
-// when it exists (supervisor#5), and a module's own process if modules ever leave
-// this one — so *which process said this* is a required dimension, not a
+// when it exists (supervisor#5), and a module's own process if modules ever
+// leave this one — so which process said this is a required dimension, not a
 // decoration. The field names follow OpenTelemetry's resource conventions so
 // an OTLP export later carries them unchanged.
 type Resource struct {

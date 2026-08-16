@@ -4,11 +4,10 @@
 // Package vocabulary is platform#52's negotiation, and the definition library as
 // one particular client should receive it.
 //
-// It lived inside the session transport until the pre-session bootstrap
-// (platform#57) needed the same machinery: the doorway carries the same vocabulary
-// declaration Attach carries, so negotiation applies to it unchanged, and a
-// second copy of "what can this client draw" is exactly the drift the
-// declaration exists to remove. Both transports read this one.
+// It is shared by the session transport and the pre-session bootstrap
+// (platform#57): the doorway carries the same vocabulary declaration Attach
+// carries, so negotiation applies to it unchanged. A second copy of "what can
+// this client draw" is exactly the drift the declaration exists to remove.
 package vocabulary
 
 import (
@@ -25,20 +24,19 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
-// What a client can *render*, and what the Platform does about what it cannot.
+// What a client can render, and what the Platform does about what it cannot.
 //
 // The declaration is the other half of the question ClientProfile answers: that
 // one is about decoding bytes, this one about drawing nodes. Both ride Attach,
 // both are optional, and both treat an absent declaration as the assumption made
 // before the field existed — here, that the client implements the whole
-// vocabulary, which is what every client was assumed to do.
+// vocabulary.
 //
-// Degradation is deliberate rather than incidental. Before this, an unsupported
-// node reached the client and became a labelled placeholder: forward-compatible,
-// and completely silent. Nobody learned that a screen had a hole in it unless
-// they were looking at that screen. So the server now declines to emit what the
-// client said it cannot draw, and *says so* — a telemetry event naming the type
-// and the screen is the whole difference between degrading and failing quietly.
+// The server declines to emit what the client said it cannot draw, and reports
+// it. The telemetry event naming the type and the screen is the difference
+// between degrading and failing quietly: an unsupported node that reaches the
+// client becomes a labelled placeholder, which is forward-compatible and
+// completely silent.
 //
 // Only the primitive tier is filtered. Components are definitions the server
 // delivers (contracts#4), so a client renders whatever it is sent; the thing it can
@@ -58,7 +56,7 @@ var contractPrimitives = func() map[string]bool {
 }()
 
 // contractActionKinds is the same for the action tier: what counts as an action
-// envelope at all. A props value carrying some other `kind` is somebody else's
+// envelope at all. A props value carrying some other kind is somebody else's
 // data and is left alone.
 var contractActionKinds = func() map[string]bool {
 	m := make(map[string]bool, len(sdui.ActionKinds))
@@ -286,8 +284,8 @@ func degradeProps(props *structpb.Struct, v Client, d *Degradation) *structpb.St
 // kind the client does not interpret, and which kind that is.
 //
 // "Is this an action?" is answered against the contract's own kind set rather
-// than by the presence of a `kind` key, so a screen param that happens to carry
-// a field called kind is not mistaken for one. A nested sequence disqualifies
+// than by the presence of a kind key, so a screen param that happens to carry a
+// field called kind is not mistaken for one. A nested sequence disqualifies
 // the whole envelope: a sequence that ran half its steps is a worse outcome than
 // one that does not run, because the half it ran is a change nobody asked for.
 func unsupportedAction(val *structpb.Value, v Client) (string, bool) {
@@ -310,9 +308,8 @@ func unsupportedAction(val *structpb.Value, v Client) (string, bool) {
 	return "", false
 }
 
-// Report writes the one telemetry line a degraded push earns. This is the whole
-// point of the slice: the client would have rendered a placeholder either way,
-// and nothing would have known.
+// Report writes the one telemetry line a degraded push earns. Without it the
+// client renders a placeholder and nothing anywhere records that it did.
 func (d Degradation) Report(ctx context.Context, session, where string) {
 	if d.empty() {
 		return

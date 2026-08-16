@@ -63,9 +63,9 @@ func TestInstalledExtensionStoreRoundTrip(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("after one install, got %d records", len(got))
 	}
-	// Compare field by field, with Equal for the instant: a timestamptz round-trips
-	// to the same instant but a struct-equal `==` would fail on the location
-	// pointer the driver hands back.
+	// Compare field by field, with Equal for the instant: a timestamptz
+	// round-trips to the same instant, but struct equality would fail on the
+	// location pointer the driver hands back.
 	if g := got[0]; g.ModuleID != rec.ModuleID || g.Repository != rec.Repository ||
 		g.Version != rec.Version || g.SignedBy != rec.SignedBy || !g.InstalledAt.Equal(rec.InstalledAt) {
 		t.Errorf("record did not round-trip: got %+v, want %+v", got[0], rec)

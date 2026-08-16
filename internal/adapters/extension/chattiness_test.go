@@ -24,25 +24,20 @@ import (
 // import before the protocol is fixed, and allowed to send the service shape
 // back for coarser, batched verbs."
 //
-// # What is measured, and what is deliberately not
-//
 // A tree import's cost is (calls per import) × (cost per call). Those are two
 // different quantities with two different owners — the first is module
 // behaviour, the second is this boundary — and measuring them together would
 // produce a number that says nothing about either.
 //
-// So this measures **cost per call**, hermetically, by running an import that
-// makes a known number of callbacks. The call count for a real import is a
-// property of the module and countable from its own tests; multiplying is the
-// reader's job and is honest arithmetic rather than a benchmark that needs the
-// network and the live Stremio addon ecosystem to be up.
-//
-// # Reading the result
+// So this measures cost per call, hermetically, by running an import that makes
+// a known number of callbacks. The call count for a real import is a property of
+// the module and countable from its own tests; multiplying is the reader's job,
+// and it keeps this out of the network and the live Stremio addon ecosystem.
 //
 // The number that matters is the marginal cost of one additional callback, not
 // the total: the total includes process spawn and handshake, which happen once
-// per module rather than once per import. Comparing 1 child against many is
-// what isolates it.
+// per module rather than once per import. Comparing 1 child against many is what
+// isolates it.
 
 func TestCallbackRoundTripCost(t *testing.T) {
 	if testing.Short() {

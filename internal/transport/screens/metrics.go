@@ -20,14 +20,13 @@ import (
 
 // The instrument viewer (sdk#9).
 //
-// **This screen is the reason the metric surface counts as built.** A capability
-// with no client path is owed rather than done, and a metric nobody can look at
-// is the specific thing sdk#5 refused to publish — a module author
-// instruments against it, gets no data, and has nothing telling them why. So the
-// surface and the screen land together.
+// This screen is what makes the metric surface built rather than owed. A
+// capability with no client path is owed, and a metric nobody can look at is the
+// specific thing sdk#5 refused to publish — a module author instruments against
+// it, gets no data, and has nothing telling them why.
 //
-// It is composed entirely from vocabulary that already exists: `SettingsFrame`,
-// `Section`, `StatCard`, `SettingsRow`, `EmptyState`. No component was added to
+// It is composed entirely from vocabulary that already exists: SettingsFrame,
+// Section, StatCard, SettingsRow, EmptyState. No component was added to
 // a client and no definition was added to the contract, which is what a new
 // screen is supposed to cost.
 
@@ -120,7 +119,7 @@ func scopesOf(series []telemetry.MetricSeries) []string {
 //
 // A counter has one — its total. A histogram has no single value, so the count
 // is what goes in the value slot and the distribution goes in the summary: an
-// average presented as *the* value is exactly the summarisation a histogram
+// average presented as the value is exactly the summarisation a histogram
 // exists to avoid.
 func metricValue(series telemetry.MetricSeries) string {
 	if series.Kind == telemetry.MetricKindHistogram {
@@ -153,7 +152,7 @@ func metricSummary(series telemetry.MetricSeries) string {
 
 // unitLabel renders a unit annotation for a person.
 //
-// The wire values are OpenTelemetry's — `By`, `{item}` — which are correct for a
+// The wire values are OpenTelemetry's — By, {item} — which are correct for a
 // backend and unreadable on a screen. Anything unrecognised is shown as given
 // rather than dropped: a unit this build does not know is still information, and
 // inventing a translation for it would be worse.
@@ -172,7 +171,7 @@ func unitLabel(unit string) string {
 
 // formatMetricNumber writes a value without trailing noise: whole numbers as
 // integers, everything else to two decimals. A counter is almost always whole,
-// and `1.00` where a reader expects `1` reads as a different kind of quantity.
+// and 1.00 where a reader expects 1 reads as a different kind of quantity.
 func formatMetricNumber(v float64) string {
 	if v == float64(int64(v)) {
 		return strconv.FormatInt(int64(v), 10)

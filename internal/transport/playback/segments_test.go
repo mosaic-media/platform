@@ -96,10 +96,9 @@ func TestASegmentPastTheEndIsRefused(t *testing.T) {
 	}
 }
 
-// TestASegmentNameIsNotAPath is the one that matters for safety. The resource
-// arrives in a URL, and the whole point of matching it against a closed set is
-// that it never becomes a filename — a directory traversal here reads whatever
-// the process can.
+// TestASegmentNameIsNotAPath pins the safety property. The resource arrives in a
+// URL and is matched against a closed set so it never becomes a filename — a
+// directory traversal here reads whatever the process can.
 func TestASegmentNameIsNotAPath(t *testing.T) {
 	for _, resource := range []string{
 		"../../etc/passwd", "..%2f..%2fetc%2fpasswd", "0.m4s.bak", "-1.m4s",

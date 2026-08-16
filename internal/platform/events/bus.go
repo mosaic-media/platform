@@ -23,15 +23,13 @@ import (
 // synchronously, in registration order. The publisher does not know or care
 // who is listening: publishing an event nobody subscribed to is not an error.
 //
-// If ANY subscriber handler returns an error, Publish returns a non-nil
-// error built from all of the failing handlers' errors — it does not
-// silently drop the failure or continue as if delivery succeeded. Bus
-// itself does not retry; that is the outbox worker's job (Worker in this
-// package), and a worker-driven retry redelivers the event to EVERY
-// subscriber of that type again, not just the one that failed. This is
-// exactly why contracts.EventHandler requires idempotency: a handler that
-// already completed its side effect may be invoked again for the same
-// event.
+// If any subscriber handler returns an error, Publish returns a non-nil error
+// built from all of the failing handlers' errors; it does not drop the failure
+// or continue as if delivery succeeded. Bus itself does not retry — that is
+// Worker's job — and a worker-driven retry redelivers the event to every
+// subscriber of that type again, not just the one that failed. This is why
+// contracts.EventHandler requires idempotency: a handler that already
+// completed its side effect may be invoked again for the same event.
 type Bus struct {
 	mu          sync.RWMutex
 	subscribers map[string][]*subscription

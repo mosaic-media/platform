@@ -18,10 +18,10 @@ import (
 // That import is the coupling the tier split forbids (platform#49, platform#51):
 // extension modules are downloaded and run at runtime, not compiled into the
 // Platform, so they are not platform dependencies and must not appear in its
-// test graph either. What a *real* extension module does out of process is
-// proven by a separate integration surface that installs one at runtime; what
-// the *Platform* does when a stream provider answers is proven here, against a
-// double that answers deterministically.
+// test graph either. What a real extension module does out of process is covered
+// by a separate integration surface that installs one at runtime; what the
+// Platform does when a stream provider answers is covered here, against a double
+// that answers deterministically.
 //
 // streamsFor is the whole of its behaviour: given the request the Platform sends
 // it, it returns the streams it offers, or none to decline. A test sets it to

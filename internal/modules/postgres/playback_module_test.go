@@ -22,13 +22,13 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// TestPlaybackResolutionAgainstPostgres is the consumer half of the extension
-// story end to end, and the point at which the library stops being inert.
+// TestPlaybackResolutionAgainstPostgres covers the consumer half of the
+// extension story end to end.
 //
 // A source imports a series and snapshots a stream location onto each episode;
-// the Platform then reads that Part back out of a real database and hands it to a
-// *different*, separately-compiled module — the first consumer, remote playback —
-// which resolves it to something playable. The consumer is the real core module;
+// the Platform then reads that Part back out of a real database and hands it to
+// a second, separately-compiled module — the consumer, remote playback — which
+// resolves it to something playable. The consumer is the real core module;
 // the source is a fake, because the platform module must not import an extension
 // module (platform#49/0081) and what is under test is the Platform's read-back and
 // consumer hand-off, not the source's addon parsing.
@@ -226,9 +226,9 @@ func seedPlaybackUser(t *testing.T, c context.Context, cs *postgres.ContractSet,
 // client of the same capability class, does not ask the source at all.
 //
 // The proof is the absence of the module rather than a timing measurement. A
-// second Service is built over the same database with **no** playback capability
-// registered — the exact configuration the test above shows failing with
-// "no playback module is installed" — and asked to resolve the same part. If it
+// second Service is built over the same database with no playback capability
+// registered — the exact configuration the test above shows failing with "no
+// playback module is installed" — and asked to resolve the same part. If it
 // answers, the answer can only have come from the cache.
 func TestPlaybackResolutionCacheAgainstPostgres(t *testing.T) {
 	requirePostgres(t)
@@ -372,7 +372,7 @@ func TestPartProbeIsDurableAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddContentChild: %v", err)
 	}
-	// Attached with what a release *name* suggested, which is what the module's
+	// Attached with what a release name suggested, which is what the module's
 	// dialect table produces and what platform#29 demoted to a ranking hint. Both
 	// of these are about to be contradicted by the bytes.
 	attached, err := svc.AttachContentPart(c, v1.AttachContentPartCommand{

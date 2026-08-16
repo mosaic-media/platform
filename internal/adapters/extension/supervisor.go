@@ -19,27 +19,21 @@ import (
 // not, and gives up on a module that will not stay up — reporting a degraded
 // capability rather than taking the Platform down with it (platform#39).
 //
-// # Why this owns the process and not the Supervisor
-//
 // platform#39 puts runtime supervision in the Platform for two reasons. A module
-// crash must be a **degraded capability, not a Generation event** — routing a
+// crash must be a degraded capability rather than a Generation event — routing a
 // restart through the Supervisor would make a wedged third-party process a
 // host-lifecycle concern, which is the coupling the tier split exists to break.
 // And the Platform is the only component that knows whether a module is
-// *answering* as opposed to merely running, so detection and remedy belong
+// answering as opposed to merely running, so detection and remedy belong
 // together.
 //
-// # The stable-proxy property
-//
-// This is what the registry holds, and it holds it once, at composition. A
+// Supervised is what the registry holds, and it holds it once, at composition. A
 // restart replaces the process and the gRPC connection underneath it — a fresh
 // [Module] with a fresh proxy — but the value the registry has does not change.
 // Role resolution reads [Manifest], which is answered from a cached copy taken
 // at the first successful launch, so a module's roles do not flicker while it is
 // down. Without this, a restart would orphan the registry's reference and every
 // call would hit a dead connection.
-//
-// # What a degraded capability looks like
 //
 // A call made while the module is down or disabled returns Unavailable, which is
 // exactly how [platform#23](0023-metadata-as-required-capability.md) and [platform#24](0024-capability-gated-affordances.md) expect an absent capability
@@ -326,7 +320,7 @@ func (s *Supervised) emit(_ v1.RedactionClass, isError bool, msg string, fields 
 	}
 }
 
-// current returns the live module, or nil when the module is down or disabled.
+// live returns the running module, or nil when it is down or disabled.
 func (s *Supervised) live() *Module {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

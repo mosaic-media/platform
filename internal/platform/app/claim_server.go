@@ -18,42 +18,36 @@ import (
 
 // Claiming an unclaimed server (platform#54).
 //
-// **This is the only write in the Platform that no caller authorises**, and the
-// only one that can be. Every command able to grant the first authority is
-// itself policy-gated, so on a server with no accounts there is nobody who
-// could be allowed to make one — which is exactly why the environment-variable
-// bootstrap existed, and why it was the only way in.
+// This is the only write in the Platform that no caller authorises, and the only
+// one that can be: every command able to grant the first authority is itself
+// policy-gated, so on a server with no accounts there is nobody who could be
+// allowed to make one.
 //
-// What stands in for authorisation is emptiness: the claim refuses the moment
+// What stands in for authorisation is emptiness. The claim refuses the moment
 // any user exists, and it re-checks inside the transaction so two people
 // arriving together produce one owner and one Conflict rather than two owners.
-// platform#54 accepts the threat this leaves — on a server reachable before
-// somebody sits down to set it up, the first party to find it becomes its
-// owner — and names the two mitigations that were deliberately not taken: a
-// console claim token, and a claim window that closes after start-up. Neither
-// is built here. They are increments, and inventing one of them quietly would
-// be worse than the gap, because an operator would then be relying on a
-// property nobody wrote down.
+// platform#54 accepts the threat this leaves and names two mitigations —
+// a console claim token, and a claim window that closes after start-up — neither
+// of which is built here. Do not invent one quietly; an operator would then be
+// relying on a property nobody wrote down.
 //
 // The environment-variable bootstrap stays beside this, unchanged. A server
-// seeded that way has a user, so it is already claimed and this refuses it —
+// seeded that way has a user, so it is already claimed and this refuses it,
 // which is what makes the two paths safe to have at once.
 
 // minPasswordLength is the shortest password the claim will accept.
 //
-// Eight rather than something longer, and no composition rules at all. This is
-// the credential for a household media server on a home network, and the
-// failure mode of a demanding policy here is a password written on a note by
-// the television. Length is the only rule with evidence behind it; the rest is
-// theatre that pushes people towards worse secrets.
+// Eight, and no composition rules at all: this is the credential for a household
+// media server on a home network, and the failure mode of a demanding policy
+// here is a password written on a note by the television.
 const minPasswordLength = 8
 
 // ClaimServerCommand is the whole of setup, submitted at once (platform#54).
 //
 // Four steps' worth of fields arrive together because the wizard collects them
-// in the client's own form scope and submits once. That is not a shortcut: a
-// server-driven step-per-round-trip would have to carry the password back down
-// inside the tree for every step after the one that collected it.
+// in the client's own form scope and submits once. A server-driven
+// step-per-round-trip would have to carry the password back down inside the tree
+// for every step after the one that collected it.
 type ClaimServerCommand struct {
 	// ServerName is what the household calls this machine. It is written outside
 	// PostgreSQL (platform#54), so it survives the database being down.
@@ -68,16 +62,14 @@ type ClaimServerCommand struct {
 	// session belongs to a device.
 	DeviceID domain.DeviceID
 	// StreamSourceModuleID names the extension module the household chose as its
-	// source of streams, if it chose one. Optional: metadata and catalogs work
-	// on a fresh install with no credential at all (module-cinemeta#1), so skipping this
-	// leaves a browsable Mosaic that cannot play, which is an honest state and a
-	// recoverable one.
+	// source of streams, if it chose one. Optional: metadata and catalogs work on
+	// a fresh install with no credential at all (module-cinemeta#1), so skipping
+	// it leaves a browsable Mosaic that cannot play.
 	//
-	// The repository it comes from is **not** carried beside it. A setup form
-	// that sent both would be a form a caller could point at a repository of
-	// their own, on the one endpoint that runs unauthenticated; resolving it
-	// from the catalogue the Platform already trusts means the only installable
-	// things are the ones the Platform was going to offer anyway.
+	// Do not carry the repository beside it. A setup form that sent both would
+	// let a caller point the one unauthenticated endpoint at a repository of
+	// their own; resolving it from the catalogue the Platform already trusts
+	// keeps the installable set to what the Platform was going to offer anyway.
 	StreamSourceModuleID string
 }
 
@@ -94,20 +86,18 @@ type ClaimServerResult struct {
 	// for or the install did not land.
 	StreamSource string
 	// StreamSourceProblem and IdentityProblem say what went wrong with the two
-	// steps that are allowed to fail without failing the claim. They are
-	// returned rather than logged and forgotten, because the person who just set
-	// the server up is the only one who can act on either.
+	// steps that are allowed to fail without failing the claim. They are returned
+	// rather than only logged, because the person who just set the server up is
+	// the only one who can act on either.
 	StreamSourceProblem string
 	IdentityProblem     string
 }
 
 // validateClaimServerCommand rejects per field (contracts#13).
 //
-// Every message here names the field it belongs to, because this is the first
-// screen a person ever sees and the first form Mosaic ever asked anyone to
-// fill in. A toast saying "invalid input" over a four-field form does not say
-// which field, and the machinery to say so has existed and been unused since
-// validation landed.
+// Every message names the field it belongs to: this is the first form Mosaic
+// asks anyone to fill in, and "invalid input" over four fields does not say
+// which one.
 func validateClaimServerCommand(cmd ClaimServerCommand) error {
 	var fields []contracts.FieldRejection
 	reject := func(field, message string) {
@@ -141,27 +131,23 @@ func validateClaimServerCommand(cmd ClaimServerCommand) error {
 		return contracts.NewError(contracts.InvalidArgument, "device id is required")
 	}
 	if len(fields) > 0 {
-		// **The summary repeats the individual messages, and that is not
-		// redundancy.** The wizard is four steps in one scope, and a rejection
-		// about the password marks a field on step two while the person is
-		// looking at step four — where the form-level line is the only thing
-		// they can see. A generic "that did not work" there would be a refusal
-		// with no way to act on it.
+		// The summary repeats the individual messages deliberately. The wizard is
+		// four steps in one scope, so a rejection about the password marks a
+		// field on step two while the person is looking at step four, where the
+		// form-level line is the only thing they can see.
 		//
-		// It is also the case client-side validation stopped covering when the
-		// steps became hidden branches rather than hidden fields: a Box that is
-		// not rendered unmounts its inputs, and an unmounted input's rules
-		// leave the scope, so the check that used to run before anything was
-		// sent now runs here instead.
+		// Client-side validation does not cover this: a Box that is not rendered
+		// unmounts its inputs, and an unmounted input's rules leave the scope, so
+		// the hidden steps' rules never run before submission.
 		return contracts.RejectFields(summarise(fields), fields...)
 	}
 	return nil
 }
 
 // summarise joins the field messages into the one line a form shows above its
-// button. Each rejection is written to stand alone for exactly this reason —
-// "Use at least 8 characters" reads as an instruction wherever it appears,
-// where "too short" would need the field beside it to mean anything.
+// button. Each rejection message must stand alone for this to read: "Use at
+// least 8 characters" works wherever it appears, where "too short" would need
+// the field beside it to mean anything.
 func summarise(fields []contracts.FieldRejection) string {
 	out := make([]string, 0, len(fields))
 	for _, f := range fields {
@@ -173,7 +159,7 @@ func summarise(fields []contracts.FieldRejection) string {
 // ClaimServer creates the first account and signs it in.
 //
 // The command order is the usual one with steps 2 and 3 replaced rather than
-// skipped: *nobody exists* is what authorises this, and it is checked twice —
+// skipped: nobody existing is what authorises this, and it is checked twice —
 // once before any work, and again inside the transaction, because the check and
 // the write must not be separable by a second claimant.
 func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (ClaimServerResult, error) {
@@ -190,14 +176,12 @@ func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (Clai
 		return ClaimServerResult{}, contracts.NewError(contracts.Conflict, "this server has already been claimed")
 	}
 
-	// **Resolved before the claim, not after.** The catalogue read is gated on
-	// the server still being claimable — deliberately, so a claimed server never
-	// reaches a remote repository for an unauthenticated caller — which means
-	// asking for it after the commit asks a server that has just stopped being
-	// claimable and gets nothing. It answered "Mosaic no longer offers
-	// aiostreams" on the very claim that chose it, and no test saw it: every
-	// one of them either had no extension manager or never got as far as the
-	// install. It took claiming a server in a browser.
+	// Resolved before the claim, not after. SetupOptions is gated on the server
+	// still being claimable, so a claimed server never reaches a remote
+	// repository for an unauthenticated caller — which also means asking after
+	// the commit asks a server that has just stopped being claimable and gets
+	// nothing back. Moving this below the transaction makes every claim report
+	// that Mosaic no longer offers the module it just chose.
 	streamRepository, streamOffered := "", cmd.StreamSourceModuleID == ""
 	if cmd.StreamSourceModuleID != "" {
 		streamRepository, streamOffered = s.streamSourceRepository(ctx, cmd.StreamSourceModuleID)
@@ -253,8 +237,8 @@ func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (Clai
 		// The owner holds everything, because it is the root of every other
 		// grant: an authority withheld here could never be given to anyone
 		// (platform#44). This is the one role the boot-time reconciliation keeps
-		// current as the Platform gains actions; every role created after it is
-		// a snapshot and stays one.
+		// current as the Platform gains actions; every role created after it is a
+		// snapshot and stays one.
 		perms := permissionsOf(SuperuserActions())
 		role, err := tx.Permissions().CreateRole(ctx, domain.Role{
 			ID: domain.RoleID(s.ids.NewID()), Name: PresetNameSuperuser, Permissions: perms,
@@ -290,11 +274,10 @@ func (s *Service) ClaimServer(ctx context.Context, cmd ClaimServerCommand) (Clai
 		return ClaimServerResult{}, err
 	}
 
-	// Everything below is after the commit and none of it may fail the claim.
+	// Everything below runs after the commit and none of it may fail the claim.
 	// The account and its authority are the part that had to be atomic; a name
-	// that did not get written and a module that did not install are both
-	// things the owner can fix from Settings, and refusing to let them in over
-	// either would be the worse answer.
+	// that did not get written and a module that did not install are both things
+	// the owner can fix from Settings.
 	result.ServerName, result.IdentityProblem = s.recordIdentity(ctx, strings.TrimSpace(cmd.ServerName))
 	result.StreamSource, result.StreamSourceProblem = s.installStreamSource(
 		ctx, result.Tokens, cmd.StreamSourceModuleID, streamRepository, streamOffered)
@@ -331,13 +314,11 @@ func (s *Service) recordIdentity(ctx context.Context, name string) (string, stri
 // installStreamSource installs the module the household picked, as the owner
 // who just claimed the server.
 //
-// **As the owner, not as the system principal.** Installing an extension is
-// downloading and running third-party code, and it is an act somebody chose;
-// attributing it to the install itself would put the one decision a person made
-// during setup outside the record of what people did. The session was minted a
-// moment ago and carries `extension.manage`, so the ordinary authorised path
-// works unchanged — this is not a special case, it is the normal command with a
-// caller that is one second old.
+// As the owner, not as the system principal: installing an extension is
+// downloading and running third-party code, and it is an act somebody chose, so
+// it belongs in the record of what people did. The session was minted a moment
+// ago and carries extension.manage, so this is the ordinary authorised command
+// with a caller that is one second old.
 func (s *Service) installStreamSource(
 	ctx context.Context, tokens domain.TokenPair, moduleID, repository string, offered bool,
 ) (string, string) {
@@ -367,10 +348,9 @@ func (s *Service) installStreamSource(
 // streamSourceRepository resolves which trusted repository offers a module,
 // among the ones the setup step was allowed to offer.
 //
-// It re-reads rather than trusting a value the claim carried, and it filters on
-// the stream role for the same reason the step does: the question is "may this
-// be installed during setup", and answering it from the catalogue means the
-// answer cannot be widened by the request.
+// It re-reads rather than trusting a value the claim carried, and filters on the
+// stream role: answering "may this be installed during setup" from the catalogue
+// means the request cannot widen the answer.
 func (s *Service) streamSourceRepository(ctx context.Context, moduleID string) (string, bool) {
 	for _, e := range s.SetupOptions(ctx).StreamSources {
 		if e.ModuleID == moduleID {

@@ -93,10 +93,10 @@ func (s *playbackStateStore) ListInProgress(ctx context.Context, userID domain.U
 	if limit <= 0 {
 		limit = defaultInProgressLimit
 	}
-	// `NOT finished` matches the partial index exactly, and `position_ms > 0`
-	// keeps out an item someone opened and closed without watching — which
-	// otherwise appears at the top of the rail, since it is the most recently
-	// touched thing there is.
+	// The NOT finished predicate matches the partial index exactly, and
+	// position_ms > 0 keeps out an item someone opened and closed without
+	// watching — which otherwise appears at the top of the rail, since it is the
+	// most recently touched thing there is.
 	rows, err := s.q.Query(ctx,
 		`SELECT `+playbackStateColumns+`
 		   FROM playback_states
@@ -126,11 +126,11 @@ func (s *playbackStateStore) ListInProgress(ctx context.Context, userID domain.U
 // ListWatched is the watch history (platform#59): everything this viewer has a
 // state for, most recently touched first.
 //
-// `position_ms > 0 OR finished` is the whole of the difference from the read
-// above. An item opened and closed without watching leaves a row at position
-// zero, and a history that listed it would say somebody watched a thing they
-// looked at the poster of; an item marked watched explicitly can sit at zero
-// legitimately, and is exactly what a history is for.
+// The "position_ms > 0 OR finished" predicate is the whole of the difference
+// from the read above. An item opened and closed without watching leaves a row
+// at position zero, and a history that listed it would say somebody watched a
+// thing they looked at the poster of; an item marked watched explicitly can sit
+// at zero legitimately, and is exactly what a history is for.
 func (s *playbackStateStore) ListWatched(ctx context.Context, userID domain.UserID, limit int) ([]v1.PlaybackState, error) {
 	if limit <= 0 {
 		limit = defaultWatchHistoryLimit

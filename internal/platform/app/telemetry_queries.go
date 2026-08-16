@@ -19,12 +19,11 @@ import (
 // These are a genuine escalation, unlike the preference actions beside them.
 // Telemetry records what every user did — which screens they opened, which
 // titles they searched for — and although values are redacted at construction
-// (platform#34), the *shape* of someone's activity is still visible. Granting
-// telemetry.read is a decision about trust, not a convenience.
+// (platform#34), the shape of someone's activity is still visible.
 //
 // They belong to the superuser and to nobody else by default (platform#44). The
-// *first* account holds them — withholding an action from the only account that
-// exists would create a permission nobody could ever be granted — while an
+// first account holds them, because withholding an action from the only account
+// that exists creates a permission nobody could ever be granted; an
 // administrator it allocates must be given them individually.
 const (
 	ActionTelemetryRead      policy.Action = "telemetry.read"
@@ -92,9 +91,8 @@ func (s *Service) GetTrace(ctx context.Context, q GetTraceQuery) (GetTraceResult
 	}
 	if len(spans) == 0 && len(logs) == 0 {
 		// A trace id that matches nothing is NotFound rather than an empty
-		// result: the usual way to reach this is pasting an id from a bug
-		// report, and "no such trace" and "that trace did nothing" are
-		// different answers to that.
+		// result: the usual way here is pasting an id from a bug report, and
+		// "no such trace" and "that trace did nothing" are different answers.
 		return GetTraceResult{}, contracts.NewError(contracts.NotFound, "no telemetry stored for that trace")
 	}
 	return GetTraceResult{Spans: spans, Logs: logs}, nil
@@ -135,26 +133,20 @@ type ListMetricsResult struct {
 
 // ListMetrics returns the live value of every counter and histogram (sdk#9).
 //
-// **It reads the process rather than the store, which is the one thing about
-// this query that is not like the three above it.** A log record and a span are
-// written once and read back; a metric is a running value with no moment of
-// production, so there is nothing in PostgreSQL to select and the answer comes
-// from the collector this process is holding. What that costs is stated on
-// MetricCollector and worth repeating where somebody calls it: these reset on
-// restart and carry no history.
+// Unlike the three queries above, it reads the process rather than the store. A
+// metric is a running value with no moment of production, so there is nothing in
+// PostgreSQL to select and the answer comes from the collector this process
+// holds: these reset on restart and carry no history.
 //
-// It takes the same telemetry.read gate as the others, and for the same reason
-// platform#36 gives — an instrument's dimensions describe what a module was asked
-// to do, which is the shape of somebody's activity even when every value is
-// redacted.
+// It takes the same telemetry.read gate as the others, for the reason platform#36
+// gives — an instrument's dimensions describe what a module was asked to do,
+// which is the shape of somebody's activity even when every value is redacted.
 func (s *Service) ListMetrics(ctx context.Context, q ListMetricsQuery) (ListMetricsResult, error) {
 	if _, err := s.enter(ctx, q.Caller, ActionTelemetryRead, policy.Resource{Type: "telemetry"}); err != nil {
 		return ListMetricsResult{}, err
 	}
-	// After the gate rather than before it. A caller who cannot read telemetry
-	// must not learn from the error whether this install has metrics
-	// configured — that is an unauthenticated caller reading a fact about the
-	// deployment, small but free to avoid.
+	// After the gate, not before it: a caller who cannot read telemetry must not
+	// learn from the error whether this install has metrics configured.
 	if s.metrics == nil {
 		return ListMetricsResult{}, contracts.NewError(contracts.Unavailable, "metrics are not configured")
 	}
@@ -178,26 +170,23 @@ func (s *Service) authorizeTelemetryRead(ctx context.Context, caller v1.Caller) 
 	return err
 }
 
-// CallerCan reports whether a caller holds an action, for deciding what to
-// *draw* rather than what to permit.
+// CallerCan reports whether a caller holds an action, for deciding what to draw
+// rather than what to permit.
 //
-// It exists because an affordance nobody may use should not be rendered: the
-// expert-mode toggle is shown only to a caller who holds ActionTelemetryRead,
-// so a normal user never sees a switch for a surface they cannot open. That is
-// a stricter rule than platform#36 first wrote, and a better one — the record had
-// the toggle visible to everyone and the data denied, which means routinely
-// showing people a control that fails.
+// An affordance nobody may use should not be rendered: the expert-mode toggle is
+// shown only to a caller who holds ActionTelemetryRead, which is stricter than
+// platform#36 wrote — that had the toggle visible to everyone and the data
+// denied, showing people a control that fails.
 //
-// It does not authorise and must never be mistaken for authorisation. It
-// returns no authorized, so nothing downstream can mistake its answer for the
-// proof platform#41 requires — the screens and services behind the affordance each
-// run the real check, and this only suppresses a button. It fails closed, and
-// it deliberately does not require permission.read, because asking "may I?"
-// about oneself is not reading the permission system.
+// It does not authorise. It returns no authorized, so nothing downstream can
+// mistake its answer for the proof platform#41 requires: the screens and services
+// behind the affordance each run the real check, and this only suppresses a
+// button. It fails closed, and it deliberately does not require permission.read,
+// because asking "may I?" about oneself is not reading the permission system.
 func (s *Service) CallerCan(ctx context.Context, caller v1.Caller, action policy.Action, resourceType string) bool {
 	// It authenticates rather than taking an authorized (platform#41): the
 	// emit-side holds a v1.Caller and has not entered the boundary for this
-	// action — asking whether it *could* is the whole question.
+	// action — asking whether it could is the whole question.
 	userID, err := s.authenticateCaller(ctx, caller)
 	if err != nil {
 		return false

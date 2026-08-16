@@ -191,8 +191,8 @@ func TestManagerActivateDefersGenerationClassChange(t *testing.T) {
 	}
 	// Pending, not Validated: the request is recorded, which is what lets an
 	// escalation tell a version somebody chose from one that merely passed
-	// validation. It used to be left Validated, and a restart could not have
-	// applied it without also applying every other validated candidate.
+	// validation. Left Validated, a restart could not apply it without also
+	// applying every other validated candidate.
 	if stored.Status != domain.ConfigPending {
 		t.Fatalf("persisted status = %q, want %q", stored.Status, domain.ConfigPending)
 	}

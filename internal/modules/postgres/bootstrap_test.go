@@ -16,11 +16,10 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/policy"
 )
 
-// TestBootstrapAdminIsUsable proves the seeded administrator is a real,
-// working account: it can sign in with its password and then exercise the
-// authority it was granted — the whole point of the bootstrap, which is what
-// makes the running binary usable by a human rather than only by a test that
-// seeds directly.
+// TestBootstrapAdminIsUsable pins that the seeded administrator is a real,
+// working account: it signs in with its password and then exercises the
+// authority it was granted, which is what makes a running binary usable by a
+// human rather than only by a test that seeds directly.
 func TestBootstrapAdminIsUsable(t *testing.T) {
 	requirePostgres(t)
 
@@ -38,12 +37,11 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 		username = "root"
 		password = "a strong bootstrap password"
 	)
-	// The full superuser set, as main.go seeds (platform#44). It used to be two
-	// permissions, which stopped working once delegation was bounded by what
-	// the grantor holds: an account with only role.create could no longer mint
-	// a role carrying content.read, which is the escalation that check closes.
-	// Seeding what the composition root seeds keeps this test about bootstrap
-	// rather than about a permission set no real install has.
+	// The full superuser set, as main.go seeds (platform#44). Seeding what the
+	// composition root seeds keeps this test about bootstrap rather than about a
+	// permission set no real install has — and delegation is bounded by what the
+	// grantor holds, so an account with only role.create cannot mint a role
+	// carrying content.read.
 	perms := make([]domain.Permission, 0)
 	for _, a := range app.SuperuserActions() {
 		perms = append(perms, domain.Permission(a))
@@ -105,16 +103,17 @@ func TestBootstrapAdminIsUsable(t *testing.T) {
 	}
 }
 
-// TestBootstrapReconcilesTheSuperuserRole covers the failure that needs a
-// *pre-existing* install to show, which is why nothing caught it.
+// TestBootstrapReconcilesTheSuperuserRole covers a failure only a pre-existing
+// install shows.
 //
 // A preset is snapshotted into a role row when the role is created, so adding an
 // action to the Platform never reaches an account that already exists. For every
 // other role that is correct — an administrator should not silently widen
 // because the software was upgraded — and for the superuser it is not: it is the
 // root of every other grant, so an authority it does not hold can never be given
-// to anyone. It surfaced live as playback progress failing to record on an
-// install whose admin predated `playback.write`.
+// to anyone. The symptom is a feature that quietly does not work, such as
+// playback progress failing to record on an install whose admin predates
+// playback.write.
 func TestBootstrapReconcilesTheSuperuserRole(t *testing.T) {
 	requirePostgres(t)
 
@@ -172,10 +171,9 @@ func TestBootstrapReconcilesTheSuperuserRole(t *testing.T) {
 		t.Error("reconciling dropped an action the role already held")
 	}
 
-	// It must not key on the role's *name*. The install that motivated this has
-	// a bootstrap role called "Administrator", from a build that named it
-	// differently — matching by name found nothing and silently did nothing,
-	// against exactly the install it was written for.
+	// Reconciliation must not key on the role's name. Bootstrap roles carry
+	// whatever name the build that created them used, so matching by name finds
+	// nothing and silently does nothing on exactly the installs that need it.
 	if len(roles) != 1 || roles[0].Name == "" {
 		t.Fatalf("expected one named role, got %+v", roles)
 	}
@@ -192,15 +190,15 @@ func TestBootstrapReconcilesTheSuperuserRole(t *testing.T) {
 	}
 }
 
-// TestOwnerRoleIsReconciledOnEveryBoot covers the same failure arriving through
-// the door claiming opened.
+// TestOwnerRoleIsReconciledOnEveryBoot covers the same failure on the claiming
+// path.
 //
 // The reconciliation above lives inside EnsureAdmin, which runs only when the
 // environment-variable bootstrap is configured. A server claimed through the
-// setup wizard (platform#54) never calls it, so its owner's authority froze at the
-// moment of claiming — and an action added by a later build would then be one
-// nobody on that install could ever hold, because the root of every grant did
-// not have it and cannot delegate what it lacks.
+// setup wizard (platform#54) never calls it, so without a separate reconcile its
+// owner's authority freezes at the moment of claiming — and an action added by a
+// later build is then one nobody on that install can ever hold, because the root
+// of every grant does not have it and cannot delegate what it lacks.
 func TestOwnerRoleIsReconciledOnEveryBoot(t *testing.T) {
 	requirePostgres(t)
 

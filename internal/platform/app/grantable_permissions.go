@@ -37,17 +37,14 @@ type GrantablePermissionsResult struct {
 // GrantablePermissions returns the permissions a grantor may confer, and which
 // of them a preset starts with (platform#44).
 //
-// The narrowing is the point. **A grantor never sees a permission they do not
-// hold** — not greyed out, not disabled, absent — because the list is computed
-// from their own grants rather than filtered on the client. An interface that
-// shows a box it will refuse to honour teaches people the product is broken,
-// and one that shows a box it *would* honour is the escalation this whole rule
-// exists to prevent.
+// A grantor never sees a permission they do not hold — not greyed out, not
+// disabled, absent — because the list is computed from their own grants rather
+// than filtered on the client.
 //
-// It is the offer side of the same invariant delegation.go enforces. Neither
+// It is the offer side of the invariant delegation.go enforces, and neither
 // replaces the other: this decides what is displayed, and the check at
-// CreateRole decides what is accepted — because the command surface is
-// reachable without going through any screen at all.
+// CreateRole decides what is accepted, because the command surface is reachable
+// without going through any screen.
 func (s *Service) GrantablePermissions(ctx context.Context, q GrantablePermissionsQuery) (GrantablePermissionsResult, error) {
 	preset, ok := Preset(q.Preset)
 	if !ok {

@@ -16,11 +16,10 @@ import (
 // moduleRecordQuota bounds how many records one module invocation may emit.
 //
 // Third-party code must not be able to fill the telemetry store, stall a
-// request, or drown another module's records. The bound is per invocation
-// rather than per interval so that a chatty module degrades its own call and
-// nothing else, and it is generous enough that no reasonable module will meet
-// it — a module that does is doing something worth knowing about, which is why
-// the overflow is itself recorded.
+// request, or drown another module's records. The bound is per invocation rather
+// than per interval so a chatty module degrades its own call and nothing else,
+// and the overflow is itself recorded because reaching it is worth knowing
+// about.
 const moduleRecordQuota = 512
 
 // moduleTelemetry implements the SDK's v1.Telemetry over the Platform's own
@@ -62,10 +61,10 @@ func newModuleTelemetry(lg *telemetry.Logger, moduleID string, metrics *telemetr
 // composition root hands it to the extension host when it adopts a module.
 //
 // It is deliberately not record-quota-bounded: the per-invocation cap the
-// in-process path uses does not map onto a long-lived process, and how a
-// long-lived out-of-process module's telemetry should be bounded — a rate limit,
-// a sampling policy — is sdk#7's open question, named here rather than
-// answered with a guessed cap.
+// in-process path uses does not map onto a long-lived process. How a long-lived
+// out-of-process module's telemetry should be bounded — a rate limit, a sampling
+// policy — is sdk#7's open question, left open rather than answered with a
+// guessed cap.
 func NewModuleTelemetry(lg *telemetry.Logger, moduleID string, metrics *telemetry.MetricCollector) v1.Telemetry {
 	return &moduleTelemetry{
 		logger: lg, moduleID: moduleID, metrics: metrics,
@@ -108,9 +107,9 @@ func (m *moduleTelemetry) emit(level telemetry.Level, message string, fields []v
 }
 
 // claim reserves one record against the invocation's quota, reporting whether
-// there was room. The record that announces exhaustion is emitted exactly once
-// — at the boundary — because a module in a tight loop would otherwise turn
-// the quota warning into the flood it exists to prevent.
+// there was room. The record announcing exhaustion is emitted exactly once, at
+// the boundary, or a module in a tight loop turns the quota warning into the
+// flood it exists to prevent.
 func (m *moduleTelemetry) claim() bool {
 	if m.unbounded {
 		return true
@@ -142,12 +141,11 @@ func (m *moduleTelemetry) Span(ctx context.Context, name string, attrs ...v1.Fie
 
 // Count and Measure record a module's own instruments (sdk#9).
 //
-// **They are not record-quota-bounded, and that is not an omission.** The record
-// quota exists because records accumulate in a store; a metric does not
-// accumulate at all — a counter written a million times is one series holding
-// one number. What *does* grow is the number of distinct series, and that is
-// bounded by the collector's own per-scope cap, which is where the bound
-// belongs because a series outlives the invocation that created it.
+// They are not record-quota-bounded, deliberately. The record quota exists
+// because records accumulate in a store; a counter written a million times is
+// one series holding one number. What grows is the number of distinct series,
+// and that is bounded by the collector's own per-scope cap — the right place for
+// it, because a series outlives the invocation that created it.
 //
 // The scope is the module id, fixed here from the registry exactly as the log
 // attribution is, so a module cannot record a series against another module's
@@ -165,10 +163,10 @@ func (m *moduleTelemetry) Measure(name string, value float64, unit v1.Unit, attr
 // unitAnnotation renders the SDK's closed unit vocabulary, normalising anything
 // outside it to unitless.
 //
-// The SDK does this too, and the duplication is deliberate rather than an
-// oversight: this path does not go through `v1.NewTelemetry`, so nothing else
-// would apply the rule, and an instrument carrying a unit nothing recognises is
-// worse than one carrying none — a backend converts against it.
+// The SDK does this too, and the duplication is deliberate: this path does not
+// go through v1.NewTelemetry, so nothing else applies the rule, and an
+// instrument carrying a unit nothing recognises is worse than one carrying none
+// — a backend converts against it.
 func unitAnnotation(u v1.Unit) string {
 	switch u {
 	case v1.UnitSeconds, v1.UnitBytes, v1.UnitItems:
@@ -181,12 +179,10 @@ func unitAnnotation(u v1.Unit) string {
 // reportMetric tells a module when its measurement did not land the way it
 // asked, through the channel it is already reading.
 //
-// Both cases are ones nothing else would ever surface. An instrument
-// OpenTelemetry refuses is a name mistake that produces no error anywhere — the
-// exact silently-discarding counter sdk#5 declined to publish — and a series
-// folded into the overflow dimension still contributes its value while losing
-// its breakdown, which is a correct total that answers a different question than
-// the one that was asked.
+// Nothing else surfaces either case. An instrument OpenTelemetry refuses is a
+// name mistake that produces no error anywhere, and a series folded into the
+// overflow dimension still contributes its value while losing its breakdown — a
+// correct total answering a different question than the one asked.
 //
 // The overflow is recorded once per scope, held by the collector, so a module in
 // a loop cannot turn the diagnostic into the flood the cap prevents.
@@ -228,11 +224,10 @@ func (noopModuleSpan) End()                      {}
 // convertFields maps SDK fields onto Platform fields, applying the Platform's
 // redaction policy.
 //
-// This is the point where the two vocabularies meet, and it is deliberately
-// the Platform that decides: an SDK field states what a value *is*, and the
-// Platform decides what happens to it. In particular Identifier is digested
-// here, because the install salt is the Platform's and must never cross into a
-// module.
+// The two vocabularies meet here and the Platform decides: an SDK field states
+// what a value is, and the Platform decides what happens to it. Identifier is
+// digested here in particular, because the install salt is the Platform's and
+// must never cross into a module.
 func convertFields(fields []v1.Field) []telemetry.Field {
 	if len(fields) == 0 {
 		return nil
@@ -249,9 +244,9 @@ func convertFields(fields []v1.Field) []telemetry.Field {
 		case v1.RedactionSecret:
 			out = append(out, telemetry.Secret(f.Key, f.Value))
 		default:
-			// Sensitive, and — importantly — anything unrecognised, including
-			// the zero value of a struct literal a module built by hand. Fail
-			// closed on the way in as well as on the way out.
+			// Sensitive, and anything unrecognised, including the zero value of
+			// a struct literal a module built by hand. Fail closed on the way in
+			// as well as on the way out.
 			out = append(out, telemetry.Sensitive(f.Key, f.Value))
 		}
 	}

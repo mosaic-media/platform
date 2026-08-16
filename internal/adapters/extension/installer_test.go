@@ -142,7 +142,7 @@ func TestInstallRejectsATamperedIndex(t *testing.T) {
 }
 
 // An index signed by a key the repository is not trusted for is refused, even
-// though it is validly signed by *some* key.
+// though it carries a valid signature from some other key.
 func TestInstallRejectsAnIndexFromTheWrongKey(t *testing.T) {
 	_, fetch, reg := newFakeRepo(t, func(files map[string][]byte, _ ed25519.PrivateKey) {
 		_, otherPriv, _ := ed25519.GenerateKey(rand.Reader)
@@ -157,12 +157,12 @@ func TestInstallRejectsAnIndexFromTheWrongKey(t *testing.T) {
 	}
 }
 
-// Boot re-adoption reads the on-disk cache and does NOT touch the network: after
-// an install, a fresh installer over the same directory — whose fetcher fails if
-// it is called at all — adopts the module and launches it. This is the
-// durable-across-restart property (platform#51): a restart reconstructs the running
-// set from what a previous install left on disk, so it neither depends on the
-// repository being reachable nor silently upgrades to whatever an index now
+// Boot re-adoption reads the on-disk cache and does not touch the network: after
+// an install, a fresh installer over the same directory — whose fetcher fails the
+// test if it is called at all — adopts the module and launches it. This is the
+// durable-across-restart property (platform#51): a restart reconstructs the
+// running set from what a previous install left on disk, so it neither depends on
+// the repository being reachable nor silently upgrades to whatever an index now
 // lists.
 func TestAdoptReUsesTheOnDiskCacheWithoutTheNetwork(t *testing.T) {
 	_, fetch, reg := newFakeRepo(t, nil)

@@ -14,22 +14,19 @@ import (
 // ModuleClient builds the HTTP client the composition root hands to every
 // module (platform#33, seam 9).
 //
-// It closes two holes at once, and the second is the more urgent of the two.
+// It closes two holes at once.
 //
-// **Telemetry.** A module's outbound call is usually where the time goes — a
-// Stremio aggregator fanning out to scrapers takes hundreds of milliseconds to
-// seconds — and until now it was the part of a trace that simply stopped. Each
-// request gets a span, and the trace context travels on the wire, so a
-// cooperating upstream could continue the trace rather than starting its own.
+// Telemetry: a module's outbound call is usually where the time goes — a Stremio
+// aggregator fanning out to scrapers takes hundreds of milliseconds to seconds —
+// and without this it is the part of a trace that stops. Each request gets a
+// span, and the trace context travels on the wire, so a cooperating upstream can
+// continue the trace rather than starting its own.
 //
-// **SSRF.** `netguard` exists because any handler fetching a URL on a client's
-// behalf opens a hole unless something stops it reaching the host's own
-// network. The artwork proxy and the playback origin use the dial guard — and
-// modules, which fetch third-party URLs a *user* supplied through module
-// settings, did not: each one built its own `http.Client` because the
-// composition root passed nil. That is the same class of hole the guard was
-// written for, reached by a different route, and it is closed here by giving
-// every module a client that cannot bypass it.
+// SSRF: a module fetches third-party URLs a user supplied through module
+// settings. Handing every module this client is what stops one building its own
+// http.Client and dialling the host's own network, the same hole the dial guard
+// closes for the artwork proxy and the playback origin. The composition root
+// must pass this rather than nil.
 func ModuleClient() *http.Client {
 	return &http.Client{
 		// Generous, because an aggregator legitimately takes seconds. Bounded,

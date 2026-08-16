@@ -12,7 +12,7 @@
 // therefore depends on contracts alone, and knowledge of the application
 // services stays here.
 //
-// **Every handler runs as the system principal** (platform#13). A handler asks the
+// Every handler runs as the system principal (platform#13). A handler asks the
 // Service for that caller and forwards it, exactly as a module forwards the
 // caller it was handed — the boundary is the ordinary one, and there is no path
 // here that reaches a store directly.
@@ -37,12 +37,10 @@ import (
 // silently dropping it.
 const (
 	// KindTelemetryRetention extends the telemetry partition window and drops
-	// the partitions retention has run out on (platform#36). It is the first
-	// caller of the six the roadmap queued behind this runner, and it was
-	// picked to prove the runner precisely because it was already configured
-	// and already doing nothing durable: retention ran in a goroutine that only
-	// existed while the process did, so a Platform down for a month came back
-	// with a month of records it had intended to drop.
+	// the partitions retention has run out on (platform#36). It is a job rather
+	// than a goroutine so that retention survives the process: a goroutine that
+	// only exists while the process does leaves a Platform down for a month
+	// coming back with a month of records it had intended to drop.
 	KindTelemetryRetention = "telemetry.retention"
 	// KindSessionTokenSweep deletes expired access and refresh tokens
 	// (platform#58). The access-token table is the fastest-growing thing in the
@@ -50,19 +48,17 @@ const (
 	// would ever remove them.
 	KindSessionTokenSweep = "session.tokens.sweep"
 	// KindLibraryMaintenance evaluates the library rules and reconciles
-	// (platform#60). It is the third of the six callers this runner was built for,
-	// and the first that does work a person would otherwise have to do by hand
-	// rather than housekeeping nobody would miss.
+	// (platform#60). Unlike the housekeeping kinds above it, it does work a
+	// person would otherwise have to do by hand.
 	KindLibraryMaintenance = "library.maintenance"
 	// KindLibraryAvailability re-asks the metadata providers where the library's
 	// works can be watched, oldest answer first (roadmap M2.5).
 	//
-	// **It is the reason the streaming-service facet may exist at all.** Both
-	// halves of that grouping worked long before this: a provider answers with
-	// availability and the store filters on it. The surface was withheld because
-	// nothing refreshed a fact that churns monthly, and a group saying "on
-	// Netflix" about a title that left in March is worse than an absent group —
-	// a user can see a missing feature and cannot see a lying one.
+	// It is what the streaming-service facet depends on. A provider answers
+	// with availability and the store filters on it, but availability churns
+	// monthly, and a group saying "on Netflix" about a title that left in
+	// March is worse than an absent group: a user can see a missing feature
+	// and cannot see a lying one.
 	KindLibraryAvailability = "library.availability"
 )
 
@@ -194,8 +190,8 @@ func sessionTokenSweep(svc *app.Service) jobs.Handler {
 // duplicate of anything.
 //
 // The job's id is forwarded so the pass can write a line per rule beside it.
-// That is what makes the background-work screen an account of *why something is
-// in the library* rather than a row saying a job succeeded.
+// That is what makes the background-work screen an account of why something is
+// in the library rather than a row saying a job succeeded.
 func libraryMaintenance(svc *app.Service) jobs.Handler {
 	return func(ctx context.Context, job domain.Job) error {
 		res, err := svc.RunLibraryMaintenance(ctx, app.RunLibraryMaintenanceCommand{

@@ -94,10 +94,9 @@ func getJSON(t *testing.T, url string, out any) *http.Response {
 	return resp
 }
 
-// TestHandoffEndpointsAgainstARunningInstance is the Supervisor gate
-// proven directly: every required endpoint is exercised
-// over real HTTP against a real running httptest.Server, not called as a
-// bare Go function.
+// TestHandoffEndpointsAgainstARunningInstance exercises every endpoint the
+// Supervisor requires over real HTTP against a running httptest.Server, rather
+// than calling the handlers as bare Go functions.
 func TestHandoffEndpointsAgainstARunningInstance(t *testing.T) {
 	h, _, _, _, _ := newTestHandoff()
 	server := httptest.NewServer(h.Mux())
@@ -235,13 +234,11 @@ func TestConfigReflectsActiveVersion(t *testing.T) {
 	}
 }
 
-// The two binaries have to agree on these three keys, and nothing structurally
-// holds them together (platform#77).
-//
-// **This is the same hazard the Supervisor's telemetry had**: a shape written by
-// one process and read by another, where a key quietly renamed on one side reads
-// as an absent value on the other rather than as an error. The Supervisor's
-// reader is `UpgradeRequest` in its own repository; this pins what it is reading.
+// TestTheUpgradeHandoffKeysAreTheOnesTheSupervisorReads pins that the two
+// binaries have to agree on these three keys and nothing structurally holds
+// them together (platform#77): a key renamed on one side reads as an absent
+// value on the other rather than as an error. The Supervisor's reader is
+// UpgradeRequest in its own repository; this pins what it is reading.
 func TestTheUpgradeHandoffKeysAreTheOnesTheSupervisorReads(t *testing.T) {
 	handoff := &health.Handoff{UpgradeStore: &fakePendingUpgrades{
 		version: "v0.4.0", at: time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC),
@@ -269,9 +266,10 @@ func TestTheUpgradeHandoffKeysAreTheOnesTheSupervisorReads(t *testing.T) {
 	}
 }
 
-// Nothing pending answers 200 with pending:false rather than a status code
-// carrying meaning: the Supervisor polls this every few seconds, and an absent
-// request must not be indistinguishable from a Platform that is unwell.
+// TestNoPendingUpgradeStillAnswersOK pins that nothing pending answers 200 with
+// pending:false rather than with a status code carrying meaning: the Supervisor
+// polls this every few seconds, and an absent request must not be
+// indistinguishable from a Platform that is unwell.
 func TestNoPendingUpgradeStillAnswersOK(t *testing.T) {
 	handoff := &health.Handoff{UpgradeStore: &fakePendingUpgrades{}}
 	recorder := httptest.NewRecorder()

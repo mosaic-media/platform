@@ -21,11 +21,11 @@ import (
 )
 
 // The publisher tool and the Platform verifier meet here: modulesign signs, the
-// Platform's Verify accepts. It is the one test of the tool, and it is the claim
-// that matters — a signature the tool produces is one the Platform trusts, and
-// the digest the tool prints is the one the Platform hashes to. Those two agree
-// only if both sides use the same functions, which is why the digest lives in a
-// shared exported helper rather than a format written down twice.
+// Platform's Verify accepts. A signature the tool produces must be one the
+// Platform trusts, and the digest the tool prints must be the one the Platform
+// hashes to. Those agree only if both sides use the same functions, which is why
+// the digest lives in a shared exported helper rather than a format written down
+// twice.
 func TestModulesignOutputVerifies(t *testing.T) {
 	dir := t.TempDir()
 	tool := buildModulesign(t, dir)

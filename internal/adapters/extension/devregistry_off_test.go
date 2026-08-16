@@ -17,21 +17,21 @@ import (
 	"github.com/mosaic-media/platform/internal/adapters/extension"
 )
 
-// **The guard on the development override (platform#55), asserted in the build that
-// ships.** Setting both variables — with a key file that is a perfectly valid
-// ed25519 public key, so nothing here passes for an incidental reason — must
-// leave this Platform trusting the compiled-in URL and the compiled-in key.
+// TestTheEnvironmentCannotRepointAShippedBuild pins the guard on the development
+// override (platform#55) in the build that ships. Setting both variables — with a
+// key file that is a valid ed25519 public key, so nothing passes here for an
+// incidental reason — must leave this Platform trusting the compiled-in URL and
+// the compiled-in key.
 //
-// This is the property a reader would otherwise have to take on faith: a release
-// binary cannot be pointed at another module repository, and therefore at
-// another publisher's code, by editing its environment. It holds structurally
-// rather than behaviourally — devregistry_off.go contains no path from an
-// environment value to a trusted key — and it would fail the moment the tag
-// split were collapsed into a runtime check.
+// A release binary cannot be pointed at another module repository, and therefore
+// at another publisher's code, by editing its environment. That holds
+// structurally rather than behaviourally — devregistry_off.go contains no path
+// from an environment value to a trusted key — and it would fail the moment the
+// tag split were collapsed into a runtime check.
 //
 // Its counterpart is TestTheDevelopmentOverrideReplacesTheURLAndTheKey, which
-// asserts the opposite under `-tags mosaicdev`. Neither test can run in the
-// other's build, which is exactly why the gate runs both.
+// asserts the opposite under -tags mosaicdev. Neither test can run in the other's
+// build, which is why the gate runs both.
 func TestTheEnvironmentCannotRepointAShippedBuild(t *testing.T) {
 	pub, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

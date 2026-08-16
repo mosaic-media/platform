@@ -13,13 +13,13 @@ import (
 // What a render says about itself, beside the tree it returns (platform#30).
 //
 // A screen built from a durable snapshot has two things to tell the transport
-// that a `UINode` cannot carry: that it should be revalidated, and that a source
+// that a UINode cannot carry: that it should be revalidated, and that a source
 // is not answering. The first schedules a background refresh whose result
-// arrives as a `RegionUpdate`; the second raises a standing notice that has to
+// arrives as a RegionUpdate; the second raises a standing notice that has to
 // be retracted by name when the source recovers.
 //
 // It rides the context rather than the return signature deliberately. Every
-// screen builder returns `(sdui.Node, error)` and only the source-backed ones
+// screen builder returns (sdui.Node, error) and only the source-backed ones
 // have anything to add — widening the signature would make every screen carry a
 // value that thirteen of them always leave empty, and the one that forgot to
 // would be indistinguishable from one with nothing to say.

@@ -289,10 +289,10 @@ func TestSpanStoreWritesAWaterfall(t *testing.T) {
 	if got["module.import"].status != "error" || got["module.import"].category != "unavailable" {
 		t.Fatalf("failed module span lost its status/category: %+v", got["module.import"])
 	}
-	// The outermost span here is NOT parentless, and that is the point: an edge
-	// continues the caller's trace rather than starting a new one, so the RPC
-	// span's parent is the client's span (platform#32). A parentless root would
-	// mean the Shell's half of the trace had been thrown away at the wire.
+	// The outermost span here is not parentless: an edge continues the caller's
+	// trace rather than starting a new one, so the RPC span's parent is the
+	// client's span (platform#32). A parentless root would mean the Shell's half
+	// of the trace had been thrown away at the wire.
 	if got["Invoke"].parent != tc.SpanIDString() {
 		t.Fatalf("the entry span should hang off the caller's span %q, got %q",
 			tc.SpanIDString(), got["Invoke"].parent)

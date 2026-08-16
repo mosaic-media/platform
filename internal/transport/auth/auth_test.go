@@ -31,9 +31,9 @@ func signedInUser(db *fakeDB) domain.UserID {
 	return userID
 }
 
-// TestSignInIssuesASession is the whole reason this transport exists: a client
-// with nothing but a username and password ends up holding the opaque session
-// ref every SessionService call requires (platform#37).
+// TestSignInIssuesASession pins the transport's purpose: a client with nothing
+// but a username and password ends up holding the opaque session ref every
+// SessionService call requires (platform#37).
 func TestSignInIssuesASession(t *testing.T) {
 	db := newFakeDB()
 	userID := signedInUser(db)
@@ -75,9 +75,9 @@ func TestSignInIssuesASession(t *testing.T) {
 	}
 }
 
-// TestSignInFailuresAreUnauthenticated pins the mapping the client depends on
-// now that GraphQL's always-200 envelope is gone: a rejected credential is an
-// UNAUTHENTICATED status code, not a success carrying an error object.
+// TestSignInFailuresAreUnauthenticated pins the mapping the client depends on: a
+// rejected credential is an UNAUTHENTICATED status code, not a success carrying
+// an error object.
 //
 // It also pins the non-enumeration property — an unknown username and a wrong
 // password are indistinguishable from outside, in both code and message.
@@ -155,10 +155,10 @@ func TestSignOutRevokesTheSession(t *testing.T) {
 	}
 }
 
-// TestSignOutWithoutACallerIsUnauthenticated guards the one check this
-// transport makes itself. It is here rather than in the command because an
-// empty caller is a malformed *request*, and answering it InvalidArgument would
-// tell an unauthenticated caller that the field shape was the only problem.
+// TestSignOutWithoutACallerIsUnauthenticated guards the one check this transport
+// makes itself. It is here rather than in the command because an empty caller is
+// a malformed request, and answering it InvalidArgument would tell an
+// unauthenticated caller that the field shape was the only problem.
 func TestSignOutWithoutACallerIsUnauthenticated(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)

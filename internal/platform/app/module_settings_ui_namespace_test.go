@@ -37,8 +37,8 @@ func TestAModuleMayEmitItsOwnNamespacedType(t *testing.T) {
 	}
 }
 
-// The first live hole. Two modules both contributing `StatChip` overwrite each
-// other in the client's registry, last writer winning, with no error anywhere.
+// Two modules both contributing StatChip would overwrite each other in the
+// client's registry, last writer winning, with no error anywhere.
 func TestAnUnprefixedUnknownTypeIsRefused(t *testing.T) {
 	ui := []byte(`{"type":"Screen","children":[{"type":"StatChip"}]}`)
 	err := validateUINode("stremio", ui)
@@ -117,7 +117,7 @@ func TestTheRootIsHeldToTheSameRule(t *testing.T) {
 }
 
 // A module id that cannot carry a namespace is refused before its tree is even
-// read: `a:b` would make `a:b:Row` ambiguous.
+// read: an id of a:b would make a:b:Row ambiguous.
 func TestAModuleIDThatCannotBeANamespaceIsRefused(t *testing.T) {
 	if err := validateUINode("bad:id", []byte(`{"type":"Screen"}`)); err == nil {
 		t.Error("a module id containing the separator was accepted")

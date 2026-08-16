@@ -138,7 +138,7 @@ func TestLogRowOffersItsTrace(t *testing.T) {
 }
 
 // TestTraceScreenNestsSpansByParent covers the waterfall's shape. The entry
-// span's parent is the *client's* span and was never stored here, so it must be
+// span's parent is the client's span and was never stored here, so it must be
 // treated as a root rather than dropped.
 func TestTraceScreenNestsSpansByParent(t *testing.T) {
 	now := time.Now()
@@ -179,7 +179,7 @@ func TestTraceScreenNestsSpansByParent(t *testing.T) {
 		}
 	}
 	// The share of the whole is the point of a waterfall — a duration alone
-	// does not say which part *was* the time.
+	// does not say which part was the time.
 	if !strings.Contains(rendered, "%") {
 		t.Fatalf("expected each span's share of the total: %s", rendered)
 	}

@@ -16,17 +16,15 @@ import (
 // escalation, when the escalation that has just happened is enough to carry
 // it.
 //
-// **It takes no caller, and that is deliberate rather than an omission.** The
-// authorisation happened when a user asked for the version: that call went
-// through the policy gate and left the request recorded as Pending. This runs
-// at boot, on nobody's behalf, and its whole job is to finish what was already
-// authorised — the same shape as a migration. A session gate here would ask a
-// question with no one present to answer it.
+// It takes no caller, deliberately. The authorisation happened when a user asked
+// for the version: that call went through the policy gate and left the request
+// recorded as Pending. This runs at boot, on nobody's behalf, to finish what was
+// already authorised — the same shape as a migration.
 //
-// `granted` is what the caller can vouch for having done. A Platform that has
-// just started grants Restart, because starting is exactly what it did; a
-// Generation-class change is left waiting for the Supervisor rather than
-// applied by a restart that was never going to carry it.
+// granted is what the caller can vouch for having done. A Platform that has just
+// started grants Restart, because starting is what it did; a Generation-class
+// change is left waiting for the Supervisor rather than applied by a restart
+// that was never going to carry it.
 func (s *Service) ApplyPendingConfig(ctx context.Context, granted config.ReloadClass) (ActivateConfigVersionResult, error) {
 	var outcome config.ActivationOutcome
 

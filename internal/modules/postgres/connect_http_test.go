@@ -89,7 +89,7 @@ func TestConnectHTTPSignsInAndRendersAScreen(t *testing.T) {
 	// Both services on one mux, as the composition root mounts them. Plain
 	// HTTP/1.1 is enough here: the Connect protocol carries a server stream over
 	// chunked encoding, so the push lane works without h2c. The binary serves
-	// h2c so the lanes *multiplex* onto one connection (contracts#5), which is a
+	// h2c so the lanes multiplex onto one connection (contracts#5), which is a
 	// performance property, not a correctness one.
 	mux := http.NewServeMux()
 	authPath, authHandler := authv1connect.NewAuthServiceHandler(authtransport.NewHandler(svc))

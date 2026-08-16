@@ -19,10 +19,9 @@ type SessionStore interface {
 
 	// Touch records that the session was used, moving LastSeenAt.
 	//
-	// It exists because idle expiry sits inside absolute expiry (platform#58),
-	// and idle is measured from this column. It was written at issue and never
-	// again, so a session that had been used every day for a month looked
-	// exactly as idle as one nobody had touched since it was minted.
+	// Idle expiry sits inside absolute expiry (platform#58) and is measured
+	// from this column, so a use that does not call Touch is a use that makes
+	// the session look idle.
 	Touch(ctx context.Context, id domain.SessionID, at time.Time) (domain.Session, error)
 
 	// ListForUser returns a user's live sessions, newest first — the device

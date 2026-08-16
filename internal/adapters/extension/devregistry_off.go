@@ -5,18 +5,14 @@
 //go:build !mosaicdev
 
 // The shipped half of the module-repository override (platform#55): there is no
-// override. This file is what an ordinary `go build` compiles, and it is the
-// whole of the mechanism in a release — two functions that read nothing and
-// decide nothing.
+// override. This file is what an ordinary go build compiles, and it is the whole
+// of the mechanism in a release — two functions that read nothing and decide
+// nothing. devregistry.go carries the reasoning.
 //
-// It is worth reading beside devregistry.go, which carries the reasoning. The
-// short version: a variable that repoints the module repository can make the
-// Platform download and run whatever it is pointed at, so the question is not
-// "how loudly should a release warn about it" but "should a release be able to
-// do it at all". This file is the answer. `official_test.go` asserts it by
-// setting both variables and watching the compiled-in URL and key come back
-// unchanged — the guard has a test in the build that ships, not only in the one
-// that does not.
+// official_test.go asserts this by setting both variables and watching the
+// compiled-in URL and key come back unchanged, so the guard has a test in the
+// build that ships and not only in the one that does not.
+
 package extension
 
 // devRepositoryOverride reports no override, without consulting the

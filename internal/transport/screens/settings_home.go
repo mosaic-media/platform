@@ -20,7 +20,7 @@ import (
 //
 // It sits under Preferences rather than under Server because it is taste: the
 // library is one shared object graph and this decides nothing about it, only
-// about how one person sees it. The library *rules* beside it are the opposite
+// about how one person sees it. The library rules beside it are the opposite
 // and live under Server, because everybody sees the same library and one person
 // decides what goes in it.
 //
@@ -74,7 +74,7 @@ func (s *Service) homeRowsPanel(ctx context.Context, caller v1.Caller, nav setti
 		keys = append(keys, r.key)
 		byKey[r.key] = r
 	}
-	// Arranged but **not** filtered: a hidden row keeps its place in this list so
+	// Arranged but not filtered: a hidden row keeps its place in this list so
 	// it can be offered back. Hiding it here as well as on home would mean the
 	// only way to restore a row is to remember it existed.
 	arranged := composition.Arrange(keys)
@@ -91,16 +91,16 @@ func (s *Service) homeRowsPanel(ctx context.Context, caller v1.Caller, nav setti
 				// pointer changes meaning between one press and the next.
 				homeMoveButton("Up", composition, keys, key, true, i == 0),
 				homeMoveButton("Down", composition, keys, key, false, i == len(arranged)-1),
-				// The switch says its *state*, not the row's name. Repeating the
+				// The switch says its state, not the row's name. Repeating the
 				// label beside the control it belongs to is noise on a row that
 				// has already said it — and "Shown"/"Hidden" is the one thing a
 				// switch cannot say for itself.
 				//
-				// **A finding rather than a choice:** `Switch` has no accessible
-				// name in the contract (contracts#14), so a screen reader hears "on"
-				// and nothing else whatever this text says — the Text beside it is
-				// a sibling, not a label. Fixing that is a vocabulary change, not
-				// a word here.
+				// A finding rather than a choice: Switch has no accessible name
+				// in the contract (contracts#14), so a screen reader hears "on"
+				// and nothing else whatever this text says — the Text beside it
+				// is a sibling, not a label. Fixing that is a vocabulary change,
+				// not a word here.
 				ui.Toggle(homeVisibilityLabel(hidden),
 					ui.On(!hidden),
 					ui.OnTap(setHomeComposition(composition.Toggle(key, !hidden)))),
@@ -126,12 +126,11 @@ func homeVisibilityLabel(hidden bool) string {
 // composition that results from pressing it.
 //
 // A worded button rather than a chevron pair, and that is a finding rather than
-// a preference: the client's glyph set has `chevron-down` and no `chevron-up`,
-// and the Icon primitive resolves an unknown name to *nothing* — so a
-// hand-written "chevron-up" would have drawn an invisible control that still
-// worked, which is the exact shape of a defect this project has shipped before.
-// Adding the glyph is a client release, and it is not worth one for a settings
-// row that reads perfectly well as Up and Down.
+// a preference: the client's glyph set has chevron-down and no chevron-up, and
+// the Icon primitive resolves an unknown name to nothing — so a hand-written
+// "chevron-up" would draw an invisible control that still worked. Adding the
+// glyph is a client release, and it is not worth one for a settings row that
+// reads perfectly well as Up and Down.
 func homeMoveButton(label string, composition app.HomeComposition, keys []string, key string, up, atEnd bool) ui.El {
 	if atEnd {
 		return ui.Button(label, "ghost", ui.Disabled(true))
@@ -143,10 +142,10 @@ func homeMoveButton(label string, composition app.HomeComposition, keys []string
 // setHomeComposition is the action a control emits: the caller's own home
 // preference, set to the document that control produces.
 //
-// It reuses `setPreference` rather than growing an action of its own, and that
+// It reuses setPreference rather than growing an action of its own, and that
 // is the honest shape: the value is a preference, the store keeps it
 // uninterpreted, and the surface that reads it owns its meaning (platform#17's
-// rule for module settings, which is the same rule). A `moveHomeRow` action
+// rule for module settings, which is the same rule). A moveHomeRow action
 // would need the Platform to recompute the row list inside a command — a
 // provider fan-out per press, to answer a question the screen that drew the
 // button had already answered.

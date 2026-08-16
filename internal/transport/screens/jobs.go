@@ -21,12 +21,11 @@ import (
 // The background-work surface (platform#13's no-user case), inside expert mode
 // beside the telemetry screens.
 //
-// It is here rather than nowhere because a queue with no surface fails
-// silently: a dead-lettered job and an empty queue are indistinguishable from
-// outside, and the whole reason a runner gives up after N attempts is that a
-// human is supposed to look. The screens are composed from the vocabulary that
-// already exists — a TraceRow per job, a LogTable for its lines — so this
-// costs no client release.
+// A queue with no surface fails silently: a dead-lettered job and an empty queue
+// are indistinguishable from outside, and a runner gives up after N attempts
+// precisely so a human looks. The screens are composed from the vocabulary that
+// already exists — a TraceRow per job, a LogTable for its lines — so this costs
+// no client release.
 
 // jobsScreen lists the queue: what is waiting, what is running, what has been
 // dead-lettered, and what has already run.

@@ -40,9 +40,9 @@ func episodeStreamFor(provider string) func(v1.StreamRequest) []v1.StreamLink {
 }
 
 // TestStreamProviderPrecedenceAgainstPostgres checks the precedence claim in
-// `registerCapabilities` — that of two stream sources able to answer, the one
-// whose module id sorts first is asked first and wins (platform#46) — with the real
-// enrichment pass and a real database.
+// registerCapabilities — that of two stream sources able to answer, the one
+// whose module id sorts first is asked first and wins (platform#46) — with the
+// real enrichment pass and a real database.
 //
 // Both sources are fakes: the platform module must not import an extension module
 // (platform#49/0081), and what is under test is the Platform's fan-out order, not a
@@ -117,7 +117,7 @@ func TestStreamProviderPrecedenceAgainstPostgres(t *testing.T) {
 	}
 	// The stream sources read no settings, so nothing is configured for them.
 
-	// Import a *TMDB* ref. No stream source is named anywhere in this command.
+	// Import a TMDB ref. No stream source is named anywhere in this command.
 	result, err := svc.ImportContent(c, app.ImportContentCommand{
 		Caller: caller,
 		Ref: v1.ContentRef{
@@ -159,9 +159,8 @@ func TestStreamProviderPrecedenceAgainstPostgres(t *testing.T) {
 		if part.Location.Scheme != v1.RemoteLocation {
 			t.Errorf("episode %q part scheme = %q, want remote", episode.Title, part.Location.Scheme)
 		}
-		// The precedence claim, checked rather than asserted in a comment: both
-		// stream sources can answer, and module-id order decides — "aiostreams"
-		// sorts before "stremio".
+		// Both stream sources can answer, and module-id order decides:
+		// "aiostreams" sorts before "stremio".
 		if part.Location.Provider != "aiostreams" {
 			t.Errorf("episode %q resolved through %q, want aiostreams — module-id order is the precedence rule",
 				episode.Title, part.Location.Provider)
@@ -181,7 +180,7 @@ func TestStreamProviderPrecedenceAgainstPostgres(t *testing.T) {
 // all the way through the Platform: a stream source is registered but has nothing
 // to offer, so it declines.
 //
-// The assertion is that the import *succeeds* — a stream source with nothing to
+// The assertion is that the import succeeds: a stream source with nothing to
 // offer must not lose a user the title they just added. It is the same rule as a
 // metadata-only deployment, arriving by a different route.
 func TestStreamSourceDeclinesButImportSucceeds(t *testing.T) {

@@ -9,7 +9,7 @@ import "time"
 // PlaybackResolution is one cached answer to "where are this release's bytes,
 // for a client that can decode this" (platform#28).
 //
-// It is the *perishable* half of the durable/perishable split. The candidate it
+// It is the perishable half of the durable/perishable split. The candidate it
 // belongs to — the release, its codecs, its size — is a Part and never expires.
 // What expires is this: a debrid link whose lifetime has no contract, because it
 // dies either on the provider's own schedule or the moment its torrent leaves

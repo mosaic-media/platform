@@ -14,8 +14,8 @@ import (
 
 // PreviewContentQuery resolves the detail of a virtual content item — one a
 // search or catalog browse produced but that is not (yet) in the library. It is
-// what lets a user open a virtual result to see more before adding it (ADR
-// 0028): reading is free, materialising is the deliberate act.
+// what lets a user open a virtual result to see more before adding it
+// (platform#18): reading is free, materialising is the deliberate act.
 type PreviewContentQuery struct {
 	Caller v1.Caller
 	Ref    v1.ContentRef

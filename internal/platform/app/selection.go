@@ -17,25 +17,23 @@ import (
 // cannot appear in a capability-gated affordance. It is code in the binary that
 // never boots.
 //
-// One honesty about the Go model, since platform#38 says "no init runs for it": a
-// compiled-in module's *package* is imported, so its package-level init runs
-// regardless — that is unavoidable for anything statically linked. What
-// selection skips is the module's construction (its New) and its registration,
-// which is where every resource and every effect lives. "Code in the binary
-// that never boots" is exact; "no init runs" is exact for the module's own
-// initialization and loose for Go's package init, and this is the distinction.
+// One qualification on platform#38's "no init runs for it": a compiled-in
+// module's package is imported, so its package-level init runs regardless, which
+// is unavoidable for anything statically linked. What selection skips is the
+// module's construction (its New) and its registration, which is where every
+// resource and every effect lives.
 //
 // Selection is Generation-class configuration in the reload-class vocabulary:
 // an admin changes it, and the Supervisor activates a new Generation of the
-// same binary with a different selection rather than building a candidate (ADR
-// 0063). The Generation-activation half is Supervisor-shaped and unbuilt; what
+// same binary with a different selection rather than building a candidate
+// (platform#38). The Generation-activation half is Supervisor-shaped and unbuilt; what
 // is built here is the selection itself and its validation.
 type Selection struct {
 	// all is true when no explicit selection was made — every core module the
 	// binary carries is wired in. It is the default because a fresh install must
-	// work with nothing configured (module-cinemeta#1): the zero-configuration metadata
-	// floor is a core module, and a default that dropped it would boot an inert
-	// Mosaic.
+	// work with nothing configured (module-cinemeta#1): the zero-configuration
+	// metadata floor is a core module, and a default that dropped it would boot
+	// an inert Mosaic.
 	all bool
 	// ids is the explicit set, used only when all is false.
 	ids map[string]bool

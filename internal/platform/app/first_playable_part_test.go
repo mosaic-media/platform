@@ -40,17 +40,14 @@ func seedWorkWithItems(db *fakeDB, itemCount, partOn int) v1.NodeID {
 	return workID
 }
 
-// TestFirstPlayablePartClearsTheBoundaryOnce is the regression this whole
-// change exists for, stated as a trace rather than a timing.
+// TestFirstPlayablePartClearsTheBoundaryOnce pins the boundary cost as a trace
+// rather than a timing.
 //
 // The walk stops at the first item that has a Part, so a work whose playable
-// child is last is the worst case — and it used to re-enter GetContentNode and
-// ListNodeParts, paying a full authenticate-plus-authorize for the node read
-// and then one more for every child it stepped over. Five children meant six
-// session reads and six policy evaluations to learn one Part id.
-//
-// The trace pins the shape, not a number: one session read and one role read,
-// wherever the Part turns out to be.
+// child is last is the worst case: re-entering GetContentNode and ListNodeParts
+// would pay a full authenticate-plus-authorize for the node read and one more
+// per child stepped over. The trace pins the shape, not a number — one session
+// read and one role read, wherever the Part turns out to be.
 func TestFirstPlayablePartClearsTheBoundaryOnce(t *testing.T) {
 	db := newFakeDB()
 	tr := &trace{}
@@ -106,13 +103,10 @@ func TestFirstPlayablePartReportsNothingToPlay(t *testing.T) {
 	}
 }
 
-// TestFirstPlayablePartDoesNotDisguiseADenialAsNothingToPlay is the behaviour
-// change that came with the fix.
-//
-// It used to swallow every error into false, so a caller who was not permitted
-// to read content saw a detail screen with no Play button — indistinguishable
-// from a work that genuinely has no bytes. Those are different facts and the
-// screen has to be able to tell them apart.
+// TestFirstPlayablePartDoesNotDisguiseADenialAsNothingToPlay pins the two
+// failure paths apart. Swallowing every error into false would give a caller who
+// is not permitted to read content a detail screen with no Play button,
+// indistinguishable from a work that genuinely has no bytes.
 func TestFirstPlayablePartDoesNotDisguiseADenialAsNothingToPlay(t *testing.T) {
 	db := newFakeDB()
 	tr := &trace{}
@@ -145,8 +139,8 @@ func TestFirstPlayablePartDoesNotDisguiseADenialAsNothingToPlay(t *testing.T) {
 }
 
 // TestFirstPlayablePartRejectsAnUnknownSession keeps the unauthenticated case
-// beside the others rather than only in the conformance table, because this is
-// the method whose old signature could not express it at all.
+// beside the others rather than only in the conformance table, since this is the
+// one entry point that returns playability as well as an error.
 func TestFirstPlayablePartRejectsAnUnknownSession(t *testing.T) {
 	db := newFakeDB()
 	tr := &trace{}

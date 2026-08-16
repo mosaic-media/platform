@@ -30,11 +30,7 @@ func New() Module {
 	return Module{}
 }
 
-// Manifest declares the Platform contracts this module fulfills. UnitOfWork
-// through HealthProbe are the module's original contract set; CredentialStore
-// is included because the Identity slice added it to the contract set (and to
-// contracts.Tx) after that set was written, and this module genuinely fulfills
-// it.
+// Manifest declares the Platform contracts this module fulfills.
 func (Module) Manifest() builtin.Manifest {
 	return builtin.Manifest{
 		ID:      ModuleID,
@@ -51,10 +47,10 @@ func (Module) Manifest() builtin.Manifest {
 			"PartStore",
 			"RelationStore",
 			"SourceBindingStore",
-			// ModuleSettingsStore was fulfilled from platform#17 and never
-			// declared here; UserPreferenceStore joins it. The manifest is
-			// what a Supervisor would check a build against, so a store
-			// missing from it is a quiet lie about what this module provides.
+			// Module settings are the opaque per-module document (platform#17).
+			// The manifest is what a Supervisor would check a build against, so
+			// a store missing from it is a quiet lie about what this module
+			// provides — every store below belongs here for that reason.
 			"ModuleSettingsStore",
 			"UserPreferenceStore",
 			"PlaybackResolutionStore",
@@ -63,10 +59,7 @@ func (Module) Manifest() builtin.Manifest {
 			"TelemetryMaintenanceStore",
 			"JobStore",
 			// What the library should contain (platform#60) and what a provider
-			// said about it (platform#62). Declared for the reason the two above
-			// were added late: the manifest is what a Supervisor would check a
-			// build against, so a store missing from it is a quiet lie about
-			// what this module provides.
+			// said about it (platform#62).
 			"LibraryRuleStore",
 			"NodeMetadataStore",
 			"SourceSnapshotStore",

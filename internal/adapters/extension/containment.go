@@ -5,7 +5,7 @@
 package extension
 
 // EgressContainment describes whether an extension module's process is denied
-// *direct* network egress by the operating system — [platform#39](0039-extension-module-boundary.md)'s layer 3,
+// direct network egress by the operating system — [platform#39](0039-extension-module-boundary.md)'s layer 3,
 // the control that turns the forward proxy from the easy path into the only one.
 //
 // The Platform cannot make this true on its own. Denying a subprocess a network
@@ -13,15 +13,15 @@ package extension
 // firewall owner rule, or seccomp on connect(2) — that needs privileges a
 // non-root Platform does not have, and on macOS and Windows there is no low-cost
 // mechanism at all ([platform#50](0050-deployment-topologies.md)). So the guarantee is a property of the
-// *deployment*, and the honest thing the Platform can do is know and report which
-// posture it is in rather than claim enforcement uniformly. That report is this
-// type: it is what an admin surface shows as "module egress is enforced" versus
-// "attributed but not enforced", and what keeps the layer-3 claim from being made
-// where it is not true.
+// deployment, and the Platform reports which posture it is in rather than
+// claiming enforcement uniformly. This type is that report: it is what an admin
+// surface shows as "module egress is enforced" versus "attributed but not
+// enforced", and what keeps the layer-3 claim from being made where it is not
+// true.
 type EgressContainment struct {
 	// Enforced is true only where the operating system actually denies a module
 	// direct egress, so the proxy is the only path. False means the proxy still
-	// sees and attributes every host a *cooperating* module contacts and applies
+	// sees and attributes every host a cooperating module contacts and applies
 	// the deny list — strictly better than nothing — but a hostile module could
 	// dial out around it.
 	Enforced bool

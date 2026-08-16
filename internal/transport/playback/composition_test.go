@@ -15,13 +15,11 @@ import (
 
 // The serving composition is checked here because nothing else can check it.
 //
-// **Reap and Close were written, tested, and called from nowhere.** Every unit
-// test passed; the package's own tests exercised both directly. What was missing
-// was a caller, and a missing caller is invisible to a test of the thing that
-// should have been called — the transcode simply outlived every viewer, because
-// startSession detaches the process from the request with
-// context.WithoutCancel and the ticker that was supposed to be its counterpart
-// did not exist.
+// Reap and Close can be written, unit-tested and called from nowhere, and a
+// missing caller is invisible to a test of the thing that should have been
+// called. Without a caller the transcode outlives every viewer, because
+// startSegmentSession detaches the process from the request with
+// context.WithoutCancel and nothing else ends it.
 //
 // So this parses the composition root the way internal/transport/health parses
 // imports: with go/parser rather than a grep, so a comment cannot satisfy it and

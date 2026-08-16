@@ -20,18 +20,18 @@ import (
 //
 // component names the surface in every record it produces ("auth", "session"),
 // so a record says which service answered rather than only that Connect did.
-// Since platform#37 those two are the whole client API, and both mount this.
+// Those two are the whole client API (platform#37), and both mount this.
 //
-// Both call shapes are covered, and they are covered differently on purpose
-// (contracts#5 gives them different lifetimes):
+// Both call shapes are covered, and they are covered differently because
+// contracts#5 gives them different lifetimes:
 //
-//   - **Unary calls** — SignIn/SignOut, and the Attach/Navigate/Invoke/
-//     SubmitInput intents — get one record each, with the duration and whether
-//     they failed. These are short.
-//   - **Subscribe** — one long-lived server stream per session — gets an open
-//     and a close record with the elapsed time between them. A record per
-//     pushed message on a stream that lives for hours would drown everything
-//     else; the messages are already observable where they are enqueued.
+//   - Unary calls — SignIn/SignOut, and the Attach/Navigate/Invoke/SubmitInput
+//     intents — get one record each, with the duration and whether they failed.
+//     These are short.
+//   - Subscribe — one long-lived server stream per session — gets an open and a
+//     close record with the elapsed time between them. A record per pushed
+//     message on a stream that lives for hours would drown everything else; the
+//     messages are already observable where they are enqueued.
 //
 // Seeding the context here rather than in each method is what lets every
 // handler, every application service beneath it, and every module it invokes
@@ -86,9 +86,9 @@ func (i *telemetryInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 
 		// One span for the whole stream. It will be long — hours — and that is
 		// honest rather than a defect: the span says how long the client stayed
-		// connected, which is the question about a stream worth asking. The
-		// work pushed *over* it belongs to the traces of the intents that
-		// caused it, not to this one.
+		// connected, which is the question about a stream worth asking. The work
+		// pushed over it belongs to the traces of the intents that caused it,
+		// not to this one.
 		ctx, span := telemetry.Start(ctx, conn.Spec().Procedure,
 			telemetry.String("rpc.system", "connect"),
 			telemetry.String("rpc.kind", "server_stream"))

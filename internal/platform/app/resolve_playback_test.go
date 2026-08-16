@@ -116,7 +116,7 @@ func TestSelectionAvoidsHDRAClientCannotRender(t *testing.T) {
 			playbackScore(sdr, browser), playbackScore(hdr, browser))
 	}
 
-	// A client that *can* render HDR must see no penalty at all, or televisions
+	// A client that can render HDR must see no penalty at all, or televisions
 	// would be steered away from the releases they exist to play.
 	tv := PlaybackPreference{
 		VideoCodecs: map[string]bool{"hevc": true}, AudioCodecs: map[string]bool{"aac": true}, HDR: true,

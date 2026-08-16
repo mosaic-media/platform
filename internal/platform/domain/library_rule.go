@@ -9,28 +9,23 @@ import (
 	"time"
 )
 
-// The library rule (platform#60).
+// The library rule (platform#60): a durable, administrator-owned statement of
+// what the library should contain, so that a catalog gaining a title or a
+// source dropping one is something the Platform can notice.
 //
-// A rule is a durable, administrator-owned statement of what the library
-// *should* contain. Nothing in Mosaic said that before: the library was
-// whatever individuals happened to press Add on, so nothing could notice when a
-// catalog gained a title or a source stopped carrying one.
-//
-// It is **Platform state and not SDK state**, which is the load-bearing choice
-// in this file. A rule references a module the way a screen does — by id — and
-// it outlives that module being uninstalled ([platform#51]): the row stays,
-// degraded and visibly so, because an extension is removable at runtime and a
-// rule that deleted itself with the module would silently unmake a household's
-// decision. Nothing here is on the published surface, and no module reads its
-// own rules.
+// It is Platform state and not SDK state. A rule references a module by id, as
+// a screen does, and it outlives that module being uninstalled
+// ([platform#51]): the row stays, degraded and visibly so, because a rule that
+// deleted itself with the module would silently unmake a household's decision.
+// Nothing here is on the published surface, and no module reads its own rules.
 //
 // [platform#51]: https://github.com/mosaic-media/platform/blob/main/docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md
 
 // LibraryRuleID identifies one rule.
 type LibraryRuleID ID
 
-// LibraryRuleKind is which of the two shapes a rule takes. It is a **closed**
-// set and deliberately has exactly two members (platform#60): a rule over the
+// LibraryRuleKind is which of the two shapes a rule takes. The set is closed
+// and deliberately has exactly two members (platform#60): a rule over the
 // library's own contents is a view rather than a source, and a rule that reads
 // what another rule wrote is a loop with no fixed point. Platform code branches
 // on this value to decide which provider role to evaluate it against, which is
@@ -49,13 +44,10 @@ const (
 // DefaultLibraryRuleBound is how many items a rule evaluates when its author
 // set no bound.
 //
-// A bound rather than "all of it", and the reason is in platform#60's
-// consequences: a rule can produce a large library quickly, so the first run of
-// a new rule is the one most likely to surprise its author. A Stremio-class
-// aggregator exposes thousands of titles per catalog, and materialising each is
-// a metadata call plus a stream fan-out per item — so an unbounded first run is
-// how a household exhausts a shared rate limit before anybody has looked at the
-// screen.
+// It is bounded rather than "all of it" (platform#60). A Stremio-class
+// aggregator exposes thousands of titles per catalog and materialising each is
+// a metadata call plus a stream fan-out per item, so an unbounded first run
+// exhausts a shared rate limit before anybody has looked at the screen.
 const DefaultLibraryRuleBound = 40
 
 // MaxLibraryRuleBound caps what an author may ask for. It is a ceiling on one
@@ -102,11 +94,10 @@ type LibraryRule struct {
 	// it adding without discarding what it says, and it is the honest answer
 	// for a rule whose source has become expensive or wrong.
 	Enabled bool
-	// CreatedBy is who wrote it. Recorded for the run log's sake — a library
-	// that maintains itself is one whose contents nobody chose item by item, so
-	// "who asked for this" is a question the install has to be able to answer —
-	// and never read to decide authority: the job runs as the system principal
-	// and re-authorises nothing against this field (platform#13).
+	// CreatedBy is who wrote it, recorded so the run log can answer "who asked
+	// for this". It is never read to decide authority: the job runs as the
+	// system principal and re-authorises nothing against this field
+	// (platform#13).
 	CreatedBy UserID
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -117,12 +108,9 @@ type LibraryRule struct {
 	LastRun LibraryRuleRun
 }
 
-// LibraryRuleRun is what one evaluation of one rule did.
-//
-// Four counts and an error, and every one of them is a different fact:
-// something new arrived, something already here was topped up, something was
-// deliberately passed over, something went wrong. Collapsing them into
-// "succeeded" is what makes a self-maintaining library unaccountable.
+// LibraryRuleRun is what one evaluation of one rule did. The four counts are
+// four distinct facts and must not be collapsed into "succeeded": a library
+// that maintains itself is unaccountable without them.
 type LibraryRuleRun struct {
 	// At is when the evaluation finished. Zero means the rule has never run,
 	// which a surface must say rather than rendering four zeroes as though the

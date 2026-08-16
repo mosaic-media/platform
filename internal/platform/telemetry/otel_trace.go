@@ -16,29 +16,25 @@ import (
 // The bridge between Mosaic's TraceContext and OpenTelemetry's SpanContext
 // (sdk#8).
 //
-// **This is the first piece of the Platform's conversion, and it is deliberately
-// the first**, because it is the piece that must not be got wrong. The trace id
-// *is* Mosaic's correlation id (platform#32): it is on every log record, every span,
-// every event and every outbox row, and it is what joins a support report to the
-// logs. A conversion that produced *a* trace id rather than *the same* trace id
-// would pass any test asserting one exists, and would silently sever the join
-// that the whole telemetry thread is arranged around.
+// The trace id is Mosaic's correlation id (platform#32): it is on every log
+// record, every span, every event and every outbox row, and it is what joins a
+// support report to the logs. A conversion producing a trace id rather than
+// the same trace id would pass any test asserting one exists and would
+// silently sever that join, so the mapping here is field for field with
+// nothing invented and nothing dropped.
 //
-// **The two representations are the same three values**, which is not luck:
-// platform#32 chose W3C Trace Context precisely so "a future OTLP export, and any
-// off-the-shelf instrumentation, work without a translation layer at each
-// boundary". This file is that promise being collected — a field-for-field
-// mapping with nothing invented and nothing dropped.
+// That the two representations are the same three values is not luck:
+// platform#32 chose W3C Trace Context so that an OTLP export and off-the-shelf
+// instrumentation need no translation layer at each boundary.
 //
-// It is tested in both directions and round-trip, so the rest of the conversion
-// can be mechanical on top of a bridge that is already proven.
+// The bridge is tested in both directions and round-trip.
 
 // SpanContext renders tc as OpenTelemetry's equivalent.
 //
 // The trace flags carry the sampling decision and nothing else, matching what
-// Traceparent already writes on the wire. Remote is deliberately **not** set:
-// this is used for a context this process holds, and OTel's own propagator sets
-// the remote flag when it extracts one from a header.
+// Traceparent already writes on the wire. Remote is deliberately not set: this
+// is used for a context this process holds, and OTel's own propagator sets the
+// remote flag when it extracts one from a header.
 func (tc TraceContext) SpanContext() trace.SpanContext {
 	var flags trace.TraceFlags
 	if tc.Sampled {
@@ -53,12 +49,11 @@ func (tc TraceContext) SpanContext() trace.SpanContext {
 
 // TraceContextOf reads an OpenTelemetry span context back into Mosaic's.
 //
-// **A zero span id survives the round trip, and that matters.** NewRootTrace
-// mints a trace whose span id is deliberately zero, meaning "nothing precedes
-// this" — so a root trace must not come back with an invented parent. OTel's
-// SpanContext holds the zero span id happily; what it will not do is report
-// itself `IsValid`, which is why this reads the fields directly rather than
-// gating on validity.
+// A zero span id must survive the round trip. NewRootTrace mints a trace whose
+// span id is deliberately zero, meaning "nothing precedes this", so a root
+// trace must not come back with an invented parent. OTel's SpanContext holds
+// the zero span id happily; what it will not do is report itself IsValid,
+// which is why this reads the fields directly rather than gating on validity.
 func TraceContextOf(sc trace.SpanContext) TraceContext {
 	return TraceContext{
 		TraceID: [16]byte(sc.TraceID()),
@@ -70,25 +65,24 @@ func TraceContextOf(sc trace.SpanContext) TraceContext {
 // The tracer, and the exporter that carries a finished span back to Mosaic's
 // SpanSink (sdk#8).
 //
-// **The sink stays, and that is what keeps the conversion contained.** Spans are
-// produced by OpenTelemetry now, so any off-the-shelf instrumentation composes
-// with Mosaic's own — but a finished span is handed to the same `SpanSink` the
-// PostgreSQL store and the expert-mode viewer already read, so neither the
-// schema nor the surface a person looks at moves in this change.
+// The sink is what keeps the conversion contained. Spans are produced by
+// OpenTelemetry, so off-the-shelf instrumentation composes with Mosaic's own,
+// but a finished span is handed to the same SpanSink the PostgreSQL store and
+// the expert-mode viewer already read — neither the schema nor the surface a
+// person looks at depends on the representation.
 //
-// **Sampling is AlwaysSample on purpose, and it is not an oversight.** platform#32
-// says the sampling decision governs whether spans are *recorded* and never
-// whether the ids exist — but the implementation it describes has always written
-// every span to the sink regardless of the flag, so a parent-based sampler here
-// would silently stop recording spans for unsampled traces. That is a product
-// decision about retention, not a side effect of a representation change, so the
-// flag continues to ride along and change nothing until something decides
-// otherwise.
+// Sampling is AlwaysSample on purpose. platform#32 says the sampling decision
+// governs whether spans are recorded and never whether the ids exist, but this
+// implementation writes every span to the sink regardless of the flag, so a
+// parent-based sampler here would silently stop recording spans for unsampled
+// traces. Changing that is a decision about retention, not about the
+// representation.
 
 // The reserved attribute keys a span carries so the exporter can rebuild a
 // SpanRecord. They are Mosaic's own dimensions, which OpenTelemetry has no
-// convention for: a component and a module are *who is speaking*, and the error
-// category is one of the Platform's seven (platform#34's vocabulary, not OTel's).
+// convention for: a component and a module are who is speaking, and the error
+// category is one of the Platform's seven (platform#34's vocabulary, not
+// OTel's).
 const (
 	attrComponent     = "mosaic.component"
 	attrModule        = "mosaic.module"
@@ -97,8 +91,7 @@ const (
 	// one. It rides on the span rather than on the provider because the
 	// identity comes from the ambient logger at the moment the span starts,
 	// and the provider is built once by whoever configured the sink. Moving it
-	// onto the provider is the right end state and belongs with the composition
-	// root's own conversion, not with this one.
+	// onto the provider is the intended end state and is not built.
 	attrServiceName     = "service.name"
 	attrServiceVersion  = "service.version"
 	attrServiceInstance = "service.instance.id"
@@ -113,7 +106,7 @@ type tracerKey struct{}
 
 // tracerFrom returns the configured tracer, or one whose spans go nowhere.
 //
-// **A span is produced either way**, which is what keeps Start safe to call with
+// A span is produced either way, which is what keeps Start safe to call with
 // no telemetry set up at all: a unit test exercising an instrumented path gets
 // real ids and a discarded span rather than a nil check at every seam.
 func tracerFrom(ctx context.Context) trace.Tracer {

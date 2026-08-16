@@ -21,13 +21,13 @@ import (
 // The configuration activation state machine, as a client can reach it
 // (platform#7, roadmap M4.4).
 //
-// **Three services, one action.** Draft, validate and activate are the
-// machinery of the reload-class model, not a workflow: somebody changing how
-// often the library pass runs is not drafting a version. Three controls would
-// make an operator drive an implementation in order, and leave a half-finished
-// draft behind every time they changed their mind — so this composes them, and
-// keeps from the three only the thing they alone can say: whether the change
-// took effect, or is waiting for something bigger than this process.
+// Three services, one action. Draft, validate and activate are the machinery of
+// the reload-class model, not a workflow: somebody changing how often the
+// library pass runs is not drafting a version. Three controls would make an
+// operator drive an implementation in order, and leave a half-finished draft
+// behind every time they changed their mind — so this composes them, and keeps
+// from the three only the thing they alone can say: whether the change took
+// effect, or is waiting for something bigger than this process.
 
 // applyConfiguration takes the fields somebody changed and puts them through
 // draft, validate and activate as one act.
@@ -42,9 +42,9 @@ func (h *Handler) applyConfiguration(ctx context.Context, s *liveSession, caller
 
 	// A draft is the whole configuration, not a patch: the activation model
 	// diffs one payload against the Active one, so a version carrying only the
-	// changed fields would read as every other field being *removed* and would
-	// classify against the wrong diff. So the boxes somebody filled are merged
-	// over what is currently stored.
+	// changed fields would read as every other field having been removed and
+	// would classify against the wrong diff. So the boxes somebody filled are
+	// merged over what is currently stored.
 	merged, err := h.mergedConfigPayload(ctx, caller, submitted)
 	if err != nil {
 		return nil, err
@@ -134,19 +134,19 @@ func appliedSentence(res app.ActivateConfigVersionResult) string {
 // configFieldsFromInput reads the submitted form values, keeping only fields
 // the schema knows and only boxes somebody actually filled.
 //
-// **Unknown keys are dropped rather than rejected**, and the reason is the
-// form: a submit carries every variable in its scope, including the error
-// binding the form itself uses. Refusing the call because a client sent
-// something the schema does not name would turn a rendering detail into an
-// error nobody can act on. A value that *is* a config field and is wrong is a
-// different matter, and validation is where it is answered.
+// Unknown keys are dropped rather than rejected, because of the form: a submit
+// carries every variable in its scope, including the error binding the form
+// itself uses. Refusing the call because a client sent something the schema does
+// not name would turn a rendering detail into an error nobody can act on. A
+// value that is a config field and is wrong is a different matter, and
+// validation is where it is answered.
 //
-// **Numbers are parsed here rather than stored as text.** Every reader on the
-// far side takes a JSON number (`durationField`, `countField`), so a retention
-// of "30" stored as a string is accepted by validation — the schema checks the
-// field is registered, not its type — and then silently ignored by the reader
-// that was supposed to apply it. That is the worst shape this bug has: a
-// configured value that reports success and never takes effect.
+// Numbers are parsed here rather than stored as text. Every reader on the far
+// side takes a JSON number (durationField, countField), so a retention of "30"
+// stored as a string passes validation — the schema checks the field is
+// registered, not its type — and is then silently ignored by the reader that was
+// supposed to apply it: a configured value that reports success and never takes
+// effect.
 func configFieldsFromInput(input []byte) (map[string]any, error) {
 	if len(input) == 0 {
 		return nil, nil
@@ -194,7 +194,7 @@ func configFieldsFromInput(input []byte) (map[string]any, error) {
 //
 // Setting the route matters as much as pushing the tree: without it a reconnect
 // would re-declare whichever panel the action was invoked from — and for a
-// Restart-class change the *point* is that the panel now says something new.
+// Restart-class change, the panel now says something new.
 func (h *Handler) configurationSurface(ctx context.Context, s *liveSession, message string) []*sessionv1.ServerMessage {
 	params := map[string]any{"section": "configuration"}
 	s.setCurrent(route{screen: "settings", params: params})

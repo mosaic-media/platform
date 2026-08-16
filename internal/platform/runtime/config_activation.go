@@ -25,12 +25,11 @@ type ConfigActivationStatus struct {
 	// empty means nothing is waiting.
 	PendingVersionID   string
 	PendingReloadClass string
-	// ReloadClass is always Hot for whatever IS active: config.Manager's
-	// Activate only ever transitions a version to Active
-	// when its change was Hot-classified — a Generation/Restart/Recovery
-	// change is left Validated instead, precisely so it never reaches
-	// here. This reports that structural invariant directly rather than
-	// guessing at a value nothing persists.
+	// ReloadClass is always Hot for whatever is active: config.Manager.Activate
+	// only transitions a version to Active when its change was Hot-classified,
+	// and anything more restrictive is marked Pending instead, so it never
+	// reaches here. This reports that invariant directly rather than guessing
+	// at a value nothing persists.
 	ReloadClass string
 }
 

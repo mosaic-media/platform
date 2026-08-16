@@ -245,7 +245,7 @@ func TestInProgressExcludesFinishedAndUnstarted(t *testing.T) {
 func TestPlaybackStateIsPerUser(t *testing.T) {
 	ctx, svc, db, first := playbackFixture(t)
 
-	// A second account on the *same* Service, which is what makes this a real
+	// A second account on the same Service, which is what makes this a real
 	// test of per-user keying rather than of two isolated fixtures.
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	db.seedUser(domain.User{ID: "u-2", Username: "housemate", Status: domain.UserActive, CreatedAt: now, UpdatedAt: now})
@@ -260,7 +260,7 @@ func TestPlaybackStateIsPerUser(t *testing.T) {
 	}
 
 	// The second viewer sees nothing, on the same item, through the same
-	// Service. There is also no parameter through which they *could* name the
+	// Service. There is also no parameter through which they could name the
 	// first viewer's state — the structural half of the same guarantee.
 	res, err := svc.GetPlaybackState(ctx, v1.GetPlaybackStateQuery{Caller: second, NodeID: "node-1"})
 	if err != nil {

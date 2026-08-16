@@ -15,9 +15,9 @@
 // file, not double. Letting a client fetch upstream directly is a deliberate
 // future opt-out for the local-network case, not the default.
 //
-// The ticket is **sealed, not signed**. The artwork proxy (platform#20) signs a URL
-// it puts in the query string, which is fine for a public image; here the
-// payload is exactly the secret being protected, so it is encrypted rather than
+// The ticket is sealed, not signed. The artwork proxy (platform#20) signs a URL it
+// puts in the query string, which is fine for a public image; here the payload
+// is exactly the secret being protected, so it is encrypted rather than
 // authenticated-in-the-clear.
 package playback
 
@@ -179,7 +179,7 @@ func (s *Sealer) open(raw string) (ticket, error) {
 // It deliberately sets no overall Timeout: a client.Timeout covers the whole
 // response body, so any value at all would cut a film off mid-play. The bounds
 // that matter for a stream are on establishing the connection and on the
-// upstream taking too long to *start* responding, which is what
+// upstream taking too long to start responding, which is what
 // ResponseHeaderTimeout gives.
 func Client() *http.Client {
 	return &http.Client{
@@ -209,12 +209,12 @@ var relayedResponseHeaders = []string{
 //
 // Pass Client() in production; a test may pass a plain client to reach a
 // loopback fixture, exactly as the artwork proxy does.
-// It keeps a session registry nobody else can reach, so **nothing reaps or
-// stops the transcodes it starts**. That is fine for a test, whose process ends
-// in a moment, and wrong for a serving Platform: a viewer who closes the tab
-// leaves ffmpeg running and its spool on disk with no request left in which to
-// notice. A composition root builds its own registry and calls
-// HandlerWithSessions.
+//
+// It keeps a session registry nobody else can reach, so nothing reaps or stops
+// the transcodes it starts. That is fine for a test, whose process ends in a
+// moment, and wrong for a serving Platform: a viewer who closes the tab leaves
+// ffmpeg running and its spool on disk with no request left in which to notice.
+// A composition root builds its own registry and calls HandlerWithSessions.
 func Handler(sealer *Sealer, client *http.Client, remuxer *Remuxer) http.Handler {
 	return HandlerWithSessions(sealer, client, remuxer, NewSegmentSessions(DefaultSegmentDir))
 }
@@ -235,11 +235,10 @@ func SetResolver(r Resolver) { resolver = r }
 // refreshed re-resolves a ticket's upstream address and reports whether it
 // changed to something worth retrying.
 //
-// **The old address is not compared against the new one for equality alone.** A
-// source that hands back the identical URL has told the origin the link is not
-// the problem, and retrying it would be a second identical failure; a source
-// that hands back a different one has repaired exactly the failure this exists
-// for. So an unchanged address is treated as no answer.
+// An unchanged address is treated as no answer. A source that hands back the
+// identical URL has told the origin the link is not the problem, and retrying it
+// would be a second identical failure; a source that hands back a different one
+// has repaired exactly the failure this exists for.
 func refreshed(ctx context.Context, t ticket) (ticket, bool) {
 	if resolver == nil || t.PartID == "" || t.Class == "" {
 		return t, false
@@ -253,9 +252,9 @@ func refreshed(ctx context.Context, t ticket) (ticket, bool) {
 }
 
 // HandlerWithSessions is Handler over an explicit session registry, so the
-// caller can start its reaper and stop every running transcode on shutdown.
-// **This is the production constructor**; see Handler for what holding no
-// reference costs.
+// caller can start its reaper and stop every running transcode on shutdown. This
+// is the production constructor; see Handler for what holding no reference
+// costs.
 func HandlerWithSessions(sealer *Sealer, client *http.Client, remuxer *Remuxer, sessions *SegmentSessions) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {

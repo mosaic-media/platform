@@ -58,15 +58,15 @@ func fanOut[T, R any](ctx context.Context, items []T, fn func(context.Context, T
 //
 // It exists for the browse roles, where a union is the wrong operation. Search
 // unions honestly — more places looked is more found, and a duplicate is a
-// ranking problem. A *catalog* list is a set of named rows on a home screen, and
+// ranking problem. A catalog list is a set of named rows on a home screen, and
 // unioning two general metadata sources yields two rows of the same films under
-// two names, which reads as a bug rather than as breadth. So the browse roles
-// pick a source; only the absence of one falls through to the floor.
+// two names. So the browse roles pick a source; only the absence of one falls
+// through to the floor.
 //
-// "Produced nothing" rather than "errored" is deliberate, and it is the case
-// that matters: a TMDB with no API key does not fail, it answers emptily. A
-// fallback keyed on errors would never have fired on the install that needs it
-// most — which is the whole population module-cinemeta#1's guarantee clause is for.
+// The trigger must be "produced nothing" rather than "errored": a provider with
+// no API key does not fail, it answers emptily, so a fallback keyed on errors
+// never fires on the install that needs it most — the population
+// module-cinemeta#1's guarantee clause is for.
 //
 // A fatal error in the first tier aborts without consulting the second: the
 // query failed, and the floor is for a source that had nothing to say, not for

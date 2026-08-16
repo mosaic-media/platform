@@ -19,7 +19,7 @@ import (
 // AuthService.Bootstrap, which sends the skin and the definitions it needs
 // alongside it because a client at this point has neither.
 //
-// **The server picks which one.** The client is not told which state it is in;
+// The server picks which one. The client is not told which state it is in;
 // it is shown one. That is why there is no screen name on the wire and no
 // params — a doorway is not a route, and a client that could ask for the setup
 // tree could ask for it on a claimed server.
@@ -151,8 +151,8 @@ func degradedDoorway(state app.ServerState) sdui.Node {
 
 // setupDoorway is what an unclaimed server shows: platform#54's four steps.
 //
-// **The steps are one tree with one scope, not four trees.** Each step is a Box
-// that renders only while the scope's `step` variable names it, and Continue is
+// The steps are one tree with one scope, not four trees. Each step is a Box
+// that renders only while the scope's step variable names it, and Continue is
 // a SetValue rather than a round trip. The alternative — the server returning
 // the next step each time — would mean the password collected in step two
 // travelling back down inside the tree for steps three and four, which is a
@@ -386,8 +386,8 @@ func setupReviewStep() ui.El {
 			ui.InfoPanel(ui.Rows([]any{
 				map[string]any{"label": "Stream source", "value": "None — add one later in Settings"},
 			}))),
-		// Either the claim, or what is stopping it. **Not both, and never
-		// neither.**
+		// Either the claim, or what is stopping it — not both, and never
+		// neither.
 		//
 		// A submit whose scope fails validation is refused by the client before
 		// anything is sent, and the fields it marks are on steps two and three —

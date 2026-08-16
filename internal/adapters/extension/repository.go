@@ -17,11 +17,11 @@ import (
 // HTTPS and the key that signs it.
 //
 // Trust is per repository, not per module and not global (platform#40). Adding a
-// repository *is* the trust decision — the moment a user takes on the risk that
-// its modules run with the Platform's authority — which is why consent attaches
-// here and not at each install. Mosaic's own repository is trusted by default; a
-// third-party one is added with explicit informed consent (platform#49 puts that
-// surface in the Platform).
+// repository is itself the trust decision — the moment a user takes on the risk
+// that its modules run with the Platform's authority — which is why consent
+// attaches here and not at each install. Mosaic's own repository is trusted by
+// default; a third-party one is added with explicit informed consent
+// (platform#49 puts that surface in the Platform).
 //
 // One key vouches for everything the repository distributes: it signs the index,
 // and the same key is what a module from this repository is verified against.
@@ -90,7 +90,7 @@ func (r *Registry) Lookup(name string) (Repository, bool) {
 // signed by the repository's key, so a client can trust that this catalogue —
 // and every manifest in it — came from the repository unaltered.
 //
-// The manifests are carried *inline* rather than referenced, so verifying the
+// The manifests are carried inline rather than referenced, so verifying the
 // index's one signature authenticates the whole catalogue at once. A module's
 // binary is still checked against the digest its inline manifest declares, so a
 // tampered binary is caught even though the index signature covers the manifest,

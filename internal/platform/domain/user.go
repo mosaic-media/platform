@@ -14,16 +14,13 @@ const (
 	UserActive UserStatus = "active"
 	// UserSuspended means an administrator has suspended the account: it is
 	// refused a new session, and every session it already held is revoked when
-	// the suspension is applied.
+	// the suspension is applied. Both halves are required — refusing only new
+	// sessions would leave a signed-in device working for the ninety days a
+	// refresh chain lives.
 	//
-	// **Both halves are load-bearing and neither existed at first.** The status
-	// was written and read by nothing, so suspending somebody let them carry on
-	// signing in — and a suspension that only refused *new* sessions would have
-	// left a signed-in device working for the ninety days a refresh chain lives.
-	//
-	// It is still distinct from revocation: revoking ends one device, and this
-	// ends the account. Reactivating restores the account and deliberately not
-	// the sessions — a device that was signed out signs in again.
+	// It is distinct from revocation: revoking ends one device, this ends the
+	// account. Reactivating restores the account and deliberately not the
+	// sessions — a device that was signed out signs in again.
 	UserSuspended UserStatus = "suspended"
 )
 

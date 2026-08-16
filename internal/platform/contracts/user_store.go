@@ -16,7 +16,6 @@ type UserStore interface {
 	FindByID(ctx context.Context, id domain.UserID) (domain.User, error)
 	FindByUsername(ctx context.Context, username string) (domain.User, error)
 	Update(ctx context.Context, user domain.User) (domain.User, error)
-	// List returns every user, ordered by CreatedAt. No pagination yet — a
-	// first cut, like the rest of this contract set.
+	// List returns every user, ordered by CreatedAt. There is no pagination.
 	List(ctx context.Context) ([]domain.User, error)
 }

@@ -123,7 +123,7 @@ const extensionsDirEnv = "MOSAIC_EXTENSIONS_DIR"
 const defaultExtensionsDir = "mosaic-extensions"
 
 // instanceFileEnv names the file this install's identity is written to
-// (platform#54): the server name a household chose, kept **outside PostgreSQL** so
+// (platform#54): the server name a household chose, kept outside PostgreSQL so
 // it still answers when the database does not.
 //
 // It is an infrastructure path read from the environment, like the DSN and the
@@ -164,17 +164,16 @@ func superuserPermissions() []domain.Permission {
 	return perms
 }
 
-// registerCapabilities wires the *core* module capabilities compiled into this
+// registerCapabilities wires the core module capabilities compiled into this
 // binary into the registry the Platform resolves through. It is the one place
 // that names concrete core modules — the composition-root equivalent of the
 // Build Pipeline's generated imports (platform#4).
 //
-// All three are core modules under architecture#3's guarantee clause: Cinemeta and
-// TMDB back the metadata/search class platform#23 requires, and remote playback
-// backs the consumer class without which the library is inert. **Extension
-// modules are no longer here** — Stremio, AIOStreams and fanart.tv used to be
-// registered beside the core three, but under platform#51 an extension is not
-// composed into the binary at all: it is installed at runtime by a user and
+// All three are core modules under architecture#3's guarantee clause: Cinemeta
+// and TMDB back the metadata/search class platform#23 requires, and remote
+// playback backs the consumer class without which the library is inert.
+// Extension modules do not belong here: under platform#51 an extension is not
+// composed into the binary at all, but installed at runtime by a user and
 // adopted by the extension Manager, which registers its proxy into this same
 // registry indistinguishably from a compiled-in module. So a fresh install
 // carries only the core three, and everything else is chosen, not shipped.
@@ -213,10 +212,10 @@ type moduleDescriptor struct {
 	construct func() v1.Capability
 }
 
-// moduleDescriptors is the list the selection is applied to — the one place that
-// names the concrete *core* modules compiled into this binary, the
-// composition-root equivalent of the Build Pipeline's generated imports (ADR
-// 0007). Extension modules are not here: they are installed at runtime and
+// moduleDescriptors is the list the selection is applied to — the concrete core
+// modules compiled into this binary, the composition-root equivalent of the
+// Build Pipeline's generated imports
+// (platform#4). Extension modules are not here: they are installed at runtime and
 // adopted by the extension Manager (platform#51), not composed in.
 func moduleDescriptors(httpClient *http.Client) []moduleDescriptor {
 	return []moduleDescriptor{
@@ -227,21 +226,19 @@ func moduleDescriptors(httpClient *http.Client) []moduleDescriptor {
 		// why the default selection includes everything — dropping it from the
 		// default would boot an inert Mosaic.
 		//
-		// **It is registered as the fallback tier**, so the browse roles reach it
-		// only when no ordinary provider answered. Until now it merely sorted
-		// before TMDB in id order, which this file recorded as "an accident rather
-		// than a policy", and the accident was visible: a keyed deployment drew
-		// Cinemeta's catalog rows beside TMDB's, the same films twice. Being the
-		// floor is now stated rather than inferred from a string comparison, and
-		// an unkeyed install is unaffected — TMDB answers emptily, and everything
-		// falls through to exactly what it drew before.
+		// It is registered as the fallback tier, so the browse roles reach it
+		// only when no ordinary provider answered. Ordering it merely by id is
+		// not enough: with both providers answering, a keyed deployment draws
+		// Cinemeta's catalog rows beside TMDB's and shows the same films twice.
+		// An unkeyed install is unaffected, since TMDB answers emptily and
+		// everything falls through.
 		{cinemeta.CapabilityID, true, func() v1.Capability { return cinemeta.New(httpClient) }},
 		// The TMDB metadata module — the richer provider of the same class, for a
 		// deployment willing to hold an API key. It needs one, set through its own
 		// settings screen (sdk#4), and every role reports that plainly until
 		// one exists; Cinemeta is what keeps the class satisfied in the meantime.
 		{tmdb.CapabilityID, false, func() v1.Capability { return tmdb.New(httpClient) }},
-		// The remote playback module — the first *consumer* capability (platform#25).
+		// The remote playback module — a consumer capability (platform#25).
 		// Registering it is what lets a snapshotted stream location be turned back
 		// into playable bytes; it is core because a library that cannot play what
 		// it holds is inert.
@@ -396,9 +393,9 @@ func run() error {
 	diagRegistry.Register("outbox-worker", worker, "postgres", "event-bus")
 
 	// The second sink (platform#36). The file above is durable and survives the
-	// database; this one makes records *queryable*, which is what the
-	// expert-mode viewer needs and what a flat file cannot serve. Neither is
-	// optional and neither replaces the other.
+	// database; this one makes records queryable, which is what the expert-mode
+	// viewer needs and what a flat file cannot serve. Neither is optional and
+	// neither replaces the other.
 	//
 	// It is deliberately attached only now, after storage is up: everything
 	// logged before this point describes bringing the database up, and is
@@ -438,10 +435,6 @@ func run() error {
 	}
 	logSnapshot(context.Background(), "boot-time health check")
 
-	// Assemble the application services over the wired contracts. This is the
-	// first time the composition root constructs app.Service: every dependency
-	// it needs is already on the ContractSet, plus the ABAC policy engine, the
-	// event bus as the audit publisher, and the Argon2id password hasher.
 	// Which modules to wire in (platform#38). Read from the environment, the same
 	// bridge the DSN and log level take until a config pipeline owns it, and
 	// unset means every module — so an unconfigured deployment gets the full set
@@ -491,25 +484,23 @@ func run() error {
 
 	// Establish the default extension-module trust: the official repository,
 	// trusted by default with the key compiled into this binary (platform#40,
-	// platform#49). Building it here validates the embedded key at boot — a corrupt
-	// or empty key fails now rather than at a user's first install — and records
-	// which repository the deployment trusts. Nothing installs from it yet: the
-	// runtime install trigger is an admin action whose surface does not exist, so
-	// this is the trust anchor standing ready, not an install path in the serve
-	// loop.
+	// platform#49). Building it here validates the embedded key at boot — a
+	// corrupt or empty key fails now rather than at a user's first install —
+	// and records which repository the deployment trusts.
 	extRegistry, err := extension.DefaultRegistry()
 	if err != nil {
 		return fmt.Errorf("default module repository trust: %w", err)
 	}
 	if repo, ok := extRegistry.Lookup(extension.OfficialRepositoryName); ok {
-		// A repository under the official *name* that is not Official is a
-		// development override (platform#55) — only a build made with `-tags
-		// mosaicdev` can produce one, and only from the two MOSAIC_DEV_REPOSITORY_*
-		// variables. It is logged at Warn, naming the URL and the fingerprint of
-		// the key now vouching for every module this Platform will download and
-		// run, because "which key am I trusting" is a question a Platform should
-		// answer out loud the moment the answer is not the one it shipped with.
-		// A release binary cannot reach this branch.
+		// A repository under the official name that is not Official is a
+		// development override (platform#55) — only a build made with -tags
+		// mosaicdev can produce one, and only from the two
+		// MOSAIC_DEV_REPOSITORY_* variables. It is logged at Warn, naming the
+		// URL and the fingerprint of the key now vouching for every module this
+		// Platform will download and run, because "which key am I trusting" is
+		// a question a Platform should answer out loud the moment the answer is
+		// not the one it shipped with. A release binary cannot reach this
+		// branch.
 		if repo.Official {
 			boot.Info("trusting extension repository",
 				telemetry.String("repository", repo.Name),
@@ -630,19 +621,12 @@ func run() error {
 		Instance: instanceIdentity,
 	})
 
-	// Close the construction cycle, then re-adopt the installed set. A spawned
-	// module registers into the same registry a compiled-in one does, and nothing
-	// above the registry can tell the difference. An extension that fails to adopt
-	// is a degraded capability the Manager logs and skips, never a boot failure:
-	// extensions fill no required role class (that is core's guarantee,
-	// platform#23/0072), so one being absent is the ordinary degraded state, not the
-	// inert Platform RequireComposedRoleClasses refuses. Default-empty: a fresh
-	// install has adopted nothing.
-	// A configuration change that needed a restart got one: this *is* the
-	// restart it was waiting for, so apply it before anything reads config
+	// A configuration change that needed a restart got one: this is the restart
+	// it was waiting for, so apply it before anything reads config
 	// (supervisor#1's escalation, recorded as Pending when the user asked). A
 	// Generation-class change is left alone — a restart was never going to
 	// carry it, and the Supervisor is what can.
+	//
 	// Its own context: bootCtx belongs to the connect-and-migrate phase and is
 	// cancelled the moment that finishes, long before here.
 	applyCtx, applyCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -660,6 +644,14 @@ func run() error {
 			telemetry.String("reload_class", string(pending.ReloadClass)))
 	}
 
+	// Close the construction cycle, then re-adopt the installed set. A spawned
+	// module registers into the same registry a compiled-in one does, and
+	// nothing above the registry can tell the difference. An extension that
+	// fails to adopt is a degraded capability the Manager logs and skips, never
+	// a boot failure: extensions fill no required role class (that is core's
+	// guarantee, platform#23/0072), so one being absent is the ordinary degraded
+	// state rather than the inert Platform RequireComposedRoleClasses refuses.
+	// A fresh install has adopted nothing.
 	extManager.SetContent(svc)
 	extManager.SetFindings(svc)
 	// Stop adopted module processes when the Platform stops, so a module process
@@ -674,7 +666,7 @@ func run() error {
 
 	// The Supervisor's own findings, adopted once (platform#74). Best-effort by
 	// design: a Platform that refused to start because it could not read the
-	// *diagnostics* would be the machinery defeating what it is for, and an
+	// diagnostics would be the machinery defeating what it is for, and an
 	// install with no Supervisor has no file to read.
 	adoptSupervisorFindings(context.Background(), svc, os.Getenv(supervisorFindingsEnv), root)
 
@@ -793,10 +785,11 @@ func run() error {
 	spanSink.Start(serveCtx)
 
 	// Background work (platform#13's system principal, platform#36's retention
-	// sweep). The runner claims from PostgreSQL with `FOR UPDATE SKIP LOCKED`
+	// sweep). The runner claims from PostgreSQL with FOR UPDATE SKIP LOCKED
 	// and the scheduler enqueues each recurring kind's current occurrence under
 	// an idempotency key, so starting it at boot is also how a restart resumes:
 	// there is no state held here to recover.
+	//
 	// The library pass's schedule is configuration (platform#60) and its field is
 	// Restart-class, so it is read once, here, where there is a boot context to
 	// read it with. The budget is not read here: it is Hot, and the run reads it
@@ -831,7 +824,7 @@ func run() error {
 	if healthAddr == "" {
 		healthAddr = defaultHealthAddr
 	}
-	// Request contexts do NOT descend from serveCtx — net/http builds them from
+	// Request contexts do not descend from serveCtx — net/http builds them from
 	// BaseContext, which defaults to context.Background(). Without this, every
 	// handler's telemetry.From(ctx) returns the no-op logger and the whole
 	// edge-seeding story silently writes nothing. It is deliberately a separate
@@ -852,11 +845,11 @@ func run() error {
 		apiAddr = defaultAPIAddr
 	}
 	// The client API is Connect, and only Connect (platform#37). Two services:
-	// AuthService mints the session, then the two-lane SessionService (contracts#5)
-	// carries everything else — unary intents (Navigate/Invoke/SubmitInput/
-	// Attach) and one server-streaming Subscribe per session for push. Between
-	// them they are the whole surface a client speaks; the GraphQL transport
-	// that used to sit beside them is gone.
+	// AuthService mints the session, then the two-lane SessionService
+	// (contracts#5) carries everything else — unary intents
+	// (Navigate/Invoke/SubmitInput/Attach) and one server-streaming Subscribe
+	// per session for push. Between them they are the whole surface a client
+	// speaks; there is no second transport.
 	authHandler := authtransport.NewHandler(svc)
 	authPath, authConnect := authv1connect.NewAuthServiceHandler(
 		authHandler,
@@ -1027,7 +1020,7 @@ const supervisorFindingsEnv = "MOSAIC_SUPERVISOR_FINDINGS"
 // adoptSupervisorFindings takes over what the Supervisor recorded while the
 // Platform was not running (platform#74).
 //
-// **Every failure here is logged and none is returned.** The whole point of the
+// Every failure here is logged and none is returned. The whole point of the
 // spool is the boot where something already went wrong; refusing to start
 // because that record was unreadable would lose the install as well as the
 // finding.

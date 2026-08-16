@@ -15,10 +15,9 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// PasswordHasher hashes and verifies passwords with Argon2id — the production
-// algorithm the domain's PasswordVerifier port was always shaped for. It
-// satisfies domain.PasswordVerifier structurally, so the crypto adapter stays
-// free of any Platform import.
+// PasswordHasher hashes and verifies passwords with Argon2id. It satisfies
+// domain.PasswordVerifier structurally, so the crypto adapter stays free of any
+// Platform import.
 //
 // A hash is encoded in the PHC string format
 // ($argon2id$v=19$m=...,t=...,p=...$salt$hash), so the parameters travel with

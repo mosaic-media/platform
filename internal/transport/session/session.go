@@ -44,10 +44,10 @@ const debounceRenderTimeout = 15 * time.Second
 // A navigate/input replaces this region; the shell frame around it persists.
 const contentRegion = "content"
 
-// playerRegion is where a playback surface is pushed (web#4). It is a region
-// of its own rather than a replacement for the content region: a player sits
-// *over* the current context, and the screen underneath must still be there when
-// it closes.
+// playerRegion is where a playback surface is pushed (web#4). It is a region of
+// its own rather than a replacement for the content region: a player sits over
+// the current context, and the screen underneath must still be there when it
+// closes.
 const playerRegion = "player"
 
 // The two payloads a client is handed before it draws anything (contracts#4) — the
@@ -117,12 +117,11 @@ func (h *Handler) Manager() *Manager { return h.mgr }
 // mailbox, the replay cursor and the current route belong to the session id
 // rather than to whatever the client happened to be holding when it connected.
 //
-// A refusal here is Unauthenticated, which is the whole reason a client can
-// implement refresh at all: before this, an expired credential reached the
-// screen builders and came back as an error *rendered into the content region*,
-// so the client saw a successful call carrying a picture of a failure and had
-// nothing to retry on. That was found by opening a browser twenty-five hours
-// after signing in, and by nothing else.
+// A refusal here is Unauthenticated, and it has to stay one for a client to be
+// able to implement refresh. An expired credential that reaches the screen
+// builders instead comes back as an error rendered into the content region: the
+// client sees a successful call carrying a picture of a failure, with nothing to
+// retry on.
 func (h *Handler) bind(ctx context.Context, credential string) (*liveSession, error) {
 	if credential == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session is required"))
@@ -169,9 +168,9 @@ func (h *Handler) Attach(ctx context.Context, req *connect.Request[sessionv1.Att
 			telemetry.Bool("hdr", cp.prefer.HDR),
 			telemetry.Int("max_height", cp.prefer.MaxHeight))
 	}
-	// What the client can *render*, recorded the same way and for the same
-	// reason. The one line it writes is the answer to a question nothing could
-	// previously ask: is this client behind the contract, and by what?
+	// What the client can render, recorded the same way and for the same
+	// reason. The line it logs is what answers "is this client behind the
+	// contract, and by what?".
 	if vp := r.GetVocabulary(); vp != nil {
 		cv := vocabulary.From(vp)
 		s.setVocabulary(cv)
@@ -374,10 +373,9 @@ func (h *Handler) onInput(s *liveSession, text string) {
 // mosaic.sdui.v1.UINode rides the envelope directly, no JSON step). ---
 
 // Every node-bearing constructor takes the session and the ctx rather than just
-// the node, and that is the enforcement: a new push path cannot forget to
-// degrade, because it cannot construct the message without handing over the
-// session whose declaration decides what the client can draw. A pass that is
-// merely "remembered at each call site" is one that a later call site omits.
+// the node, so a new push path cannot forget to degrade: it cannot construct the
+// message without handing over the session whose declaration decides what the
+// client can draw. Keep it that way rather than degrading at each call site.
 
 func shellMsg(ctx context.Context, s *liveSession, node sdui.Node) *sessionv1.ServerMessage {
 	node = degradeFor(ctx, s, node, "shell")
@@ -401,8 +399,8 @@ func degradeFor(ctx context.Context, s *liveSession, node sdui.Node, where strin
 // push that lands them on the fields, and reports whether there were any.
 //
 // The envelope is the same one the client's own validators fill, so a rejection
-// from either side renders identically — which is the whole reason it is
-// symmetric rather than a second, server-shaped error surface.
+// from either side renders identically. Do not add a second, server-shaped error
+// surface beside it.
 func fieldErrorsMsg(err error) (*sessionv1.ServerMessage, bool) {
 	var perr *contracts.Error
 	if !errors.As(err, &perr) || len(perr.Fields) == 0 {
@@ -445,20 +443,18 @@ func tokensMsg() *sessionv1.ServerMessage {
 // or a re-render.
 //
 // The default is the right one for an action a person pressed: say it worked,
-// and show the change. It is wrong for one a *client* emits on a timer, and
-// progress reporting is the first of those — a "Done" toast every fifteen
-// seconds over a playing film, and a content re-render underneath it each time.
+// and show the change. It is wrong for one a client emits on a timer, such as
+// progress reporting — that would be a "Done" toast every fifteen seconds over a
+// playing film, with a content re-render underneath it each time.
 //
 // A list rather than a flag on the action, because the property belongs to the
 // action rather than to the caller: whoever sends reportProgress, it is still
 // not something to confirm.
 //
-// signOut is here for a third reason again, and it is the sharpest one: the
-// credential it just revoked is the credential the re-render would authorise
-// with. Confirming and re-rendering would put an Unauthenticated error into the
-// content region of a screen the client is about to replace with the doorway —
-// a picture of a failure pushed over a success, which is precisely the shape
-// platform#58's first defect had.
+// signOut (platform#58) is here for a different reason: the credential it just
+// revoked is the credential the re-render would authorise with, so confirming
+// and re-rendering would put an Unauthenticated error into the content region of
+// a screen the client is about to replace with the doorway.
 func silentAction(action string) bool {
 	return action == "reportProgress" || action == "recordImpression" || action == "signOut"
 }

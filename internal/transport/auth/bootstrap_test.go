@@ -28,10 +28,9 @@ import (
 	"github.com/mosaic-media/platform/internal/transport/vocabulary"
 )
 
-// The pre-session bootstrap (platform#57). What is worth testing hardest is not
-// that it answers — a handler returning the whole library would also answer —
-// but the three properties that are easy to lose: the subset stays a subset,
-// negotiation applies, and nothing here varies on identity.
+// The pre-session bootstrap (platform#57). These cover the three properties that
+// are easy to lose: the subset stays a subset, negotiation applies, and nothing
+// here varies on identity.
 
 func bootstrap(t *testing.T, h *auth.Handler, vocab *sessionv1.VocabularyProfile) *authv1.BootstrapResponse {
 	t.Helper()
@@ -44,9 +43,9 @@ func bootstrap(t *testing.T, h *auth.Handler, vocab *sessionv1.VocabularyProfile
 	return res.Msg
 }
 
-// The whole of what a client needs to draw one screen, in one response — which
-// is the point: split into two calls, each can succeed while the other does
-// not, and that is exactly the failure this replaces.
+// TestBootstrapAnswersWithTheSkinTheDefinitionsAndTheTree pins that one response
+// carries the whole of what a client needs to draw one screen. Split into two
+// calls, each can succeed while the other does not.
 func TestBootstrapAnswersWithTheSkinTheDefinitionsAndTheTree(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)
@@ -74,8 +73,8 @@ func TestBootstrapAnswersWithTheSkinTheDefinitionsAndTheTree(t *testing.T) {
 	}
 }
 
-// A doorway has two states and the server picks. This is platform#54's decision,
-// carried unchanged.
+// TestBootstrapServesSetupWhileUnclaimedAndSignInOnceClaimed pins that a doorway
+// has two states and the server picks which (platform#54).
 func TestBootstrapServesSetupWhileUnclaimedAndSignInOnceClaimed(t *testing.T) {
 	unclaimed := bootstrap(t, auth.NewHandler(newTestService(newFakeDB(), testNow)), nil)
 	if got := treeText(unclaimed.GetUiNode()); !strings.Contains(got, "Set up Mosaic") {
@@ -90,9 +89,9 @@ func TestBootstrapServesSetupWhileUnclaimedAndSignInOnceClaimed(t *testing.T) {
 	}
 }
 
-// The subset is the security property of the one payload an unauthenticated
-// party can enumerate. A response carrying the library would pass every other
-// test in this file.
+// TestBootstrapServesADefinitionSubsetAndNotTheLibrary pins the security
+// property of the one payload an unauthenticated party can enumerate. A response
+// carrying the whole library would pass every other test in this file.
 func TestBootstrapServesADefinitionSubsetAndNotTheLibrary(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)
@@ -112,10 +111,9 @@ func TestBootstrapServesADefinitionSubsetAndNotTheLibrary(t *testing.T) {
 		names = append(names, n)
 	}
 
-	// Bounded against the library rather than against a number somebody
-	// remembered to update. The count moved once already — the doorway grew a
-	// form — and a hard cap would have failed for the right shape of change,
-	// which teaches the next person to raise it rather than to look.
+	// Bounded against the library rather than against a hard number: the count
+	// moves whenever the doorway grows, and a fixed cap would fail for the right
+	// shape of change and teach the next person to raise it rather than look.
 	var library []map[string]json.RawMessage
 	if err := json.Unmarshal(vocabulary.Library(), &library); err != nil {
 		t.Fatalf("decode the library: %v", err)
@@ -137,17 +135,18 @@ func TestBootstrapServesADefinitionSubsetAndNotTheLibrary(t *testing.T) {
 	}
 }
 
-// platform#52's negotiation applies to the doorway exactly as it applies to every
-// screen after it, because the request carries the same declaration Attach
-// carries. A client that declares nothing is an older client and gets
-// everything, which is the compatibility guarantee.
+// TestBootstrapAppliesTheDeclaredVocabulary pins that platform#52's negotiation
+// applies to the doorway exactly as it applies to every screen after it, because
+// the request carries the same declaration Attach carries. A client that
+// declares nothing is an older client and gets everything, which is the
+// compatibility guarantee.
 func TestBootstrapAppliesTheDeclaredVocabulary(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)
 	h := auth.NewHandler(newTestService(db, testNow))
 
 	// A client that declares every primitive gets templates with no fallback
-	// swapped in; the `fallback` key is stripped either way, because a client
+	// swapped in; the fallback key is stripped either way, because a client
 	// never chooses — the server already did.
 	all := make([]string, 0, len(sdui.Primitives))
 	for _, p := range sdui.Primitives {
@@ -172,9 +171,9 @@ func TestBootstrapAppliesTheDeclaredVocabulary(t *testing.T) {
 	}
 }
 
-// It does not vary on the identity attempted, because it takes none. The
-// response for a server with one account and a server with several is the same
-// bytes, so nothing here can be used to learn who exists.
+// TestBootstrapDoesNotVaryOnWhoExists pins that the response takes no identity
+// and does not vary on one. A server with one account and a server with several
+// answer with the same bytes, so nothing here can be used to learn who exists.
 func TestBootstrapDoesNotVaryOnWhoExists(t *testing.T) {
 	one := newFakeDB()
 	signedInUser(one)
@@ -196,11 +195,11 @@ func TestBootstrapDoesNotVaryOnWhoExists(t *testing.T) {
 	}
 }
 
-// It is the one surface reachable before authentication, so it is bounded.
-// The burst and the refill. It is deliberately not named "per peer": every
-// request here comes from the same (absent) caller, so separation between
-// callers is the *next* test's job — this one was called that for a while and
-// checked no such thing.
+// TestBootstrapBurstIsSpendableAndRefills pins the bound on the one surface
+// reachable before authentication: the burst is spendable in full and the bucket
+// refills. Every request here comes from the same (absent) caller, so separation
+// between callers is TestTwoCallersGetSeparateBuckets's job rather than this
+// one's.
 func TestBootstrapBurstIsSpendableAndRefills(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)
@@ -235,14 +234,14 @@ func TestBootstrapBurstIsSpendableAndRefills(t *testing.T) {
 	}
 }
 
-// Separation between callers, over real HTTP, because that is the only place
-// the chain that produces it exists: the middleware resolves an address, the
-// handler keys a bucket on it, and neither half is meaningful alone.
+// TestTwoCallersGetSeparateBuckets pins separation between callers, over real
+// HTTP, because that is the only place the chain that produces it exists: the
+// middleware resolves an address, the handler keys a bucket on it, and neither
+// half is meaningful alone.
 //
-// It matters more since platform#75 than it did before. Every request now arrives
-// from the Supervisor over a Unix socket, which has no peer address at all, so
-// without the forwarded address one household shares one bucket and any member
-// of it can spend everyone's.
+// Every request arrives from the Supervisor over a Unix socket (platform#75),
+// which has no peer address at all, so without the forwarded address one
+// household shares one bucket and any member of it can spend everyone's.
 func TestTwoCallersGetSeparateBuckets(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)
@@ -298,8 +297,7 @@ func treeText(n *sduiv1.UINode) string {
 	b.WriteString(n.GetType())
 	b.WriteString(" ")
 	// Sorted, because a props bag is a Go map and an unsorted walk would make
-	// this comparison a coin flip — which is how the identity test first
-	// "failed".
+	// this comparison a coin flip.
 	props := n.GetProps().AsMap()
 	keys := make([]string, 0, len(props))
 	for k := range props {

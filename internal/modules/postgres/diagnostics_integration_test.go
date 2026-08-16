@@ -18,13 +18,11 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/telemetry"
 )
 
-// TestDiagnosticsRegistryReportsRealStateAcrossPostgresWorkerAndBus is the
-// Diagnostics exit criterion proven end to end: a
-// diagnostics.Registry wired to the real PostgreSQL adapter, the real
-// outbox Worker and the real event Bus reports genuinely different,
-// live-computed health for each — not a hardcoded "ok" anywhere — and that
-// snapshot survives being turned into a redacted support bundle and a
-// structured log entry.
+// TestDiagnosticsRegistryReportsRealStateAcrossPostgresWorkerAndBus wires a
+// diagnostics.Registry to the real PostgreSQL adapter, the real outbox Worker
+// and the real event Bus, and asserts each reports live-computed health rather
+// than a hardcoded "ok" — and that the snapshot survives being turned into a
+// redacted support bundle and a structured log entry.
 func TestDiagnosticsRegistryReportsRealStateAcrossPostgresWorkerAndBus(t *testing.T) {
 	requirePostgres(t)
 	pool := freshDatabase(t)
@@ -44,8 +42,8 @@ func TestDiagnosticsRegistryReportsRealStateAcrossPostgresWorkerAndBus(t *testin
 	registry.Register("event-bus", bus)
 	registry.Register("outbox-worker", worker, "postgres", "event-bus")
 
-	// Before the worker has ever run, it must report Unavailable — a real,
-	// live consequence of never having drained anything, not a fake value.
+	// Before the worker has ever run it must report Unavailable, as a live
+	// consequence of never having drained anything.
 	before := registry.Snapshot(c)
 	byComponent := func(snap []domain.ComponentHealth) map[string]domain.ComponentHealth {
 		m := make(map[string]domain.ComponentHealth, len(snap))
@@ -61,8 +59,8 @@ func TestDiagnosticsRegistryReportsRealStateAcrossPostgresWorkerAndBus(t *testin
 	if beforeMap["outbox-worker"].Health != domain.HealthUnavailable {
 		t.Fatalf("outbox-worker health before any run = %q, want %q", beforeMap["outbox-worker"].Health, domain.HealthUnavailable)
 	}
-	// The worker's dependency health must reflect postgres's REAL state,
-	// computed in the same snapshot — not a static placeholder.
+	// The worker's dependency health must reflect postgres's own state, computed
+	// in the same snapshot rather than carried as a static placeholder.
 	depHealth := map[string]domain.HealthState{}
 	for _, dep := range beforeMap["outbox-worker"].DependencyHealth {
 		depHealth[dep.Component] = dep.Health
@@ -71,9 +69,8 @@ func TestDiagnosticsRegistryReportsRealStateAcrossPostgresWorkerAndBus(t *testin
 		t.Fatalf("outbox-worker's postgres dependency health = %q, want %q", depHealth["postgres"], domain.HealthHealthy)
 	}
 
-	// Drive a real event through the real outbox, then let the real worker
-	// drain it, and confirm the snapshot changes to reflect that — genuine
-	// state transition, not a scripted result.
+	// Drive an event through the real outbox, let the real worker drain it, and
+	// confirm the snapshot moves with it.
 	if err := cs.Outbox.Append(c, domain.OutboxEvent{Event: domain.Event{
 		ID: "e-diag-1", Type: "diagnostics.test", OccurredAt: cs.Clock.Now(), RecordedAt: cs.Clock.Now(), Payload: []byte("x"),
 	}}); err != nil {

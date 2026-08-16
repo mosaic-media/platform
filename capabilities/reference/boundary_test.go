@@ -19,10 +19,13 @@ import (
 // and the standard library. A private Platform import here would mean the
 // contracts are not ready to publish (the roadmap's stop point, platform#12).
 //
-// Since the surface was extracted into its own module, Go itself would also
-// reject a Platform-internal import — but this parse keeps the intent explicit
-// and catches a third-party dependency creeping in too, in the same style as
-// the auth and health transport boundary tests.
+// Go itself would also reject a Platform-internal import, since the surface is
+// its own module — but this parse keeps the intent explicit and catches a
+// third-party dependency creeping in too, in the same style as the auth and
+// health transport boundary tests.
+//
+// It reads this directory only, not the tree: a subdirectory is skipped, so
+// adding one means making this walk or the boundary goes unchecked there.
 func TestCapabilityImportsOnlyTheSDK(t *testing.T) {
 	const (
 		sdkPrefix      = "github.com/mosaic-media/sdk/"

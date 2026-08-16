@@ -29,10 +29,11 @@ func twoTrackRelease() MediaInfo {
 	}
 }
 
-// TestAnOverrideReDecidesRatherThanRelabels is the property that makes this
-// safe. Whether audio is copied or encoded is a fact about the *chosen track's*
-// codec, so a plan that carried a new index beside the old verdict would copy a
-// stream the client cannot decode and present it to a viewer as silence.
+// TestAnOverrideReDecidesRatherThanRelabels pins the property that makes an
+// override safe. Whether audio is copied or encoded is a fact about the chosen
+// track's codec, so a plan carrying a new index beside the old verdict would
+// copy a stream the client cannot decode and present it to a viewer as
+// silence.
 func TestAnOverrideReDecidesRatherThanRelabels(t *testing.T) {
 	info := twoTrackRelease()
 	base := Decide(info, browserish(), []string{"eng"})

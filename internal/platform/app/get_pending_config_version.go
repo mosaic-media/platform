@@ -26,11 +26,10 @@ type GetPendingConfigVersionQuery struct {
 // usual answer to be "nothing", and making that an error would have every
 // render of the panel produce one.
 //
-// ReloadClass is **re-derived from the diff against whatever is Active now**,
-// not read back off the record, for the reason Manager.ApplyPending re-derives
-// it: the class is a function of two payloads, and an activation between the
-// request and this read can change it. Storing it at request time would persist
-// a value a later activation could quietly invalidate.
+// ReloadClass must be re-derived from the diff against whatever is Active now
+// rather than read back off the record, for the reason Manager.ApplyPending
+// re-derives it: the class is a function of two payloads, and an activation
+// between the request and this read can change it.
 type GetPendingConfigVersionResult struct {
 	Version     domain.ConfigVersion
 	Found       bool
@@ -38,13 +37,10 @@ type GetPendingConfigVersionResult struct {
 	// Changed names the fields that actually differ from what is Active.
 	//
 	// It is here rather than left to a caller because a pending version is a
-	// *whole* configuration and not a patch — the activation model diffs two
+	// whole configuration and not a patch: the activation model diffs two
 	// payloads, so a draft carries every field, including the ones nobody
-	// touched. A caller listing the payload's keys would report a change to
-	// every setting in it. That is not a hypothetical: the first version of the
-	// configuration panel did exactly that, and told an operator a change was
-	// waiting to set two values they had not touched to the values they already
-	// had.
+	// touched. A caller listing the payload's keys reports a change to every
+	// setting in it.
 	Changed []string
 }
 
@@ -80,9 +76,8 @@ func (s *Service) GetPendingConfigVersion(ctx context.Context, query GetPendingC
 	}
 
 	// The payload to diff against. A fresh install has no Active version, and
-	// the empty payload is the right comparand there rather than a reason to
-	// fail: every field in the pending version is then a change, which is
-	// exactly what it is.
+	// the empty payload is the right comparand rather than a reason to fail:
+	// every field in the pending version is then a change, which it is.
 	var current domain.ConfigVersion
 	active, err := s.configStore.FindActive(ctx)
 	switch {

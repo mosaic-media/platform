@@ -17,14 +17,12 @@ import (
 //
 // Its own action rather than a reuse of telemetry.read, even though the screen
 // that shows it lives behind the same expert-mode switch. They reveal different
-// things: telemetry is what every *user* did, and the queue is what the
-// *install* did to itself. An operator who should see a stuck sweep and a
-// dead-lettered import need not also be able to read everyone's search history,
-// and folding the two together would make that the only option.
+// things: telemetry is what every user did, and the queue is what the install
+// did to itself. An operator who should see a stuck sweep and a dead-lettered
+// import need not also be able to read everyone's search history.
 //
 // It sits in the superuser preset beside the telemetry actions, and an
-// administrator is granted it individually — the same arrangement, for the same
-// reason.
+// administrator is granted it individually.
 const ActionJobRead policy.Action = "job.read"
 
 // ListJobsQuery reads the background-work queue.
@@ -41,9 +39,8 @@ type ListJobsResult struct {
 // ListJobs returns the queue: what has run, what is running, what is waiting to
 // be retried and what has been dead-lettered.
 //
-// A dead-letter is the reason this query exists. A queue that gives up on a job
-// and has no surface has not failed loudly — it has failed silently and looks
-// exactly like a queue with nothing to do.
+// A dead-letter is the reason this query exists: a queue that gives up on a job
+// and has no surface looks exactly like a queue with nothing to do.
 func (s *Service) ListJobs(ctx context.Context, q ListJobsQuery) (ListJobsResult, error) {
 	if _, err := s.enter(ctx, q.Caller, ActionJobRead, policy.Resource{Type: "job"}); err != nil {
 		return ListJobsResult{}, err

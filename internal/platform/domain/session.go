@@ -14,13 +14,10 @@ type AuthStrength string
 const (
 	// AuthStrengthPassword marks a Session produced by password verification.
 	AuthStrengthPassword AuthStrength = "password"
-	// AuthStrengthPasswordTOTP marks a Session produced by a password *and* a
-	// time-based second factor (platform#79).
-	//
-	// It is a distinct value rather than a flag beside AuthStrengthPassword
-	// because the whole point of recording strength is that a policy can one
-	// day read it: "this session proved two factors" is the fact worth
-	// carrying, and a session that proved one must not be able to look like it.
+	// AuthStrengthPasswordTOTP marks a Session produced by a password and a
+	// time-based second factor (platform#79). It is a distinct value rather
+	// than a flag beside AuthStrengthPassword so that a session which proved
+	// one factor can never look like one that proved two.
 	AuthStrengthPasswordTOTP AuthStrength = "password+totp"
 	// AuthStrengthPasskey marks a Session produced by passkey verification.
 	AuthStrengthPasskey AuthStrength = "passkey"

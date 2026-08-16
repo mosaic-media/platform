@@ -451,7 +451,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 			}
 		}
 
-		// Nested containment: a document whose array is a *superset* matches.
+		// Nested containment: a document whose array is a superset matches.
 		netflix, err := d.Nodes.Search(c, contracts.NodeQuery{
 			AttributesContain: []byte(`{"watch":{"providers":["Netflix"]}}`), Limit: 10,
 		})
@@ -555,7 +555,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 			t.Fatalf("genre search = %v, want Arrival and Dune", titles(sf))
 		}
 
-		// **Conjunctive, not disjunctive.** Two chips lit mean "both", and a
+		// Conjunctive, not disjunctive: two chips lit mean "both", and a
 		// union would widen a selection a user made to narrow.
 		conjunction, err := d.Nodes.Search(c, contracts.NodeQuery{
 			Genres: []string{"Science Fiction", "Drama"}, Limit: 10,
@@ -624,7 +624,7 @@ func RunNodeStoreContract(t *testing.T, newDeps Factory) {
 			t.Fatalf("second facet = %+v, want Drama × 1", facets.Genres[1])
 		}
 
-		// **The query's own genre narrowing is ignored**, so pressing a chip does
+		// The query's own genre narrowing is ignored, so pressing a chip does
 		// not empty the row that offered it.
 		narrowed, err := d.Nodes.Facets(c, contracts.NodeQuery{
 			Kind: v1.NodeWork, Genres: []string{"Drama"},
@@ -892,7 +892,7 @@ func RunPartStoreContract(t *testing.T, newDeps Factory) {
 		requireCategory(t, err, contracts.NotFound)
 	})
 
-	// An edition or cut is NOT a new Node. One Item carries however many cuts
+	// An edition or cut is not a new Node. One Item carries however many cuts
 	// exist, because the cut is a property of which bytes play.
 	t.Run("editions are parts of one item, not separate nodes", func(t *testing.T) {
 		d := newDeps(t)
@@ -1737,10 +1737,10 @@ func RunContentAtomicityContract(t *testing.T, newDeps Factory) {
 // mustErr discards a store method's value so its error can be asserted inline.
 func mustErr[T any](_ T, err error) error { return err }
 
-// WatchAvailabilityContract exercises the projection the streaming-service facet
-// filters on and the refresh keeps current (roadmap M2.5).
+// RunWatchAvailabilityContract exercises the projection the streaming-service
+// facet filters on and the refresh keeps current (roadmap M2.5).
 //
-// **The assertions worth reading are the two about an empty answer**, because
+// The assertions worth reading are the two about an empty answer, because
 // they are the whole reason this store exists rather than the facet reading the
 // module's own attributes document. A title that has left every service must
 // stop matching, and the refresh must be able to tell "asked, nothing there"
@@ -1783,10 +1783,10 @@ func RunWatchAvailabilityContract(t *testing.T, newDeps Factory) {
 			t.Fatalf("service search = %v, want only Arrival", titles(netflix))
 		}
 
-		// **A work whose availability was never fetched does not match.** It is
-		// not known to be absent from a service; nothing has been asked. A store
-		// that returned it would be guessing, which is the failure this whole
-		// slice is arranged against.
+		// A work whose availability was never fetched does not match. It is not
+		// known to be absent from a service; nothing has been asked. A store that
+		// returned it would be guessing, which is the failure this whole slice is
+		// arranged against.
 		all, err := d.Nodes.Search(c, contracts.NodeQuery{Limit: 10})
 		if err != nil {
 			t.Fatalf("Search all: %v", err)
@@ -1824,8 +1824,8 @@ func RunWatchAvailabilityContract(t *testing.T, newDeps Factory) {
 		}
 	})
 
-	// **The refresh's whole point.** A title that has left every service is
-	// recorded as being on none, and must stop matching — a store that treated
+	// The refresh's whole point: a title that has left every service is
+	// recorded as being on none, and must stop matching. A store that treated
 	// an empty answer as "nothing to write" would freeze the last positive
 	// answer forever, which is a group that says "on Netflix" about something
 	// that left in March.
@@ -1872,7 +1872,7 @@ func RunWatchAvailabilityContract(t *testing.T, newDeps Factory) {
 	})
 
 	// The refresh works never-asked first, then oldest-first. The first half is
-	// what makes it a **backfill**: every library that predates this store has no
+	// what makes it a backfill: every library that predates this store has no
 	// rows at all, and a pass that only revisited what it had already written
 	// would keep such a library permanently outside the feature.
 	t.Run("stale works come back never-asked first, then oldest", func(t *testing.T) {

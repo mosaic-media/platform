@@ -24,10 +24,10 @@ func writeSpool(t *testing.T, lines string) string {
 	return path
 }
 
-// **A bad line is skipped and the good ones survive it.** A boot that refused
-// to proceed because the diagnostics were malformed would be the machinery
-// defeating what it is for — and a truncated file is the ordinary shape of one
-// whose writer was killed, which is exactly when it has something to say.
+// A bad line is skipped and the good ones survive it. A boot that refused to
+// proceed because the diagnostics were malformed would defeat what they are for,
+// and a truncated file is the ordinary shape of one whose writer was killed —
+// exactly when it has something to say.
 func TestAnUnreadableLineDoesNotCostTheReadableOnes(t *testing.T) {
 	path := writeSpool(t, `{"type":"child_unrecoverable","context":"child","reference":"platform"}
 this is not json
@@ -46,9 +46,9 @@ this is not json
 	}
 }
 
-// **Adopted once.** A file left behind would be re-read on every boot, turning
-// one rollback into a finding that reappears forever — and by then the rows are
-// in the register, so nothing would look wrong.
+// A finding is adopted once. A file left behind would be re-read on every boot,
+// turning one rollback into a finding that reappears forever — and by then the
+// rows are in the register, so nothing would look wrong.
 func TestTheSpoolIsConsumed(t *testing.T) {
 	path := writeSpool(t, `{"type":"provision_failed","context":"host"}`+"\n")
 
@@ -73,8 +73,8 @@ func TestTheSpoolIsConsumed(t *testing.T) {
 }
 
 // No file is the ordinary state of an install with nothing wrong, and of every
-// install with no Supervisor. It must not be an error, or a plain `docker run`
-// of the Platform would log one on every boot.
+// install with no Supervisor. It must not be an error, or a plain docker run of
+// the Platform would log one on every boot.
 func TestNoSpoolIsNotAProblem(t *testing.T) {
 	findings, err := filesystem.ReadSpool(filepath.Join(t.TempDir(), "nothing-here.jsonl"))
 	if err != nil {

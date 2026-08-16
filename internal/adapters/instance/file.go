@@ -8,14 +8,13 @@
 // It is in internal/adapters rather than internal/modules because it is not
 // module-shaped: it implements one small port over the filesystem, it has no
 // manifest and no lifecycle, and nothing would ever want a second
-// implementation of it. That is the distinction the package tier model draws,
-// and this is the filesystem-helper case it names.
+// implementation of it.
 //
-// **Why a file at all**, when there is a perfectly good database: because the
-// question this answers is "which server is this" and the moment it is asked
-// most urgently is when the database cannot answer anything. A server name held
-// only in PostgreSQL vanishes exactly when a person needs it to identify the
-// machine that has stopped working.
+// It is a file rather than a database row because the question it answers is
+// "which server is this", and the moment that is asked most urgently is when the
+// database cannot answer anything. A server name held only in PostgreSQL
+// vanishes exactly when a person needs it to identify the machine that has
+// stopped working.
 package instance
 
 import (
@@ -128,9 +127,9 @@ func (f *File) Write(_ context.Context, identity domain.InstanceIdentity) error 
 	return nil
 }
 
-// parseTime and formatTime keep the on-disk timestamp in RFC 3339, which is
-// what every other Mosaic document uses and what a person reading the file with
-// `cat` can make sense of.
+// parseTime and formatTime keep the on-disk timestamp in RFC 3339, which is what
+// every other Mosaic document uses and what a person reading the file with cat
+// can make sense of.
 func parseTime(s string) (time.Time, error) { return time.Parse(time.RFC3339, s) }
 
 func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339) }

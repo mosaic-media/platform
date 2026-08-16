@@ -12,11 +12,10 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// TestComponentHealthReporterReflectsRealDatabaseState proves the
-// Diagnostics exit criterion for the storage component directly: this
-// is NOT a hardcoded "ok" — ReportHealth reflects a real, fully migrated
-// PostgreSQL database when one is reachable, and reports Unavailable with a
-// real reason once the connection is actually closed.
+// TestComponentHealthReporterReflectsRealDatabaseState pins that ReportHealth
+// answers from the database rather than from a hardcoded "ok": healthy against a
+// reachable, fully migrated PostgreSQL, and Unavailable with a reason once the
+// connection is closed.
 func TestComponentHealthReporterReflectsRealDatabaseState(t *testing.T) {
 	requirePostgres(t)
 	pool := freshDatabase(t)
@@ -42,8 +41,8 @@ func TestComponentHealthReporterReflectsRealDatabaseState(t *testing.T) {
 	}
 	firstSuccessfulCheck := healthy.LastSuccessfulCheck
 
-	// Close the pool out from under the reporter: this is a real, live
-	// connection failure, not a simulated one.
+	// Close the pool out from under the reporter, so the failure is a real
+	// connection failure rather than a simulated one.
 	pool.Close()
 
 	unavailable := reporter.ReportHealth(c)
@@ -56,8 +55,8 @@ func TestComponentHealthReporterReflectsRealDatabaseState(t *testing.T) {
 	if unavailable.LastFailureCategory == "" {
 		t.Fatal("expected a non-empty LastFailureCategory once the database is unreachable")
 	}
-	// LastSuccessfulCheck must carry forward the last time it WAS healthy,
-	// not reset to zero or advance just because a check ran.
+	// LastSuccessfulCheck must carry forward the last time the component was
+	// healthy, not reset to zero or advance just because a check ran.
 	if !unavailable.LastSuccessfulCheck.Equal(firstSuccessfulCheck) {
 		t.Fatalf("LastSuccessfulCheck after failure = %v, want unchanged %v", unavailable.LastSuccessfulCheck, firstSuccessfulCheck)
 	}

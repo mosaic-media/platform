@@ -20,7 +20,7 @@ import (
 // The proxy cannot be selective: the registry must not be able to tell it from
 // a local struct, and Go type assertions cannot be made conditional at runtime,
 // so it satisfies all eight interfaces unconditionally. Every resolution in the
-// registry therefore has to gate on the *manifest*, and this double is what
+// registry therefore has to gate on the manifest, and this double is what
 // makes that testable without spawning a process.
 type everythingCapability struct {
 	manifest v1.Manifest
@@ -60,9 +60,9 @@ func (c *everythingCapability) SettingsUI(context.Context, v1.SettingsUIRequest)
 }
 
 // A metadata-only module reached through a proxy must not be enumerated as a
-// stream, artwork, catalog or playback provider. Before the registry gated on
-// the manifest, every one of these returned it — a bare type assertion against
-// a proxy always succeeds.
+// stream, artwork, catalog or playback provider. Without the manifest gate every
+// one of these returns it, because a bare type assertion against a proxy always
+// succeeds.
 func TestProxyIsResolvedByManifestNotTypeAssertion(t *testing.T) {
 	reg := app.NewCapabilityRegistry()
 	reg.Register(&everythingCapability{manifest: v1.Manifest{
@@ -185,9 +185,8 @@ func TestUnregisterMakesACapabilityUnresolvable(t *testing.T) {
 
 // The registry is read while it is being mutated — an install or uninstall
 // happens while requests resolve capabilities. Register, Unregister and the read
-// paths run concurrently here; under -race this is what proves the RWMutex
-// actually guards the map rather than the single-threaded boot path having hidden
-// the absence of one.
+// paths run concurrently here, so under -race this proves the RWMutex guards the
+// map; a single-threaded boot path would hide the absence of one.
 func TestConcurrentRegisterUnregisterAndRead(t *testing.T) {
 	reg := app.NewCapabilityRegistry()
 	// A stable core module always present, so readers always have something to

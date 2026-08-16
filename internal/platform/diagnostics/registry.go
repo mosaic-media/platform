@@ -21,10 +21,9 @@ type registration struct {
 }
 
 // Registry aggregates real component health from every registered
-// contracts.ComponentHealthReporter. It is the mechanism that answers
-// "granular enough... without reducing the whole system to a single failed
-// state": Snapshot reports every component's own health independently, so
-// one degraded component never masks another's.
+// contracts.ComponentHealthReporter. Snapshot reports every component's own
+// health independently, so one degraded component never masks another's and
+// the system is never reduced to a single failed state.
 type Registry struct {
 	mu   sync.Mutex
 	regs map[string]registration
@@ -53,12 +52,12 @@ func (r *Registry) Register(component string, reporter contracts.ComponentHealth
 	r.regs[component] = registration{reporter: reporter, dependencies: append([]string(nil), dependencies...)}
 }
 
-// Snapshot computes ComponentHealth for every registered component. Each
-// reporter is called independently — one reporter panicking or hanging is
-// this method's problem to isolate in a later slice (Supervisor handoff),
-// not something Snapshot silently tolerates today — and DependencyHealth
-// is filled in from the other components' health computed in this same
-// call, so it always reflects a single consistent point in time.
+// Snapshot computes ComponentHealth for every registered component.
+// DependencyHealth is filled in from the other components' health computed in
+// this same call, so it always reflects a single consistent point in time.
+//
+// Reporters are called directly and are not isolated: a reporter that panics
+// or blocks takes Snapshot with it.
 func (r *Registry) Snapshot(ctx context.Context) []domain.ComponentHealth {
 	r.mu.Lock()
 	order := append([]string(nil), r.order...)

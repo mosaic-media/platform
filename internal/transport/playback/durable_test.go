@@ -12,8 +12,8 @@ import (
 
 // theHindiFirstRelease is the fixture platform#29 was written around: a 4K HEVC
 // Matroska with four E-AC3 tracks whose first is Hindi. It is the case that
-// proves storing only the Part's scalar columns would have been a regression —
-// nothing in Container/VideoCodec/AudioCodec can say which of these four plays.
+// shows why the Part's scalar columns are not enough — nothing in
+// Container/VideoCodec/AudioCodec can say which of these four plays.
 var theHindiFirstRelease = MediaInfo{
 	Container: "matroska",
 	SizeBytes: 34_336_638_566,
@@ -107,7 +107,7 @@ func TestSummaryAudioCodecNamesThePlayedTrack(t *testing.T) {
 }
 
 // TestEncodeOmitsNothingLoadBearing guards the zero values that carry meaning.
-// Stream index 0 is a real index, and `omitempty` on it would silently move
+// Stream index 0 is a real index, and omitempty on it would silently move
 // every video stream to index 0 on the way back — which happens to be right for
 // most files and wrong for the ones that matter.
 func TestEncodeOmitsNothingLoadBearing(t *testing.T) {
@@ -168,11 +168,12 @@ func TestDurationSurvivesTheStoredProbe(t *testing.T) {
 	}
 }
 
-// A document written before Duration existed must re-probe rather than decode
-// with a zero. Reading it back as current would leave every release probed
-// before this change permanently unseekable, which is the failure the version
-// field exists to prevent — and it only works if the version was actually
-// bumped, which is what this asserts.
+// TestAProbeFromBeforeDurationIsRejected pins that a document written before
+// Duration existed must re-probe rather than decode with a zero. Reading it
+// back as current would leave every release probed before this change
+// permanently unseekable, which is the failure the version field exists to
+// prevent — and it only works if the version was actually bumped, which is what
+// this asserts.
 func TestAProbeFromBeforeDurationIsRejected(t *testing.T) {
 	old := []byte(`{"v":1,"container":"matroska","sizeBytes":100,"video":{"index":0,"codec":"h264"}}`)
 	if _, ok := Decode(old); ok {

@@ -44,7 +44,7 @@ func (s *Service) detailScreen(ctx context.Context, caller v1.Caller, params map
 // richDetail builds the full detail for a ref, in the order the design states
 // it: hero, episodes, cast, technical facts, related.
 //
-// Episodes come *before* cast deliberately. Someone opening a series they are
+// Episodes come before cast deliberately. Someone opening a series they are
 // part-way through is looking for the next episode, and putting a rail of
 // headshots between them and it makes the common case scroll past the rare one.
 func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.ContentRef, params map[string]any) (sdui.Node, error) {
@@ -59,8 +59,8 @@ func (s *Service) richDetail(ctx context.Context, caller v1.Caller, ref v1.Conte
 // resolved.
 //
 // It is split from the fetch because the two planes now resolve differently and
-// must still render identically (platform#62): a **virtual** item asks its provider
-// live, and a **library** item reads the stored document and its own tree. A
+// must still render identically (platform#62): a virtual item asks its provider
+// live, and a library item reads the stored document and its own tree. A
 // second renderer for the second plane is how the library detail would quietly
 // become the poorer one.
 func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.ContentRef, res app.PreviewContentResult, knownSeasons []int, params map[string]any) (sdui.Node, error) {
@@ -73,7 +73,7 @@ func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.Con
 	// The selected season, its episodes and this viewer's progress through them
 	// — computed once, because the hero's resume label, the panel's "up next"
 	// and the episode rows are three readings of the same answer. It comes first
-	// because it decides *which* release the hero is about to play.
+	// because it decides which release the hero is about to play.
 	season := s.seasonView(ctx, caller, res, m.Episodes, knownSeasons, params)
 
 	// The release behind the play button, and everything known about it. It is
@@ -163,10 +163,10 @@ func (s *Service) renderDetail(ctx context.Context, caller v1.Caller, ref v1.Con
 // kickerLabel is the eyebrow above the title — "Series · 2 seasons", "Film".
 //
 // The season count lives here rather than in the meta pills because it is what
-// the thing *is*, not a fact about it: a pill row reads as a list of attributes
+// the thing is, not a fact about it: a pill row reads as a list of attributes
 // and "2 Seasons · 19 Episodes" sitting among a rating and a certificate reads
 // as one more attribute rather than as the shape of the work.
-// It takes the resolved season *order* rather than an episode list. Counting
+// It takes the resolved season order rather than an episode list. Counting
 // distinct seasons among the episodes on hand was correct while a detail always
 // held every episode of a series, and became wrong the moment a library detail
 // began reading one season at a time (platform#62): a seventy-five-season programme
@@ -201,7 +201,7 @@ func mediaTypeWord(mediaType string) string {
 // is about, who it is for, and — when Mosaic actually holds the bytes — what
 // they are.
 //
-// The rating carries no source name. `v1.ContentMetadata.Rating` is a bare
+// The rating carries no source name. v1.ContentMetadata.Rating is a bare
 // float with no scale or attribution on it, so "8.7 IMDb" as the design writes
 // it cannot be stated truthfully; the number is shown and the claim about where
 // it came from is not.
@@ -326,7 +326,7 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 			// Play comes first and Add second, which is the ordering platform#73
 			// argues for: a viewer wants to watch the thing, and adding it is
 			// what the Platform has to do to let them. Both are drawn only for a
-			// caller who may import, because **pressing Play here adds it** —
+			// caller who may import, because pressing Play here adds it —
 			// the same authority, honestly gated (platform#44).
 			els = append(els, ui.Button("Play", "primary", ui.IconName("play"),
 				ui.OnTap(ui.Invoke(playPartAction, map[string]any{
@@ -345,7 +345,7 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 
 	if playing != nil {
 		// Where this viewer got to, if anywhere (platform#26). The state is keyed
-		// on the *item* that has the bytes rather than on the work above it,
+		// on the item that has the bytes rather than on the work above it,
 		// because that is what a viewer resumes — an episode, not a series.
 		state, stateErr := s.content.GetPlaybackState(ctx, v1.GetPlaybackStateQuery{
 			Caller: caller, NodeID: playing.NodeID,
@@ -368,7 +368,7 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 			"poster":    s.art(m.Poster),
 		}
 
-		// Naming *what* is being played rather than the clock reading, when the
+		// Naming what is being played rather than the clock reading, when the
 		// thing has a name. "Resume S2 E7" tells a viewer of a series the one
 		// thing they wanted to know; "Resume 47:12" makes them open the episode
 		// list to find out which one it is. On a first play the name matters
@@ -443,7 +443,7 @@ func (s *Service) heroActions(ctx context.Context, caller v1.Caller, res app.Pre
 // The design's panel opens with "Playing on — Living Room TV" and closes with a
 // "Change device" control. Neither is here: a Session carries a DeviceID with no
 // name on it, there is no device registry to name one from, and no capability
-// role in the SDK describes a playback *target*. Rows Mosaic cannot answer are
+// role in the SDK describes a playback target. Rows Mosaic cannot answer are
 // dropped rather than filled with the local machine.
 func playbackPanel(m v1.ContentMetadata, ref v1.ContentRef, facts releaseFacts, playing *v1.Part, season seasonView) ui.El {
 	if playing != nil {
@@ -480,11 +480,11 @@ func playbackPanel(m v1.ContentMetadata, ref v1.ContentRef, facts releaseFacts, 
 		row("Type", mt)
 	}
 	row("Year", yearLabel(m.Year))
-	// Seasons rather than episodes, and read from the season *order* rather than
+	// Seasons rather than episodes, and read from the season order rather than
 	// from the episodes on hand.
 	//
 	// A library detail reads one season at a time (platform#62), so counting
-	// `m.Episodes` here said "Episodes 6" over a selector offering seventy-five
+	// m.Episodes here said "Episodes 6" over a selector offering seventy-five
 	// seasons — a number that was true of the read and false of the series. The
 	// season count is the one this panel can state honestly without reading a
 	// tree it deliberately does not read.
@@ -549,11 +549,11 @@ func (s *Service) providerName(ctx context.Context, caller v1.Caller, moduleID s
 // playTarget is the release the hero's primary action plays, and which episode
 // it belongs to.
 //
-// `FirstPlayablePart` deliberately does not walk past a work's direct children,
+// FirstPlayablePart deliberately does not walk past a work's direct children,
 // so it reports nothing playable for every series: a series' children are its
 // seasons, and picking an episode inside one is a choice the application layer
 // declined to make silently. That limit stands, and this is the screen making
-// the choice out loud instead — it resolves a *named* episode and the button
+// the choice out loud instead — it resolves a named episode and the button
 // says which one, so nothing is defaulted behind the viewer's back.
 //
 // The order is the order a viewer would expect: the episode they are part-way
@@ -671,7 +671,7 @@ func (s seasonView) nextUp() *v1.EpisodePreview {
 // seasonView resolves the season to show and reads this viewer's progress
 // through it. An error anywhere costs the progress, never the episodes.
 // knownSeasons, when given, is the complete season list read from the tree's
-// season *containers* — the library plane's way of listing seventy-five seasons
+// season containers — the library plane's way of listing seventy-five seasons
 // having read the episodes of only one. The virtual plane passes nil and the
 // order is derived from the provider's preview, which carries every season
 // because a provider answers with the whole series at once.
@@ -794,7 +794,7 @@ func (s *Service) fillSeasonProgress(ctx context.Context, caller v1.Caller, seri
 	}
 
 	// What each episode's release actually is, for the quality pill on its row.
-	// One read per episode of the *shown* season only; a season nobody is
+	// One read per episode of the shown season only; a season nobody is
 	// looking at costs nothing.
 	view.quality = make(map[int]string, len(byNumber))
 	for num, id := range byNumber {
@@ -924,7 +924,7 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 
 	// The node fills what the document does not. Artwork is the case that
 	// matters: it is stored on the node (platform#45) and re-ranked by the artwork
-	// pass (platform#47), so the node's copy is the *better* one and the document's
+	// pass (platform#47), so the node's copy is the better one and the document's
 	// is what its metadata provider happened to carry.
 	if p := n.Artwork.Poster; p != "" {
 		m.Poster = p
@@ -956,9 +956,8 @@ func (s *Service) libraryDetail(ctx context.Context, caller v1.Caller, nodeID st
 // structuralDetail is what a node with no stored description renders as: what
 // the graph itself holds, which is a title, its artwork and its contents.
 //
-// It was the *only* library detail before platform#62 and is now the floor beneath
-// it. It draws the children's posters, which the version it replaces did not —
-// a grid of blank cards was the visible half of the same omission.
+// It is the floor beneath the platform#62 detail. It draws the children's
+// posters; without them the fallback is a grid of blank cards.
 func (s *Service) structuralDetail(n v1.Node, children []v1.Node) sdui.Node {
 	heroEls := []ui.El{
 		ui.Title(n.Title),

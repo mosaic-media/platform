@@ -17,28 +17,22 @@ import (
 
 // The watch-availability refresh (roadmap M2.5).
 //
-// **This is the slice that makes grouping by streaming service correct rather
-// than confidently wrong, and it is built before the surface deliberately.**
-// Both halves of the grouping have existed for a while — a metadata provider
-// answers with availability and the store can filter on it — and the surface was
-// withheld on purpose, because availability churns monthly and nothing refreshed
-// it. A group saying "on Netflix" about a title that left in March is worse than
-// an absent group: a user can see a feature that is missing and cannot see one
-// that is lying.
+// Availability churns monthly, so grouping by streaming service is only correct
+// while something re-asks: a group saying "on Netflix" about a title that left
+// in March is worse than an absent group, because a user can see a feature that
+// is missing and cannot see one that is lying. This pass is for the second
+// visit; the first is free, because the import already asked.
 //
-// So what this pass is *for* is the second visit, not the first. The first is
-// free — the import already asked — and everything after it is this.
-//
-// **It is not the library maintenance pass, and the difference is the point.**
-// That one walks the *rules* and re-imports what they match, so a title nobody
-// wrote a rule for — anything added by hand from search — is never revisited. It
-// also does its work through the module, which re-reads a whole title's detail.
-// This walks the *library*, oldest answer first, so every work with a stored
-// answer is eventually re-asked and none starves.
+// It is not the library maintenance pass. That one walks the rules and
+// re-imports what they match, so a title nobody wrote a rule for — anything
+// added by hand from search — is never revisited, and it works through the
+// module, which re-reads a whole title's detail. This walks the library, oldest
+// answer first, so every work with a stored answer is eventually re-asked and
+// none starves.
 
-// Config fields governing the pass. Named here rather than spelled at the read
-// site, for the reason the maintenance pass's are: a misspelling is a configured
-// value that silently never takes effect.
+// Config fields governing the pass. Named as constants rather than spelled at
+// the read site because a misspelling is a configured value that silently never
+// takes effect.
 const (
 	fieldAvailabilityInterval = "library.availability.interval_hours"
 	fieldAvailabilityBudget   = "library.availability.items_per_run"
@@ -48,23 +42,21 @@ const (
 type AvailabilitySettings struct {
 	// Interval is how often the schedule fires.
 	Interval time.Duration
-	// Budget is how many works one run may re-ask about. It is a budget rather
-	// than "all of them" for the reason the maintenance pass has one: this turns
-	// a household's upstream load from human-triggered into continuous, and the
-	// credential paying for it may be one a whole household shares (architecture#4).
+	// Budget is how many works one run may re-ask about. Bounded rather than
+	// "all of them" for the reason the maintenance pass is: this turns upstream
+	// load from human-triggered into continuous, and the credential paying for it
+	// may be one a whole household shares (architecture#4).
 	Budget int
 }
 
 // DefaultAvailability is what applies when the Active configuration says
 // nothing, which is the normal state.
 //
-// **Daily, and the number is chosen against what it is refreshing.** Streaming
-// catalogues move on the order of a month, so asking once a day is already an
-// order of magnitude more often than the fact changes; asking hourly would be
-// twenty-four times the upstream cost for the same answer. The budget is what
-// decides how long a full sweep takes: at 200 a day a library of two thousand
-// works is ten days from end to end, which is well inside the churn it is
-// tracking.
+// Daily, chosen against what it refreshes: streaming catalogues move on the
+// order of a month, so asking once a day is already an order of magnitude more
+// often than the fact changes. The budget decides how long a full sweep takes —
+// at 200 a day a library of two thousand works is ten days end to end, well
+// inside the churn it is tracking.
 var DefaultAvailability = AvailabilitySettings{
 	Interval: 24 * time.Hour,
 	Budget:   200,
@@ -73,11 +65,10 @@ var DefaultAvailability = AvailabilitySettings{
 // Availability reads the pass's schedule out of the Active configuration,
 // falling back to the defaults field by field.
 //
-// It never fails, for the reason the maintenance pass's reader never fails: this
-// governs a background sweep, and turning a typo in configuration into a
-// Platform that never refreshes its availability is worse than running with the
-// default — and worse in the specific way this slice exists to prevent, since a
-// refresh that silently stopped is how a group goes back to lying.
+// It never fails, like the maintenance pass's reader: this governs a background
+// sweep, and a typo in configuration must not become a Platform that never
+// refreshes its availability — a refresh that silently stopped is how a group
+// goes back to lying.
 func (s *Service) Availability(ctx context.Context) AvailabilitySettings {
 	out := DefaultAvailability
 	if s.configStore == nil {
@@ -108,9 +99,8 @@ type RefreshAvailabilityCommand struct {
 	Budget int
 }
 
-// RefreshAvailabilityResult accounts for what a run did. Every work it took is
-// in exactly one of these, so a run that touched sixty and reports forty raises
-// a question rather than answering one.
+// RefreshAvailabilityResult accounts for what a run did. Every work a run takes
+// must land in exactly one of these counters, so they sum to the budget spent.
 type RefreshAvailabilityResult struct {
 	// Checked is how many works were re-asked about and had their answer
 	// stored.
@@ -125,9 +115,9 @@ type RefreshAvailabilityResult struct {
 // RefreshAvailability re-asks the metadata provider about the works whose
 // answers are oldest, and stores what it is told.
 //
-// It **acts as the system principal** (platform#13), like the maintenance pass and
-// for the same reason: a refresh must not fail because the person who last
-// signed in has since been suspended, and nothing here is anybody's decision.
+// It acts as the system principal (platform#13), like the maintenance pass: a
+// refresh must not fail because the person who last signed in has since been
+// suspended, and nothing here is anybody's decision.
 func (s *Service) RefreshAvailability(ctx context.Context, cmd RefreshAvailabilityCommand) (RefreshAvailabilityResult, error) {
 	// 1. validate command shape.
 	if cmd.Caller.Session == "" {
@@ -161,17 +151,16 @@ func (s *Service) RefreshAvailability(ctx context.Context, cmd RefreshAvailabili
 	for _, nodeID := range stale {
 		ref, ok := s.storedRefFor(ctx, nodeID)
 		if !ok {
-			// Nothing to re-ask with. A stored document predating the ref being
-			// carried, or a provider whose answer never named itself — either
-			// way the row is left exactly as it was, with its old timestamp, so
-			// it stays at the head of the queue rather than being quietly
-			// dropped from the rotation.
+			// Nothing to re-ask with — a stored document predating the ref being
+			// carried, or a provider whose answer never named itself. The row is
+			// left exactly as it was, with its old timestamp, so it stays at the
+			// head of the queue rather than being dropped from the rotation.
 			out.Skipped++
 			continue
 		}
 		// The whole enrichment, not just the availability: it is the same fetch,
-		// so re-asking for one and discarding the other would pay a provider
-		// round trip to keep a document deliberately stale.
+		// so re-asking for one and discarding the other pays a provider round
+		// trip to keep a document stale.
 		if err := s.enrichMetadataErr(ctx, system, ref, nodeID); err != nil {
 			out.Failed++
 			telemetry.From(ctx).For("library").Warn("availability refresh could not re-ask a provider",
@@ -187,13 +176,13 @@ func (s *Service) RefreshAvailability(ctx context.Context, cmd RefreshAvailabili
 
 // storedRefFor recovers the ref a work was last described by.
 //
-// **This is the answer to the problem platform#45 named**: a materialised node
-// cannot be turned back into a provider-bearing ref, because the node records
-// the external *scheme* and id but not the module that served it nor that
-// module's native type vocabulary. What changed is that platform#62 stores the
-// provider's whole answer, and `ContentMetadata.Ref` is part of it — so a work
+// A materialised node cannot be turned back into a provider-bearing ref: it
+// records the external scheme and id but not the module that served it nor that
+// module's native type vocabulary — the problem platform#45 named. platform#62
+// stores the provider's whole answer including ContentMetadata.Ref, so a work
 // that has ever been enriched carries the ref it was enriched by, written by the
-// provider itself rather than reconstructed by the Platform.
+// provider rather than reconstructed here. A work that has never been enriched
+// has no ref and is skipped.
 func (s *Service) storedRefFor(ctx context.Context, nodeID v1.NodeID) (v1.ContentRef, bool) {
 	stored, err := s.nodeMetadata.Get(ctx, nodeID)
 	if err != nil {

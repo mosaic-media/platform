@@ -4,12 +4,12 @@
 
 //go:build mosaicdev
 
-// The development half of the module-repository override (platform#55). **This
-// file is compiled only into a build made with `-tags mosaicdev`**; the shipped
+// The development half of the module-repository override (platform#55). This
+// file is compiled only into a build made with -tags mosaicdev; the shipped
 // binary gets devregistry_off.go instead, which reads no environment and can
 // return no override.
 //
-// The build tag *is* the guard, and it is deliberately not a runtime one. An
+// The build tag is the guard, and it is deliberately not a runtime one. An
 // environment variable that repoints the module repository is a remote-code-
 // execution path: the repository's key vouches for every binary the Platform
 // downloads and spawns with its own authority, so anything able to name a
@@ -19,17 +19,17 @@
 // (a NAS app's env table, a hosting panel, a compose file pasted from a forum)
 // where editing configuration is not supposed to mean executing code. There is
 // no check that makes the mechanism safe to ship, so the mechanism is not
-// shipped: `go build ./...` produces a binary in which none of this exists —
-// not the parser, not the environment read, and not the unguarded fetcher
-// below.
+// shipped: go build ./... produces a binary in which none of this exists — not
+// the parser, not the environment read, and not the unguarded fetcher below.
 //
-// What that costs is real and worth stating: the dev stack runs a binary built
-// differently from the released one. It is confined to *which repository and
-// key are trusted* and *which dialer fetches from it*. Every check that decides
-// whether a module runs — the index signature, the manifest, the SDK major, the
-// per-platform binary digest, the handshake — is the same code on both sides of
-// the tag. A development key signs a development index, and the local loop
-// exercises the real verification path rather than a bypass of it.
+// The cost is that the dev stack runs a binary built differently from the
+// released one. It is confined to which repository and key are trusted and which
+// dialer fetches from it. Every check that decides whether a module runs — the
+// index signature, the manifest, the SDK major, the per-platform binary digest,
+// the handshake — is the same code on both sides of the tag. A development key
+// signs a development index, and the local loop exercises the real verification
+// path rather than a bypass of it.
+
 package extension
 
 import (

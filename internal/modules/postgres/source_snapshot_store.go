@@ -20,8 +20,8 @@ type sourceSnapshotStore struct {
 
 // NewSourceSnapshotStore builds a pool-backed store. Pool-backed rather than
 // transaction-scoped, like the playback resolution cache beside it: a snapshot
-// is written on a *read* path, as a side effect of a browse that succeeded, and
-// it commits with nothing.
+// is written on a read path, as a side effect of a browse that succeeded, and it
+// commits with nothing.
 func NewSourceSnapshotStore(pool *pgxpool.Pool) contracts.SourceSnapshotStore {
 	return &sourceSnapshotStore{q: pool}
 }

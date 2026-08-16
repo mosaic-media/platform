@@ -20,29 +20,24 @@ import (
 // The boundary conformance suite.
 //
 // Every exported Service method that accepts a caller must authenticate it and
-// put it through policy before doing anything else. Nothing in Go enforces
-// that: there are no annotations and no runtime proxies, so a handler that
-// simply omits the preamble compiles, passes its own tests, and serves reads
-// to anyone holding a made-up session id. The rule has been documentation and
-// developer discipline, which is exactly the arrangement that let a helper
-// re-run the gates ten times in a loop without anyone noticing either.
+// put it through policy before doing anything else. Nothing in Go enforces that:
+// a handler that omits the preamble compiles, passes its own tests, and serves
+// reads to anyone holding a made-up session id.
 //
-// This suite is the enforcement. It has two halves and needs both:
+// The suite has two halves and needs both:
 //
-//   - boundaryCases asserts the *behaviour*. Each caller-bearing method is
-//     called twice — once with a session that does not exist, once with a real
-//     session holding no grants — and must answer Unauthenticated and then
+//   - boundaryCases asserts the behaviour. Each caller-bearing method is called
+//     twice — once with a session that does not exist, once with a real session
+//     holding no grants — and must answer Unauthenticated and then
 //     PermissionDenied. A handler that forgot either gate fails here.
 //   - TestBoundaryTableCoversEveryCallerBearingMethod asserts the table is
-//     *complete*, by reflecting over *app.Service and demanding that every
-//     method carrying a v1.Caller or a domain.SessionID appears above. A new
-//     handler cannot be added without a row, which is the property an
-//     annotation would have given for free and a hand-written table would not.
+//     complete, by reflecting over *app.Service and demanding that every method
+//     carrying a v1.Caller or a domain.SessionID appears above. A new handler
+//     cannot be added without a row.
 //
-// What it deliberately does not check is that each handler names the *right*
-// action. Only a declared action-per-handler table could, and that table would
-// itself be the thing to keep in sync. Omission is the failure that happens;
-// this catches omission.
+// It deliberately does not check that each handler names the right action. Only
+// a declared action-per-handler table could, and that table would itself be the
+// thing to keep in sync. Omission is the failure this catches.
 
 // caller builds the opaque published caller for a session id (platform#13).
 func caller(session domain.SessionID) v1.Caller {
@@ -66,15 +61,13 @@ type boundaryCase struct {
 // the reason each is safe to leave out. It exists so that "not in the table"
 // is always a stated decision rather than an oversight.
 var boundaryExempt = map[string]string{
-	// CallerCan answers whether an affordance should be *drawn*, not whether
-	// an operation may proceed (platform#36). It returns a bool and no
-	// authorized, so nothing downstream can mistake its answer for the proof
-	// platform#41 requires — the screens and services behind every affordance run
-	// the real boundary themselves, and a test asserts telemetry.read is
-	// enforced there.
+	// CallerCan answers whether an affordance should be drawn, not whether an
+	// operation may proceed (platform#36). It returns a bool and no authorized,
+	// so nothing downstream can mistake its answer for the proof platform#41
+	// requires; the screens and services behind every affordance run the real
+	// boundary themselves.
 	//
-	// Holding it to the entry-point contract would be actively wrong: an entry
-	// point must deny, and this one must *answer* — returning "no" for an
+	// An entry point must deny, and this one must answer: returning "no" for an
 	// unauthenticated caller is its correct behaviour, not a missing gate.
 	"CallerCan": "affordance visibility hint; returns a bool, grants nothing, and the surfaces behind it each enter the boundary",
 	// ExpertModeEnabled reads the caller's own display preference. It
@@ -87,14 +80,10 @@ var boundaryExempt = map[string]string{
 	// a test asserts a stored preference cannot surface it without the grant.
 	"ExpertModeEnabled": "display preference; authenticates but does not authorize, returns a bool, and reveals nothing the permission has not already allowed",
 	// HomeCompositionFor reads how the caller arranged their own home screen
-	// (platform#59). Exempt on exactly the terms above, and the reasoning matters
-	// more here than for a toggle: this is a *preference, not a scope*
-	// (platform#42). It returns which rows one person chose to hide, it discloses
-	// no content, and every row it decides the visibility of is separately
-	// reachable by search and by link. Requiring a permission to read your own
-	// taste would make the home screen fail for anyone who lacks it — and
-	// treating the answer as authority is precisely the confusion platform#59
-	// forbids, because a hidden row is not evidence of a permission.
+	// (platform#59). Exempt on the terms above: it is a preference, not a scope
+	// (platform#42). It returns which rows one person chose to hide, discloses no
+	// content, and every row whose visibility it decides is separately reachable
+	// by search and by link. A hidden row is not evidence of a permission.
 	"HomeCompositionFor": "display preference; authenticates but does not authorize, returns no content, and hides nothing that is not reachable by other means",
 	// LanguagePreferenceFor reads what the caller wants to hear and read
 	// (platform#83). Exempt on the same terms as the two rows above: it
@@ -102,12 +91,10 @@ var boundaryExempt = map[string]string{
 	// own stored document and nothing else — no content, no other viewer's
 	// setting, nothing a permission was protecting.
 	//
-	// The stronger argument is what an entry point would cost here. This is read
-	// on the path that starts a playback, and an entry point must deny; denying
-	// would turn "your language preference could not be read" into "you cannot
-	// watch this", which inverts the relationship between a taste setting and the
-	// thing it decorates. It returns nil on every failure for that reason, and the
-	// transport reads nil as the default.
+	// It is also read on the path that starts a playback, and an entry point
+	// must deny: denying would turn "your language preference could not be
+	// read" into "you cannot watch this". It returns nil on every failure, and
+	// the transport reads nil as the default.
 	"LanguagePreferenceFor": "playback preference; authenticates but does not authorize, returns only the caller's own stored document, and degrades to the default rather than refusing a play",
 	// SessionForCaller answers "which session is this credential" (platform#58).
 	// It authenticates — an unknown credential is Unauthenticated, like
@@ -121,26 +108,22 @@ var boundaryExempt = map[string]string{
 	// caller's own and the session already proves it, so a permission to be told
 	// what you have just proved is not an access control.
 	//
-	// It required `user.read` until a second account existed. That is
-	// administrator authority, so every viewer was refused their own name and
-	// the account cluster — which is on every screen — drew a question mark for
-	// them. The exemption is the correction, and it is written here rather than
-	// worked around because this list is what makes "not in the table" a
-	// decision instead of an oversight.
+	// Do not gate it on user.read: that is administrator authority, so every
+	// ordinary viewer would be refused their own name and the account cluster on
+	// every screen would draw a question mark for them.
 	"GetCurrentUser": "the caller's own record; authenticates, has no action to authorize, and discloses nothing the session does not already prove",
 }
 
 // RefreshSession is not in either list, and cannot be: it carries no caller at
 // all, so the reflection pass never sees it (platform#58).
 //
-// That is the honest shape rather than an omission. Step 2 of its boundary is
-// the refresh token itself, exactly as the password credential plays that role
-// in AuthenticateLocalUser — there is no caller session to look up, because the
-// whole point of the call is that the caller's access token has expired. And
-// there is deliberately no step 3: refreshing is not a new authority, it is the
-// continuation of one already granted, so a policy action gating it would be an
-// action nobody could hold before they had refreshed. Its own tests cover what
-// it must refuse.
+// Step 2 of its boundary is the refresh token itself, exactly as the password
+// credential plays that role in AuthenticateLocalUser — there is no caller
+// session to look up, because the point of the call is that the caller's access
+// token has expired. There is deliberately no step 3: refreshing continues an
+// authority already granted, so a policy action gating it would be an action
+// nobody could hold before they had refreshed. Its own tests cover what it must
+// refuse.
 
 func boundaryCases() []boundaryCase {
 	return []boundaryCase{
@@ -210,10 +193,10 @@ func boundaryCases() []boundaryCase {
 				Caller: caller(sid), NodeID: "node-1",
 			}))
 		}},
-		// Three results rather than two, so discard does not fit. It is the one
-		// entry point that reports playability as well as an error, because the
-		// screens transport asks it a yes/no question (platform#24) and must still
-		// be able to tell "no bytes here" from "your session expired".
+		// Three results rather than two, so discard does not fit: it reports
+		// playability as well as an error, because the screens transport asks a
+		// yes/no question (platform#24) and must still be able to tell "no bytes
+		// here" from "your session expired".
 		{"FirstPlayablePart", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			_, _, err := s.FirstPlayablePart(ctx, caller(sid), "node-1")
 			return err
@@ -248,10 +231,8 @@ func boundaryCases() []boundaryCase {
 				Caller: caller(sid), ModuleID: "stremio", CatalogID: "top",
 			}))
 		}},
-		// The cache-first browse reads (platform#30). They are on this table for a
-		// sharper reason than the two above: they can answer from storage without
-		// asking a source at all, so an unauthorised caller would be served a
-		// stored answer rather than refused — the boundary is the only thing
+		// The cache-first browse reads (platform#30). They can answer from storage
+		// without asking a source at all, so the boundary is the only thing
 		// standing between a snapshot and anybody who asks for it.
 		{"BrowseCatalogs", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.BrowseCatalogs(ctx, app.BrowseCatalogsQuery{Caller: caller(sid)}))
@@ -283,11 +264,10 @@ func boundaryCases() []boundaryCase {
 			return discard(s.ListSettingsModules(ctx, app.ListSettingsModulesQuery{Caller: caller(sid)}))
 		}},
 		// Installing and uninstalling an extension changes which third-party code
-		// runs with the Platform's authority (platform#51), so both refuse an unknown
-		// session and an ungranted caller like any other administrator action. The
-		// rejection lands at the boundary, before the injected manager is reached —
-		// the Service in this suite has none, which is exactly why the rejection
-		// must come first.
+		// runs with the Platform's authority (platform#51), so both refuse an
+		// unknown session and an ungranted caller. The rejection must land at the
+		// boundary, before the injected manager is reached: the Service in this
+		// suite has none.
 		{"InstallExtension", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.InstallExtension(ctx, app.InstallExtensionCommand{
 				Caller: caller(sid), Repository: "mosaic-official", ModuleID: "stremio",
@@ -309,11 +289,10 @@ func boundaryCases() []boundaryCase {
 				Caller: caller(sid), PartID: "part-1",
 			}))
 		}},
-		// The origin's correction for a dead cached link (platform#28). It is
-		// called from a transport rather than from a client, which is exactly
-		// why it earns a row instead of an exemption: a ticket proves its own
-		// provenance and nothing else, so the session it names has to clear the
-		// boundary here the same as anywhere.
+		// The origin's correction for a dead cached link (platform#28). Called
+		// from a transport rather than a client, which is why it earns a row
+		// instead of an exemption: a ticket proves its own provenance and
+		// nothing else, so the session it names must clear the boundary here.
 		{"ReresolvePlayback", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ReresolvePlayback(ctx, caller(sid), "part-1", "browser"))
 		}},
@@ -332,10 +311,9 @@ func boundaryCases() []boundaryCase {
 				Caller: caller(sid), WorkID: "work-1",
 			}))
 		}},
-		// A write on a read path, which is why it is worth having a row here
-		// rather than an exemption: recording a probe is triggered by playing,
-		// but it mutates the content graph and must refuse an ungranted caller
-		// like any other mutation.
+		// A write on a read path: recording a probe is triggered by playing, but
+		// it mutates the content graph and must refuse an ungranted caller like
+		// any other mutation.
 		{"RecordPartProbe", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.RecordPartProbe(ctx, app.RecordPartProbeCommand{
 				Caller: caller(sid), PartID: "part-1", Probe: []byte(`{"v":1}`),
@@ -344,11 +322,10 @@ func boundaryCases() []boundaryCase {
 
 		// --- playback state (platform#26) ---
 		//
-		// The first per-user rows in the content domain, and the boundary matters
-		// more here than anywhere above it: these methods resolve *whose* state
-		// they touch from the caller's own session, so a session that does not
-		// authenticate must never reach a store. There is no user parameter to
-		// get wrong, and this is what keeps it that way.
+		// These methods resolve whose state they touch from the caller's own
+		// session, so a session that does not authenticate must never reach a
+		// store. There is no user parameter to get wrong, and these rows are
+		// what keep it that way.
 		{"RecordPlaybackProgress", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.RecordPlaybackProgress(ctx, v1.RecordPlaybackProgressCommand{
 				Caller: caller(sid), NodeID: "node-1", Position: time.Minute,
@@ -415,10 +392,9 @@ func boundaryCases() []boundaryCase {
 		// --- background work (platform#13) ---
 		//
 		// These carry an ordinary caller like every row above, which is the
-		// point of them being here: the system principal is a *caller*, not a
-		// bypass, so the same handlers must still refuse an unknown session and
-		// an ungranted user. A separate test asserts the system principal gets
-		// through the same gate.
+		// point: the system principal is a caller, not a bypass, so the same
+		// handlers must still refuse an unknown session and an ungranted user.
+		// A separate test asserts the system principal gets through the gate.
 		{"ListJobs", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListJobs(ctx, app.ListJobsQuery{Caller: caller(sid)}))
 		}},
@@ -473,7 +449,7 @@ func boundaryCases() []boundaryCase {
 			}))
 		}},
 		{"RevokeSession", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
-			// **Somebody else's** session, which is the case that needs a grant.
+			// Somebody else's session, which is the case that needs a grant.
 			// Ending your own is signing out and is deliberately ungated, so a
 			// case naming the caller's own session would assert the opposite of
 			// what this suite is for. The harness seeds this one to another user.
@@ -529,19 +505,19 @@ func boundaryCases() []boundaryCase {
 
 		// --- the library and its rules (platform#60) ---
 		//
-		// RunLibraryMaintenance is the row worth reading twice. It *acts* as the
-		// system principal whoever triggers it, and that must not weaken the
-		// gate on triggering it: an unknown session and an ungranted caller are
-		// refused before anything acts as anybody. A pass that authorised itself
-		// because it was going to act as the install would be a way to run
-		// unbounded authority from an unauthenticated request.
+		// RunLibraryMaintenance acts as the system principal whoever triggers
+		// it, and that must not weaken the gate on triggering it: an unknown
+		// session and an ungranted caller are refused before anything acts as
+		// anybody. A pass that authorised itself because it was going to act as
+		// the install would run unbounded authority from an unauthenticated
+		// request.
 		{"ListLibrary", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.ListLibrary(ctx, app.ListLibraryQuery{Caller: caller(sid)}))
 		}},
 		// Reading a title out of the graph rather than from its provider
-		// (platform#62). It is a content read like any other and gated as one: the
-		// library is shared, so everybody who may see it may see all of it, and
-		// nobody who may not gets a description of it either.
+		// (platform#62). A content read like any other: the library is shared, so
+		// everybody who may see it may see all of it, and nobody who may not
+		// gets a description of it either.
 		{"GetLibraryDetail", func(ctx context.Context, s *app.Service, sid domain.SessionID) error {
 			return discard(s.GetLibraryDetail(ctx, app.GetLibraryDetailQuery{
 				Caller: caller(sid), NodeID: "node-1",
@@ -633,11 +609,10 @@ func TestEveryEntryPointRejectsACallerWithoutGrants(t *testing.T) {
 	}
 }
 
-// TestBoundaryTableCoversEveryCallerBearingMethod is the half that makes the
-// two tests above a guarantee rather than a sample. Reflection finds every
-// exported method that takes a caller in any form; the table and the exemption
-// list must between them account for all of them. Add a handler, forget a row,
-// and this fails on the same commit.
+// TestBoundaryTableCoversEveryCallerBearingMethod makes the two tests above a
+// guarantee rather than a sample. Reflection finds every exported method that
+// takes a caller in any form; the table and the exemption list must between them
+// account for all of them, so adding a handler without a row fails the build.
 func TestBoundaryTableCoversEveryCallerBearingMethod(t *testing.T) {
 	covered := map[string]bool{}
 	for _, tc := range boundaryCases() {
@@ -664,8 +639,7 @@ func TestBoundaryTableCoversEveryCallerBearingMethod(t *testing.T) {
 	}
 
 	// The reverse direction: an exemption or a row for a method that no longer
-	// exists is stale, and a stale row is how a table quietly stops covering
-	// what it claims to.
+	// exists is how a table quietly stops covering what it claims to.
 	known := map[string]bool{}
 	for _, name := range callerBearingMethods() {
 		known[name] = true
@@ -684,10 +658,10 @@ func TestBoundaryTableCoversEveryCallerBearingMethod(t *testing.T) {
 
 // callerBearingMethods reports the exported methods of *app.Service that accept
 // a caller — either directly, or as a field of the command or query struct they
-// take. That is the structural definition of an entry point: a method holding a
-// caller is one that has to establish who it is before acting. Methods that take
-// an already-resolved domain.UserID are inside the boundary by construction and
-// are not listed.
+// take. That is the structural definition of an entry point. Methods taking an
+// already-resolved domain.UserID are inside the boundary by construction and are
+// not listed. It inspects only the struct's own fields, not embedded or nested
+// ones, so a command that carries its caller indirectly would not be found.
 func callerBearingMethods() []string {
 	var (
 		callerType  = reflect.TypeOf(v1.Caller{})

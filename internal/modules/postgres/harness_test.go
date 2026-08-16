@@ -18,9 +18,8 @@ import (
 	"github.com/mosaic-media/platform/internal/modules/postgres"
 )
 
-// This harness gives the Postgres adapter a REAL PostgreSQL instance to run
-// against, satisfying the requirement that contract tests execute against
-// real PostgreSQL (not a fake).
+// This harness gives the Postgres adapter a real PostgreSQL instance to run
+// against, so the contract tests exercise the engine rather than a fake.
 //
 // Two ways to provide the database:
 //   - Set MOSAIC_TEST_POSTGRES_DSN to point at an existing PostgreSQL (the
@@ -30,7 +29,7 @@ import (
 //   - Otherwise the harness downloads and starts an embedded PostgreSQL for
 //     the duration of the test binary (no Docker required). If that fails
 //     (for example, no network on first run), the integration tests skip with
-//     a clear reason rather than failing the whole `go test ./...`.
+//     a clear reason rather than failing the whole go test ./... run.
 
 const (
 	embeddedPort   = 5455
@@ -126,10 +125,8 @@ func freshDatabase(t *testing.T) *pgxpool.Pool {
 	admin.Close()
 
 	// postgres.Connect rather than pgxpool.New, so tests exercise the pool the
-	// Platform actually builds. It was pgxpool.New until the query tracer
-	// (platform#33, seam 6) landed, and the difference was invisible until a test
-	// asserted on statement spans and found none: the tracer is attached in
-	// Connect, so a pool built any other way is silently untraced.
+	// Platform actually builds. The query tracer (platform#33, seam 6) is
+	// attached in Connect, so a pool built any other way is silently untraced.
 	pool, err := postgres.Connect(ctx, dsnForDatabase(name))
 	if err != nil {
 		t.Fatalf("connect %s: %v", name, err)

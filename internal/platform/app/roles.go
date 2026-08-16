@@ -8,24 +8,19 @@ import "github.com/mosaic-media/platform/internal/platform/policy"
 
 // Permission presets (platform#44).
 //
-// **These are starting points, not tiers.** Authority in Mosaic is granular:
-// what an account may do is the set of actions granted to it, and nothing
-// reads a role's *name* to decide anything. A preset is what a grantor starts
-// from before ticking boxes off — "Administrator" fills the form in, and the
-// grantor then removes whatever they do not want to hand over.
+// These are starting points, not tiers. Authority in Mosaic is granular: what an
+// account may do is the set of actions granted to it, and nothing reads a role's
+// name to decide anything. A preset fills a grant form in, and the grantor then
+// removes whatever they do not want to hand over.
 //
-// The boundary that actually holds is enforced elsewhere and does not mention
-// these at all: nobody may grant authority they do not themselves hold
-// (delegation.go). That rule is what makes handing out a preset safe, because
-// an account whose own set was trimmed can only ever pass on what survived the
-// trimming — a "PresetAdministrator" granted by a reduced administrator is
-// silently reduced to the intersection, which is the correct answer and needs
-// no special case.
+// The boundary that holds is enforced elsewhere and does not mention these at
+// all: nobody may grant authority they do not themselves hold (delegation.go).
+// An administrator whose own set was trimmed granting PresetAdministrator
+// confers the intersection, with no special case here.
 //
-// So a preset is a convenience for whoever is granting. It is deliberately not
-// a security concept, and reading one as though it were is how a system with
-// granular permissions grows a shadow tier model that disagrees with its own
-// checks.
+// A preset is a convenience for whoever is granting. Do not read one as a
+// security concept: that is how a system with granular permissions grows a
+// shadow tier model disagreeing with its own checks.
 const (
 	// PresetNameSuperuser is the account created on first boot: the person who
 	// owns the server and performed setup. It holds everything, because it is
@@ -44,25 +39,17 @@ const (
 // it, and keep its own settings.
 func userActions() []policy.Action {
 	return []policy.Action{
-		// **Signing in.** It was in the administrator preset and not this one,
-		// so every ordinary account this Platform could create was refused a
-		// session — the password was right, the account was active, and the
-		// policy engine denied `session.create`. Nobody saw it because nobody
-		// had ever made a second account: the only account that existed was the
-		// bootstrap superuser, which holds everything.
-		//
-		// It belongs here because it is the floor of having an account at all.
-		// An account that cannot authenticate is not a reduced account, it is a
-		// row in a table.
+		// Signing in, and it must stay in this preset: an account without
+		// session.create is refused a session with the right password and an
+		// active status, and the only sign is a policy denial. It is the floor
+		// of having an account at all.
 		ActionSessionCreate,
 		ActionContentRead,
 		ActionContentResolve,
-		// Where they got to (platform#26). These belong to the *ordinary* preset
-		// and not to the administrator one, which is the whole reason they are
-		// separate actions from content.read and content.create: a household
-		// member who may watch everything and change nothing is the normal
-		// arrangement, and folding progress into the content actions would make
-		// resume a librarian's privilege.
+		// Where they got to (platform#26). These belong to the ordinary preset
+		// rather than the administrator one, which is why they are separate
+		// actions from content.read and content.create: a household member who
+		// may watch everything and change nothing is the normal arrangement.
 		ActionPlaybackWrite,
 		ActionPlaybackRead,
 		ActionPreferenceWrite,
@@ -75,9 +62,9 @@ func userActions() []policy.Action {
 func administratorActions() []policy.Action {
 	return append(userActions(),
 		ActionUserCreate, ActionUserRead, ActionUserList, ActionUserStatusUpdate,
-		// ActionSessionRevoke is *somebody else's* session. Ending your own
-		// needs no permission at all — see RevokeSession, where owning the
-		// target is what stands in for the grant.
+		// ActionSessionRevoke is somebody else's session. Ending your own needs
+		// no permission at all — see RevokeSession, where owning the target
+		// stands in for the grant.
 		ActionSessionRevoke,
 		ActionPermissionRead,
 		ActionRoleCreate, ActionRoleGrant,
@@ -85,14 +72,12 @@ func administratorActions() []policy.Action {
 		ActionContentCreate, ActionContentRelate, ActionContentBind, ActionContentImport,
 		ActionModuleConfigure, ActionModuleRead, ActionExtensionManage,
 		// What the library should contain (platform#60). Administrator rather
-		// than superuser: a rule is curation, which is the thing running a
-		// household install mostly *is*. Reading is separated from managing
-		// because they are different disclosures — one says what the install
-		// decided, the other changes it — even though the preset confers both.
+		// than superuser: a rule is curation. Reading is a separate action from
+		// managing because they are different disclosures, even though this
+		// preset confers both.
 		ActionLibraryRuleRead, ActionLibraryRuleManage,
-		// The resolution register (platform#74). An administrator, because a
-		// finding is about the install rather than about the person reading:
-		// "an extension will not start" is not one viewer's business, and
+		// The resolution register (platform#74). Administrator, because a
+		// finding is about the install rather than about the person reading, and
 		// acting on it changes what this install is for everybody.
 		ActionFindingsRead, ActionFindingsResolve,
 	)
@@ -102,28 +87,25 @@ func administratorActions() []policy.Action {
 //
 // telemetry.read and its neighbours reveal which screens each user opened and
 // what they searched for. Values are redacted at construction (platform#34), but
-// the shape of a person's activity survives redaction, so it is not something
-// running the install implies. A superuser can still grant it to an
-// administrator individually — that is the whole point of it being an action
-// rather than a tier.
+// the shape of a person's activity survives redaction, so running the install
+// does not imply it. A superuser can still grant it to an administrator
+// individually.
 func superuserActions() []policy.Action {
 	return append(administratorActions(),
 		ActionTelemetryRead, ActionTelemetryExport, ActionTelemetryConfigure,
-		// Reading the background-work queue is the same class of insight about
-		// the install rather than about a person, and it lands in the same
-		// tier: a superuser sees the queue, and an administrator is granted it
-		// deliberately. `telemetry.configure` is already here, which is what
-		// the retention sweep authorises — so the *sweep* running as the system
-		// principal and an *administrator* running one by hand would be the
-		// same permission, as they should be.
+		// Reading the background-work queue is insight about the install rather
+		// than about a person, so it lands in the same tier: a superuser sees
+		// the queue, and an administrator is granted it deliberately.
+		// telemetry.configure, already here, is what the retention sweep
+		// authorises — so the sweep running as the system principal and an
+		// administrator running one by hand need the same permission.
 		ActionJobRead,
 		// The credential tables' own housekeeping (platform#58). Install-level
 		// rather than about any one person's session, which is why it is here
 		// and not in the administrator preset beside user.session.revoke.
 		ActionSessionMaintain,
 		// ActionAuditRead and ActionAuditExport join here when the audit store
-		// is built (platform#35) — same category, named now so the decision does
-		// not need remaking.
+		// is built (platform#35) — same category.
 	)
 }
 

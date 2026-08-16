@@ -138,7 +138,7 @@ func (i *Installer) installFor(ctx context.Context, repoName, moduleID, goos, go
 	}
 
 	// Persist the authenticated manifest beside the binary. This is what lets a
-	// later boot re-adopt the *pinned* version from disk (platform#51): the on-disk
+	// later boot re-adopt the pinned version from disk (platform#51): the on-disk
 	// binary is re-verified against this manifest's digest before every spawn,
 	// which confirms the exact bytes without re-fetching an index that may by
 	// then list a newer version. Its trust here is local-disk trust — the

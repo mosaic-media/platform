@@ -10,9 +10,9 @@ import (
 )
 
 // Keyring is the set of publisher keys the Platform trusts (platform#40). Signing
-// is universal — every artefact is signed — so trust is not about *whether*
-// something is signed but about *whose* key signed it. Mosaic's own key is
-// trusted by default; a user-added repository adds its key with explicit consent
+// is universal — every artefact is signed — so trust is not about whether
+// something is signed but about whose key signed it. Mosaic's own key is trusted
+// by default; a user-added repository adds its key with explicit consent
 // (platform#49 puts that consent surface in the Platform).
 //
 // ed25519 is the signature scheme: small keys, small signatures, fast

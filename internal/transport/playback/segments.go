@@ -17,15 +17,15 @@ import (
 
 // The transcode session, keyed by segment (platform#82, platform#82).
 //
-// **Segment N is what ffmpeg produces when started at N × the segment length.**
-// It is not the Nth segment of a continuous run, and that distinction is the
-// whole design. A copied stream cuts only at the source's keyframes, so a run
-// asked for six-second segments of a release with ten-second keyframes emits
-// ten-second ones — but a *restart* at N × length re-anchors to the playlist's
-// own arithmetic, so the error is one keyframe interval and never accumulates.
-// Measured: a restart at 60 s produced a segment whose first timestamp was
-// 60.000000, and one at 42 s produced 40.000000, which is the keyframe a copy
-// can begin at and nowhere else.
+// Segment N is what ffmpeg produces when started at N × the segment length. It
+// is not the Nth segment of a continuous run, and that distinction is the whole
+// design. A copied stream cuts only at the source's keyframes, so a run asked
+// for six-second segments of a release with ten-second keyframes emits
+// ten-second ones — but a restart at N × length re-anchors to the playlist's own
+// arithmetic, so the error is one keyframe interval and never accumulates. A
+// restart at 60 s produces a segment whose first timestamp is 60.000000, and one
+// at 42 s produces 40.000000, the keyframe a copy can begin at and nowhere
+// else.
 //
 // Everything below follows from that. A request for a segment no running
 // transcode will reach is not a failure, it is a seek; and a run that falls far
@@ -34,12 +34,11 @@ import (
 // segmentsAhead is how far past the last requested segment a transcode may run
 // before it is paused.
 //
-// **This is what keeps a playback's disk footprint a window rather than a
-// film.** Without it an audio-only remux — which proceeds at near-copy speed —
-// races to the end of the release as fast as the upstream will serve it, so one
-// click on Play writes tens of gigabytes. Ten segments is about a minute of
-// lead, comfortably more than any player buffers ahead and far less than a
-// release.
+// It is what keeps a playback's disk footprint a window rather than a film.
+// Without it an audio-only remux — which proceeds at near-copy speed — races to
+// the end of the release as fast as the upstream will serve it, so one click on
+// Play writes tens of gigabytes. Ten segments is about a minute of lead,
+// comfortably more than any player buffers ahead and far less than a release.
 const segmentsAhead = 10
 
 // segmentsBehind is how many played segments are kept before eviction. A player
@@ -52,8 +51,8 @@ const segmentsBehind = 5
 // count as read-ahead rather than a seek.
 //
 // A player asking for the next segment or two is buffering; one asking for a
-// segment a minute away has been scrubbed. The threshold is not an optimisation:
-// **a linear play needs it.** Where real segments run longer than nominal a
+// segment a minute away has been scrubbed. The threshold is not an optimisation
+// — a linear play needs it. Where real segments run longer than nominal, a
 // continuous run produces fewer of them than the playlist names, so a viewer
 // watching straight through eventually asks for a segment that run will never
 // emit, and only a restart answers it.
@@ -457,8 +456,7 @@ func (t *segmentSession) isDead() bool {
 
 // readInit waits for the initialisation segment and opens it. It waits on the
 // file rather than on the frontier, because ffmpeg writes the init before any
-// segment — verified: three seconds into a realtime run the directory held
-// init.mp4 and nothing else.
+// segment: early in a run the directory holds init.mp4 and nothing else.
 func (t *segmentSession) readInit(ctx context.Context) (io.ReadCloser, int64, error) {
 	deadline := time.Now().Add(segmentWaitTimeout)
 	for {

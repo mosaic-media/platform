@@ -32,7 +32,7 @@ type AuthenticateLocalUserResult struct {
 	// Tokens is the bearer pair (platform#58). Its plaintext exists here and
 	// nowhere else — nothing stores it, nothing logs it, and there is no way to
 	// read it back, which is what makes a database read of the token tables
-	// useless to whoever performed it.
+	// useless. Do not log or persist it.
 	Tokens domain.TokenPair
 }
 
@@ -90,15 +90,13 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 		return AuthenticateLocalUserResult{}, contracts.NewError(contracts.Unauthenticated, "invalid credentials")
 	}
 
-	// A suspended account is refused **after** the credential is verified, and
-	// with a different category.
+	// A suspended account is refused after the credential is verified, and with
+	// a different category.
 	//
 	// After, because refusing before would answer differently for a suspended
-	// account and an unknown one against a wrong password, which is the
-	// enumeration the collapsing above exists to prevent. Different, because
-	// the two are different situations for the person in front of the screen:
-	// "your password is wrong" sends them off to retype something that was
-	// right, and there is nothing they can do about the other one but ask.
+	// account and an unknown one against a wrong password — the enumeration the
+	// collapsing above exists to prevent. Different, because "your password is
+	// wrong" sends somebody off to retype something that was right.
 	if user.Status != domain.UserActive {
 		s.publishAuditEvent(ctx, "authentication.refused", []byte(string(user.Status)), string(user.ID))
 		return AuthenticateLocalUserResult{}, contracts.NewError(contracts.PermissionDenied,
@@ -125,10 +123,9 @@ func (s *Service) AuthenticateLocalUser(ctx context.Context, cmd AuthenticateLoc
 		session, pair, err := s.sessionManager.Issue(
 			ctx, tx.Sessions(), tx.Tokens(), user.ID, cmd.DeviceID, domain.AuthStrengthPassword,
 			// What this account may do, resolved now and stamped on the session
-			// so a client can omit what it could not use (platform#24). Read
-			// outside the delegation path deliberately: this is a projection for
-			// drawing a screen, and every call the client then makes
-			// re-authorises against the grants as they are at that moment.
+			// so a client can omit what it could not use (platform#24). It is a
+			// projection for drawing a screen, not an authority: every call the
+			// client makes re-authorises against the grants as they then are.
 			s.sessionCapabilities(ctx, user.ID))
 		if err != nil {
 			return err

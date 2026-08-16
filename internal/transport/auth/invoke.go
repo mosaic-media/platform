@@ -149,11 +149,11 @@ func (h *Handler) doorwaySignIn(ctx context.Context, r *authv1.InvokeRequest, cl
 	if err != nil {
 		switch contracts.CategoryOf(err) {
 		case contracts.Unauthenticated:
-			// **One message, on the form and not on a field.** Saying which of
-			// the two was wrong is exactly the enumeration
-			// AuthenticateLocalUser collapses its errors to prevent, and a
-			// rejection attached to "username" would say a username exists as
-			// surely as a sentence would.
+			// One message, on the form and not on a field. Saying which of the
+			// two was wrong is exactly the enumeration AuthenticateLocalUser
+			// collapses its errors to prevent, and a rejection attached to
+			// "username" would say a username exists as surely as a sentence
+			// would.
 			return connect.NewResponse(&authv1.InvokeResponse{
 				Outcome: &authv1.InvokeResponse_FieldErrors{FieldErrors: formError(
 					"That username and password do not match an account on this server.")},

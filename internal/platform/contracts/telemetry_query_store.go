@@ -12,12 +12,11 @@ import (
 
 // TelemetryQueryStore reads stored telemetry back (platform#36).
 //
-// It is read-only and it is **not on Tx**, which is the same call the write
-// side made for the opposite reason. Telemetry is written outside any
-// transaction because it must never fail a request; it is read outside one
-// because a diagnostics query is a long, wide scan over a partitioned table
-// and has no business holding a transaction open beside the work it is
-// diagnosing.
+// It is read-only and not on Tx, which is the same call the write side made
+// for the opposite reason. Telemetry is written outside any transaction
+// because it must never fail a request; it is read outside one because a
+// diagnostics query is a long, wide scan over a partitioned table and has no
+// business holding a transaction open beside the work it is diagnosing.
 type TelemetryQueryStore interface {
 	// QueryLogs returns records matching filter, newest first.
 	QueryLogs(ctx context.Context, filter domain.TelemetryLogFilter) ([]domain.TelemetryLogRecord, error)

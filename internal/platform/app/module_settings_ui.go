@@ -85,9 +85,9 @@ type ListSettingsModulesResult struct {
 	Modules []SettingsModule
 }
 
-// ListSettingsModules enumerates the modules that fill RoleSettingsUI (ADR
-// 0038), so the settings host can offer an index rather than naming one module
-// by constant.
+// ListSettingsModules enumerates the modules that fill RoleSettingsUI
+// (sdk#4), so the settings host offers an index rather than naming one module by
+// constant.
 //
 // It authorises the same read as opening one of those screens — a caller who may
 // not read a module's settings must not learn which modules are installed from
@@ -122,19 +122,17 @@ func (s *Service) capabilitySettingsUIProvider(id string) (v1.SettingsUIProvider
 
 // validateUINode confines a module-supplied settings screen to a well-formed,
 // correctly namespaced UINode tree before the Platform hosts it (sdk#4,
-// contracts#9): the bytes must be a JSON object carrying a non-empty string "type",
-// and **every** node in the tree must name a type this module may emit.
+// contracts#9): the bytes must be a JSON object carrying a non-empty string
+// "type", and every node in the tree must name a type this module may emit.
 //
 // This is the one boundary a module's own UI crosses, so it is where the
-// namespace rule is enforced. It matters because the vocabulary is open and was
-// flat: a module returning a node called `PosterCard` — not *using* the core
-// component, but contributing a definition of that name — would replace the core
-// one in every client's registry, and two modules both contributing a `StatChip`
-// would silently overwrite each other. A map's last writer wins and nothing
-// errors.
+// namespace rule is enforced. The vocabulary is open, so a module contributing a
+// definition named PosterCard would replace the core component of that name in
+// every client's registry, and two modules both contributing a StatChip would
+// silently overwrite each other: a map's last writer wins and nothing errors.
 //
-// The whole tree rather than the root, because a hole two levels down is exactly
-// the kind that survives being looked at.
+// It walks the whole tree rather than the root, because a hole two levels down
+// survives being looked at.
 func validateUINode(moduleID string, ui []byte) error {
 	if len(ui) == 0 {
 		return contracts.NewError(contracts.InvalidArgument, "empty settings UI")
@@ -152,10 +150,10 @@ func validateUINode(moduleID string, ui []byte) error {
 	return validateNodeTypes(moduleID, node)
 }
 
-// validateNodeTypes walks a decoded UINode tree checking every `type` against
-// the namespace rule. It walks children and slots explicitly rather than every
-// map it meets: props are an open bag, and a screen param that happens to be
-// called "type" is the module's data, not a node.
+// validateNodeTypes walks a decoded UINode tree checking every type against the
+// namespace rule. It walks children and slots explicitly rather than every map
+// it meets: props are an open bag, and a screen param that happens to be called
+// "type" is the module's data, not a node.
 func validateNodeTypes(moduleID string, node map[string]any) error {
 	t, _ := node["type"].(string)
 	if err := sdui.ValidateModuleType(moduleID, t); err != nil {

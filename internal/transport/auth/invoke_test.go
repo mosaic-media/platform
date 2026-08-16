@@ -20,11 +20,10 @@ import (
 
 // The pre-session action lane (platform#57's lane, carrying platform#54's claim).
 //
-// What is worth testing hardest here is not that a claim works — a handler that
-// created a user would also do that — but the properties that would be
-// catastrophic to lose: a claimed server refuses a second claim, a refusal
-// lands on the fields it came from rather than in a sentence beside them, and
-// signing in does not become a way to learn which usernames exist.
+// The properties these cover are the ones that would be catastrophic to lose: a
+// claimed server refuses a second claim, a refusal lands on the fields it came
+// from rather than in a sentence beside them, and signing in does not become a
+// way to learn which usernames exist.
 
 func invoke(t *testing.T, h *auth.Handler, action string, input any) (*authv1.InvokeResponse, error) {
 	t.Helper()
@@ -41,9 +40,9 @@ func invoke(t *testing.T, h *auth.Handler, action string, input any) (*authv1.In
 	return res.Msg, nil
 }
 
-// A well-formed claim on an empty server creates the owner and signs them in,
-// which is the whole of platform#54's decision: the person who claimed the server
-// is signed in by the act of claiming it.
+// TestClaimingAnUnclaimedServerCreatesTheOwnerAndSignsThemIn pins platform#54's
+// decision: a well-formed claim on an empty server creates the owner, and the
+// person who claimed the server is signed in by the act of claiming it.
 func TestClaimingAnUnclaimedServerCreatesTheOwnerAndSignsThemIn(t *testing.T) {
 	db := newFakeDB()
 	h := auth.NewHandler(newTestService(db, testNow))
@@ -80,9 +79,10 @@ func TestClaimingAnUnclaimedServerCreatesTheOwnerAndSignsThemIn(t *testing.T) {
 	}
 }
 
-// A second claim is a Conflict, not a second owner. It answers with the door
-// rather than with an error, because the person looking at a stale setup page
-// needs somewhere to go and "conflict" is not it.
+// TestASecondClaimIsRefusedAndAnswersWithTheDoor pins that a second claim is a
+// Conflict rather than a second owner, and that it answers with the door rather
+// than with an error: the person looking at a stale setup page needs somewhere
+// to go, and "conflict" is not it.
 func TestASecondClaimIsRefusedAndAnswersWithTheDoor(t *testing.T) {
 	db := newFakeDB()
 	h := auth.NewHandler(newTestService(db, testNow))
@@ -115,9 +115,9 @@ func TestASecondClaimIsRefusedAndAnswersWithTheDoor(t *testing.T) {
 	}
 }
 
-// contracts.RejectFields has been routed and never called since validation
-// landed. This is the first screen that produces one, so this is the test that
-// it arrives where it belongs.
+// TestAClaimIsRefusedOnTheFieldsThatWereWrong pins that a contracts.RejectFields
+// rejection arrives on the fields it names rather than as a sentence beside the
+// form.
 func TestAClaimIsRefusedOnTheFieldsThatWereWrong(t *testing.T) {
 	h := auth.NewHandler(newTestService(newFakeDB(), testNow))
 
@@ -152,10 +152,11 @@ func TestAClaimIsRefusedOnTheFieldsThatWereWrong(t *testing.T) {
 	}
 }
 
-// A wrong password is one message on the form, never a mark on a field.
-// Attaching it to "username" would say a username exists as surely as a
-// sentence would, which is exactly the enumeration AuthenticateLocalUser
-// collapses its errors to prevent.
+// TestASignInRefusalDoesNotSayWhichHalfWasWrong pins that a wrong password is
+// one message on the form and never a mark on a field. Attaching it to
+// "username" would say a username exists as surely as a sentence would, which is
+// exactly the enumeration AuthenticateLocalUser collapses its errors to
+// prevent.
 func TestASignInRefusalDoesNotSayWhichHalfWasWrong(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)
@@ -191,9 +192,10 @@ func TestASignInRefusalDoesNotSayWhichHalfWasWrong(t *testing.T) {
 	}
 }
 
-// Signing in through the door is the same command the direct RPC calls, so it
-// must mint the same thing — including the capability set, which is what a
-// client gates its affordances on (platform#24).
+// TestSigningInThroughTheDoorMintsASessionWithItsCapabilities pins that the door
+// calls the same command the direct RPC does and mints the same thing —
+// including the capability set, which is what a client gates its affordances on
+// (platform#24).
 func TestSigningInThroughTheDoorMintsASessionWithItsCapabilities(t *testing.T) {
 	db := newFakeDB()
 	signedInUser(db)
@@ -215,14 +217,14 @@ func TestSigningInThroughTheDoorMintsASessionWithItsCapabilities(t *testing.T) {
 	}
 }
 
-// The stream source the household picked is installed, and the repository it
-// comes from is the Platform's answer rather than the caller's.
+// TestClaimingInstallsTheStreamSourceThatWasChosen pins that the stream source
+// the household picked is installed, and that the repository it comes from is
+// the Platform's answer rather than the caller's.
 //
-// **This is the test the browser wrote.** The repository was resolved after the
-// claim committed, from a catalogue read that is deliberately gated on the
-// server still being claimable — so it answered "Mosaic no longer offers
-// aiostreams" on the very claim that had just chosen it. Every test passed:
-// each one either had no extension manager or never reached the install.
+// The catalogue read that resolves the repository is gated on the server still
+// being claimable, so it has to happen before the claim commits — resolving it
+// afterwards answers "Mosaic no longer offers aiostreams" on the very claim that
+// chose it.
 func TestClaimingInstallsTheStreamSourceThatWasChosen(t *testing.T) {
 	ext := &fakeExtensions{available: []app.ExtensionCatalogueEntry{
 		{Repository: "mosaic-official", ModuleID: "aiostreams", Provides: []string{"stream"}},
@@ -249,9 +251,10 @@ func TestClaimingInstallsTheStreamSourceThatWasChosen(t *testing.T) {
 	}
 }
 
-// A module the catalogue does not offer as a stream source is not installed,
-// whatever the request says. The claim still succeeds: the account is the part
-// that had to work, and a source can be added from Settings.
+// TestAClaimWillNotInstallSomethingTheCatalogueDidNotOffer pins that a module
+// the catalogue does not offer as a stream source is not installed, whatever the
+// request says. The claim still succeeds: the account is the part that had to
+// work, and a source can be added from Settings.
 func TestAClaimWillNotInstallSomethingTheCatalogueDidNotOffer(t *testing.T) {
 	ext := &fakeExtensions{available: []app.ExtensionCatalogueEntry{
 		{Repository: "mosaic-official", ModuleID: "fanart-tv", Provides: []string{"artwork"}},
@@ -276,8 +279,9 @@ func TestAClaimWillNotInstallSomethingTheCatalogueDidNotOffer(t *testing.T) {
 	}
 }
 
-// The switch is the complete enumeration of what an unauthenticated caller can
-// ask for. An action it does not name does not exist.
+// TestAnUnknownDoorwayActionIsRefused pins that the Invoke switch is the
+// complete enumeration of what an unauthenticated caller can ask for: an action
+// it does not name does not exist.
 func TestAnUnknownDoorwayActionIsRefused(t *testing.T) {
 	h := auth.NewHandler(newTestService(newFakeDB(), testNow))
 	_, err := invoke(t, h, "deleteEverything", map[string]any{})
@@ -289,7 +293,8 @@ func TestAnUnknownDoorwayActionIsRefused(t *testing.T) {
 	}
 }
 
-// A suspended account's password is still right, and telling them to check it
+// TestASuspendedAccountIsNotToldToCheckItsPassword pins the separate sentence: a
+// suspended account's password is still right, and telling them to check it
 // would send them off to do something that cannot help.
 func TestASuspendedAccountIsNotToldToCheckItsPassword(t *testing.T) {
 	db := newFakeDB()

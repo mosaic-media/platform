@@ -15,10 +15,14 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/contracts"
 )
 
-// Verify checks a downloaded extension module before it is ever run, and is the
-// gate platform#40 requires between an artefact and the Platform's authority. Under
-// platform#49 it is the Platform that runs this, not the Supervisor: the process
-// that will spawn the module and hand it a Caller is the one that checks it.
+// Verified is what [Verify] returns for a module that passed every check before
+// it was ever run: a [Config] ready for [Launch] or [Supervise], and the
+// publisher whose key vouched for it.
+//
+// Verify is the gate platform#40 requires between an artefact and the Platform's
+// authority. Under platform#49 it is the Platform that runs it, not the
+// Supervisor: the process that will spawn the module and hand it a Caller is the
+// one that checks it.
 //
 // It refuses on the first failure and the checks run in the order that fails
 // cheapest and most decisively first — an unsigned or untrusted manifest is
@@ -26,20 +30,19 @@ import (
 // platform's binary is only hashed once the manifest it would be checked against
 // is known to be authentic.
 //
-//  1. **Signature.** The manifest is signed by a trusted publisher key
-//     (Keyring). An unsigned or untrusted-key manifest is refused — this is the
-//     "signing is universal, trust is about whose key" line from platform#40.
-//  2. **Schema and identity.** The manifest parses and names a module.
-//  3. **SDK major.** The module was built against this Platform's SDK major
+//  1. Signature. The manifest is signed by a trusted publisher key (Keyring). An
+//     unsigned or untrusted-key manifest is refused — this is the "signing is
+//     universal, trust is about whose key" line from platform#40.
+//  2. Schema and identity. The manifest parses and names a module.
+//  3. SDK major. The module was built against this Platform's SDK major
 //     (platform#39); a mismatch is refused here, without executing anything.
-//  4. **Platform.** The module ships a binary for this OS and architecture.
-//  5. **Digest.** The binary on disk hashes to the digest the (now-authentic)
+//  4. Platform. The module ships a binary for this OS and architecture.
+//  5. Digest. The binary on disk hashes to the digest the (now-authentic)
 //     manifest declares for this platform.
 //
-// On success it returns a [Config] ready for [Launch] or [Supervise], carrying
-// the manifest's identity as DeclaredManifest — so the handshake then makes the
-// third check platform#39 describes, that the running binary agrees with what was
-// signed. The verifying publisher is returned as provenance.
+// The Config carries the manifest's identity as DeclaredManifest, so the
+// handshake then makes the third check platform#39 describes: that the running
+// binary agrees with what was signed.
 type Verified struct {
 	Config   Config
 	SignedBy string // the trusted publisher whose key verified the manifest

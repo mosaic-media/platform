@@ -167,12 +167,12 @@ type Findings interface {
 // capability — never fatal, because extensions fill no required role class. It
 // is called once, before the serve loop.
 //
-// **A failure is also recorded** (platform#74). It used to be logged and skipped,
-// which is the exact shape that document exists to stop: the capability is
-// simply absent, nothing fails, nothing is said, and the line scrolls away
-// before anybody wonders why their addons stopped working. A success withdraws
-// any finding from a previous boot, so the register says what is wrong *now*
-// rather than what has ever been wrong.
+// A failure is also recorded on the resolution register (platform#74). Logging
+// and skipping is not enough: the capability is simply absent, nothing fails,
+// nothing is said, and the line scrolls away before anybody wonders why their
+// addons stopped working. A success withdraws any finding from a previous
+// boot, so the register says what is wrong now rather than what has ever been
+// wrong.
 func (m *Manager) AdoptInstalled(ctx context.Context) error {
 	records, err := m.store.List(ctx)
 	if err != nil {
@@ -318,10 +318,10 @@ func (m *Manager) stopLocked(moduleID string) {
 
 // raiseUnavailable states that a module is not running.
 //
-// **The register's own failure is logged and swallowed**, which is the one
-// place that is right: this runs on the boot path, and a Platform that refused
-// to start because it could not write down that an *optional* module did not
-// start would have turned a degradation into an outage.
+// The register's own failure is logged and swallowed. This runs on the boot
+// path, and a Platform that refused to start because it could not write down
+// that an optional module did not start would turn a degradation into an
+// outage.
 func (m *Manager) raiseUnavailable(ctx context.Context, log *telemetry.Logger, moduleID string, cause error) {
 	if m.findings == nil {
 		return

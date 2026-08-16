@@ -19,20 +19,20 @@ import (
 // The library rules, as a client can reach them (platform#60, roadmap M2.2).
 //
 // Four dispatch cases, and one thing they share that the account cases do not:
-// **each returns to the rules list rather than to the panel it was invoked
-// from.** The confirmation that creates a rule has served its purpose the moment
-// the rule exists, and re-rendering the current route would show the "what this
-// will do" panel again for a rule that now does it. So these actions produce
-// their own surface — the toast, and the list — the way playPart produces a
-// player, instead of relying on the transport's re-render of wherever the caller
+// each returns to the rules list rather than to the panel it was invoked from.
+// The confirmation that creates a rule has served its purpose the moment the
+// rule exists, and re-rendering the current route would show the "what this will
+// do" panel again for a rule that now does it. So these actions produce their
+// own surface — the toast, and the list — the way playPart produces a player,
+// instead of relying on the transport's re-render of wherever the caller
 // happened to be.
 
 // libraryRuleEnvelope is what the library-rule actions carry.
 //
 // The catalog fields come from the action rather than from a form's scope,
-// because they are *which rule this is* rather than something the form
+// because they say which rule this is rather than being something the form
 // collects; the name is the one field a person types. That split is contracts#19's
-// merge rule and it is the same shape the new-account form uses for its preset.
+// merge rule, the same shape the new-account form uses for its preset.
 type libraryRuleEnvelope struct {
 	// Creating.
 	Name       string `json:"ruleName"`

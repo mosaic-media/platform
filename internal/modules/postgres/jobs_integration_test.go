@@ -14,11 +14,11 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// The half of the jobs runner PostgreSQL decides rather than the Platform:
-// `FOR UPDATE SKIP LOCKED` handing two runners disjoint sets, a lapsed lease
-// becoming claimable again, and the partial unique index that makes a recurring
-// enqueue idempotent. None of these can be demonstrated against a fake — a fake
-// would only prove the test agrees with itself about what the SQL means.
+// The half of the jobs runner PostgreSQL decides rather than the Platform: FOR
+// UPDATE SKIP LOCKED handing two runners disjoint sets, a lapsed lease becoming
+// claimable again, and the partial unique index that makes a recurring enqueue
+// idempotent. None of these can be demonstrated against a fake — a fake would
+// only prove the test agrees with itself about what the SQL means.
 
 func jobsStore(t *testing.T) (contracts.JobStore, context.Context) {
 	t.Helper()
@@ -88,7 +88,7 @@ func TestClaimSkipsLockedRowsSoTwoRunnersNeverTakeTheSameJob(t *testing.T) {
 }
 
 // Survives a restart, against the real predicate: the lease is what makes an
-// abandoned job recoverable rather than stuck in `running` for good.
+// abandoned job recoverable rather than stuck in the running state for good.
 func TestAnExpiredLeaseBecomesClaimableAgain(t *testing.T) {
 	store, ctx := jobsStore(t)
 	now := time.Now().UTC()

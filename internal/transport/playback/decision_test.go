@@ -28,19 +28,17 @@ var theRealRelease = MediaInfo{
 
 // sameReleaseInSDR is theRealRelease with the dynamic range removed.
 //
-// It exists because the copy-video case cannot be demonstrated on an HDR source
-// any more, and that is a correction rather than a test inconvenience: these
-// assertions used to run against the HDR fixture and pass, which means they were
-// asserting a copy that would have rendered with wrong colour. Tone-mapping is
-// the *only* honest answer for HDR on an SDR client, so the "copy the video"
-// case needs a source where copying is genuinely right.
+// The copy-video case cannot be demonstrated on an HDR source: tone-mapping is
+// the only honest answer for HDR on an SDR client, so asserting a copy against
+// an HDR fixture would assert a picture that renders with wrong colour. The
+// "copy the video" case needs a source where copying is genuinely right.
 var sameReleaseInSDR = func() MediaInfo {
 	m := theRealRelease
 	m.Video.HDRFormat = ""
 	return m
 }()
 
-// TestDecideCopiesVideoAndEncodesOnlyTheAudio is the whole point of deciding per
+// TestDecideCopiesVideoAndEncodesOnlyTheAudio pins the reason for deciding per
 // stream. Re-encoding 32 GB of 4K HEVC to fix an audio track would not keep up
 // on a home server, and it is not necessary: Chrome decodes the video already.
 func TestDecideCopiesVideoAndEncodesOnlyTheAudio(t *testing.T) {
@@ -237,7 +235,7 @@ func TestTonemapFilterDownscalesBeforeMapping(t *testing.T) {
 }
 
 // TestNoFilterWhenCopying — a copied stream takes no filter chain at all;
-// passing one to ffmpeg alongside `-c:v copy` is an error, not a no-op.
+// passing one to ffmpeg alongside -c:v copy is an error, not a no-op.
 func TestNoFilterWhenCopying(t *testing.T) {
 	if vf := (Plan{Video: ActionCopy}).videoFilter(); vf != "" {
 		t.Errorf("videoFilter() = %q, want empty for a copy", vf)
@@ -247,17 +245,17 @@ func TestNoFilterWhenCopying(t *testing.T) {
 // TestUnmuxableAudioIsEncodedOnlyWhenRemuxing pins the two-constraint rule that
 // made a real 4K release unplayable.
 //
-// The client profile answers "can this be decoded"; the output container answers
-// "can this be carried". Chrome decodes FLAC, so a FLAC track was chosen and
-// copied — into fragmented MP4, whose muxer refuses FLAC as experimental. ffmpeg
-// exited before writing a byte.
+// TestUnmuxableAudioIsEncodedOnlyWhenRemuxing pins both halves. The client
+// profile answers "can this be decoded"; the output container answers "can this
+// be carried". Chrome decodes FLAC, so a FLAC track is chosen and copied — into
+// fragmented MP4, whose muxer refuses FLAC as experimental, and ffmpeg exits
+// before writing a byte.
 //
-// The second half of the name is the part that is easy to get wrong, and the
-// first attempt at this fix did: the container constraint must apply *only* when
-// ffmpeg is already involved. While the stream is relayed the container is the
-// source's own, and Matroska carries FLAC perfectly well — forcing an encode
-// there would push a release that direct-plays today through a transcode for
-// nothing.
+// The second half is the part that is easy to get wrong: the container
+// constraint must apply only when ffmpeg is already involved. While the stream
+// is relayed the container is the source's own, and Matroska carries FLAC
+// perfectly well — forcing an encode there would push a release that direct-plays
+// today through a transcode for nothing.
 func TestUnmuxableAudioIsEncodedOnlyWhenRemuxing(t *testing.T) {
 	flac := []AudioTrack{{Index: 1, Codec: "flac", Language: "eng"}}
 
@@ -293,8 +291,9 @@ func TestUnmuxableAudioIsEncodedOnlyWhenRemuxing(t *testing.T) {
 	}
 }
 
-// AC3 is the mirror case and guards the rule from being written as "encode
-// anything unusual": the client cannot decode it, so it is encoded — but for the
+// TestUndecodableAudioReasonNamesTheClientNotTheContainer pins AC3 is the
+// mirror case and guards the rule from being written as "encode anything
+// unusual": the client cannot decode it, so it is encoded — but for the
 // client's reason, since MP4 carries AC3 perfectly well.
 func TestUndecodableAudioReasonNamesTheClientNotTheContainer(t *testing.T) {
 	plan := Decide(

@@ -49,8 +49,8 @@ func (s *libraryRuleStore) Create(ctx context.Context, rule domain.LibraryRule) 
 }
 
 // Update writes the mutable fields and leaves the last-run columns alone. An
-// edit is a change to what the rule *says*; what it last did is a separate
-// fact, written by RecordRun.
+// edit changes what the rule says; what it last did is a separate fact, written
+// by RecordRun.
 func (s *libraryRuleStore) Update(ctx context.Context, rule domain.LibraryRule) (domain.LibraryRule, error) {
 	tag, err := s.q.Exec(ctx,
 		`UPDATE library_rules

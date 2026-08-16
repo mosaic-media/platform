@@ -25,9 +25,9 @@ type PartitionRetention struct {
 // ones retention has run out on (platform#36).
 //
 // It exists as a contract, rather than the composition root reaching for the
-// concrete PostgreSQL store, because retention is now a *job* — and a job
-// handler calls an application service, which may depend on Platform contracts
-// and never on a module's types. The interface is the seam that makes the
+// concrete PostgreSQL store, because retention is a job, and a job handler
+// calls an application service, which may depend on Platform contracts and
+// never on a module's types. The interface is the seam that makes the
 // dependency point inward.
 type TelemetryMaintenanceStore interface {
 	// EnsurePartitions creates the daily partitions covering [day, day+ahead).

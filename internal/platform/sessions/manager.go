@@ -17,8 +17,8 @@ import (
 	"github.com/mosaic-media/platform/internal/platform/domain"
 )
 
-// The three lifetimes a session has since platform#58, and they are three
-// different questions.
+// The three lifetimes a session has (platform#58). They answer three different
+// questions.
 const (
 	// AccessLifetime is how long a credential presented on an ordinary call
 	// lasts. Minutes, because it is the window in which a stolen access token
@@ -28,21 +28,18 @@ const (
 	AccessLifetime = 10 * time.Minute
 
 	// AbsoluteLifetime is how long a session can live however much it is used.
-	// Past this, no refresh extends it and the user signs in again. It replaces
-	// the fixed 24 hours a session used to have, which made "come back after a
-	// fortnight and still be signed in" impossible by construction.
+	// Past this, no refresh extends it and the user signs in again.
 	AbsoluteLifetime = 90 * 24 * time.Hour
 
-	// IdleLifetime is how long a session survives *unused*. It sits inside the
+	// IdleLifetime is how long a session survives unused. It sits inside the
 	// absolute lifetime, so a device somebody stopped using stops working long
 	// before a device they use every day does — which is the difference
 	// between a long-lived credential and an abandoned one.
 	IdleLifetime = 30 * 24 * time.Hour
 )
 
-// DefaultLifetime is the absolute lifetime of a newly issued session. Kept as
-// a name because callers and tests read it; it is AbsoluteLifetime now rather
-// than the 24 hours it was.
+// DefaultLifetime is the absolute lifetime of a newly issued session. It is an
+// alias for AbsoluteLifetime, kept as a name because callers and tests read it.
 const DefaultLifetime = AbsoluteLifetime
 
 // tokenBytes is how much entropy each token carries. 32 bytes is past any
@@ -73,12 +70,12 @@ func NewManager(clock contracts.Clock, ids contracts.IDGenerator) *Manager {
 // pointing at nothing.
 //
 // capabilities is the caller's flattened authority as it stands at this moment
-// (platform#24). It is **resolved by the caller and passed in** rather than read
-// here, because this package holds no permission store and should not acquire
-// one: a session manager that could read authority would be a second place
-// authority is decided, and there is exactly one — the policy engine, which
-// every later call goes through anyway. What is recorded here is a snapshot for
-// a client to omit affordances from, never a substitute for that check.
+// (platform#24). It is resolved by the caller and passed in rather than read
+// here: this package holds no permission store and must not acquire one, or
+// authority would be decided in a second place alongside the policy engine,
+// which every later call goes through anyway. What is recorded here is a
+// snapshot for a client to omit affordances from, never a substitute for that
+// check.
 func (m *Manager) Issue(
 	ctx context.Context,
 	sessions contracts.SessionStore,
@@ -116,9 +113,9 @@ func (m *Manager) Issue(
 //
 // Every failure — an unknown token, an expired one, a revoked or expired
 // session, an idle one — is the Unauthenticated category, so callers never
-// branch on which. That is not laziness: the differences are exactly what an
-// attacker would like told apart, and there is nothing a legitimate client does
-// differently between them. It refreshes or it signs in.
+// branch on which. The differences are exactly what an attacker would like
+// told apart, and a legitimate client does the same thing in all of them: it
+// refreshes or it signs in.
 func (m *Manager) Validate(
 	ctx context.Context,
 	sessions contracts.SessionStore,
@@ -160,16 +157,14 @@ func (m *Manager) Validate(
 // Compromise is a refresh that revealed a stolen or replayed credential: the
 // chain it belongs to must be revoked.
 //
-// It is returned rather than acted on, and that is not fastidiousness. The
-// exchange runs inside a transaction — spending a token and storing its
-// replacement have to commit together — so a revocation performed here would
-// be rolled back by the very error that reported it, leaving the chain alive
-// and the attacker working. The caller revokes outside the transaction and then
-// returns the refusal.
+// It is returned rather than acted on. The exchange runs inside a transaction
+// — spending a token and storing its replacement have to commit together — so
+// a revocation performed here would be rolled back by the very error that
+// reported it, leaving the chain alive and the attacker working. The caller
+// revokes outside the transaction and then returns the refusal.
 //
-// It was found by a test over the real wire, after the browser found the defect
-// above it. A unit test with an in-memory store cannot see it: there is no
-// rollback to undo the write.
+// A unit test with an in-memory store cannot catch a regression here: there is
+// no rollback to undo the write.
 type Compromise struct {
 	ChainID domain.ID
 	Reason  string
@@ -188,11 +183,11 @@ func CompromiseOf(err error) (Compromise, bool) {
 
 // Refresh exchanges a refresh token for a new pair, rotating it.
 //
-// Rotation is the load-bearing part and reuse detection is what makes it worth
-// having: a token presented twice revokes the whole chain, so theft becomes
-// *detectable* rather than silent. The cost is stated rather than hidden — a
-// stolen token used by an attacker and then by the legitimate user (or the
-// reverse) signs that user out of that device. That is the intended behaviour.
+// Reuse detection is what makes rotation worth having: a token presented twice
+// revokes the whole chain, so theft becomes detectable rather than silent. The
+// cost is that a stolen token used by an attacker and then by the legitimate
+// user (or the reverse) signs that user out of that device. That is the
+// intended behaviour.
 func (m *Manager) Refresh(
 	ctx context.Context,
 	sessions contracts.SessionStore,
@@ -255,7 +250,7 @@ func (m *Manager) Refresh(
 
 	// The refresh is itself use, so it moves the idle clock. Without this a
 	// client that refreshes and then sits idle would be timed out on the
-	// strength of when it last *navigated*, which is not what idle means.
+	// strength of when it last navigated, which is not what idle means.
 	session.LastSeenAt = now
 	if _, err := sessions.Touch(ctx, session.ID, now); err != nil {
 		return domain.Session{}, domain.TokenPair{}, err

@@ -4,14 +4,15 @@
 
 //go:build mosaicdev
 
-// The development-override tests (platform#55). They run only under
-// `-tags mosaicdev`, which the test gate runs as a second pass — the override
-// exists in exactly one build configuration, so it is tested in that one rather
-// than left as the untested half of a tag split.
+// The development-override tests (platform#55). They run only under -tags
+// mosaicdev, which the test gate runs as a second pass — the override exists in
+// exactly one build configuration, so it is tested in that one rather than left
+// as the untested half of a tag split.
 //
 // Their counterpart is TestTheEnvironmentCannotRepointAShippedBuild in
-// official_test.go, which asserts the opposite in the default build. The pair is
-// the point: one file proves the mechanism works, the other proves it is absent.
+// official_test.go, which asserts the opposite in the default build: one file
+// proves the mechanism works, the other proves it is absent.
+
 package extension_test
 
 import (
@@ -112,11 +113,10 @@ func TestTheDevelopmentOverrideReplacesTheURLAndTheKey(t *testing.T) {
 	}
 }
 
-// **The whole point of the override, end to end in one test.** A catalogue is
-// fetched from a local HTTP registry on loopback and verified against the
-// development key — which takes the URL override, the key override, and the
-// relaxed dialer all being in effect, since netguard refuses loopback and the
-// compiled-in key did not sign this index.
+// The override end to end: a catalogue is fetched from a local HTTP registry on
+// loopback and verified against the development key — which takes the URL
+// override, the key override and the relaxed dialer all being in effect, since
+// netguard refuses loopback and the compiled-in key did not sign this index.
 func TestTheDevelopmentRepositoryIsFetchedAndVerified(t *testing.T) {
 	url, keyPath := devRegistry(t, nil)
 	t.Setenv(extension.DevRepositoryURLEnv, url)
@@ -138,7 +138,7 @@ func TestTheDevelopmentRepositoryIsFetchedAndVerified(t *testing.T) {
 	}
 }
 
-// **Verification is not bypassed, it is re-keyed.** An index signed by a key the
+// Verification is not bypassed, it is re-keyed. An index signed by a key the
 // Platform was not given is refused exactly as an unsigned official index would
 // be. Without this the override would be a hole rather than a loop: the local
 // path would prove nothing about the real one.
@@ -221,7 +221,7 @@ func TestAMalformedDevelopmentKeyFailsTheBoot(t *testing.T) {
 
 // With nothing set, a development build is a normal one: the compiled-in
 // repository, trusted by default, fetched through the dial guard. The tag makes
-// the override *possible*, not active.
+// the override possible, not active.
 func TestADevelopmentBuildWithNoOverrideIsUnchanged(t *testing.T) {
 	t.Setenv(extension.DevRepositoryURLEnv, "")
 	t.Setenv(extension.DevRepositoryKeyEnv, "")

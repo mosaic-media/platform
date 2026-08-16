@@ -23,8 +23,9 @@
 // not narrate. Application services, transports, modules and the composition
 // root are the layers that observe.
 //
-// This package holds the redaction vocabulary that internal/platform/diagnostics
-// used to own, because more than one thing needs it now — the support bundle
-// still, and the module surface across the SDK boundary (sdk#5) — and one
-// fail-closed classification is worth more than two that can drift apart.
+// This package is the single home of the redaction vocabulary, because more
+// than one thing needs it — the support bundle in
+// internal/platform/diagnostics, and the module surface across the SDK
+// boundary (sdk#5) — and one fail-closed classification is worth more than two
+// that can drift apart.
 package telemetry

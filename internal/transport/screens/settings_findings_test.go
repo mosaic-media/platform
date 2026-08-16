@@ -20,10 +20,10 @@ func findingsText(t *testing.T, svc *Service) string {
 	return treeStrings(render(t, svc, "settings", map[string]any{"section": sectionFindings}))
 }
 
-// An empty register says so. A panel that drew nothing in the ordinary state of
-// a working install reads as one that failed to load, which would teach
-// somebody to distrust the one screen that has to be believed on the day it is
-// not empty.
+// TestAnEmptyRegisterSaysNothingIsWrong pins that an empty register says so. A
+// panel that drew nothing in the ordinary state of a working install reads as
+// one that failed to load, which would teach somebody to distrust the one
+// screen that has to be believed on the day it is not empty.
 func TestAnEmptyRegisterSaysNothingIsWrong(t *testing.T) {
 	fake := &fakeQueries{}
 	svc := configService(fake)
@@ -34,8 +34,9 @@ func TestAnEmptyRegisterSaysNothingIsWrong(t *testing.T) {
 	}
 }
 
-// A finding reads as a sentence about the install, built from the type and the
-// reference — never from the stored error, which may be unreadable.
+// TestAFindingReadsAsASentence pins that a finding reads as a sentence about
+// the install, built from the type and the reference — never from the stored
+// error, which may be unreadable.
 func TestAFindingReadsAsASentence(t *testing.T) {
 	fake := &fakeQueries{}
 	svc := configService(fake)
@@ -64,9 +65,9 @@ func TestAFindingReadsAsASentence(t *testing.T) {
 	}
 }
 
-// Which process detected it is on the row, because "the Supervisor could not
-// start the Platform" and "the Platform could not start a module" are different
-// situations with different remedies.
+// TestASupervisorFindingSaysSo pins that which process detected it is on the
+// row, because "the Supervisor could not start the Platform" and "the Platform
+// could not start a module" are different situations with different remedies.
 func TestASupervisorFindingSaysSo(t *testing.T) {
 	fake := &fakeQueries{}
 	svc := configService(fake)
@@ -86,9 +87,10 @@ func TestASupervisorFindingSaysSo(t *testing.T) {
 	}
 }
 
-// **Every suggestion this build offers is drawable.** A type with no words
-// would render an unlabelled button, and the panel silently drops it — so the
-// drop must never be reachable from what SuggestionsFor actually returns.
+// TestEverySuggestionOfferedHasWords pins that every suggestion this build
+// offers is drawable. A type with no words would render an unlabelled button, so
+// the panel drops it silently — and that drop must never be reachable from what
+// SuggestionsFor actually returns.
 func TestEverySuggestionOfferedHasWords(t *testing.T) {
 	for _, issueType := range domain.KnownIssueTypes {
 		for _, suggestion := range domain.SuggestionsFor(issueType) {
@@ -109,9 +111,10 @@ func TestEverySuggestionOfferedHasWords(t *testing.T) {
 	}
 }
 
-// A type from a newer build says so rather than drawing a blank row. The store
-// CHECK-constrains the set, so this is only reachable by a downgrade — which is
-// exactly when somebody needs to be told the reader is the stale one.
+// TestAnUnknownIssueTypeNamesItself pins that a type from a newer build says so
+// rather than drawing a blank row. The store CHECK-constrains the set, so this
+// is only reachable by a downgrade — which is exactly when somebody needs to be
+// told the reader is the stale one.
 func TestAnUnknownIssueTypeNamesItself(t *testing.T) {
 	got := issueHeadline(domain.Issue{Type: domain.IssueType("disk_full")})
 	if !strings.Contains(got, "disk_full") {

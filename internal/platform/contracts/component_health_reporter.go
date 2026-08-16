@@ -12,11 +12,11 @@ import (
 
 // ComponentHealthReporter reports a component's full diagnostics snapshot.
 // Unlike HealthProbe.Check, it never returns an error: a reporter that cannot
-// determine its own health reports that fact AS an Unavailable
+// determine its own health reports that as an Unavailable
 // domain.ComponentHealth with a DegradedReason, rather than failing the
-// caller. The diagnostics model keeps component health granular rather than
-// reducing the whole system to a single failed state, so the reporting
-// mechanism itself must not become a new way for the whole system to fail.
+// caller. Component health is kept granular rather than reduced to a single
+// system-wide failed state, so the reporting mechanism itself must not become
+// a new way for the whole system to fail.
 type ComponentHealthReporter interface {
 	ReportHealth(ctx context.Context) domain.ComponentHealth
 }

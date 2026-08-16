@@ -13,8 +13,8 @@ import (
 // UpgradeStore persists what somebody asked the Supervisor to install
 // (platform#77).
 //
-// **This is the one remedy on the resolution register the Platform cannot
-// perform.** It cannot stop and restart itself onto a different Generation, so
+// This is the one remedy on the resolution register the Platform cannot
+// perform: it cannot stop and restart itself onto a different Generation, so
 // an upgrade is recorded here, read over the private handoff listener, and
 // carried out by the process that can. The store is deliberately tiny: one
 // pending request at a time, and settlement is a comparison rather than an
@@ -30,8 +30,8 @@ type UpgradeStore interface {
 	// is the ordinary case: nothing is waiting.
 	Pending(ctx context.Context) (domain.UpgradeRequest, error)
 	// Settle closes the pending request. It is called when the install is found
-	// to be running the version that was asked for, which is a statement about
-	// what *is* rather than a report of what happened — the process that would
+	// to be running the version that was asked for: a statement about what is,
+	// rather than a report of what happened, because the process that would
 	// have reported it has been replaced by the upgrade.
 	Settle(ctx context.Context) error
 }

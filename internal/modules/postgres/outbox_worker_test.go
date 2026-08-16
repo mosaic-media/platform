@@ -133,14 +133,12 @@ func TestOutboxListUnpublishedBecomesDeliverableOnceRetryIsDue(t *testing.T) {
 	}
 }
 
-// TestWorkerPublishesFromRealPostgresOutboxToIdempotentSubscriber is the
-// exit criterion — "Outbox worker publishes to an idempotent local
-// subscriber" — proven end to end against a real database: a command
-// commits state and an outbox row in the same transaction (proving
-// atomicity again, incidentally), then a real events.Worker over the real
-// events.Bus drains it. The subscriber tracks processed event IDs and is
-// invoked twice with the same event id to confirm duplicate delivery does
-// not duplicate its side effect.
+// TestWorkerPublishesFromRealPostgresOutboxToIdempotentSubscriber runs the
+// publish path end to end against a real database: a command commits state and
+// an outbox row in the same transaction, then a real events.Worker over the real
+// events.Bus drains it. The subscriber tracks processed event IDs and is invoked
+// twice with the same event id, so duplicate delivery must not duplicate its
+// side effect.
 func TestWorkerPublishesFromRealPostgresOutboxToIdempotentSubscriber(t *testing.T) {
 	requirePostgres(t)
 

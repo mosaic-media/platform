@@ -170,9 +170,9 @@ func TestARecurringJobRunsWithNoUserAndRetentionRemovesRows(t *testing.T) {
 	}
 }
 
-// The other half of the system principal: it is a principal, not a bypass. The
-// sweep refuses a session holding no grants exactly as any other command does,
-// and the *only* difference in the allowed call is who the caller is.
+// The system principal is a principal, not a bypass. The sweep refuses a session
+// holding no grants exactly as any other command does, and the only difference in
+// the allowed call is who the caller is.
 func TestTheRetentionSweepStillRefusesAnOrdinaryUngrantedCaller(t *testing.T) {
 	requirePostgres(t)
 	pool := freshDatabase(t)

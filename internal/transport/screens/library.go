@@ -21,34 +21,32 @@ import (
 // object graph rather than a provider.
 //
 // Every other browse surface is a window onto somebody else's shelf: home
-// renders provider catalogs, `collections` and `catalog` browse a *module's*
-// collections, and search unions the library with the sources. Nothing showed
-// what the install actually owns, which is why nobody could tell whether the
-// library was what they thought it was.
+// renders provider catalogs, collections and catalog browse a module's
+// collections, and search unions the library with the sources.
 //
 // It says two things the catalog screen cannot, and both are consequences of
-// reading the graph. The **count is real** — the catalog screen renders "128+"
+// reading the graph. The count is real — the catalog screen renders "128+"
 // because a provider will not say how large its catalog is, and these are the
-// install's own rows. And the **titles are the library's own**, read from the
-// nodes rather than re-derived from whichever source last answered, so a title
-// stays put when a provider is down.
+// install's own rows. And the titles are the library's own, read from the nodes
+// rather than re-derived from whichever source last answered, so a title stays
+// put when a provider is down.
 
 // libraryPageSize is how many works one lazy page adds.
 //
-// The screen scrolls rather than paging: a `query` action replaces the content
+// The screen scrolls rather than paging: a query action replaces the content
 // region, so each further page is the whole window re-rendered, and the client's
 // lazy-list observer asks for the next one as the end of the grid comes into
-// view (contracts#16). That is why this is a page *increment* and not a page.
+// view (contracts#16). That is why this is a page increment and not a page.
 const libraryPageSize = 60
 
 // libraryWindowCap is where the scroll stops.
 //
 // Every further page re-sends everything above it, so an unbounded scroll over
 // a large library is a payload that grows quadratically in the number of pages
-// somebody scrolls through. The screen stops offering more here and **says
-// so**, because a lazy list that silently stops loading is indistinguishable
-// from one that has reached the end — and the count above it would then be
-// visibly larger than what is on screen with nothing to explain the gap.
+// somebody scrolls through. The screen stops offering more here and says so,
+// because a lazy list that silently stops loading is indistinguishable from one
+// that has reached the end — and the count above it would then be visibly larger
+// than what is on screen with nothing to explain the gap.
 const libraryWindowCap = 600
 
 // libraryScreen renders one page of what the install owns.
@@ -82,7 +80,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		// the other is a stale link, and telling somebody with an empty library
 		// to go back a page would be nonsense.
 		//
-		// A *narrowed* browse that matches nothing is a third thing again and
+		// A narrowed browse that matches nothing is a third thing again and
 		// must not land here: telling somebody whose library holds eight hundred
 		// titles that it is empty because they pressed a chip would be the screen
 		// lying about the library. The facets are built from what is on the shelf
@@ -124,7 +122,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 
 	if len(res.Works) == 0 {
 		// Narrowed to nothing — a stale link, or a combination that holds
-		// nothing. It has to come *after* the past-the-end case and be guarded
+		// nothing. It has to come after the past-the-end case and be guarded
 		// against it, because both are "no rows on this page" and only this one
 		// can offer the way out that actually helps: the facet rows themselves,
 		// which are still drawn.
@@ -146,7 +144,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 		cards = append(cards, s.libraryCard(work))
 	}
 
-	// The lazy list (contracts#16). `hasMore` and `loadMore` are the server's
+	// The lazy list (contracts#16). hasMore and loadMore are the server's
 	// statement that this is a page of something longer and what fetches the
 	// rest; the client observes the end of the grid coming into view and asks.
 	// A full page is deliberately not evidence of another — that is why this is
@@ -154,7 +152,7 @@ func (s *Service) libraryScreen(ctx context.Context, caller v1.Caller, params ma
 	grid := []ui.El{ui.MinColumnWidth(196), ui.Group(cards...)}
 	more := len(res.Works) < res.Total
 	if more && window < libraryWindowCap {
-		// The narrowing travels with the page. A `query` action replaces the
+		// The narrowing travels with the page. A query action replaces the
 		// content region and re-renders the whole window, so a next-page action
 		// that dropped the genre would quietly widen the browse mid-scroll —
 		// the same class of mistake as a provider that ignores a filter it does
@@ -195,15 +193,15 @@ const maxLibraryFacets = 14
 // libraryFacets is the row of narrowings, built from what is actually on the
 // shelf.
 //
-// **Genre only, and the absence of a streaming-service row here is the
-// decision.** Availability is not a property of a shelf: the question it answers
-// is "what could I watch on this service", which spans what the library holds
-// *and* what it does not, and answering it over the library alone gives a user
-// the small half of it while looking like the whole. That surface belongs where
-// a source's catalogue is browsed with library items marked — the catalog
-// screen, where `module-tmdb` declares a `with_watch_providers` filter — and not
-// here. Genre is on both because a genre *is* a property of what you own, so
-// narrowing the shelf by one is a question with a complete answer.
+// Genre only, and the absence of a streaming-service row here is deliberate.
+// Availability is not a property of a shelf: the question it answers is "what
+// could I watch on this service", which spans what the library holds as well as
+// what it does not, and answering it over the library alone gives a user the
+// small half of it while looking like the whole. That surface belongs where a
+// source's catalogue is browsed with library items marked — the catalog screen,
+// where module-tmdb declares a with_watch_providers filter — and not here. Genre
+// is on both because a genre is a property of what you own, so narrowing the
+// shelf by one is a question with a complete answer.
 func libraryFacets(facets contracts.Facets, genre string) ui.El {
 	return facetRow(facets.Genres, paramGenre, genre)
 }
@@ -233,7 +231,7 @@ func facetRow(values []contracts.FacetValue, param, selected string) ui.El {
 		if v.Value != selected {
 			params[param] = v.Value
 		}
-		// When it *is* the selection the param is simply absent, so pressing the
+		// When it is the selection the param is simply absent, so pressing the
 		// lit chip clears it — reversible by the press that set it.
 		chips = append(chips, ui.FilterChip(v.Value, v.Value == selected,
 			ui.FacetCount(strconv.Itoa(v.Count)),
@@ -250,7 +248,7 @@ func facetRow(values []contracts.FacetValue, param, selected string) ui.El {
 func librarySubtitle(res app.ListLibraryResult, more bool, window int, genre string) string {
 	count := libraryCountLabel(res.Total)
 	if genre != "" {
-		// The count is of the *narrowed* library, so it says what it counted.
+		// The count is of the narrowed library, so it says what it counted.
 		// "81 titles" under a lit Drama chip would read as the whole library and
 		// be a smaller number than the one before it — which is the shape of a
 		// screen that has silently lost something.
@@ -265,11 +263,11 @@ func librarySubtitle(res app.ListLibraryResult, more bool, window int, genre str
 
 // libraryCard is one work as the library holds it.
 //
-// It opens the detail screen **by node id, not by ref**, and that is the
-// difference between this grid and every other one in Mosaic. A card built from
-// a ref sends the detail back to the provider that sourced it; a card built from
-// a node id opens something the install owns, which still renders if the source
-// is unreachable.
+// It opens the detail screen by node id, not by ref, and that is the difference
+// between this grid and every other one in Mosaic. A card built from a ref sends
+// the detail back to the provider that sourced it; a card built from a node id
+// opens something the install owns, which still renders if the source is
+// unreachable.
 func (s *Service) libraryCard(work v1.Node) *ui.Element {
 	els := make([]ui.El, 0, 3)
 	if poster := work.Artwork.Poster; poster != "" {

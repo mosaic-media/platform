@@ -11,10 +11,11 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// The two sides of Mosaic wear different frames, and the shell is the only place
-// that can decide which. It used to be emitted once per session and never again,
-// which is why settings wore the media side's floating pills: there was no moment
-// at which anything could have chosen otherwise.
+// TestShellWearsTheChromeOfTheScreenItFrames pins that the two sides of Mosaic
+// wear different frames, and the shell is the only place that can decide which.
+// It used to be emitted once per session and never again, which is why settings
+// wore the media side's floating pills: there was no moment at which anything
+// could have chosen otherwise.
 func TestShellWearsTheChromeOfTheScreenItFrames(t *testing.T) {
 	for _, c := range []struct {
 		screen     string

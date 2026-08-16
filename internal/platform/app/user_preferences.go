@@ -17,16 +17,14 @@ import (
 // ActionPreferenceWrite and ActionPreferenceRead are the policy actions for a
 // user's own settings.
 //
-// They exist for the same reason every other action does — the command order
-// authorises before it mutates — but they are the weakest authority in the
-// Platform, and deliberately so: these commands only ever act on the *caller's
-// own* preferences. There is no target-user parameter, so holding the action
-// grants a user nothing over anybody else.
+// They are the weakest authority in the Platform, deliberately: these commands
+// only ever act on the caller's own preferences. There is no target-user
+// parameter, so holding the action grants a user nothing over anybody else.
 //
-// Reading or changing another user's preferences is an administrative
-// capability that does not exist yet. When it does it needs its own action
-// rather than a wider reading of these, because "may configure myself" and
-// "may configure anyone" are not the same permission.
+// Reading or changing another user's preferences is an administrative capability
+// that does not exist yet. When it does it needs its own action rather than a
+// wider reading of these: "may configure myself" and "may configure anyone" are
+// not the same permission.
 const (
 	ActionPreferenceWrite policy.Action = "preference.write"
 	ActionPreferenceRead  policy.Action = "preference.read"
@@ -81,9 +79,9 @@ func (s *Service) SetUserPreference(ctx context.Context, cmd SetUserPreferenceCo
 		if err != nil {
 			return err
 		}
-		// The key, never the value. A key is a fixed vocabulary this
-		// repository writes; a value is whatever a user chose, and an event
-		// payload is not the place to start carrying that.
+		// The key, never the value. A key is a fixed vocabulary this repository
+		// writes; a value is whatever a user chose, and an event payload is not
+		// the place to carry that.
 		return tx.Outbox().Append(ctx, domain.OutboxEvent{
 			Event: s.newEvent(ctx, "preference.set", []byte(cmd.Key), string(az.userID)),
 		})
@@ -123,11 +121,10 @@ func (s *Service) GetUserPreferences(ctx context.Context, q GetUserPreferencesQu
 
 // BoolPreference reports whether the caller has a preference set to JSON true.
 //
-// It is the shape every consumer of a flag preference wants, and it exists so
-// each of them does not re-derive "unset means the default" differently. An
-// unset key, an unreadable store and a non-boolean value all yield fallback:
-// a preference must never be able to fail a request, because it only ever
-// decides what to *show*.
+// It exists so each consumer of a flag preference does not re-derive "unset
+// means the default" differently. An unset key, an unreadable store and a
+// non-boolean value all yield fallback: a preference must never be able to fail
+// a request, because it only ever decides what to show.
 //
 // It deliberately does not authorise. It is an internal read on behalf of a
 // caller already authenticated by the surface calling it, and gating a
@@ -147,11 +144,10 @@ func (s *Service) BoolPreference(ctx context.Context, userID domain.UserID, key 
 
 // ExpertModeEnabled reports whether the caller has turned expert mode on.
 //
-// It authenticates but does not authorise, and that split is the whole design
-// (platform#36): the *permission* decides whether the diagnostics surface may be
-// reached, and this preference decides whether the person currently wants to
-// see it. Collapsing the two would make a display setting into an access
-// control.
+// It authenticates but does not authorise (platform#36): the permission decides
+// whether the diagnostics surface may be reached, and this preference decides
+// whether the person currently wants to see it. Collapsing the two makes a
+// display setting into an access control.
 //
 // It fails closed to off, so an unauthenticated or unreadable caller simply
 // gets the plain interface.
@@ -166,17 +162,14 @@ func (s *Service) ExpertModeEnabled(ctx context.Context, caller v1.Caller) bool 
 // LanguagePreferenceFor returns the caller's stored language document
 // (platform#83), or nil when there is not one to return.
 //
-// **It returns the raw document rather than a parsed preference**, and the
-// reason is the dependency direction rather than laziness: the type that
-// understands this value lives in the playback transport, and an application
-// service may not import a transport. So the store's bytes travel and the
-// transport that owns the meaning decodes them — the same arrangement module
-// settings use, for the same reason.
+// It returns the raw document rather than a parsed preference because of the
+// dependency direction: the type that understands this value lives in the
+// playback transport, and an application service may not import a transport. So
+// the store's bytes travel and the transport that owns the meaning decodes them,
+// the same arrangement module settings use.
 //
-// It cannot fail, like HomeCompositionFor and for the same argument: a
-// preference decides what a viewer gets, never whether they get anything, and a
-// play that refused because a taste setting could not be read would be a far
-// worse outcome than one that used the default.
+// It cannot fail, like HomeCompositionFor: a preference decides what a viewer
+// gets, never whether they get anything.
 func (s *Service) LanguagePreferenceFor(ctx context.Context, caller v1.Caller) []byte {
 	if s.userPreferences == nil {
 		return nil

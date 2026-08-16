@@ -27,25 +27,13 @@ type GetCurrentUserResult struct {
 // Every other read of a user takes the id of the user to read, which is right
 // for an administrator looking at somebody else and useless for the one surface
 // that wants to say "you": a settings screen has a session and no way to turn it
-// into a name. `GetUserByID` cannot serve that — it needs the answer as its
-// input.
+// into a name. GetUserByID cannot serve that — it needs the answer as its input.
 //
-// **It authenticates and deliberately does not authorise**, which is a change
-// from how it was first written. It used to require `user.read`, on the
-// argument that carving an exception into the boundary rule for a convenience
-// would make the rule something each reader has to check rather than rely on.
-// That argument was made when the only account that existed held everything,
-// and the cost it accepted — "an account holding no role cannot read its own
-// name" — turned out to be the ordinary case the moment a second account
-// existed: `user.read` is administrator authority, so every viewer on the
-// server was refused their own name and the account cluster on every screen
-// drew a question mark.
-//
-// There is no action to gate here. The record is the caller's own, the session
-// already proves that, and a permission to be told what you have just proved is
-// not an access control. It joins the small exempt list beside
-// SessionForCaller, which is the same shape of fact about the credential
-// presented.
+// It authenticates and deliberately does not authorise. There is no action to
+// gate: the record is the caller's own and the session already proves it. Do not
+// gate it on user.read, which is administrator authority — that refuses every
+// ordinary viewer their own name. It joins the exempt list in
+// boundary_conformance_test.go beside SessionForCaller.
 func (s *Service) GetCurrentUser(ctx context.Context, q GetCurrentUserQuery) (GetCurrentUserResult, error) {
 	if q.Caller.Session == "" {
 		return GetCurrentUserResult{}, contracts.NewError(contracts.InvalidArgument, "caller is required")

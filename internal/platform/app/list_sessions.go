@@ -22,24 +22,21 @@ type ListSessionsQuery struct {
 type ListSessionsResult struct {
 	Sessions []domain.Session
 	// Current is the session the caller's own credential resolves to, so a
-	// device list can say "this one" rather than showing a viewer four rows
-	// and leaving them to work out which is the screen in front of them.
+	// device list can say "this one" rather than leaving a viewer to work out
+	// which of four rows is the screen in front of them.
 	Current domain.SessionID
 }
 
 // ListSessions returns the caller's own live sessions (platform#58).
 //
-// This is what makes a bearer pair defensible rather than merely convenient: a
-// long-lived credential a user cannot see and cannot end is a long-lived
-// credential, and the device id has been on the session since the beginning
-// precisely so this could exist.
+// It is what makes a bearer pair defensible: a long-lived credential a user
+// cannot see and cannot end is a long-lived credential.
 //
-// **It answers about the caller and nobody else.** There is no target-user
-// parameter, so it cannot be turned into "show me somebody else's devices" by
-// a caller who holds the permission for their own — reading another account's
-// sessions belongs with user administration and is a different authority. It
-// authorises `preference.read`, the action every account already holds for
-// reading its own things, because that is what this is.
+// It answers about the caller and nobody else. There must be no target-user
+// parameter, so it cannot be turned into "show me somebody else's devices" by a
+// caller holding the permission for their own; reading another account's
+// sessions belongs with user administration. It authorises preference.read, the
+// action every account already holds for reading its own things.
 func (s *Service) ListSessions(ctx context.Context, q ListSessionsQuery) (ListSessionsResult, error) {
 	az, err := s.enter(ctx, q.Caller, ActionPreferenceRead, policy.Resource{Type: "session"})
 	if err != nil {

@@ -43,7 +43,7 @@ func TestUpgradeRequestLifecycle(t *testing.T) {
 		t.Fatalf("pending is %+v", pending)
 	}
 
-	// **A second press replaces the first rather than being refused**, and the
+	// A second press replaces the first rather than being refused, and the
 	// unique index is what would otherwise stop it: two pending requests would
 	// be applied by one Supervisor in an order nobody chose.
 	if err := store.Request(ctx, domain.UpgradeRequest{

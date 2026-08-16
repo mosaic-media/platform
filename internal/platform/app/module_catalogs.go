@@ -26,10 +26,10 @@ type ListModuleCatalogsQuery struct {
 	Caller v1.Caller
 	// ModuleID optionally narrows to one module's catalogs. Empty fans out to
 	// every registered provider, which is what the collections browser wants;
-	// naming one is what a catalog screen wants, because it needs that
-	// catalog's *declaration* — the filters it accepts — and asking every
-	// installed provider for their whole list to find one row is a round trip
-	// per module on every render of one screen.
+	// naming one is what a catalog screen wants, because it needs that catalog's
+	// declaration — the filters it accepts — and asking every installed provider
+	// for their whole list to find one row is a round trip per module on every
+	// render of one screen.
 	ModuleID string
 }
 
@@ -107,11 +107,10 @@ type ListCatalogItemsQuery struct {
 	// source-native name and holding one of the option values that filter
 	// declared (SDK v0.25.0). Nil is no narrowing.
 	//
-	// The Platform validates nothing here and interprets nothing: the names and
-	// values are the provider's own vocabulary, and the module refuses one it
-	// did not declare. That is deliberate — a Platform that checked would need
-	// to hold a second copy of every source's filter list, and the copy would be
-	// the one that went stale.
+	// The Platform validates and interprets nothing here: the names and values
+	// are the provider's own vocabulary, and the module refuses one it did not
+	// declare. Checking would mean holding a second copy of every source's filter
+	// list, and the copy is what goes stale.
 	Filters map[string]string
 }
 
@@ -147,10 +146,9 @@ func (s *Service) ListCatalogItems(ctx context.Context, q ListCatalogItemsQuery)
 //
 // It exists because a library rule pages a catalog several times in one
 // evaluation (platform#60), and calling the entry point per page would
-// re-authenticate and re-authorise for every page of one rule of one run —
-// the exact shape that made a ten-result search cost ten boundary cycles.
-// Requiring an authorized is what says "already inside" in a signature rather
-// than in a comment (platform#41).
+// re-authenticate and re-authorise for every page. Requiring an authorized is
+// what says "already inside" in a signature rather than in a comment
+// (platform#41).
 func (s *Service) catalogItemsPage(ctx context.Context, az authorized, q ListCatalogItemsQuery) (ListCatalogItemsResult, error) {
 	provider, ok := s.capabilityCatalogProvider(q.ModuleID)
 	if !ok {
@@ -167,9 +165,9 @@ func (s *Service) catalogItemsPage(ctx context.Context, az authorized, q ListCat
 	if err != nil {
 		return ListCatalogItemsResult{}, contracts.WrapError(contracts.Unavailable, "list catalog items", err)
 	}
-	// The same per-item dedup as search, and it had the same defect: a catalog
-	// page is the home screen, so this loop is the first thing a signed-in user
-	// pays for. It is not in the reported issue — the type change found it.
+	// The same per-item dedup as search. A catalog page is the home screen, so
+	// this loop is the first thing a signed-in user pays for: resolveInLibrary
+	// takes an authorized rather than re-entering the boundary per item.
 	items := resp.Items
 	for i := range items {
 		items[i].InLibrary, items[i].NodeID = s.resolveInLibrary(ctx, az, items[i].Ref)

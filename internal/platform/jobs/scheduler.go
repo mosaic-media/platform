@@ -15,10 +15,10 @@ import (
 
 // Schedule is a recurring job: one enqueued per interval, forever.
 //
-// The interval is an interval and not a cron expression, deliberately — see the
-// package comment. What it buys is that the occurrence is *computable*: the
-// slot a moment falls in is the moment truncated to the interval, which is what
-// makes enqueuing idempotent without a "last run" row to race over.
+// The interval is an interval and not a cron expression — see the package
+// comment. What it buys is that the occurrence is computable: the slot a
+// moment falls in is the moment truncated to the interval, which is what makes
+// enqueuing idempotent without a "last run" row to race over.
 type Schedule struct {
 	Kind        string
 	Every       time.Duration

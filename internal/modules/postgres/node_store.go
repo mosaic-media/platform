@@ -144,7 +144,7 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1
 		return nil, contracts.NewError(contracts.InvalidArgument, "limit must be positive")
 	}
 
-	// The attribute filter is the one criterion that can be *malformed* rather
+	// The attribute filter is the one criterion that can be malformed rather
 	// than merely empty, so it is rejected here instead of being handed to the
 	// driver — a cast failure inside the engine would surface as Internal, which
 	// tells the caller nothing about the mistake being theirs.
@@ -163,14 +163,15 @@ func (s *nodeStore) Search(ctx context.Context, query contracts.NodeQuery) ([]v1
 		offset = 0
 	}
 
-	// `@>` over the nodes_attributes_gin index, exactly as FindByExternalID
-	// reads the neighbouring external_ids document. The NULL check is what makes
-	// the filter optional without building the SQL by concatenation.
+	// Containment over the nodes_attributes_gin index, exactly as
+	// FindByExternalID reads the neighbouring external_ids document. The NULL
+	// check is what makes the filter optional without building the SQL by
+	// concatenation.
 	//
-	// ORDER BY title, id is a *total* order and that is what makes OFFSET
-	// paging correct: title alone ties for a household holding two cuts of one
-	// film, and a tie under LIMIT/OFFSET is how a row appears on two pages
-	// while another appears on none.
+	// ORDER BY title, id is a total order, and that is what makes OFFSET paging
+	// correct: title alone ties for a household holding two cuts of one film,
+	// and a tie under LIMIT/OFFSET is how a row appears on two pages while
+	// another appears on none.
 	rows, err := s.q.Query(ctx,
 		`SELECT `+nodeColumns+` FROM nodes
 		 WHERE ($1 = '' OR title ILIKE $2 ESCAPE '\')
@@ -243,16 +244,16 @@ func (s *nodeStore) Count(ctx context.Context, query contracts.NodeQuery) (int, 
 // matches — the genres carried on the nodes, and the services in the Platform's
 // stored availability.
 //
-// `unnest` rather than a normalised table on either side: both sets are small
+// unnest rather than a normalised table on either side: both sets are small
 // (tens of values over hundreds of works), both are read once per screen render,
 // and a lookup table would be a join and a write path for values nothing updates
 // independently of the rows they hang off.
 //
-// **A facet's own narrowing is not applied to that facet**, so selecting a chip
-// does not empty the row that offered it — but the *other* facet's is, so the
-// two rows compose: picking a service reshapes the genre counts and the other
-// way round. Every remaining criterion applies to both, which is what makes an
-// empty result unreachable by pressing.
+// A facet's own narrowing is not applied to that facet, so selecting a chip does
+// not empty the row that offered it — but the other facet's is, so the two rows
+// compose: picking a service reshapes the genre counts and the other way round.
+// Every remaining criterion applies to both, which is what makes an empty result
+// unreachable by pressing.
 func (s *nodeStore) Facets(ctx context.Context, query contracts.NodeQuery) (contracts.Facets, error) {
 	var attributes any
 	if len(query.AttributesContain) > 0 {
@@ -266,7 +267,7 @@ func (s *nodeStore) Facets(ctx context.Context, query contracts.NodeQuery) (cont
 
 	var out contracts.Facets
 
-	// The genre set honours the *service* narrowing and ignores its own, so the
+	// The genre set honours the service narrowing and ignores its own, so the
 	// two rows compose: picking Netflix reshapes the genre counts, and picking a
 	// genre does not empty the row that offered it.
 	genreRows, err := s.q.Query(ctx,
@@ -460,8 +461,8 @@ func nodeIDParam(id *v1.NodeID) any {
 }
 
 // nullableText maps the domain's "absent means empty string" convention onto
-// the schema's nullable columns, so container_type and item_type are NULL
-// rather than ” on the kinds they do not apply to.
+// the schema's nullable columns, so container_type and item_type are NULL rather
+// than the empty string on the kinds they do not apply to.
 func nullableText(s string) any {
 	if s == "" {
 		return nil
@@ -491,15 +492,15 @@ func genreArray(genres []string) []string {
 
 // genreFilter renders a query's genre narrowing as a nullable text[] parameter.
 //
-// nil rather than an empty array when nothing is selected, because the
-// predicate is `$n IS NULL OR genres @> $n` and `genres @> '{}'` is *true for
-// every row*: an empty array would read as "no filter" by accident rather than
-// by intent, and would go on reading that way if the predicate were ever
-// tightened.
+// nil rather than an empty array when nothing is selected, because the predicate
+// is "$n IS NULL OR genres @> $n" and containment of an empty array is true for
+// every row: an empty array would read as "no filter" by accident rather than by
+// intent, and would go on reading that way if the predicate were ever tightened.
 //
-// `@>` and not `&&`: containment is the conjunctive reading — a row must carry
-// every genre asked for — which is what two lit chips on a facet control mean.
-// `&&` is the union, and it would widen a selection a user made to narrow.
+// Containment (@>) and not overlap (&&): containment is the conjunctive
+// reading — a row must carry every genre asked for — which is what two lit chips
+// on a facet control mean. Overlap is the union, and it would widen a selection a
+// user made to narrow.
 func genreFilter(genres []string) any {
 	if len(genres) == 0 {
 		return nil
@@ -508,8 +509,8 @@ func genreFilter(genres []string) any {
 }
 
 // artworkDocument renders stored artwork as its jsonb column value. Artwork is a
-// struct of strings, so marshalling it never fails; an empty value becomes `{}`
-// through the omitempty tags, matching the column default.
+// struct of strings, so marshalling it never fails; an empty value becomes an
+// empty object through the omitempty tags, matching the column default.
 func artworkDocument(a v1.Artwork) []byte {
 	doc, err := json.Marshal(a)
 	if err != nil {

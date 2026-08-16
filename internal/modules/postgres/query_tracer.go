@@ -21,12 +21,11 @@ import (
 // through a UnitOfWork or a direct pooled read — is covered because they all
 // go through this pool.
 //
-// It records the SQL text. That is a considered decision rather than an
-// oversight: Platform SQL is written in this repository as string constants,
-// so it contains no user data — the values are always bound parameters, and
-// those are *not* recorded. A span that showed the arguments would carry
-// usernames and search terms straight into the telemetry store, which is
-// precisely what platform#34 exists to prevent.
+// It records the SQL text and never its arguments. Platform SQL is written in
+// this repository as string constants, so the text contains no user data: the
+// values are always bound parameters. A span that showed the arguments would
+// carry usernames and search terms straight into the telemetry store, which is
+// what platform#34 exists to prevent.
 type queryTracer struct{}
 
 // traceQueryKey carries the in-flight span between the pgx start and end hooks.

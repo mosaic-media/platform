@@ -15,11 +15,10 @@ import (
 
 // GetRoleByNameQuery reads the role a name refers to.
 //
-// It exists because a role's name is unique across the install, so "create the
-// User role" is a thing that can only happen once — and provisioning the second
-// account from the same preset has to find the role the first one made rather
-// than fail. Without it, three accounts out of four were created holding no
-// authority at all, which is a state they could not sign in from.
+// A role's name is unique across the install, so creating the User role can only
+// happen once: provisioning a second account from the same preset must find the
+// role the first one made rather than fail, or the account is created holding no
+// authority and cannot sign in.
 type GetRoleByNameQuery struct {
 	Caller v1.Caller
 	Name   string
@@ -37,10 +36,10 @@ type GetRoleByNameResult struct {
 
 // GetRoleByName resolves a role by its name.
 //
-// It authorises `permission.read` — the same action that reads a person's roles
+// It authorises permission.read — the same action that reads a person's roles
 // and their effective set — because it answers the same kind of question about
-// the same objects. It is deliberately not gated on `role.create`: reading what
-// a role carries is not the authority to hand it out, and the grant itself is
+// the same objects. It is deliberately not gated on role.create: reading what a
+// role carries is not the authority to hand it out, and the grant itself is
 // bounded by what the grantor holds whatever this returns (platform#44).
 func (s *Service) GetRoleByName(ctx context.Context, q GetRoleByNameQuery) (GetRoleByNameResult, error) {
 	// 1. validate query shape.

@@ -20,9 +20,9 @@ import (
 // It holds identity and provenance, not the binary (platform#8: a module owns no
 // schema, so its install record is a Platform store, not a table it defines).
 // This is deliberately distinct from ModuleSettingsStore: whether the Platform
-// *has* a module and how a module it has is *configured* are different
-// questions, and one row answering both would have to represent "configured but
-// not installed" as a state.
+// has a module and how a module it has is configured are different questions,
+// and one row answering both would have to represent "configured but not
+// installed" as a state.
 type InstalledExtensionStore interface {
 	// List returns every installed extension, ordered by module id, for boot
 	// re-adoption and the settings surface. The empty set is the default and is

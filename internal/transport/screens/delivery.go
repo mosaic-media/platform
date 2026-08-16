@@ -15,20 +15,16 @@ import (
 // A detail screen says how a release will be delivered — direct play, or which
 // stream has to be re-encoded and why (platform#29). That answer is not a property
 // of the release alone: the same file direct-plays on one client and is remuxed
-// for another, so stating it needs what the *asking* client declared on Attach
-// (platform#28). Until now that declaration lived only on the live session and was
-// read only at play time, so the plan was computed, used to mint one ticket and
-// discarded — and the screen that would have shown it had no way to ask.
+// for another, so stating it needs what the asking client declared on Attach
+// (platform#28).
 //
 // It rides the context rather than Render's signature deliberately. Every screen
 // implements that signature and exactly one of them wants this; widening it
 // would make ten builders carry a parameter to hand to the eleventh. A
 // request-scoped value that most handlers ignore is what a context is for.
 //
-// A context with no profile on it yields the browser assumption, which is what
-// the Platform used everywhere before clients declared anything — so a caller
-// that does not set it degrades to the previous behaviour rather than to no
-// answer.
+// A context with no profile on it yields the browser assumption, so a caller
+// that does not set it degrades to a usable answer rather than to none.
 
 type clientCodecsKey struct{}
 

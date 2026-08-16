@@ -21,8 +21,8 @@ import (
 // test/extprobe.
 //
 // They build the probe rather than assuming a binary exists, so a green result
-// means the module *source* in this repository works — not that someone
-// remembered to compile it.
+// means the module source in this repository works — not that someone remembered
+// to compile it.
 
 // buildProbe compiles test/extprobe and returns the binary path. It is built
 // once per test binary run; go's build cache makes the repeat cost small.
@@ -191,23 +191,23 @@ func TestRegistryHoldsAnExtensionModuleLikeAnyOther(t *testing.T) {
 	}
 }
 
-// TestStreamAndSubtitleFieldsCrossTheProcessBoundary is the strongest form of
-// the claim SDK v0.26.0's five fields need: a real child process, a real Unix
-// socket, a real handshake, real protobuf on the way there and back.
+// TestStreamAndSubtitleFieldsCrossTheProcessBoundary pins SDK v0.26.0's five
+// fields against a real child process, a real Unix socket, a real handshake and
+// real protobuf on the way there and back.
 //
-// sdk/host has its own version of this over a real gRPC connection, and it is
-// not the same test. That one proves the converters and the dispatch with both
-// ends in one process. This one proves the fields survive everything between
-// two, which is the arrangement the failure has always hidden in: a field with
-// no `module.proto` counterpart compiles on both sides, converts to nothing, and
-// arrives as a zero — indistinguishable from a source that had nothing to say.
-// It has happened three times.
+// sdk/host has its own version of this over a real gRPC connection, and it is not
+// the same test: that one proves the converters and the dispatch with both ends
+// in one process. This one proves the fields survive everything between two,
+// which is where the failure hides — a field with no module.proto counterpart
+// compiles on both sides, converts to nothing, and arrives as a zero,
+// indistinguishable from a source that had nothing to say. It has happened three
+// times.
 //
-// The two directions are asserted separately and deliberately. The three
-// technical fields travel module-to-Platform and are read off what the caller
-// receives. The two subtitle coordinates travel Platform-to-module, and the only
-// witness is the child: it echoes them back in the track id, because nothing the
-// caller can otherwise read reports what the child was handed.
+// The two directions are asserted separately. The three technical fields travel
+// module-to-Platform and are read off what the caller receives. The two subtitle
+// coordinates travel Platform-to-module, and the only witness is the child: it
+// echoes them back in the track id, because nothing the caller can otherwise read
+// reports what the child was handed.
 func TestStreamAndSubtitleFieldsCrossTheProcessBoundary(t *testing.T) {
 	m := launch(t, &recordingContent{})
 

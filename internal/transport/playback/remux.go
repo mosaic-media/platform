@@ -21,9 +21,9 @@ import (
 //
 // The constraint it answers is narrow and hard: Media Source Extensions — how
 // every browser plays adaptive video — accepts only fragmented MP4 and WebM.
-// **Matroska cannot pass through it whatever codec is inside**, so a 1080p h264
+// Matroska cannot pass through it whatever codec is inside, so a 1080p h264
 // release in an MKV is exactly as unplayable in a browser as an HEVC one. That
-// is a *container* problem, and a container problem has a cheap answer: rewrite
+// is a container problem, and a container problem has a cheap answer: rewrite
 // the container and copy the streams through untouched. No decoding, no
 // encoding, near-zero CPU.
 //
@@ -39,7 +39,7 @@ import (
 //     neither is pretended at here.
 //
 // It lives on the Platform rather than in the playback module on purpose. A
-// module *resolves* and never serves (platform#25); a remux is a transform on the
+// module resolves and never serves (platform#25); a remux is a transform on the
 // serving side, so putting it in a module would hand a module the byte path the
 // whole contract keeps away from it — and would put an ffmpeg dependency behind
 // the SDK boundary.
@@ -88,17 +88,17 @@ func (r *Remuxer) Stream(ctx context.Context, upstreamURL string, headers map[st
 // StreamFrom is Stream starting at an offset into the release, which is what
 // makes a transcoded stream seekable (platform#82).
 //
-// Two flags carry the whole idea and both are load-bearing:
+// Two flags carry it, and neither is optional:
 //
-//   - **`-ss` before `-i`** seeks the *input*. ffmpeg then asks the upstream for
-//     a byte range rather than decoding and discarding everything before the
-//     offset, which is only affordable because the upstream honours Range — the
-//     measurement this design rests on. After `-i` it would decode from zero.
-//   - **`-copyts`** keeps the source's timestamps instead of rebasing them to
-//     zero. Without it every seek produces a stream that claims to start at 0,
-//     so the player's clock jumps back to the beginning and the scrubber fights
-//     the viewer. With it the fragments carry the real decode times and the
-//     player lands where the person asked to be.
+//   - -ss before -i seeks the input. ffmpeg then asks the upstream for a byte
+//     range rather than decoding and discarding everything before the offset,
+//     which is only affordable because the upstream honours Range. After -i it
+//     would decode from zero.
+//   - -copyts keeps the source's timestamps instead of rebasing them to zero.
+//     Without it every seek produces a stream that claims to start at 0, so the
+//     player's clock jumps back to the beginning and the scrubber fights the
+//     viewer. With it the fragments carry the real decode times and the player
+//     lands where the person asked to be.
 //
 // An offset of zero is an ordinary play from the start and adds neither flag,
 // so the un-seeked path is byte-for-byte what it was.
@@ -146,21 +146,21 @@ func (r *Remuxer) StreamFrom(ctx context.Context, upstreamURL string, headers ma
 // reconnectArgs lets ffmpeg re-establish a dropped upstream connection instead
 // of ending the transcode.
 //
-// **The remux path holds one HTTP connection open for the length of a film.** A
+// The remux path holds one HTTP connection open for the length of a film. A
 // debrid CDN closing it after ninety minutes is ordinary rather than
 // exceptional, and without these the transcode simply ends: the spool stops
 // growing, readers see a clean EOF, and the viewer gets a stream that stops
-// mid-scene with nothing anywhere reporting an error. The relay path already
-// survives this, because a media element re-requests a range and the origin
-// opens a fresh upstream request for it.
+// mid-scene with nothing anywhere reporting an error. The relay path survives it
+// already, because a media element re-requests a range and the origin opens a
+// fresh upstream request for it.
 //
-// Only for http and https, and that guard is load-bearing rather than tidiness:
-// these are options of the HTTP protocol, and ffmpeg exits with "Option
+// Only for http and https, and that guard is not tidiness: these are options of
+// the HTTP protocol, and ffmpeg exits with "Option
 // reconnect not found" when nothing consumes one. A module resolving to any
 // other scheme must not be made unplayable by a flag meant to make it more
 // reliable.
 //
-// **`-reconnect_at_eof` is deliberately not among them**, though the reference
+// -reconnect_at_eof is deliberately not among them, though the reference
 // implementations pass it. It treats end-of-file as an error worth reconnecting
 // over, which is right for a live stream and wrong for a film: these inputs are
 // finite and range-capable, so ffmpeg knows the real length, and reconnecting at
@@ -189,19 +189,19 @@ func reconnectArgs(upstreamURL string) []string {
 // so without a way to hold it back one playback writes the whole release to
 // disk as fast as the upstream serves it.
 //
-// Three flags carry the design and each is load-bearing:
+// Three flags carry the design, and none is optional:
 //
-//   - **`-ss` before `-i`, with `-copyts`** — platform#82's arithmetic, re-keyed
-//     from a byte offset to a segment index. Together they make segment n begin
-//     at the timestamp its nominal position implies rather than at zero, which
-//     is what lets a client seek into a stream nothing has produced yet.
-//   - **`-start_number n`** names the output for its position in the *release*
-//     rather than its position in this run, so a restart mid-film writes the
-//     segment the client actually asked for.
-//   - **`-hls_flags temp_file`** writes each segment under a temporary name and
+//   - -ss before -i, with -copyts — platform#82's arithmetic, re-keyed from a byte
+//     offset to a segment index. Together they make segment n begin at the
+//     timestamp its nominal position implies rather than at zero, which is what
+//     lets a client seek into a stream nothing has produced yet.
+//   - -start_number n names the output for its position in the release rather
+//     than its position in this run, so a restart mid-film writes the segment
+//     the client actually asked for.
+//   - -hls_flags temp_file writes each segment under a temporary name and
 //     renames it, so a file appearing at its final name means a finished
 //     segment. Presence is the readiness signal, and without this flag it would
-//     be a race — verified: a run leaves no `.tmp` behind.
+//     be a race.
 func (r *Remuxer) Segment(ctx context.Context, upstreamURL string, headers map[string]string, plan Plan, dir string, length time.Duration, n int) (stop, pause, resume func(), err error) {
 	if !r.Available() {
 		return nil, nil, nil, ErrRemuxUnavailable
@@ -265,16 +265,16 @@ func (r *Remuxer) Segment(ctx context.Context, upstreamURL string, headers map[s
 // (platform#83).
 //
 // It is the same arithmetic the video segments use — a start derived from an
-// index, a length, `-copyts` so the cues carry the times the source gave them —
+// index, a length, -copyts so the cues carry the times the source gave them —
 // applied to a stream that costs almost nothing to produce and quite a lot to
-// reach. **The cost is the container, not the text.** Subtitle packets are
+// reach. The cost is the container, not the text: subtitle packets are
 // interleaved with the video, so getting a minute of dialogue means reading a
-// minute of pictures, and `-ss` before `-i` is what keeps that to a range
-// request over the window rather than a read from the beginning of the release.
+// minute of pictures, and -ss before -i is what keeps that to a range request
+// over the window rather than a read from the beginning of the release.
 //
-// `-vn -an` drop the video and audio outputs. They do not stop ffmpeg reading
-// the container, and nothing can; what they stop is it spending any time on
-// frames nobody will see.
+// -vn -an drop the video and audio outputs. They do not stop ffmpeg reading the
+// container, and nothing can; what they stop is it spending any time on frames
+// nobody will see.
 //
 // The result is small enough — a minute of dialogue is a few hundred bytes — to
 // go straight to the response, which is why nothing here writes a file. The
@@ -295,12 +295,11 @@ func (r *Remuxer) Subtitles(ctx context.Context, upstreamURL string, headers map
 	if offset := segmentStart(n, subtitleWindow); offset > 0 {
 		args = append(args, "-ss", strconv.FormatFloat(offset.Seconds(), 'f', 3, 64))
 	}
-	// **`-to`, not `-t`, and the difference is not stylistic.** `-t` bounds the
-	// output's *duration*, which `-copyts` has already rebased onto the source's
-	// clock — so a window starting at 60 s with `-t 60` stops the instant it
-	// starts and every window but the first comes out empty. Measured: window 0
-	// yielded six cues and window 1 yielded none. `-to` is the absolute form and
-	// is the one that composes with `-copyts`.
+	// -to, not -t, and the difference is not stylistic. -t bounds the output's
+	// duration, which -copyts has already rebased onto the source's clock — so a
+	// window starting at 60 s with -t 60 stops the instant it starts and every
+	// window but the first comes out empty. -to is the absolute form and the one
+	// that composes with -copyts.
 	args = append(args, "-copyts", "-i", upstreamURL,
 		"-to", strconv.FormatFloat(segmentStart(n+1, subtitleWindow).Seconds(), 'f', 3, 64),
 		"-vn", "-an",
@@ -327,11 +326,11 @@ func (r *Remuxer) Subtitles(ctx context.Context, upstreamURL string, headers map
 // StyledSubtitles extracts one subtitle track as the script it was authored as
 // (platform#83).
 //
-// **It is not windowed, and it cannot be.** An ASS script is one document: a
-// header, a style table and then the events, and libass needs all of it before
-// it can draw the first line. So this reads the container from the start, which
-// is the cost of typeset fidelity — the same read burning would have done, minus
-// the encode.
+// It is not windowed, and it cannot be. An ASS script is one document: a header,
+// a style table and then the events, and libass needs all of it before it can
+// draw the first line. So this reads the container from the start, which is the
+// cost of typeset fidelity — the same read burning would have done, minus the
+// encode.
 //
 // The output is small enough to stream straight to the response; a two-hour
 // film's script is a few hundred kilobytes. Nothing is written to disk.
@@ -401,15 +400,15 @@ func serveRemuxed(w http.ResponseWriter, r *http.Request, t ticket, plan Plan, r
 	defer stop()
 	defer body.Close()
 
-	// **The first bytes are read before the status is written**, and that
-	// ordering is the whole point of this block.
+	// The first bytes are read before the status is written, and that ordering
+	// is the point of this block.
 	//
 	// Writing 200 first means an ffmpeg that dies on its own arguments still
 	// produces a successful response with an empty body. The player then reports
 	// only "format not supported" and the access log says status=200, so the one
 	// place that knows what went wrong — ffmpeg's stderr — is the one place
-	// nobody is looking. That is exactly how a FLAC track the MP4 muxer refuses
-	// presented as a broken file for a whole session.
+	// nobody is looking. A FLAC track the MP4 muxer refuses presents as a broken
+	// file that way.
 	//
 	// A remux that has produced its first bytes has written a valid fMP4 header,
 	// so this is a real signal rather than a delay: past it, failures are
@@ -478,8 +477,8 @@ func (p Plan) ffmpegArgs(upstreamURL string) []string {
 		graph += "null[main];[main][sub]overlay=eof_action=pass:repeatlast=0[v]"
 		args = append(args, "-filter_complex", graph, "-map", "[v]")
 	case p.Burn != nil:
-		// A text track is drawn by libass, which reads a *file* — so the source
-		// is named again and opened a second time. That is the cost of typeset
+		// A text track is drawn by libass, which reads a file — so the source is
+		// named again and opened a second time. That is the cost of typeset
 		// fidelity and there is no way around it: the filter cannot be handed a
 		// stream that is already open.
 		chain := p.videoFilter()
@@ -539,8 +538,8 @@ func (p Plan) ffmpegArgs(upstreamURL string) []string {
 func (p Plan) videoFilter() string {
 	var parts []string
 	if p.MaxHeight > 0 {
-		// -2 keeps the width even, which h264 requires, and `min` leaves a
-		// source already below the cap untouched rather than upscaling it.
+		// -2 keeps the width even, which h264 requires, and min leaves a source
+		// already below the cap untouched rather than upscaling it.
 		parts = append(parts, fmt.Sprintf("scale=-2:'min(ih,%d)'", p.MaxHeight))
 	}
 	if p.Tonemap {
@@ -737,11 +736,11 @@ func serveStyledSubtitle(w http.ResponseWriter, r *http.Request, rx *Remuxer, t 
 // output is a few hundred bytes and its size is not known until ffmpeg has
 // finished, so buffering to learn a number nobody needs would only add latency.
 //
-// **An extraction that produces nothing is a success, not an error.** A minute
-// of a film with no dialogue in it is an ordinary thing, and the WebVTT header
-// alone is a valid document meaning exactly that. Only a failure to start ffmpeg
-// is a failure, and it is the one case where a player showing no subtitles for
-// the rest of the film should instead be told the origin could not produce them.
+// An extraction that produces nothing is a success, not an error. A minute of a
+// film with no dialogue in it is an ordinary thing, and the WebVTT header alone
+// is a valid document meaning exactly that. Only a failure to start ffmpeg is a
+// failure, and it is the one case where a player showing no subtitles for the
+// rest of the film should instead be told the origin could not produce them.
 func serveSubtitleSegment(w http.ResponseWriter, r *http.Request, rx *Remuxer, t ticket, index, n int) {
 	body, stop, err := rx.Subtitles(r.Context(), t.URL, t.Headers, index, n)
 	if err != nil {
@@ -787,9 +786,8 @@ func segmentIndexOf(resource string) (int, bool) {
 }
 
 // writeSegment sends one segment with a real length, which a segment always has
-// because it is a finished file rather than a live pipe. That is the difference
-// the whole slice bought: the byte-addressed origin advertised a length it had
-// to estimate, and could not make the estimate true.
+// because it is a finished file rather than a live pipe. A byte-addressed origin
+// can only advertise an estimated length, and cannot make the estimate true.
 func writeSegment(w http.ResponseWriter, r *http.Request, contentType string, size int64, body io.Reader) {
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
@@ -807,12 +805,11 @@ func writeSegment(w http.ResponseWriter, r *http.Request, contentType string, si
 // ExternalSubtitles fetches a module-resolved subtitle file and converts it to
 // WebVTT (platform#83).
 //
-// **ffmpeg does the fetch as well as the conversion**, which is not laziness: it
-// already speaks every scheme a module might return, it already carries the
-// reconnect behaviour the rest of this file needs, and a SubRip file that is
-// already WebVTT costs a passthrough rather than a second code path. The
-// alternative — fetch with net/http, then decide whether to convert — would
-// duplicate both.
+// ffmpeg does the fetch as well as the conversion: it already speaks every
+// scheme a module might return, it already carries the reconnect behaviour the
+// rest of this file needs, and a SubRip file that is already WebVTT costs a
+// passthrough rather than a second code path. Fetching with net/http and then
+// deciding whether to convert would duplicate both.
 //
 // The whole file is read, and there is nothing to window: a subtitle document
 // has no seekable structure and is a few hundred kilobytes at most.
