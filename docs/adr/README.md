@@ -92,6 +92,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 93 | [Filesystem containment is applied where the OS allows it, and reported where it does not](0093-filesystem-containment-is-applied-where-the-os-allows.md) | Accepted. Not built. Gives [platform#92](0092-module-storage-is-granted-not-enforced.md)'s grant boundary a mechanism on Linux. |
 | 94 | [A gateway is invoked from outside, and holds no authority of its own](0094-a-gateway-is-invoked-from-outside-and-holds-no-authority.md) | Accepted. Not built. Depends on [platform#90](0090-one-origin-facility-consumers-declare-against.md). |
 | 95 | [A composer supplies an expression, and an identity provider attests](0095-composers-supply-expressions-and-identity-providers-attest.md) | Accepted. Not built. |
+| 96 | [Module settings are written by merge, and declared secret fields are sealed](0096-module-settings-are-merged-and-secret-fields-are-sealed.md) | Accepted. Not built. |
 
 ## Records this repository depends on
 
@@ -145,6 +146,7 @@ Decisions held elsewhere that these records cite. They bind work here and are no
 - [supervisor#5](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0005-the-supervisor-observes-independently.md)
 - [supervisor#7](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0007-the-supervisor-answers-the-platforms-client-surface.md)
 - [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md)
+- [supervisor#13](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0013-the-supervisor-takes-the-backup.md)
 
 **`web`**
 
