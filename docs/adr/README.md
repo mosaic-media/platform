@@ -89,6 +89,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 90 | [One origin facility, which each consumer declares against](0090-one-origin-facility-consumers-declare-against.md) | Accepted. Not built. |
 | 91 | [A module's bulk output is served from the Platform's origin, signed and relayed](0091-module-served-resources.md) | Accepted. Not built. |
 | 92 | [Module storage is granted, quota-bounded, and cannot be made exclusive](0092-module-storage-is-granted-not-enforced.md) | Accepted. Not built. |
+| 93 | [Filesystem containment is applied where the OS allows it, and reported where it does not](0093-filesystem-containment-is-applied-where-the-os-allows.md) | Accepted. Not built. Gives [platform#92](0092-module-storage-is-granted-not-enforced.md)'s grant boundary a mechanism on Linux. |
 
 ## Records this repository depends on
 
