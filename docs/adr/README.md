@@ -86,6 +86,8 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 87 | [A module is called for events, in batches, and never calls out](0087-module-lifecycle-events-progress-and-schedules.md) | Accepted. Not built. |
 | 88 | [A contribution composes from published definitions, on a surface the Platform frames](0088-a-contribution-composes-from-published-definitions.md) | Accepted. Not built. Depends on [platform#86](0086-a-module-verb-is-declared-and-dispatched-by-name.md). Slice 4 of the extension surface. |
 | 89 | [Annotations are facts and documents, resolved by group in an order the operator sets](0089-annotations-are-facts-and-documents-ordered-by-the-operator.md) | Accepted. Not built. Depends on [platform#85](0085-a-modules-authority-is-declared-and-consented.md). Slice 5 of the extension surface. |
+| 90 | [One origin facility, which each consumer declares against](0090-one-origin-facility-consumers-declare-against.md) | Accepted. Not built. |
+| 91 | [A module's bulk output is served from the Platform's origin, signed and relayed](0091-module-served-resources.md) | Accepted. Not built. |
 
 ## Records this repository depends on
 
