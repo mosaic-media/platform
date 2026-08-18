@@ -12,7 +12,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 4 | [Static Go module composition](0004-static-go-module-composition.md) | Accepted, and partly superseded — for the extension tier only. |
 | 5 | [Developer Platform as an integrated toolchain](0005-developer-platform-toolchain.md) | Accepted |
 | 6 | [Test Harness as development modules](0006-test-harness-as-development-modules.md) | Accepted |
-| 7 | [Platform transports events, modules own domain events](0007-platform-transports-events.md) | Accepted |
+| 7 | [Platform transports events, modules own domain events](0007-platform-transports-events.md) | Accepted, and superseded in part by [platform#87](0087-module-lifecycle-events-progress-and-schedules.md): the ownership split below stands, but the SDK never carried the bus interfaces or envelope contract this assigns it, and the extension tier's move out of process made that assignment unbuildable as written. |
 | 8 | [Capabilities do not own stores](0008-capabilities-do-not-own-stores.md) | Accepted. Supersedes [platform#1](0001-transactional-store-extensibility.md). |
 | 9 | [The object graph: Node, Part, Relation](0009-object-graph.md) | Accepted. |
 | 10 | [Storage authority, media linking and transaction scope](0010-storage-authority-and-transaction-scope.md) | Accepted |
@@ -83,6 +83,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 84 | [Authorization is scoped to the resource, not only the action](0084-authorization-is-scoped-to-the-resource.md) | Accepted. Not built. |
 | 85 | [A module's authority is declared in its manifest and consented at install](0085-a-modules-authority-is-declared-and-consented.md) | Accepted. Not built. Depends on [platform#84](0084-authorization-is-scoped-to-the-resource.md). |
 | 86 | [A module verb is declared in its manifest and dispatched by name](0086-a-module-verb-is-declared-and-dispatched-by-name.md) | Accepted. Not built. |
+| 87 | [A module is called for events, in batches, and never calls out](0087-module-lifecycle-events-progress-and-schedules.md) | Accepted. Not built. |
 
 ## Records this repository depends on
 
@@ -125,6 +126,7 @@ Decisions held elsewhere that these records cite. They bind work here and are no
 - [sdk#5](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0005-modules-observe-through-the-sdk.md)
 - [sdk#6](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0006-the-artwork-provider-role.md)
 - [sdk#7](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0007-go-plugin-as-the-extension-harness.md)
+- [sdk#10](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0010-the-sdk-carries-no-implementation.md)
 
 **`supervisor`**
 

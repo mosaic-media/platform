@@ -1,6 +1,6 @@
 # Platform transports events, modules own domain events
 
-**Status:** Accepted
+**Status:** Accepted, and **superseded in part** by [platform#87](0087-module-lifecycle-events-progress-and-schedules.md): the ownership split below stands, but the SDK never carried the bus interfaces or envelope contract this assigns it, and the extension tier's move out of process made that assignment unbuildable as written.
 **Date:** 2026-07-14
 
 ## Context
