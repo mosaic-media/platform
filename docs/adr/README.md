@@ -82,6 +82,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 83 | [Subtitles answer to a person's language preference, in whatever form the track has](0083-subtitles-answer-to-a-persons-language-preference.md) | Accepted. Built, with four things named rather than claimed. |
 | 84 | [Authorization is scoped to the resource, not only the action](0084-authorization-is-scoped-to-the-resource.md) | Accepted. Not built. |
 | 85 | [A module's authority is declared in its manifest and consented at install](0085-a-modules-authority-is-declared-and-consented.md) | Accepted. Not built. Depends on [platform#84](0084-authorization-is-scoped-to-the-resource.md). |
+| 86 | [A module verb is declared in its manifest and dispatched by name](0086-a-module-verb-is-declared-and-dispatched-by-name.md) | Accepted. Not built. |
 
 ## Records this repository depends on
 
