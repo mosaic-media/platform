@@ -84,6 +84,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 85 | [A module's authority is declared in its manifest and consented at install](0085-a-modules-authority-is-declared-and-consented.md) | Accepted. Not built. Depends on [platform#84](0084-authorization-is-scoped-to-the-resource.md). |
 | 86 | [A module verb is declared in its manifest and dispatched by name](0086-a-module-verb-is-declared-and-dispatched-by-name.md) | Accepted. Not built. |
 | 87 | [A module is called for events, in batches, and never calls out](0087-module-lifecycle-events-progress-and-schedules.md) | Accepted. Not built. |
+| 88 | [A contribution composes from published definitions, on a surface the Platform frames](0088-a-contribution-composes-from-published-definitions.md) | Accepted. Not built. Depends on [platform#86](0086-a-module-verb-is-declared-and-dispatched-by-name.md). Slice 4 of the extension surface. |
 
 ## Records this repository depends on
 
