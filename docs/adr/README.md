@@ -7,7 +7,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | # | Record | Status |
 |---|---|---|
 | 1 | [Transactional store extensibility](0001-transactional-store-extensibility.md) | Superseded by [platform#8](0008-capabilities-do-not-own-stores.md) |
-| 2 | [Module storage and delivery model](0002-module-storage-and-delivery-model.md) | Accepted |
+| 2 | [Module storage and delivery model](0002-module-storage-and-delivery-model.md) | Accepted, and superseded in part by [platform#92](0092-module-storage-is-granted-not-enforced.md): point 2's rule that modules do not own storage stands as an intent, but it was a guarantee only while a module was a library compiled into the binary. |
 | 3 | [Platform as execution kernel](0003-platform-as-execution-kernel.md) | Accepted |
 | 4 | [Static Go module composition](0004-static-go-module-composition.md) | Accepted, and partly superseded — for the extension tier only. |
 | 5 | [Developer Platform as an integrated toolchain](0005-developer-platform-toolchain.md) | Accepted |
@@ -88,6 +88,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 89 | [Annotations are facts and documents, resolved by group in an order the operator sets](0089-annotations-are-facts-and-documents-ordered-by-the-operator.md) | Accepted. Not built. Depends on [platform#85](0085-a-modules-authority-is-declared-and-consented.md). Slice 5 of the extension surface. |
 | 90 | [One origin facility, which each consumer declares against](0090-one-origin-facility-consumers-declare-against.md) | Accepted. Not built. |
 | 91 | [A module's bulk output is served from the Platform's origin, signed and relayed](0091-module-served-resources.md) | Accepted. Not built. |
+| 92 | [Module storage is granted, quota-bounded, and cannot be made exclusive](0092-module-storage-is-granted-not-enforced.md) | Accepted. Not built. |
 
 ## Records this repository depends on
 

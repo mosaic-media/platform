@@ -1,6 +1,6 @@
 # Module storage and delivery model
 
-**Status:** Accepted
+**Status:** Accepted, and **superseded in part** by [platform#92](0092-module-storage-is-granted-not-enforced.md): point 2's rule that modules do not own storage stands as an intent, but it was a guarantee only while a module was a library compiled into the binary. An extension module is a separate process and can bring its own store, so the Platform now grants bounded storage and reports a containment posture rather than asserting exclusivity. Point 1's premise — that a module is always compiled in — was itself superseded by the extension tier.
 **Date:** 2026-07-18
 
 ## Context
