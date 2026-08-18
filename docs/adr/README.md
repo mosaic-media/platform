@@ -80,6 +80,8 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 81 | [The install key](0081-the-install-key.md) | Proposed. The sealing envelope is built (internal/adapters/crypto/sealer.go); the key it needs is not, which is what this record is for. |
 | 82 | [The origin relays where it can, and serves a nominal segment grid where it cannot](0082-the-origin-relays-or-serves-a-nominal-segment-grid.md) | Accepted. Built on both sides, and never played. |
 | 83 | [Subtitles answer to a person's language preference, in whatever form the track has](0083-subtitles-answer-to-a-persons-language-preference.md) | Accepted. Built, with four things named rather than claimed. |
+| 84 | [Authorization is scoped to the resource, not only the action](0084-authorization-is-scoped-to-the-resource.md) | Accepted. Not built. |
+| 85 | [A module's authority is declared in its manifest and consented at install](0085-a-modules-authority-is-declared-and-consented.md) | Accepted. Not built. Depends on [platform#84](0084-authorization-is-scoped-to-the-resource.md). |
 
 ## Records this repository depends on
 
