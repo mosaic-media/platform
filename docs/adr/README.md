@@ -93,6 +93,7 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 94 | [A gateway is invoked from outside, and holds no authority of its own](0094-a-gateway-is-invoked-from-outside-and-holds-no-authority.md) | Accepted. Not built. Depends on [platform#90](0090-one-origin-facility-consumers-declare-against.md). |
 | 95 | [A composer supplies an expression, and an identity provider attests](0095-composers-supply-expressions-and-identity-providers-attest.md) | Accepted. Not built. |
 | 96 | [Module settings are written by merge, and declared secret fields are sealed](0096-module-settings-are-merged-and-secret-fields-are-sealed.md) | Accepted. Not built. |
+| 97 | [A manifest names one capability, and what it asks for is separate from what it offers](0097-a-manifest-names-one-capability-and-separates-asks-from-offers.md) | Accepted. Not built. Closes the last open question in architecture's deliberately-undecided list. |
 
 ## Records this repository depends on
 
