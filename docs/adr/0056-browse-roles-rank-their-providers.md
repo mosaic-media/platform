@@ -1,6 +1,6 @@
 # The browse roles rank their providers; they do not union them
 
-**Status:** Built. `CapabilityRegistry.RegisterFallback` and `fanOutPreferred`
+**Status:** Accepted. Built. `CapabilityRegistry.RegisterFallback` and `fanOutPreferred`
 are in the Platform, and the composition root registers `module-cinemeta` as the
 fallback tier. Partly supersedes
 [module-cinemeta#1](https://github.com/mosaic-media/module-cinemeta/blob/main/docs/adr/0001-the-guaranteed-metadata-provider-needs-no-credential.md): its

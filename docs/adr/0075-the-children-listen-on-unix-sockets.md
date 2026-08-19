@@ -1,6 +1,6 @@
 # The children listen on Unix sockets
 
-**Status:** Built.
+**Status:** Accepted. Built.
 **Date:** 2026-08-08
 
 ## Context

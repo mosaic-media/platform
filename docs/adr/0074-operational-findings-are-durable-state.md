@@ -1,6 +1,6 @@
 # Operational findings are durable state
 
-**Status:** Built. The register, its screen and the Supervisor's spool all landed; `unhealthy` and `unsupported` did not — see the roadmap.
+**Status:** Accepted. Built. The register, its screen and the Supervisor's spool all landed; `unhealthy` and `unsupported` did not — see the roadmap.
 **Date:** 2026-08-08
 
 ## Context

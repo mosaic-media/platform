@@ -1,6 +1,6 @@
 # The upgrade channel is the handoff and the register
 
-**Status:** Built. The Supervisor checks the catalogue on a schedule and spools an offer, polls `GET /upgrade` and carries out what it finds; the Platform raises `upgrade_available`, offers `apply_upgrade`, records the request and settles it by comparing `MOSAIC_GENERATION_ID` against the version asked for. Not built: [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md)'s automation *policy* on top of it — every upgrade is a person pressing something today, which is that record's Manual level and its safest.
+**Status:** Accepted. Built. The Supervisor checks the catalogue on a schedule and spools an offer, polls `GET /upgrade` and carries out what it finds; the Platform raises `upgrade_available`, offers `apply_upgrade`, records the request and settles it by comparing `MOSAIC_GENERATION_ID` against the version asked for. Not built: [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md)'s automation *policy* on top of it — every upgrade is a person pressing something today, which is that record's Manual level and its safest.
 **Date:** 2026-08-09
 
 Closes the question [supervisor#12](https://github.com/mosaic-media/supervisor/blob/main/docs/adr/0012-upgrade-automation-is-staged-against-the-contract-version.md)
