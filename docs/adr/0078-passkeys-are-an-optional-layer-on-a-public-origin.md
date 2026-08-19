@@ -1,6 +1,6 @@
 # Passkeys are an optional layer on a public origin
 
-**Status:** Proposed. Nothing here is built — `PasskeyCredential`, `SavePasskey` and `ListPasskeys` are the whole of what exists, exactly as before. The *announcement* half — silence until an origin exists, one prompt, never again — is [platform#80](0080-an-optional-capability-is-announced-once-when-it-becomes-possible.md). This records the enrolment policy that unblocks building it, and one thing it depends on is untested: whether a browser will run a WebAuthn ceremony on a `.local` origin behind a self-signed certificate.
+**Status:** Accepted. Nothing here is built — `PasskeyCredential`, `SavePasskey` and `ListPasskeys` are the whole of what exists, exactly as before. The *announcement* half — silence until an origin exists, one prompt, never again — is [platform#80](0080-an-optional-capability-is-announced-once-when-it-becomes-possible.md). This records the enrolment policy that unblocks building it, and one thing it depends on is untested: whether a browser will run a WebAuthn ceremony on a `.local` origin behind a self-signed certificate.
 **Date:** 2026-08-10
 
 Builds on [platform#43](0043-one-principal-many-credentials.md), which decided that

@@ -1,6 +1,6 @@
 # One principal, many credentials
 
-**Status:** Proposed. Unbuilt apart from `domain.PasskeyCredential` and two store methods. The passkey branch gained an enrolment policy in [platform#78](0078-passkeys-are-an-optional-layer-on-a-public-origin.md) — optional, and only on an install with a public origin — which narrows where that credential kind applies without changing this record's decision. [platform#79](0079-totp-is-the-second-factor-that-works-everywhere.md) adds TOTP, which is deliberately *not* a fifth credential in the diagram below: it resolves to no Principal on its own and makes the password path two-step instead.
+**Status:** Accepted. Unbuilt apart from `domain.PasskeyCredential` and two store methods. The passkey branch gained an enrolment policy in [platform#78](0078-passkeys-are-an-optional-layer-on-a-public-origin.md) — optional, and only on an install with a public origin — which narrows where that credential kind applies without changing this record's decision. [platform#79](0079-totp-is-the-second-factor-that-works-everywhere.md) adds TOTP, which is deliberately *not* a fifth credential in the diagram below: it resolves to no Principal on its own and makes the password path two-step instead.
 **Date:** 2026-07-23
 
 ## Context

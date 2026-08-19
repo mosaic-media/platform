@@ -1,6 +1,6 @@
 # Module distribution and trust: signed binaries and user-added repositories
 
-**Status:** Proposed; built in part. Partly superseded: the **actor** is reversed
+**Status:** Accepted; built in part. Partly superseded: the **actor** is reversed
 by [platform#49](0049-the-platform-manages-extension-modules.md) — the Platform, not
 the Supervisor, verifies and installs extension modules — and the distribution,
 signing and trust *mechanism* below stands unchanged. The **verification gate**

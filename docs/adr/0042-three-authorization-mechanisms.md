@@ -1,6 +1,6 @@
 # Authorization has three mechanisms, not one
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-07-23
 
 ## Context

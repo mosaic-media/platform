@@ -1,6 +1,6 @@
 # The Platform binary is built by CI; the Supervisor selects, not compiles
 
-**Status:** Proposed; the CI release matrix is built (the producing half). A
+**Status:** Accepted; the CI release matrix is built (the producing half). A
 version tag cross-compiles the one Platform binary to linux/amd64, linux/arm64,
 darwin and windows with checksums, publishes a GitHub release, and builds a thin
 multi-arch container image from the same bytes ([platform#50](0050-deployment-topologies.md)).

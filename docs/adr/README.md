@@ -40,22 +40,22 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 32 | [The correlation ID is the trace ID](0032-the-correlation-id-is-the-trace-id.md) | Accepted (built) — the Shell mints the trace where the user clicks, a Connect interceptor carries traceparent on every call, and Event.CorrelationID has a source. |
 | 33 | [Instrument at the seams](0033-instrument-at-the-seams.md) | Accepted (built) — all nine seams, including seam nine: netguard.ModuleClient is handed to every module in place of nil, which closed the SSRF gap alongside the tracing. |
 | 34 | [Redaction classes are the PII boundary](0034-redaction-classes-are-the-pii-boundary.md) | Accepted (built, except its enforcement). |
-| 35 | [Audit is a store, not a log stream](0035-audit-is-a-store-not-a-log-stream.md) | Proposed. |
+| 35 | [Audit is a store, not a log stream](0035-audit-is-a-store-not-a-log-stream.md) | Accepted. |
 | 36 | [Telemetry storage, retention, and expert mode](0036-telemetry-storage-retention-and-expert-mode.md) | Accepted (built for logs and spans). |
 | 37 | [One client transport: retire GraphQL](0037-one-client-transport.md) | Accepted — built (the GraphQL transport is deleted; AuthService mints sessions over Connect). |
-| 38 | [The Platform binary is built by CI; the Supervisor selects, not compiles](0038-platform-binary-built-by-ci.md) | Proposed; the CI release matrix is built (the producing half). |
+| 38 | [The Platform binary is built by CI; the Supervisor selects, not compiles](0038-platform-binary-built-by-ci.md) | Accepted; the CI release matrix is built (the producing half). |
 | 39 | [The extension module boundary](0039-extension-module-boundary.md) | Accepted; built in part. |
-| 40 | [Module distribution and trust: signed binaries and user-added repositories](0040-module-distribution-and-trust.md) | Proposed; built in part. |
+| 40 | [Module distribution and trust: signed binaries and user-added repositories](0040-module-distribution-and-trust.md) | Accepted; built in part. |
 | 41 | [Authorization is carried in the type](0041-authorization-is-carried-in-the-type.md) | Accepted (built) |
-| 42 | [Authorization has three mechanisms, not one](0042-three-authorization-mechanisms.md) | Proposed |
-| 43 | [One principal, many credentials](0043-one-principal-many-credentials.md) | Proposed. Unbuilt apart from domain.PasskeyCredential and two store methods. |
+| 42 | [Authorization has three mechanisms, not one](0042-three-authorization-mechanisms.md) | Accepted |
+| 43 | [One principal, many credentials](0043-one-principal-many-credentials.md) | Accepted. Unbuilt apart from domain.PasskeyCredential and two store methods. |
 | 44 | [Privilege cannot escalate through delegation](0044-privilege-cannot-escalate.md) | Accepted (built) |
 | 45 | [Content artwork is stored on the node](0045-content-artwork-is-stored-on-the-node.md) | Accepted, and extended twice on its own reasoning. |
 | 46 | [Stream resolution is decoupled from metadata provenance](0046-stream-resolution-is-decoupled-from-metadata-provenance.md) | Accepted |
 | 47 | [Artwork is a candidate set](0047-artwork-is-a-candidate-set.md) | Accepted; built, except the user's half of the selection rule. |
-| 48 | [Core modules keep their repositories; CI carries the version bump](0048-core-modules-keep-their-repositories.md) | Proposed |
+| 48 | [Core modules keep their repositories; CI carries the version bump](0048-core-modules-keep-their-repositories.md) | Accepted |
 | 49 | [The Platform manages extension modules; the Supervisor manages the binary](0049-the-platform-manages-extension-modules.md) | Accepted; built, except the third-party repository surface. |
-| 50 | [Deployment topologies: a native binary that runs in a container or on bare metal](0050-deployment-topologies.md) | Proposed. |
+| 50 | [Deployment topologies: a native binary that runs in a container or on bare metal](0050-deployment-topologies.md) | Accepted. |
 | 51 | [Extension installation is user-initiated and persistent](0051-extension-installation-is-user-initiated-and-persistent.md) | Accepted; built. |
 | 52 | [Vocabulary negotiation and deliberate degradation](0052-vocabulary-negotiation-and-deliberate-degradation.md) | Accepted (built) |
 | 53 | [The pre-session tree, and what a locked door may say](0053-the-pre-session-tree.md) | Accepted, built, and withdrawn on 2026-07-25 — the code was removed in contracts v0.48.0 and the Platform and Shell commits that used it were reverted. |
@@ -72,12 +72,12 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 73 | [Playing something unowned adds it](0073-playing-something-unowned-adds-it.md) | Accepted. Built. |
 | 74 | [Operational findings are durable state](0074-operational-findings-are-durable-state.md) | Built. The register, its screen and the Supervisor's spool all landed; unhealthy and unsupported did not — see the roadmap. |
 | 75 | [The children listen on Unix sockets](0075-the-children-listen-on-unix-sockets.md) | Built. |
-| 76 | [Two signing keys, held offline, rotated by overlap](0076-the-signing-key-hierarchy.md) | Proposed. Partly built: one of the two keys exists and is in use — the registry key signs the live index and the Platform verifies it. |
+| 76 | [Two signing keys, held offline, rotated by overlap](0076-the-signing-key-hierarchy.md) | Accepted. Partly built: one of the two keys exists and is in use — the registry key signs the live index and the Platform verifies it. |
 | 77 | [The upgrade channel is the handoff and the register](0077-the-upgrade-channel-is-the-handoff-and-the-register.md) | Built. The Supervisor checks the catalogue on a schedule and spools an offer, polls GET /upgrade and carries out what it finds; |
-| 78 | [Passkeys are an optional layer on a public origin](0078-passkeys-are-an-optional-layer-on-a-public-origin.md) | Proposed. Nothing here is built — PasskeyCredential, SavePasskey and ListPasskeys are the whole of what exists, exactly as before. |
-| 79 | [TOTP is the second factor that works everywhere](0079-totp-is-the-second-factor-that-works-everywhere.md) | Proposed. Nothing is built. domain.RecoveryFactor already exists — single-use, hashed, with ConsumedAt — and has never had a caller; |
-| 80 | [An optional capability is announced once, when it becomes possible](0080-an-optional-capability-is-announced-once-when-it-becomes-possible.md) | Proposed. Nothing is built. |
-| 81 | [The install key](0081-the-install-key.md) | Proposed. The sealing envelope is built (internal/adapters/crypto/sealer.go); the key it needs is not, which is what this record is for. |
+| 78 | [Passkeys are an optional layer on a public origin](0078-passkeys-are-an-optional-layer-on-a-public-origin.md) | Accepted. Nothing here is built — PasskeyCredential, SavePasskey and ListPasskeys are the whole of what exists, exactly as before. |
+| 79 | [TOTP is the second factor that works everywhere](0079-totp-is-the-second-factor-that-works-everywhere.md) | Accepted. Nothing is built. domain.RecoveryFactor already exists — single-use, hashed, with ConsumedAt — and has never had a caller; |
+| 80 | [An optional capability is announced once, when it becomes possible](0080-an-optional-capability-is-announced-once-when-it-becomes-possible.md) | Accepted. Nothing is built. |
+| 81 | [The install key](0081-the-install-key.md) | Accepted. The sealing envelope is built (internal/adapters/crypto/sealer.go); the key it needs is not, which is what this record is for. |
 | 82 | [The origin relays where it can, and serves a nominal segment grid where it cannot](0082-the-origin-relays-or-serves-a-nominal-segment-grid.md) | Accepted. Built on both sides, and never played. |
 | 83 | [Subtitles answer to a person's language preference, in whatever form the track has](0083-subtitles-answer-to-a-persons-language-preference.md) | Accepted. Built, with four things named rather than claimed. |
 | 84 | [Authorization is scoped to the resource, not only the action](0084-authorization-is-scoped-to-the-resource.md) | Accepted. Not built. |
@@ -95,6 +95,12 @@ A record is cited from another repository as `platform#N`, written as a link to 
 | 96 | [Module settings are written by merge, and declared secret fields are sealed](0096-module-settings-are-merged-and-secret-fields-are-sealed.md) | Accepted. Not built. |
 | 97 | [A manifest names one capability, and what it asks for is separate from what it offers](0097-a-manifest-names-one-capability-and-separates-asks-from-offers.md) | Accepted. Not built. Closes the last open question in architecture's deliberately-undecided list. |
 | 98 | [A queue that is behind raises an Issue, and the batch numbers are the outbox's own](0098-a-queue-that-is-behind-raises-an-issue.md) | Accepted. Not built. |
+| 99 | [Revocation is a signed list, checked on a schedule, and a revoked key is not a yanked version](0099-revocation-is-a-signed-list-checked-on-a-schedule.md) | Accepted. Not built. |
+| 100 | [A module updates itself until it asks for more](0100-a-module-updates-itself-until-it-asks-for-more.md) | Accepted. Not built. Answers the update half of [platform#51](0051-extension-installation-is-user-initiated-and-persistent.md)'s open pair; |
+| 101 | [Precedence is ordered by the operator, and dedup is exact or not attempted](0101-precedence-is-ordered-by-the-operator-and-dedup-is-exact.md) | Accepted. Not built, except as the special case it replaces. |
+| 102 | [Ordering is renumbered when it runs out of room, and confidence does not decay](0102-two-orderings-and-a-confidence.md) | Accepted. Not built. |
+| 103 | [A module's own output is telemetry, and containment stays one mechanism](0103-module-output-is-telemetry-and-containment-stays-one-mechanism.md) | Accepted. Not built. |
+| 104 | [A person is an attribute, not a node](0104-a-person-is-an-attribute-not-a-node.md) | Accepted. Not built — there is nothing to build, which is the point. |
 
 ## Records this repository depends on
 

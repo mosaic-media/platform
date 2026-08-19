@@ -1,6 +1,6 @@
 # Core modules keep their repositories; CI carries the version bump
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-07-24
 
 Answers a question [architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md) left implicit and

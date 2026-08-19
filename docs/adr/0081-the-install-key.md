@@ -1,6 +1,6 @@
 # The install key
 
-**Status:** Proposed. The sealing envelope is built (`internal/adapters/crypto/sealer.go`); the key it needs is not, which is what this record is for. Nothing generates, stores or reads an install key today.
+**Status:** Accepted. The sealing envelope is built (`internal/adapters/crypto/sealer.go`); the key it needs is not, which is what this record is for. Nothing generates, stores or reads an install key today.
 **Date:** 2026-08-10
 
 Arises from [platform#79](0079-totp-is-the-second-factor-that-works-everywhere.md),

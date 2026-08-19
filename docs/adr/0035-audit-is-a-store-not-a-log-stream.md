@@ -1,6 +1,6 @@
 # Audit is a store, not a log stream
 
-**Status:** Proposed. **Partly superseded:** the claim below that a bootstrapped
+**Status:** Accepted. **Partly superseded:** the claim below that a bootstrapped
 administrator does not receive `audit.read` was reversed by
 [platform#44](0044-privilege-cannot-escalate.md) — the first account is the
 superuser and holds everything, since an action withheld from the only account

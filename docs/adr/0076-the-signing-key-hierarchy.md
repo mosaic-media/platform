@@ -1,6 +1,6 @@
 # Two signing keys, held offline, rotated by overlap
 
-**Status:** Proposed. Partly built: one of the two keys exists and is in use —
+**Status:** Accepted. Partly built: one of the two keys exists and is in use —
 the registry key signs the live index and the Platform verifies it. The release
 key does not exist, nothing verifies a release artefact, and the custody and
 rotation procedures below are written down here and nowhere else yet.

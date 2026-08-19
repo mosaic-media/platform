@@ -1,6 +1,6 @@
 # TOTP is the second factor that works everywhere
 
-**Status:** Proposed. Nothing is built. `domain.RecoveryFactor` already exists — single-use, hashed, with `ConsumedAt` — and has never had a caller; this is what gives it one.
+**Status:** Accepted. Nothing is built. `domain.RecoveryFactor` already exists — single-use, hashed, with `ConsumedAt` — and has never had a caller; this is what gives it one.
 **Date:** 2026-08-10
 
 Extends [platform#43](0043-one-principal-many-credentials.md), which named four

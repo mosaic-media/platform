@@ -1,6 +1,11 @@
 # First-administrator bootstrap
 
 **Status:** Accepted. Expected to be superseded when Supervisor onboarding exists.
+**The open question the body leaves to that work — the injection channel — was
+answered elsewhere:** [platform#54](0054-claiming-an-unclaimed-server.md) has a
+person claim the server through a wizard, so no channel is needed. The body sends
+a reader to the overview's *Deliberately Undecided* list for it; that entry was
+removed when platform#54 landed, and the list is now empty.
 **Date:** 2026-07-20
 
 ## Context
